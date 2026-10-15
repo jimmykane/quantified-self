@@ -14,6 +14,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the nested Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    expect(copy).toContain('**Health → Timeline notes**');
+    expect(copy).toContain('same notes manager without leaving your current workspace');
+    expect(copy).toContain('stays highlighted in navigation while comparing');
+  });
   it('explains read-only note comparisons and honest coverage/source boundaries without implying an effect', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     for (const phrase of ['**Compare** beside a saved note', '**14 days on each side**', '**5/7**', '**10/14**', '**20/28**',

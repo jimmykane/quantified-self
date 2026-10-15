@@ -1,5 +1,8 @@
-import { Component, computed, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, Injector, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter, map } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
@@ -33,6 +36,18 @@ export class SideNavComponent {
   public themePreference = toSignal(this.themeService.getThemePreference(), { initialValue: SYSTEM_THEME_PREFERENCE });
   private analyticsService = inject(AppAnalyticsService);
   private hapticsService = inject(AppHapticsService);
+  private readonly router = inject(Router);
+  private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly dialogs = inject(MatDialog);
+  private readonly navigationUrl = toSignal(this.router.events.pipe(
+    filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+    map(event => event.urlAfterRedirects),
+  ), { initialValue: this.router.url });
+  readonly timelineNotesOpening = signal(false);
+  readonly timelineNotesOpen = signal(false);
+  readonly timelineNotesActive = computed(() => this.timelineNotesOpen()
+    || this.navigationUrl().split(/[?#]/)[0].startsWith('/health/compare/'));
   public readonly hasTrainingPlanningNavigationAccess = computed(() => !!this.userService.user()?.uid);
 
   constructor(
@@ -133,6 +148,37 @@ export class SideNavComponent {
   public openCompareFilesFromNav(): void {
     this.analyticsService.logToolCompareEntry('side_nav', !!this.user);
     this.closeSideNav();
+  }
+
+  async openTimelineNotesFromNav(): Promise<void> {
+    const uid = this.user?.uid;
+    if (!uid || this.timelineNotesOpening() || this.timelineNotesOpen()) return;
+    this.timelineNotesOpening.set(true);
+    this.hapticsService.selection();
+    try {
+      // Let the drawer restore focus before Material captures the dialog's return target.
+      await this.sideNav.close();
+      const [{ TimelineNotesDialogComponent }, { AppTimelineNotesService }] = await Promise.all([
+        import('../timeline-notes/timeline-notes-dialog.component'),
+        import('../../services/app.timeline-notes.service'),
+      ]);
+      if (this.destroyRef.destroyed || this.user?.uid !== uid) return;
+      const notes = this.injector.get(AppTimelineNotesService);
+      if (!notes.isOwner(uid)) return;
+      if (this.dialogs.openDialogs.some(dialog => dialog.componentInstance instanceof TimelineNotesDialogComponent)) return;
+      const dialog = this.dialogs.open(TimelineNotesDialogComponent, {
+        width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid },
+      });
+      this.timelineNotesOpen.set(true);
+      dialog.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.timelineNotesOpen.set(false));
+    } catch {
+      if (!this.destroyRef.destroyed && this.user?.uid === uid) {
+        this.hapticsService.error();
+        this.snackBar.open('Timeline notes could not open. Please try again.', undefined, { duration: 3000 });
+      }
+    } finally {
+      this.timelineNotesOpening.set(false);
+    }
   }
 
 }

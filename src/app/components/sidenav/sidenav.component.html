@@ -70,10 +70,24 @@
     }
   </div>
 
-  <mat-list-item routerLinkActive="active" routerLink="/health" (click)="closeSideNav()">
-    <mat-icon>cardiology</mat-icon>
-    <span>Health</span>
-  </mat-list-item>
+  <div role="group" aria-label="Health">
+    <mat-list-item routerLinkActive="active" routerLink="/health"
+      [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+      (click)="closeSideNav()">
+      <mat-icon>cardiology</mat-icon>
+      <span>Health</span>
+    </mat-list-item>
+    <div class="sidenav-subitem-guide" [class.sidenav-subitem-guide-active]="timelineNotesActive()">
+      <button mat-list-item type="button" class="sidenav-subitem sidenav-notes-item"
+        [class.active]="timelineNotesActive()" [disabled]="timelineNotesOpening()"
+        aria-haspopup="dialog" [attr.aria-expanded]="timelineNotesOpen()"
+        [attr.aria-current]="timelineNotesActive() ? 'true' : null" [attr.aria-busy]="timelineNotesOpening()"
+        (click)="openTimelineNotesFromNav()">
+        <mat-icon matListItemIcon aria-hidden="true">event_note</mat-icon>
+        <span matListItemTitle>Timeline notes</span>
+      </button>
+    </div>
+  </div>
 
   <!-- Tags is temporarily omitted from navigation; /tags remains available. -->
 

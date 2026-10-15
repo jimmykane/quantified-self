@@ -58,7 +58,7 @@ const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
 
 const TIMELINE_NOTES_HELP_CONTENT = `## Timeline notes
 
-Use **Timeline notes** in the Dashboard, Health, or Calendar header to add private context such as sickness, injury, vacation, travel, or stress. Notes also appear on supported Training charts. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
+Use **Health → Timeline notes** in the app navigation, or **Timeline notes** in the Dashboard, Health, or Calendar header, to add private context such as sickness, injury, vacation, travel, or stress. The nested navigation shortcut opens the same notes manager without leaving your current workspace. Choose **Compare** beside a saved note to open its before/after view; Timeline notes stays highlighted in navigation while comparing. Notes also appear on supported Training charts. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
 
 Choose a single day, an inclusive date range, or an ongoing period. You can plan future days and ranges; ongoing notes must already have started. **End today** closes an ongoing note using its original time zone. Dates stay fixed when you travel.
 

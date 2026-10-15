@@ -8,8 +8,11 @@ import { AppSideNavService } from '../../services/side-nav/app-side-nav.service'
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+import { TimelineNotesDialogComponent } from '../timeline-notes/timeline-notes-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
@@ -31,6 +34,9 @@ describe('SideNavComponent', () => {
     let mockAnalyticsService: any;
     let mockHapticsService: any;
     let mockSnackBar: any;
+    let notesClosed: Subject<void>;
+    let notesDialogs: { open: ReturnType<typeof vi.fn>; openDialogs: unknown[] };
+    let notesService: { isOwner: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
         mockAuthService = {
@@ -59,10 +65,14 @@ describe('SideNavComponent', () => {
         };
         mockHapticsService = {
             selection: vi.fn(),
+            error: vi.fn(),
         };
         mockSnackBar = {
             open: vi.fn(),
         };
+        notesClosed = new Subject<void>();
+        notesDialogs = { open: vi.fn().mockReturnValue({ afterClosed: () => notesClosed }), openDialogs: [] };
+        notesService = { isOwner: vi.fn().mockReturnValue(true) };
 
         await TestBed.configureTestingModule({
             declarations: [SideNavComponent],
@@ -75,6 +85,8 @@ describe('SideNavComponent', () => {
                 { provide: AppThemeService, useValue: mockThemeService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: MatDialog, useValue: notesDialogs },
+                { provide: AppTimelineNotesService, useValue: notesService },
                 { provide: AppHapticsService, useValue: mockHapticsService },
                 { provide: AppWhatsNewService, useValue: { unreadCount: signal(0) } },
             ],
@@ -322,6 +334,94 @@ describe('SideNavComponent', () => {
             .find(item => item.nativeElement.textContent.includes('Health'));
 
         expect(healthItem).toBeUndefined();
+        expect(fixture.nativeElement.querySelector('.sidenav-notes-item')).toBeNull();
+    });
+
+    it('nests a native Timeline notes action beneath Health for every signed-in account, but not guests', () => {
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.sidenav-notes-item')).toBeNull();
+        mockUserService.user.mockReturnValue(new User('notes-owner'));
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('.sidenav-notes-item') as HTMLButtonElement;
+        expect(button.tagName).toBe('BUTTON'); expect(button.type).toBe('button');
+        expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(button.querySelector('mat-icon')?.textContent).toBe('event_note');
+        expect(button.closest('[role="group"][aria-label="Health"]')).toBeTruthy();
+        expect(button.parentElement?.previousElementSibling?.getAttribute('routerlink')).toBe('/health');
+        expect(notesDialogs.open).not.toHaveBeenCalled(); expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('opens the existing manager after closing the drawer, without navigation, duplicate opens or duplicate feedback', async () => {
+        mockUserService.user.mockReturnValue(new User('notes-owner'));
+        let finishClose!: () => void;
+        mockSideNavService.close.mockImplementation(() => new Promise<void>(resolve => { finishClose = resolve; }));
+        const url = TestBed.inject(Router).url;
+        const opening = component.openTimelineNotesFromNav();
+        expect(component.timelineNotesOpening()).toBe(true); expect(notesDialogs.open).not.toHaveBeenCalled();
+        await component.openTimelineNotesFromNav(); expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        finishClose(); await opening; fixture.detectChanges();
+        expect(notesDialogs.open).toHaveBeenCalledExactlyOnceWith(TimelineNotesDialogComponent,
+            { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid: 'notes-owner' } });
+        expect(TestBed.inject(Router).url).toBe(url);
+        expect(component.timelineNotesOpening()).toBe(false); expect(component.timelineNotesActive()).toBe(true);
+        await component.openTimelineNotesFromNav(); expect(notesDialogs.open).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        notesClosed.next(); fixture.detectChanges();
+        expect(component.timelineNotesOpen()).toBe(false); expect(component.timelineNotesActive()).toBe(false);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('does not open private notes for guests, a changed account, or an invalid owner', async () => {
+        await component.openTimelineNotesFromNav(); expect(mockSideNavService.close).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        mockUserService.user.mockReturnValue(new User('notes-owner'));
+        let finishClose!: () => void;
+        mockSideNavService.close.mockImplementationOnce(() => new Promise<void>(resolve => { finishClose = resolve; }));
+        const opening = component.openTimelineNotesFromNav();
+        mockUserService.user.mockReturnValue(new User('other-owner')); finishClose(); await opening;
+        expect(notesDialogs.open).not.toHaveBeenCalled(); expect(notesService.isOwner).not.toHaveBeenCalled();
+        notesService.isOwner.mockReturnValue(false); await component.openTimelineNotesFromNav();
+        expect(notesDialogs.open).not.toHaveBeenCalled(); expect(component.timelineNotesOpening()).toBe(false);
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
+    });
+
+    it('does not stack another existing manager or open one after the sidenav is destroyed', async () => {
+        mockUserService.user.mockReturnValue(new User('notes-owner'));
+        notesDialogs.openDialogs = [{ componentInstance: Object.create(TimelineNotesDialogComponent.prototype) }];
+        await component.openTimelineNotesFromNav(); expect(notesDialogs.open).not.toHaveBeenCalled();
+        let finishClose!: () => void;
+        mockSideNavService.close.mockImplementationOnce(() => new Promise<void>(resolve => { finishClose = resolve; }));
+        const opening = component.openTimelineNotesFromNav(); fixture.destroy(); finishClose(); await opening;
+        expect(notesDialogs.open).not.toHaveBeenCalled(); expect(mockHapticsService.error).not.toHaveBeenCalled();
+    });
+
+    it('reports an explicit open failure and allows a retry without changing notes', async () => {
+        mockUserService.user.mockReturnValue(new User('notes-owner'));
+        mockSideNavService.close.mockRejectedValueOnce(new Error('drawer failed'));
+        await component.openTimelineNotesFromNav();
+        expect(component.timelineNotesOpening()).toBe(false); expect(notesDialogs.open).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).toHaveBeenCalledOnce();
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Timeline notes could not open. Please try again.', undefined, { duration: 3000 });
+        await component.openTimelineNotesFromNav(); expect(notesDialogs.open).toHaveBeenCalledOnce();
+    });
+
+    it('marks Timeline notes independently of Health while comparing and clears the nested indicator on other routes', async () => {
+        mockUserService.user.mockReturnValue(new User('notes-owner')); fixture.detectChanges();
+        const router = TestBed.inject(Router);
+        const health = fixture.nativeElement.querySelector('[routerlink="/health"]') as HTMLElement;
+        const notes = fixture.nativeElement.querySelector('.sidenav-notes-item') as HTMLElement;
+        for (const path of ['/health/compare/' + 'a'.repeat(64), '/health/compare/' + 'b'.repeat(64) + '?view=history#chart']) {
+            await router.navigateByUrl(path); await fixture.whenStable(); fixture.detectChanges();
+            expect(notes.classList.contains('active')).toBe(true); expect(notes.getAttribute('aria-current')).toBe('true');
+            expect(notes.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(true);
+            expect(health.classList.contains('active')).toBe(false);
+        }
+        await router.navigateByUrl('/health?metric=sleep#chart'); await fixture.whenStable(); fixture.detectChanges();
+        expect(health.classList.contains('active')).toBe(true); expect(notes.classList.contains('active')).toBe(false);
+        await router.navigateByUrl('/dashboard'); await fixture.whenStable(); fixture.detectChanges();
+        expect(notes.classList.contains('active')).toBe(false); expect(health.classList.contains('active')).toBe(false);
+        expect(notesDialogs.open).not.toHaveBeenCalled(); expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('highlights Plans independently of Training on a nested path while preserving Training query navigation', async () => {
@@ -386,18 +486,6 @@ describe('SideNavComponent', () => {
 
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
-    });
-
-    it('keeps the nested guide rail as the only Plans active indicator', () => {
-        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.scss'), 'utf8');
-        const genericDarkActiveRule = styles.indexOf(':host-context(.dark-theme) .active');
-        const nestedActiveRule = styles.indexOf('mat-list-item.sidenav-subitem.active');
-        const genericDarkActiveBlock = styles.slice(genericDarkActiveRule, styles.indexOf('}', genericDarkActiveRule));
-
-        expect(nestedActiveRule).toBeGreaterThan(genericDarkActiveRule);
-        expect(genericDarkActiveBlock).not.toContain('border-left');
-        expect(styles.slice(nestedActiveRule, styles.indexOf('}', nestedActiveRule)))
-            .toContain('border-left: 0 !important');
     });
 
     it('opens the profile section when the signed-in profile shortcut is selected', () => {
@@ -680,5 +768,19 @@ describe('SideNavComponent', () => {
         expect(component.assistantRoute).toBe('/ai-insights');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Beta');
         expect(assistantItem?.nativeElement.textContent).not.toContain('PAID');
+    });
+});
+
+describe('nested sidenav style contract without fixtures', () => {
+    it('keeps the guide rail as the only Plans and Timeline notes active indicator', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.scss'), 'utf8');
+        const genericDarkActiveRule = styles.indexOf(':host-context(.dark-theme) .active');
+        const nestedActiveRule = styles.indexOf('mat-list-item.sidenav-subitem.active');
+        const genericDarkActiveBlock = styles.slice(genericDarkActiveRule, styles.indexOf('}', genericDarkActiveRule));
+        expect(nestedActiveRule).toBeGreaterThan(genericDarkActiveRule);
+        expect(genericDarkActiveBlock).not.toContain('border-left');
+        const nestedBlock = styles.slice(nestedActiveRule, styles.indexOf('}', nestedActiveRule));
+        expect(nestedBlock).toContain('button[mat-list-item].sidenav-subitem.active');
+        expect(nestedBlock).toContain('border-left: 0 !important');
     });
 });

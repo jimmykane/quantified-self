@@ -62,6 +62,11 @@ contracts, consent, queries and mutations are unchanged. No backend deployment o
 
 ## Workspace Shells
 
+Signed-in navigation groups **Timeline notes** under **Health** using the same nested guide rail as **Plans**.
+Its native Material list button lazily opens the existing manager after the drawer closes, preserving focus return and
+the current workspace. It does not add a duplicate list route or load private note UI for anonymous navigation.
+The nested action and rail stay selected during note comparisons; the Health overview link uses exact-path matching.
+
 Health All and the owner Dashboard Today share the surface-free summary from
 `components/shared/health-change-summary/`. Its presentation delegates to
 `components/shared/summary-disclosure/`, shared with the saved-note and public-example

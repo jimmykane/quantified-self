@@ -194,7 +194,7 @@ mat-nav-list {
   width: 100%;
 }
 
-mat-list-item {
+mat-list-item, button[mat-list-item] {
   margin: 2px 0;
   border-radius: 0 !important;
   transition: all 0.2s ease;
@@ -223,15 +223,23 @@ mat-list-item {
   background: var(--mat-sys-primary);
 }
 
-mat-list-item.sidenav-subitem {
+.sidenav-subitem {
   padding-inline-start: 0;
 }
 
-mat-list-item.sidenav-subitem mat-icon {
+.sidenav-subitem mat-icon {
   width: 20px;
   height: 20px;
   margin-inline: 4px 12px;
   font-size: 20px;
+}
+
+.sidenav-notes-item {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
 }
 
 .sidenav-status-label {
@@ -288,7 +296,7 @@ mat-list-item.active:hover {
 
 // The guide rail is the nested route's active indicator. Keep this after the
 // generic light/dark active rules so a second inset border cannot win the cascade.
-mat-list-item.sidenav-subitem.active {
+mat-list-item.sidenav-subitem.active, button[mat-list-item].sidenav-subitem.active {
   border-left: 0 !important;
   border-inline-start: 0 !important;
 }
