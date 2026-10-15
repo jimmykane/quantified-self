@@ -73,6 +73,22 @@ describe('shared Health request queue', () => {
     expect(service.loadSleepSummaryRange('owner', 1, 2, 10, b.signal)).toBe(first);
     await flush(); a.abort(); finish!(); expect((await first).complete).toBe(true);
   });
+  it('stops native Sleep paging after its last consumer leaves and does not reuse that cancelled read', async () => {
+    let current!: () => boolean, finish!: () => void;
+    sleep.loadSummaryRange.mockImplementationOnce((_uid, _start, _end, isCurrent) => new Promise((_resolve, reject) => {
+      current = isCurrent; finish = () => reject(new Error('Sleep summary read cancelled.'));
+    }));
+    const service = TestBed.inject(HealthMetricQueryService), a = new AbortController(), b = new AbortController();
+    const first = service.loadSleepSummaryRange('owner', 1, 2, 10, a.signal);
+    const cancelled = expect(first).rejects.toThrow('cancelled');
+    expect(service.loadSleepSummaryRange('owner', 1, 2, 10, b.signal)).toBe(first);
+    await flush(); a.abort(); expect(current()).toBe(true);
+    b.abort(); expect(current()).toBe(false);
+    sleep.loadSummaryRange.mockResolvedValueOnce({ sessions: [], complete: true, limitReached: null });
+    const fresh = service.loadSleepSummaryRange('owner', 1, 2);
+    expect(fresh).not.toBe(first);
+    finish(); await cancelled; expect((await fresh).complete).toBe(true);
+  });
   it('rejects public reads and results belonging to a previous account', async () => {
     const service=TestBed.inject(HealthMetricQueryService);
     await expect(service.loadMetricRange('other',request(1))).rejects.toThrow('owner');

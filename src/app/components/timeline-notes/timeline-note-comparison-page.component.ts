@@ -87,7 +87,7 @@ export class TimelineNoteComparisonPageComponent {
     if (!row?.dailySeries?.points.length || !window) return null;
     const start = comparisonDateCarrier(window.before.startDate);
     const end = comparisonDateCarrier(window.after.endDate < window.today ? window.after.endDate : addComparisonDays(window.today, -1));
-    return { model: buildHealthChartModels([row.dailySeries], start, end, this.units())[0], start, end, window,
+    return { model: buildHealthChartModels([row.dailySeries], start, end, this.units(), { includeTwoReadingComparison: false })[0], start, end, window,
       source: healthChartSourceChoice(row.series).shortLabel, status: row.status === 'comparable' ? null : row.reason };
   });
   private version = 0;

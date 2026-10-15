@@ -109,6 +109,8 @@ checked conservatively against that calendar convention; a mismatch withholds th
 Missing device/timezone metadata is not guessed. Daily chart points use UTC-noon **calendar carriers**, not claimed
 observation instants. The shared Health renderer opts into date-only tooltips, before/after series, a start marker and
 explicit nulls for every missing/change day. Existing Health/Dashboard charts retain their ordinary rendering. An
+ungated two-reading difference is also suppressed in the comparison chart's accessible description, so sparse history
+cannot bypass the comparison's coverage gates. An
 explicitly selected hidden note can be analyzed; this anchor never changes global/per-note chart visibility or exposes
 other notes. Public/profile previews receive no private comparison evidence.
 
@@ -117,7 +119,8 @@ and one native Sleep envelope. No workout/sample query, extra 60-day personal-ra
 request is added. `AppSleepService.loadSummaryRange` uses its existing start-time query with 32-record pages plus lookahead,
 512 records and 8 MiB cumulative UTF-8 budget, at most a 64-day envelope, explicit completeness, and account/cancellation
 checks between pages. The existing three-job queue and bounded 60-second cache also cover this path. One closing consumer
-cannot cancel another consumer's active shared read. Health keeps its existing limits and completeness metadata.
+cannot cancel another consumer's active shared read; when the last consumer closes, paging stops after the in-flight
+page and a later view starts a fresh read. Health keeps its existing limits and completeness metadata.
 
 The page fences note/data requests across owner, note, window, mutation and teardown changes; selected-note reads also
 check the service generation after completion. Focus/visibility revalidate, and a visible-tab minute clock notices a

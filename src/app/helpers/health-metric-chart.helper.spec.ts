@@ -130,6 +130,16 @@ describe('Health metric chart helpers', () => {
     expect(model.twoReadingComparisonText).toContain(`Recorded change: ${change > 0 ? '+' : ''}${formatHealthValue(HEALTH_METRIC_IDS.RestingHeartRate, change, 'bpm', false)}`);
   });
 
+  it('can withhold the independent two-reading announcement for a coverage-gated comparison', () => {
+    const candidate = series({ points: series().points.slice(0, 2) });
+    const model = buildHealthChartModels([candidate], 0, 2 * DAY_MS, null, { includeTwoReadingComparison: false })[0];
+    expect(model.twoReadingComparisonText).toBeNull();
+    expect(model.ariaLabel).not.toContain('Recorded change:');
+    expect(model.ariaLabel).toContain('Latest');
+    expect(model.displayedPoints).toEqual(candidate.points);
+    expect(buildHealthChartModels([candidate], 0, 2 * DAY_MS)[0].ariaLabel).toContain('Recorded change:');
+  });
+
   it('does not compare native scales, categories, totals, invalid dates, repeated timestamps or more than two records', () => {
     const base = series({ points: series().points.slice(0, 2) });
     for (const candidate of [series(), { ...base, nativeOnly: true }, { ...base, chartKind: 'bar' as const },

@@ -89,6 +89,18 @@ describe('Timeline note comparison page', () => {
     expect(fixture.nativeElement.textContent).toContain('after window is still in progress');
     component.chooseWindow(28); expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
+  it('withholds sparse differences in chart accessibility text as well as the metric table', async () => {
+    comparisons.load.mockImplementationOnce(async (_uid, selected, days) => {
+      const series = readings('hrv', 'heart_rate_variability', 'overnight_average');
+      series.points = [series.points[0], series.points.at(-1)!];
+      return { window: noteComparisonWindow(selected, days, now), series: [series],
+        complete: { sleep_duration: true, heart_rate_variability: true, resting_heart_rate: true }, notices: [] };
+    });
+    const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);
+    expect(fixture.componentInstance.rows().every(row => row.difference === null)).toBe(true);
+    expect(fixture.componentInstance.chart().model.twoReadingComparisonText).toBeNull();
+    expect(fixture.componentInstance.chart().model.ariaLabel).not.toContain('Recorded change:');
+  });
   it('discloses its method accessibly through the app Material button pattern', async () => {
     const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);
     const button = fixture.nativeElement.querySelector('[aria-controls="comparison-method"]') as HTMLButtonElement;

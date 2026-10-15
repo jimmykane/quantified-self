@@ -62,10 +62,7 @@ export class HealthMetricQueryService {
             .then(sessions => withHealthSleepAccountKeys(uid, sessions)), priority, signal);
     }
     loadSleepSummaryRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<SleepSummaryRangeLoad> {
-        this.syncOwner();
-        const generation = this.generation;
-        return this.read(uid, ['sleep-summary', startMs, endMs], () => this.sleep.loadSummaryRange(uid, startMs, endMs,
-            () => this.isOwner(uid) && generation === this.generation)
+        return this.read(uid, ['sleep-summary', startMs, endMs], isCurrent => this.sleep.loadSummaryRange(uid, startMs, endMs, isCurrent)
             .then(async result => ({ ...result, sessions: await withHealthSleepAccountKeys(uid, result.sessions) })), priority, signal);
     }
     invalidate(uid: string): void {
@@ -74,7 +71,7 @@ export class HealthMetricQueryService {
                 this.cache.delete(key);
         this.invalidated$.next(uid);
     }
-    private read<T>(uid: string, parts: unknown[], run: () => Promise<T>, priority: number, signal?: AbortSignal): Promise<T> {
+    private read<T>(uid: string, parts: unknown[], run: (isCurrent: () => boolean) => Promise<T>, priority: number, signal?: AbortSignal): Promise<T> {
         this.syncOwner();
         if (signal?.aborted)
             return Promise.reject(new DOMException('Health read cancelled.', 'AbortError'));
@@ -90,7 +87,12 @@ export class HealthMetricQueryService {
             return cached.promise as Promise<T>;
         }
         let job!: ReadJob;
-        const promise = new Promise<T>((resolve, reject) => { job = { generation: this.generation, key, uid, priority, run, resolve, reject }; this.queue.push(job); });
+        const promise = new Promise<T>((resolve, reject) => {
+            job = { generation: this.generation, key, uid, priority,
+                run: () => run(() => this.isOwner(uid) && job.generation === this.generation
+                    && (entry.persistent || entry.listeners.size > 0)), resolve, reject };
+            this.queue.push(job);
+        });
         const entry: CachedRead = { uid, promise, job, expires: Infinity, persistent: false, listeners: new Set() };
         this.retain(entry, signal);
         this.cache.set(key, entry);
@@ -116,9 +118,11 @@ export class HealthMetricQueryService {
             entry.listeners.delete(token);
             signal.removeEventListener('abort', release);
             const index = this.queue.indexOf(entry.job);
-            if (signal.aborted && !entry.persistent && !entry.listeners.size && index >= 0) {
-                this.queue.splice(index, 1);
-                entry.job.reject(new DOMException('Health read cancelled.', 'AbortError'));
+            if (signal.aborted && !entry.persistent && !entry.listeners.size) {
+                if (index >= 0) {
+                    this.queue.splice(index, 1);
+                    entry.job.reject(new DOMException('Health read cancelled.', 'AbortError'));
+                }
                 if (this.cache.get(entry.job.key) === entry)
                     this.cache.delete(entry.job.key);
             }

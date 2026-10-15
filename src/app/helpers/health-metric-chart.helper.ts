@@ -87,6 +87,11 @@ export interface HealthChartSeriesModel {
   ariaLabel: string;
 }
 
+export interface HealthChartModelOptions {
+  /** A gated comparison must not announce a separate ungated two-reading difference. */
+  includeTwoReadingComparison?: boolean;
+}
+
 export interface HealthChartStatusOverlay {
   rangePoints?: readonly { timestampMs: number; normalRange: { min: number; max: number } | null }[];
   normalRangeColor: string;
@@ -149,8 +154,9 @@ export function buildHealthChartModels(
   startTimeMs: number,
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
+  options: HealthChartModelOptions = {},
 ): HealthChartSeriesModel[] {
-  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs, unitSettings));
+  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs, unitSettings, options));
 }
 
 export function buildHealthMetricEChartsOption(
@@ -743,6 +749,7 @@ function buildSeriesModel(
   startTimeMs: number,
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null,
+  options: HealthChartModelOptions,
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
@@ -780,7 +787,8 @@ function buildSeriesModel(
   const readingCountText = `${getNumberFormatter().format(sortedPoints.length)} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
   const evidenceText = `${readingCountText} recorded${plotKind === 'point' ? ' · No trend inferred' : ''}`;
   const recordedDateText = latest ? formatRecordedDate(latest.calendarDate) : null;
-  const twoReadingComparisonText = buildTwoReadingComparison(series, sortedPoints, plotKind, unitSettings);
+  const twoReadingComparisonText = options.includeTwoReadingComparison === false ? null
+    : buildTwoReadingComparison(series, sortedPoints, plotKind, unitSettings);
 
   return {
     series,
