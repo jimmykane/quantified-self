@@ -675,6 +675,35 @@ describe('health writer', () => {
         expect(built.chunks[0].qualityCodes).toBeNull();
     });
 
+    it.each([true, false])('persists whether an automatic retry is pending: %s', async retryPending => {
+        const fake = fakeDatabase();
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.SuuntoApp, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending,
+        }, 10_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'failed', retryPending });
+    });
+
+    it('clears a pending retry on recovery without changing the last successful update on failure', async () => {
+        const fake = fakeDatabase();
+        fake.stored.set('users/user-1/healthSyncState/SuuntoApp', {
+            status: 'failed', retryPending: true, lastSyncedAtMs: 9_000,
+        });
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.SuuntoApp, {
+            status: HEALTH_SYNC_STATUSES.Ready, lastErrorCode: null,
+        }, 10_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'ready', retryPending: false });
+        expect(fake.sets.mock.calls[0][1]).not.toHaveProperty('lastSyncedAtMs');
+    });
+
+    it('can stage sync state inside the queue retry transaction without starting a nested transaction', async () => {
+        const fake = fakeDatabase();
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending: false,
+        }, 10_000, { db: fake.db as never, transaction: fake.transaction as never });
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'failed', retryPending: false });
+    });
+
     it('writes only opaque sync error codes', async () => {
         const fake = fakeDatabase();
         await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
@@ -692,6 +721,14 @@ describe('health writer', () => {
         await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
             lastErrorCode: 'raw response with user data',
         }, 10_000, { db: fake.db as never })).rejects.toThrow('opaque bounded error code');
+    });
+
+    it.each(['true', 1, null])('rejects invalid retry metadata: %s', async retryPending => {
+        const fake = fakeDatabase();
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.SuuntoApp, {
+            status: 'failed', retryPending,
+        }, 10_000, { db: fake.db as never })).rejects.toThrow('retryPending must be a boolean');
+        expect(fake.sets).not.toHaveBeenCalled();
     });
 
     it('does not recreate sync state while account deletion is active', async () => {

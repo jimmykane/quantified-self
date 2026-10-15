@@ -377,7 +377,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
     transition: (
         transaction: admin.firestore.Transaction,
         currentQueueItem: Record<string, unknown>,
-    ) => void | Promise<void>,
+    ) => void | false | Promise<void | false>,
 ): Promise<QueueItemUserGuardedUpdateResult> {
     const queueItemRef = params.queueItem.ref;
     if (!queueItemRef) {
@@ -410,7 +410,9 @@ async function runQueueItemTransitionIfCurrentUserActive(
             return QueueItemUserGuardedUpdateResult.NotCurrent;
         }
 
-        await transition(transaction, currentQueueItem);
+        if (await transition(transaction, currentQueueItem) === false) {
+            return QueueItemUserGuardedUpdateResult.NotCurrent;
+        }
         return QueueItemUserGuardedUpdateResult.Updated;
     });
 
@@ -524,11 +526,11 @@ export interface IncreaseRetryCountIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
-    /** Adds provider-owned state to the same transaction as retry-exhausted DLQ movement. */
+    /** Adds provider-owned state to the DLQ transaction; false rejects a changed lifecycle before any write. */
     onRetryExhaustedInTransaction?: (
         transaction: admin.firestore.Transaction,
         currentQueueItem: Record<string, unknown>,
-    ) => void | Promise<void>;
+    ) => void | boolean | Promise<void | boolean>;
     /**
      * An acknowledged delayed retry can retain its planned dispatch time as
      * the queue marker. This prevents the reconciliation scheduler from
@@ -838,10 +840,11 @@ export async function increaseRetryCountIfCurrentUserActive(
 
             if (nextRetryCount >= MAX_RETRY_COUNT) {
                 movedToDlq = true;
-                await params.onRetryExhaustedInTransaction?.(
+                const accepted = await params.onRetryExhaustedInTransaction?.(
                     transaction,
                     currentQueueItem,
                 );
+                if (accepted === false) return false;
                 const currentQueueItemForDlq = {
                     ...currentQueueItem,
                     id: params.queueItem.id,
@@ -884,6 +887,7 @@ export async function increaseRetryCountIfCurrentUserActive(
                 providerOperationStartedAt: null,
                 ...clearRevisionProcessingLeaseUpdate(),
             });
+            return undefined;
         });
 
         if (transitionResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {

@@ -105,6 +105,21 @@ describe('guarded terminal queue transitions', () => {
     expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
   });
 
+  it('does not consume retries or move to DLQ when the provider lifecycle rejects the terminal state', async () => {
+    const queueItem = {
+      id: 'changed-provider-lifecycle', ref: { parent: { id: 'sleepSyncQueue' } }, retryCount: 9,
+    } as Parameters<typeof increaseRetryCountIfCurrentUserActive>[0]['queueItem'];
+    const result = await increaseRetryCountIfCurrentUserActive({
+      queueItem, error: new Error('last retry'), userID: 'user-1', phase: 'provider_retry',
+      logPrefix: 'ProviderQueue', isCurrent: () => true,
+      onRetryExhaustedInTransaction: async () => false,
+    });
+    expect(result).toBe(QueueResult.Processed);
+    expect(hoisted.transaction.set).not.toHaveBeenCalled();
+    expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+    expect(hoisted.transaction.update).not.toHaveBeenCalled();
+  });
+
   it('commits provider terminal state in an immediate DLQ transaction', async () => {
     const queueItem = {
       id: 'guarded-terminal-state',

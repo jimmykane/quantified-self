@@ -169,6 +169,12 @@ Chunks are permanent leaf documents by schema. Firestore Rules do not grant acce
 
 This collection is not the OAuth connection source of truth. Provider credentials and stable raw account identity remain in their existing server-owned integration stores.
 
+Failed attempts add the optional boolean `retryPending`. Health displays **Retrying** with the existing delayed tone while it is true, and **Sync failed** when it is false or absent. This additive field preserves the stored status enum and old-client compatibility. Garmin Health, Suunto Health and COROS daily ingestion share this behavior. Permission, reconnect, unsupported and disconnected states remain distinct; a successful or authoritative lifecycle status clears the retry flag without inventing a successful data timestamp.
+
+The worker first records a guarded pending retry. Only the live queue retry counter can exhaust it: the final Health state is staged in the same guarded transaction as `failed_jobs` admission and queue removal. A lifecycle rejection cancels that terminal transition without consuming a retry. Same-authority Suunto credential rotation rebases the whole terminal transaction; replacement accounts and stale queue revisions never acquire that authority. State-write/commit failure leaves the retry pending, and newer successful status/timestamps are preserved. Existing validation errors that are terminal without retry keep the terminal failure label. No provider retry schedules, limits, queue identities, monitoring labels or Cloud Alert definitions change.
+
+Release the Health frontend and affected `processSleepSyncTask` / `processGarminHealthBackfillTask` consumers through the normal separately approved deployment. Either order is schema-compatible; frontend first recognizes the flag as soon as workers emit it. Older failed records retain their legacy display until subsequent worker/lifecycle updates; no production migration is part of this change. The flag is app-owned operational state, outside MCP Health/Sleep projections, grants, Assistant data and bundled skill contracts.
+
 ### Sports Lib scalar serialization boundary
 
 Quantified Self pins `@sports-alliance/sports-lib@21.0.3` and uses its exported Health and Sleep data classes as the

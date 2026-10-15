@@ -405,6 +405,8 @@ export type HealthSyncStatus = typeof HEALTH_SYNC_STATUSES[keyof typeof HEALTH_S
 export interface HealthSyncState {
   provider: HealthProvider;
   status: HealthSyncStatus;
+  /** A failed attempt still has automatic retries; absent retains legacy terminal-failure display. */
+  retryPending?: boolean;
   lastWebhookAtMs?: number | null;
   lastPollAtMs?: number | null;
   lastSyncedAtMs?: number | null;

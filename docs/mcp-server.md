@@ -2294,6 +2294,8 @@ requires no new Firestore composite index.
 
 ## Recorded Health tools
 
+Health source sync badges and the operational `healthSyncState.retryPending` field are app-only. Health/Sleep tools do not read or project sync-state documents; retry-label changes therefore add no MCP output fields, metrics, scopes, consent, Assistant actions or bundled-plugin changes.
+
 ### Shared HRV personal range
 
 `get_hrv_personal_range` is additive and requires both `health:read` and `sleep:read`. It accepts explicit ISO `start`

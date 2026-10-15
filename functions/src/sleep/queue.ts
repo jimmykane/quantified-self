@@ -40,6 +40,7 @@ import {
     replaceHealthSourceRecord,
     replaceHealthSourceRecords,
     updateHealthSyncState,
+    type HealthSyncStateWriterDependencies,
 } from '../health/writer';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import * as requestPromise from '../request-helper';
@@ -615,7 +616,7 @@ function isSameQueuePayload(
     return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
 }
 
-function healthStateGuardsForCurrentQueueRevision<T extends GarminHealthWriteLifecycleGuards | SuuntoHealthWriteLifecycleGuards>(
+function healthStateGuardsForCurrentQueueRevision<T extends HealthSyncStateWriterDependencies>(
     queueItem: SleepSyncQueueItemInterface,
     guards: T,
 ): T {
@@ -3443,6 +3444,8 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 ? sanitizeCOROSDailyErrorForTelemetry(error)
                 : error;
+        let retryExhaustedHealthState: Parameters<typeof increaseRetryCountForQueueItem>[5];
+        let terminalHealthGuardRejected = false;
         if (queueItem.userID) {
             const sleepErrorStateWritten = isHealthQueueItem(queueItem)
                 ? undefined
@@ -3499,11 +3502,32 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
                         status: HEALTH_SYNC_STATUSES.Failed,
+                        retryPending: true,
                         lastErrorCode: isSuuntoHealthQueueItem(queueItem)
                             ? 'suunto_health_sync_failed'
                             : isGarminHealthQueueItem(queueItem)
                                 ? 'garmin_health_sync_failed'
                                 : 'coros_daily_sync_failed',
+                    };
+                    retryExhaustedHealthState = async transaction => {
+                        const currentGuards = isSuuntoHealthQueueItem(queueItem)
+                            ? suuntoHealthLifecycleGuards
+                            : failedHealthLifecycleGuards;
+                        if (!currentGuards) {
+                            terminalHealthGuardRejected = true;
+                            return false;
+                        }
+                        // The final label commits with the authoritative retry count and DLQ movement.
+                        // A rejected lifecycle guard must leave both queue and status unchanged.
+                        const written = await updateHealthSyncState(
+                            failedHealthUserID,
+                            failedHealthProvider,
+                            { ...failureStateUpdate, retryPending: false },
+                            failedAtMs,
+                            { ...healthStateGuardsForCurrentQueueRevision(queueItem, currentGuards), transaction },
+                        );
+                        terminalHealthGuardRejected = !written;
+                        return written;
                     };
                     let healthStateWritten: boolean;
                     if (isSuuntoHealthQueueItem(queueItem)
@@ -3519,7 +3543,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                                 failedHealthProvider,
                                 failureStateUpdate,
                                 failedAtMs,
-                                guards,
+                                healthStateGuardsForCurrentQueueRevision(queueItem, guards),
                             ),
                             written => !written,
                         );
@@ -3531,7 +3555,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                             failedHealthProvider,
                             failureStateUpdate,
                             failedAtMs,
-                            failedHealthLifecycleGuards,
+                            healthStateGuardsForCurrentQueueRevision(queueItem, failedHealthLifecycleGuards),
                         );
                     }
                     if (!healthStateWritten) {
@@ -3566,10 +3590,35 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             `[SleepSync] Queue item ${queueItem.id} failed`,
             safeSuuntoFailureTelemetry || telemetryError,
         );
-        return increaseRetryCountForQueueItem(
+        const retry = () => increaseRetryCountForQueueItem(
             queueItem,
             telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),
+            1, undefined, undefined, retryExhaustedHealthState,
         );
+        let retryResult: Awaited<ReturnType<typeof retry>>;
+        if (retryExhaustedHealthState && isSuuntoHealthQueueItem(queueItem)
+            && queueItem.userID && suuntoHealthLifecycleGuards && suuntoAuthorityBaseline) {
+            const attempt = await runWithSuuntoHealthCredentialRebase(
+                queueItem.userID, queueItem.providerUserId, suuntoAuthorityBaseline,
+                suuntoHealthLifecycleGuards,
+                guards => {
+                    suuntoHealthLifecycleGuards = guards;
+                    terminalHealthGuardRejected = false;
+                    return retry();
+                },
+                () => terminalHealthGuardRejected,
+            );
+            suuntoHealthLifecycleGuards = attempt.guards;
+            retryResult = attempt.result;
+        } else {
+            retryResult = await retry();
+        }
+        if (terminalHealthGuardRejected) {
+            return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
+                skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD', sessionsWritten: 0, sessionsSkipped: 0,
+            });
+        }
+        return retryResult;
     } finally {
         if (isSuuntoHealthQueueItem(queueItem)) {
             try {

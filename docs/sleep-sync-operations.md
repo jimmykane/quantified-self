@@ -1,5 +1,9 @@
 # Sleep Sync Operations
 
+Health source badges distinguish automatic recovery from final failure for Garmin, Suunto and COROS. `healthSyncState.retryPending=true` renders **Retrying**; committed retry exhaustion clears it in the same transaction that writes the dead-letter record and removes the queue row. Successful and authoritative lifecycle updates clear it too. The displayed date remains the latest source update. Older clients retain the existing stored status enum and older failed rows converge on subsequent worker updates. See [Health sync state](unified-health-data.md#sync-state) for lifecycle/transaction details and deployment consumers.
+
+Monitoring coverage for this label change is **unchanged**: the #830 `[HealthSleep]` signals, provider/workload labels, error classifications, committed retry/DLQ counters, queue probes, schedules and alerts retain their existing meanings. The UI flag neither filters telemetry nor treats an HTTP acknowledgement as successful ingestion. No monitoring-bundle apply or cloud configuration change is required.
+
 Sleep sync is controlled independently from activity sync. The shared Sleep & Health queue supports
 Garmin, Suunto, and COROS Sleep for every connected user. COROS daily responses also feed the unified
 Health writer. Suunto 24/7 Health uses the same queue and worker but has a separate scheduler, kill switch,

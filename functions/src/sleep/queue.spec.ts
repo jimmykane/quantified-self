@@ -5728,6 +5728,82 @@ describe('sleep queue', () => {
         },
     );
 
+    it.each((['GarminAPI', 'SuuntoApp', 'COROSAPI'] as const).flatMap(provider =>
+        [0, 9].map(retryCount => ({ provider, retryCount, rotateCredentials: false })),
+    ).concat([{ provider: 'SuuntoApp', retryCount: 9, rotateCredentials: true }]))(
+    'projects Health retries for $provider at retry $retryCount (credential rotation: $rotateCredentials)',
+    async ({ provider, retryCount, rotateCredentials }) => {
+        hoisted.disabledProviders.splice(0);
+        const providerUserId = provider === 'GarminAPI' ? 'garmin-user-1'
+            : provider === 'SuuntoApp' ? 'suunto-user-1' : 'coros-user-1';
+        const token = {
+            id: providerUserId,
+            data: () => ({ serviceName: provider, userID: providerUserId, userName: providerUserId,
+                openId: providerUserId, accessToken: 'fixture-access-token' }),
+            ref: { parent: { parent: { id: 'test-user-uid' } } },
+        };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [token], empty: false });
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(token);
+        hoisted.processGarminHealthQueueItem.mockRejectedValue(new Error('temporary provider failure'));
+        hoisted.processSuuntoHealthQueueItem.mockRejectedValue(new Error('temporary provider failure'));
+        hoisted.requestGet.mockRejectedValue(new Error('temporary provider failure'));
+        if (rotateCredentials) {
+            hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue({
+                requiredExistingDocumentRef: { path: 'suunto-token' },
+                requiredExistingTokenCredential: { accessToken: 'rotated-access-token' },
+                requiredDocumentFieldValues: {
+                    documentRef: { path: 'suunto-binding' },
+                    expectedFields: { authorizationSource: 'oauth_callback' },
+                },
+                additionalRequiredDocumentFieldValues: [],
+            });
+            // The pending write succeeds; credentials rotate before the terminal transaction.
+            hoisted.updateHealthSyncState.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValue(true);
+        }
+        const item: SleepSyncQueueItemInterface = {
+            id: `health-retry-${provider}-${retryCount}`, dateCreated: 1_700_000_000_000,
+            processed: false, retryCount, dispatchedToCloudTask: 1_700_000_000_500,
+            provider, userID: 'test-user-uid', providerUserId,
+            type: provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll',
+            ...(provider === 'SuuntoApp' ? { healthTrigger: 'poll' as const } : {}),
+            rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+            ...(provider === 'GarminAPI' ? {
+                garminSummaryType: 'dailies' as const,
+                garminHealthTokenCredentialGeneration: 'garmin-token-generation-1',
+                garminHealthRootOAuthCredentialGeneration: 'garmin-root-generation-1',
+                garminHealthConnectionStateGeneration: 'garmin-connection-generation-1',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=fixture',
+            } : {}),
+        };
+        const update = vi.fn().mockResolvedValue(undefined);
+        item.ref = { id: item.id, parent: { id: 'sleepSyncQueue' }, update,
+            get: async () => ({ exists: true, data: () => ({ ...item }) }),
+        } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>;
+
+        const result = await processSleepSyncQueueItem(item);
+
+        expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(1, 'test-user-uid', provider,
+            expect.objectContaining({ status: 'failed', retryPending: true }), expect.any(Number), expect.any(Object));
+        if (retryCount === 9) {
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith('test-user-uid', provider,
+                expect.objectContaining({ status: 'failed', retryPending: false }), expect.any(Number),
+                expect.objectContaining({ transaction: expect.any(Object) }));
+            expect(hoisted.batchDelete).toHaveBeenCalledWith(item.ref);
+            if (rotateCredentials) {
+                expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(3);
+                expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith('test-user-uid', provider,
+                    expect.objectContaining({ retryPending: false }), expect.any(Number),
+                    expect.objectContaining({ requiredExistingTokenCredential: { accessToken: 'rotated-access-token' } }));
+                expect(hoisted.batchDelete).toHaveBeenCalledTimes(1);
+            }
+        } else {
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(1);
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
+        }
+    });
+
     it('rebases a credential-only rotation before recording a Suunto Health failure', async () => {
         const healthUserID = 'suunto-health-user';
         const tokenRef = {
@@ -5809,9 +5885,10 @@ describe('sleep queue', () => {
             expect.objectContaining({
                 status: 'failed',
                 lastErrorCode: 'suunto_health_sync_failed',
+                retryPending: true,
             }),
             expect.any(Number),
-            initialGuards,
+            expect.objectContaining({ requiredExistingTokenCredential: initialGuards.requiredExistingTokenCredential }),
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             2,
@@ -5820,9 +5897,10 @@ describe('sleep queue', () => {
             expect.objectContaining({
                 status: 'failed',
                 lastErrorCode: 'suunto_health_sync_failed',
+                retryPending: true,
             }),
             expect.any(Number),
-            rotatedGuards,
+            expect.objectContaining({ requiredExistingTokenCredential: rotatedGuards.requiredExistingTokenCredential }),
         );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
