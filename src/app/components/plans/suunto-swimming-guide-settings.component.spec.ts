@@ -30,6 +30,30 @@ describe('Suunto swimming screen preferences', () => {
     expect(element.querySelector('section')?.hidden).toBe(false);
     expect(element.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
   });
+  it('binds each disclosure to its own region when plan and workout dialogs coexist', () => {
+    const first = render(); const second = render();
+    // TestBed's root renderer may detach the earlier fixture. Keep both real
+    // component hosts attached, as overlapping Material dialogs would be.
+    document.body.append(first.nativeElement, second.nativeElement);
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 }, targets: [] },
+    ] };
+    for (const fixture of [first, second]) {
+      fixture.componentRef.setInput('structure', structure); fixture.detectChanges();
+    }
+    const ids = new Set<string>();
+    for (const fixture of [first, second]) {
+      const host = fixture.nativeElement as HTMLElement;
+      for (const toggle of Array.from(host.querySelectorAll('button[aria-controls]'))) {
+        const id = toggle.getAttribute('aria-controls')!;
+        expect(ids.has(id)).toBe(false);
+        ids.add(id);
+        expect(host.querySelector(`[id="${id}"]`)).not.toBeNull();
+        expect(document.getElementById(id)).toBe(host.querySelector(`[id="${id}"]`));
+      }
+    }
+    expect(ids.size).toBe(4); expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('changes/reorders choices with one feedback owner, ignoring duplicates and no-ops', () => {
     const component = render().componentInstance;
     component.choose('workFields', 0, 'strokes'); component.move('workFields', 0, 1);
@@ -64,7 +88,7 @@ describe('Suunto swimming screen preferences', () => {
     expect(fixture.nativeElement.textContent).toContain('not guaranteed visible');
     fixture.componentRef.setInput('structure', null); fixture.detectChanges();
     expect(component.availability()).toBeNull();
-    expect(fixture.nativeElement.querySelector('#suunto-swim-field-availability')).toBeNull();
+    expect(fixture.nativeElement.querySelector(`[id="${component.availabilityRegionId}"]`)).toBeNull();
     expect(save).not.toHaveBeenCalled();
   });
   it('bounds availability rendering and silently resets paging when the recipe changes', () => {
@@ -108,6 +132,18 @@ describe('Suunto swimming screen preferences', () => {
     expect(save).toHaveBeenCalledExactlyOnceWith(user(), { settings: { suuntoSwimmingGuide: component.draft() } });
     expect(component.notice()).toContain('already opted into sync');
     expect(haptics.success).toHaveBeenCalledOnce(); expect(component.canSave()).toBe(false);
+  });
+  it('clears stale save feedback only after accepted draft edits, without another write', async () => {
+    const component = render().componentInstance;
+    component.choose('workFields', 0, 'strokes'); await component.save();
+    const success = component.notice();
+    component.choose('workFields', 0, 'strokes');
+    expect(component.notice()).toBe(success); // An unchanged selection is silent.
+    component.choose('workFields', 0, 'heartRate');
+    expect(component.notice()).toBeNull(); expect(component.canSave()).toBe(true);
+    expect(save).toHaveBeenCalledOnce();
+    component.error.set('Previous save failed'); component.move('workFields', 0, 1);
+    expect(component.error()).toBeNull(); expect(save).toHaveBeenCalledOnce();
   });
   it('preserves choices on failed save and reports success only after a successful retry', async () => {
     save.mockRejectedValueOnce(new Error('fixture'));

@@ -10,10 +10,13 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultSuuntoSwimmingGuideSettings, normalizeSuuntoSwimmingGuideSettings, parseSuuntoSwimmingGuideSettings,
   SUUNTO_SWIM_WORK_FIELDS, SUUNTO_SWIM_REST_FIELDS, SUUNTO_SWIM_FIELD_LABELS } from '@shared/suunto-swimming-guide-settings';
 type Phase = 'workFields' | 'restFields';
+let nextSwimmingGuideSettingsId = 0;
 @Component({ selector: 'app-suunto-swimming-guide-settings', standalone: true, imports: [SharedModule],
   templateUrl: './suunto-swimming-guide-settings.component.html', styleUrl: './suunto-swimming-guide-settings.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class SuuntoSwimmingGuideSettingsComponent {
+  readonly fieldsRegionId = `suunto-swimming-guide-fields-${++nextSwimmingGuideSettingsId}`;
+  readonly availabilityRegionId = `${this.fieldsRegionId}-availability`;
   readonly structure = input<WorkoutStructureV1 | null>(null);
   private readonly users = inject(AppUserService);
   private readonly haptics = inject(AppHapticsService);
@@ -90,29 +93,33 @@ export class SuuntoSwimmingGuideSettingsComponent {
   choose(phase: Phase, index: number, value: string): void {
     if (this.saving() || this.draft()[phase][index] === value || index < 0 || index >= this.draft()[phase].length) return;
     const fields: string[] = [...this.draft()[phase]]; fields[index] = value;
-    try { this.draft.set(parseSuuntoSwimmingGuideSettings({ ...this.draft(), [phase]: fields })); this.haptics.selection(); }
+    try { this.changeDraft({ ...this.draft(), [phase]: fields }); }
     catch { /* Invalid/duplicate selections never become preferences. */ }
   }
   move(phase: Phase, index: number, delta: number): void {
     const fields = [...this.draft()[phase]]; const to = index + delta;
     if (this.saving() || index < 0 || index >= fields.length || to < 0 || to >= fields.length || to === index) return;
     [fields[index], fields[to]] = [fields[to], fields[index]];
-    this.draft.set(parseSuuntoSwimmingGuideSettings({ ...this.draft(), [phase]: fields })); this.haptics.selection();
+    this.changeDraft({ ...this.draft(), [phase]: fields });
   }
   remove(phase: Phase, index: number): void {
     if (this.saving() || index < 0 || index >= this.draft()[phase].length) return;
-    this.draft.set(parseSuuntoSwimmingGuideSettings({ ...this.draft(), [phase]: this.draft()[phase].filter((_, i) => i !== index) })); this.haptics.selection();
+    this.changeDraft({ ...this.draft(), [phase]: this.draft()[phase].filter((_, i) => i !== index) });
   }
   add(phase: Phase): void {
     if (this.saving() || this.draft()[phase].length >= 5) return;
     const allowed = phase === 'workFields' ? SUUNTO_SWIM_WORK_FIELDS : SUUNTO_SWIM_REST_FIELDS;
     const field = allowed.find(value => !this.draft()[phase].some(selected => selected === value));
     if (!field) return;
-    this.draft.set(parseSuuntoSwimmingGuideSettings({ ...this.draft(), [phase]: [...this.draft()[phase], field] })); this.haptics.selection();
+    this.changeDraft({ ...this.draft(), [phase]: [...this.draft()[phase], field] });
   }
   reset(): void {
     if (this.saving() || JSON.stringify(this.draft()) === JSON.stringify(defaultSuuntoSwimmingGuideSettings())) return;
-    this.draft.set(defaultSuuntoSwimmingGuideSettings()); this.haptics.selection();
+    this.changeDraft(defaultSuuntoSwimmingGuideSettings());
+  }
+  private changeDraft(value: unknown): void {
+    this.draft.set(parseSuuntoSwimmingGuideSettings(value));
+    this.notice.set(null); this.error.set(null); this.haptics.selection();
   }
   async save(): Promise<void> {
     const user = this.users.user(); if (!this.canSave() || !user || user.uid !== this.owner()) return;

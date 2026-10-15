@@ -1491,11 +1491,12 @@ describe('Training provider delivery controls', () => {
     expect(document.body.textContent).not.toContain('Last checked:');
     expect(document.querySelector('.delivery-list')?.getAttribute('aria-label')).toBe('Suunto workout delivery records');
     expect(ref.componentInstance.swimmingGuideStructure()?.sport).toBe(ActivityTypes.Swimming);
-    (document.querySelector('button[aria-controls="suunto-swimming-guide-fields"]') as HTMLButtonElement).click();
+    (document.querySelector('app-suunto-swimming-guide-settings > button[aria-controls]') as HTMLButtonElement).click();
     TestBed.inject(ApplicationRef).tick();
-    (document.querySelector('button[aria-controls="suunto-swim-field-availability"]') as HTMLButtonElement).click();
+    const availabilityToggle = document.querySelector('button[aria-controls$="-availability"]') as HTMLButtonElement;
+    availabilityToggle.click();
     render('suunto-swim-fields'); render('suunto-swim-fields-dark');
-    expect(document.querySelector('#suunto-swim-field-availability')?.hasAttribute('hidden')).toBe(false);
+    expect(document.getElementById(availabilityToggle.getAttribute('aria-controls')!)?.hasAttribute('hidden')).toBe(false);
     expect(document.querySelector('.availability-step h4')?.textContent).toContain('Rest 1/10');
     expect(document.querySelectorAll('.availability-step')).toHaveLength(6);
     ref.close();

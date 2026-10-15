@@ -3128,6 +3128,9 @@ step numbers preserve prescription order and six rows load at a time. It is the 
 current draft preferences, not a renderer/readback of an already delivered Guide. Native readings need watch data;
 included fields are not guaranteed visible. Plan-level settings do not invent a representative workout. The report
 is cleared when the same-account schedule is unavailable; no new query, provider read, persistence or mutation is added.
+Disclosure targets use per-instance IDs so stacked plan/workout dialogs cannot control another dialog's region.
+Accepted draft edits clear old save success/error messages; unchanged or rejected selections remain silent and
+never imply that a later draft was saved. Both behaviors have focused Angular regression coverage.
 The existing 1,000-screen/256-KiB enriched-JSON bounds retain compact/frozen fallbacks without speculative numbering;
 the report explicitly warns that size fallback can omit headings/planned context.
 

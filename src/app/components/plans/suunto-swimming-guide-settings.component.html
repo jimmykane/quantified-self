@@ -1,13 +1,13 @@
-<button mat-button type="button" [attr.aria-expanded]="expanded()" aria-controls="suunto-swimming-guide-fields"
+<button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="fieldsRegionId"
   (click)="toggle()">{{ expanded() ? 'Hide' : 'Show' }} swimming Guide screens</button>
-<section id="suunto-swimming-guide-fields" [hidden]="!expanded()" aria-label="Suunto swimming Guide screens">
+<section [id]="fieldsRegionId" [hidden]="!expanded()" aria-label="Suunto swimming Guide screens">
   <p>Choose extra fields for all your future pool and open-water Guides. Order matters; Suunto adapts the layout to your watch.</p>
   <p>The ending countdown, authored targets and instructions keep their slots. Target readings stay together; extra fields fill the remaining space, up to five fields.</p>
   <p>These are priorities, not five guaranteed watch cells. When selected, the interval number goes in the heading, such as <strong>Rest 1/10</strong>, without using a metric slot. Previous/next planned distances share one short text field; Suunto may crop that text beside numeric readings.</p>
   @if (availability(); as allocation) {
-    <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" aria-controls="suunto-swim-field-availability"
+    <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" [attr.aria-controls]="availabilityRegionId"
       (click)="toggleAvailability()">{{ availabilityExpanded() ? 'Hide' : 'Show' }} field availability for this workout</button>
-    <div id="suunto-swim-field-availability" [hidden]="!availabilityExpanded()">
+    <div [id]="availabilityRegionId" [hidden]="!availabilityExpanded()">
       <p>This is the new normal-layout allocation for your current choices, not a preview of the Guide already on your watch. Included means requested from Suunto, not guaranteed visible or measured. Targets and instructions may leave fewer slots. Large Guides can use a compact fallback without interval headings or planned-distance context.</p>
       @if (allocation.blocked) {
         <p>This recipe cannot currently be sent as a Suunto Guide. Review its compatibility before relying on a field allocation.</p>
