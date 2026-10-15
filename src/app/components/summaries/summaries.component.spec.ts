@@ -7,6 +7,7 @@ import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/das
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { buildDashboardExamplePreview } from '../../helpers/dashboard-chart-preview.helper';
 import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
 import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-view-model.helper';
 import { EMPTY } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
@@ -1565,7 +1566,7 @@ describe('SummariesComponent', () => {
     const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
     component.user = { uid: 'owner', settings: { dashboardSettings } } as any;
     component.showActions = true; component.isOwnerDashboard = true;
-    component.dashboardTodayReadiness.changeSignals = [{ id: 'hrv', label: 'HRV',
+    component.dashboardGlanceSignals = [{ id: 'hrv', label: 'HRV',
       sourceLabel: 'Suunto · Overnight average', state: 'outside-range',
       statusText: 'Below your usual range', detailText: '7-day average compared with 60 days' }];
     const host = fixture.nativeElement as HTMLElement;
@@ -1584,22 +1585,59 @@ describe('SummariesComponent', () => {
     expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
   });
 
-  it('keeps ordinary Today recovery context to one named-signal sentence', () => {
+  it('keeps all five ordinary Today assessments to one sentence without extra rows or a new score', () => {
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as any;
     component.showActions = true; component.isOwnerDashboard = true;
-    component.dashboardTodayReadiness.changeSignals = [
+    const healthSignals: typeof component.dashboardGlanceSignals = [
       { id: 'hrv', label: 'HRV', sourceLabel: 'Suunto · Overnight average', state: 'within-range',
         statusText: 'Within your usual range', detailText: '7-day average compared with 60 days' },
       { id: 'sleep', label: 'Sleep', sourceLabel: 'Suunto', state: 'recorded',
         statusText: 'Latest night', detailText: 'Recorded sleep' },
     ];
+    component.dashboardGlanceSignals = buildDashboardGlanceSignals({ ...component.dashboardTodayReadiness,
+      loading: false, awaitingSleep: false, warningText: '', label: 'Ready', scoreText: '82/100', sleepText: '87/100',
+      sleepContextText: 'Today', overnightHeartRateText: '-4%', overnightHeartRateTone: 'positive', changeSignals: healthSignals,
+    }, { label: 'Balanced', caption: 'Stable load', scalePosition: 2, scaleTone: 'positive' }, 'available');
     fixture.detectChanges();
     const summary = (fixture.nativeElement as HTMLElement).querySelector('app-health-change-summary')!;
     expect(summary.querySelector('h2')?.textContent).toBe('At a glance');
-    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Your 7-day HRV average is within your usual range.');
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Readiness is Ready, training state is Balanced, and today’s sleep is recorded.');
+    expect(summary.querySelector('[role="status"]')?.textContent).not.toContain('/100');
     expect(summary.querySelector('button')).toBeNull();
     expect(summary.querySelector('.health-change-scope')).toBeNull();
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('shows the existing Mixed assessment and its contributing sources only when details are requested', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+    component.isOwnerDashboard = true;
+    const healthSignals: typeof component.dashboardGlanceSignals = [
+      { id: 'hrv', label: 'HRV', sourceLabel: 'Garmin · Overnight HRV', state: 'within-range', statusText: 'Within range', detailText: '7-day average · 60-day range' },
+      { id: 'sleep', label: 'Sleep', sourceLabel: 'Suunto', state: 'recorded', statusText: 'Recorded', detailText: 'Night ended 15 Oct, 08:00' },
+    ];
+    component.dashboardGlanceSignals = buildDashboardGlanceSignals({ ...component.dashboardTodayReadiness,
+      loading: false, awaitingSleep: false, warningText: '', label: 'Mixed', scoreText: '64/100', sleepText: '62/100',
+      confidenceText: 'High confidence', evidenceText: '4/4 signals', sleepContextText: 'Today', overnightHeartRateText: '-4%',
+      overnightHeartRateTone: 'positive', changeSignals: healthSignals,
+    }, { label: 'Balanced', caption: 'Stable load', scalePosition: 2, scaleTone: 'positive' }, 'available');
+    fixture.detectChanges();
+    const summary = (fixture.nativeElement as HTMLElement).querySelector('app-health-change-summary')!;
+    const details = summary.querySelector<HTMLElement>('#dashboard-today-changes-details')!;
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Readiness is Mixed.');
+    expect(details.hidden).toBe(true);
+    summary.querySelector('button')!.click(); fixture.detectChanges();
+    expect(details.hidden).toBe(false);
+    expect(details.querySelectorAll('dt')).toHaveLength(5);
+    expect(details.textContent).toContain('Mixed · 64/100');
+    expect(details.textContent).toContain('Sleep score 62/100');
+    expect(details.textContent).toContain('Garmin · Overnight HRV');
+    expect(details.textContent).toContain('Suunto');
+    expect(summary.querySelector('.health-change-glance-icon')).toBeNull();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    component['resetDerivedMetricsState'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(details.textContent).not.toContain('Suunto');
+    expect(details.hidden).toBe(true);
+    expect(component.dashboardGlanceSignals.every(signal => signal.state === 'loading')).toBe(true);
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {
@@ -1772,6 +1810,10 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
+      expect(component.dashboardGlanceSignals.map(signal => signal.id)).toEqual(['readiness', 'training-load', 'sleep', 'hrv', 'overnight-hr']);
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'readiness')).toMatchObject({ state: 'attention', statusText: 'Mixed · 67/100' });
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'training-load')).toMatchObject({ state: 'available', statusText: component.dashboardTodayTrainingState.label });
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'overnight-hr')).toMatchObject({ state: 'attention', statusText: 'Above baseline' });
       expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'hrv')).toMatchObject({
         state: 'insufficient', sourceLabel: 'Suunto · Sleep HRV',
       });
@@ -1811,6 +1853,8 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'insufficient')).toBe(true);
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, awaitingSleep: true, score: null, warningText: '' });
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'sleep')?.state).toBe('insufficient');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'training-load')?.state).toBe('available');
       expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Awaiting today’s sleep');
       expect(render().querySelector('[label="Available readiness signals"]')).toBeNull();
       // Newly imported sleep continues updating the open dashboard.
@@ -1844,6 +1888,8 @@ describe('SummariesComponent', () => {
         state: 'recorded', detailText: expect.stringContaining('Sep 10, 2026'),
       });
       expect(component.dashboardTodayReadiness.loadText).toBe('+24.9 / -1.3');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'readiness')?.state).toBe('insufficient');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'overnight-hr')?.state).toBe('insufficient');
       expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
       sleep$.next(nights);
       vi.advanceTimersToNextFrame();
@@ -1910,6 +1956,8 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
       render();
       expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'unavailable')).toBe(true);
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'readiness')?.state).toBe('unavailable');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'training-load')?.state).toBe('available');
       expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be loaded');
       expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
       expect(reservations()).toEqual(pendingLayout);

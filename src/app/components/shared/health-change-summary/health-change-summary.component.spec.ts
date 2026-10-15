@@ -135,12 +135,12 @@ describe('Health change summary disclosure', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['within-range', 'outside-range', 'unavailable', 'loading', 'insufficient', 'recorded'] as const)('uses a %s rail without a standalone status icon', state => {
+  it.each(['within-range', 'outside-range', 'attention', 'available', 'unavailable', 'loading', 'insufficient', 'recorded'] as const)('uses a %s rail without a standalone status icon', state => {
     const fixture = TestBed.createComponent(HealthChangeSummaryComponent);
     fixture.componentRef.setInput('compact', true);
     fixture.componentRef.setInput('scopeKey', 'owner');
     fixture.componentRef.setInput('summaryId', 'glance');
-    fixture.componentRef.setInput('signals', [{ id: 'hrv', label: 'HRV', sourceLabel: 'Suunto',
+    fixture.componentRef.setInput('signals', [{ id: state === 'attention' || state === 'available' ? 'readiness' : 'hrv', label: 'HRV', sourceLabel: 'Suunto',
       state, statusText: state, detailText: 'Same-source evidence' }]);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;

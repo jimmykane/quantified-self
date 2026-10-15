@@ -4,7 +4,8 @@ import type { HealthPriorityCardView } from '../components/health/health-priorit
 import { selectDefaultHealthSourceKey } from './health-source-selection.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
 
-export type HealthChangeState = 'outside-range' | 'within-range' | 'insufficient' | 'recorded' | 'loading' | 'unavailable';
+export type HealthChangeState = 'outside-range' | 'within-range' | 'insufficient' | 'recorded' | 'loading' | 'unavailable'
+  | 'attention' | 'available';
 
 /** Presentation of existing evidence only. This is not an anomaly detector or a score. */
 export interface HealthChangeSignal {
@@ -14,6 +15,8 @@ export interface HealthChangeSignal {
   state: HealthChangeState;
   statusText: string;
   detailText: string;
+  /** Dashboard clause from an existing assessment, not a new personal-range classification. */
+  summaryText?: string;
 }
 
 interface PersonalRangeSummary {
@@ -71,6 +74,7 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
 
 /** Dashboard copy only: name the evidence checked, never imply an all-metrics assessment. */
 export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal[]) {
+  if (signals.some(signal => signal.id === 'readiness')) return buildDashboardAssessmentSummary(signals);
   const attentionSignals = signals.filter(signal => signal.state === 'outside-range'
     || signal.state === 'unavailable' || signal.state === 'insufficient');
   const priority: readonly HealthChangeState[] = ['outside-range', 'unavailable', 'loading', 'insufficient', 'within-range', 'recorded'];
@@ -91,6 +95,29 @@ export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal
     default: headline = 'No recent sleep or nightly HRV readings yet.';
   }
   return { headline, attentionSignals, state: state ?? null };
+}
+
+function buildDashboardAssessmentSummary(signals: readonly HealthChangeSignal[]) {
+  const issues = signals.filter(signal => signal.state === 'attention' || signal.state === 'outside-range');
+  const unavailable = signals.filter(signal => signal.state === 'unavailable');
+  const missing = signals.filter(signal => signal.state === 'insufficient');
+  const loading = signals.filter(signal => signal.state === 'loading');
+  const selected = issues.length ? issues : unavailable.length ? unavailable : missing.length ? missing : loading;
+  const readiness = signals.find(signal => signal.id === 'readiness');
+  // A Mixed/Recover assessment needs its contributing evidence, including recorded Sleep scores.
+  const attentionSignals = readiness?.state === 'attention'
+    ? [...signals]
+    : signals.filter(signal => ['attention', 'outside-range', 'unavailable', 'insufficient'].includes(signal.state));
+  const clauseSignals = selected[0]?.id === 'readiness' && selected[0].state !== 'attention' ? selected.slice(0, 1) : selected.slice(0, 2);
+  const clauses = clauseSignals.map(signal => signal.summaryText || `${signal.label}: ${signal.statusText}`);
+  if (clauses.length) clauses[0] = clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1);
+  const training = signals.find(signal => signal.id === 'training-load');
+  const sleep = signals.find(signal => signal.id === 'sleep');
+  const headline = clauses.length ? `${clauses.join('; ')}.`
+    : readiness?.state === 'available' && training?.state === 'available' && sleep?.state === 'recorded'
+      ? `Readiness is Ready, training state is ${training.statusText}, and today’s sleep is recorded.`
+      : 'Your available current assessments are shown below.';
+  return { headline, attentionSignals, state: selected[0]?.state ?? (readiness?.state === 'available' ? 'available' : null) };
 }
 
 /** Mirrors Highlight source selection; never combines provider/account or semantic series. */

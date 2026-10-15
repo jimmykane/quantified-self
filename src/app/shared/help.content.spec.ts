@@ -449,7 +449,11 @@ describe('help.content', () => {
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
     expect(health).toContain('Dashboard leaves out these extra rows on ordinary days');
-    expect(health).toContain('shows only those signals');
+    expect(health).toContain('existing Readiness, training load, Sleep, HRV and overnight HR assessments');
+    expect(health).toContain('**Mixed** or **Recover** Readiness includes all five contributing signals');
+    expect(health).toContain('including recorded Sleep scores and any still-loading evidence');
+    expect(health).toContain('not daily resting HR');
+    expect(health).toContain('no new sleep-score threshold is added');
     expect(health).toContain('**Show details** to see the source');
     expect(health).toContain('not an assessment of every chart');
     expect(health).toContain('Loading, failed or incomplete reads are never treated as normal');

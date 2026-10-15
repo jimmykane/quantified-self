@@ -9,7 +9,9 @@
   padding-block: 0.125rem;
   padding-inline-start: 0.75rem;
   &[data-glance-state='within-range'] { --health-glance-accent: var(--qs-theme-success); }
+  &[data-glance-state='available'] { --health-glance-accent: var(--qs-theme-success); }
   &[data-glance-state='outside-range'] { --health-glance-accent: var(--mat-sys-tertiary); }
+  &[data-glance-state='attention'] { --health-glance-accent: var(--mat-sys-tertiary); }
   &[data-glance-state='unavailable'] { --health-glance-accent: var(--mat-sys-error); }
   .health-change-heading { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 0.25rem; }
   .health-change-intro { display: grid; gap: 0.25rem; grid-column: 1; grid-row: 1; }
