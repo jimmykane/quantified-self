@@ -173,6 +173,8 @@ For Garmin, Suunto and COROS, failed attempts carry the optional `retryPending` 
 
 Final failure status uses the queue's existing retry-exhaustion callback and commits with the live retry counter's DLQ transition. Only this status bookkeeping resolves a current credential inside the transaction, requiring the same account and OAuth generation and retaining all connection/root guards. Queue utilities, ownership, retry policy, provider requests and data/recovery write paths remain unchanged. Release the Health frontend and the existing Health/Sleep workers through separately approved deployments.
 
+Pending status also requires the current queue revision and processing lease. The existing claim authorizes the owner without requiring legacy rows to have a stored UID; no queue ownership migration is introduced.
+
 ### Sports Lib scalar serialization boundary
 
 Quantified Self pins `@sports-alliance/sports-lib@21.0.3` and uses its exported Health and Sleep data classes as the

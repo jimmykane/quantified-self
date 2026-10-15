@@ -66,6 +66,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health status in the exis
         expect((await queue().get()).get('retryCount')).toBe(9);
         expect((await db.doc(`failed_jobs/${uid}`).get()).exists).toBe(false);
     });
+    it.each(['queueRevision', 'processingOwner'])('does not publish a pending retry after %s changes', async field => {
+        await seed();
+        await state().set({ provider, status: 'ready', retryPending: false, updatedAtMs: 15_000 });
+        await queue().update({ processingOwner: 'worker-1', [field]: 'replacement' });
+        expect(await updateHealthSyncState(uid, provider, { status: 'failed', retryPending: true }, 20_000, {
+            db, additionalRequiredDocumentFieldValues: [{ documentRef: queue(), expectedFields: {
+                processed: false, queueRevision: 'original', processingOwner: 'worker-1',
+            } }],
+        })).toBe(false);
+        expect((await state().get()).data()).toMatchObject({ status: 'ready', retryPending: false });
+    });
     it.each(['newer_success', 'replacement_connection'])('preserves %s without changing the queue outcome', async reason => {
         await seed();
         await state().set({ provider, status: 'ready', retryPending: false, updatedAtMs: reason === 'newer_success' ? 30_000 : 15_000 });

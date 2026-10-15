@@ -40,6 +40,7 @@ import {
     replaceHealthSourceRecord,
     replaceHealthSourceRecords,
     updateHealthSyncState,
+    type HealthSyncStateWriterDependencies,
 } from '../health/writer';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import * as requestPromise from '../request-helper';
@@ -615,9 +616,10 @@ function isSameQueuePayload(
     return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
 }
 
-function healthStateGuardsForCurrentQueueRevision<T extends GarminHealthWriteLifecycleGuards | SuuntoHealthWriteLifecycleGuards>(
+function healthStateGuardsForCurrentQueueRevision<T extends HealthSyncStateWriterDependencies>(
     queueItem: SleepSyncQueueItemInterface,
     guards: T,
+    requireStoredOwner = true,
 ): T {
     if (!queueItem.ref) return guards;
     const queueRevision = typeof queueItem.queueRevision === 'string'
@@ -625,7 +627,7 @@ function healthStateGuardsForCurrentQueueRevision<T extends GarminHealthWriteLif
         : '';
     const expectedFields: Record<string, unknown> = {
         processed: false,
-        ...(queueItem.userID ? { userID: queueItem.userID } : {}),
+        ...(requireStoredOwner && queueItem.userID ? { userID: queueItem.userID } : {}),
         ...(queueRevision
             ? { queueRevision }
             : { dateCreated: queueItem.dateCreated }),
@@ -3496,6 +3498,9 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     : corosLifecycleGuards;
             const failedHealthUserID = queueItem.userID;
             if (failedHealthProvider && failedHealthLifecycleGuards && failedHealthUserID) {
+                // The claim already authenticated the owner; legacy rows may lack a durable UID.
+                const pendingGuards = (guards: typeof failedHealthLifecycleGuards) =>
+                    healthStateGuardsForCurrentQueueRevision(queueItem, guards, false);
                 try {
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
@@ -3544,7 +3549,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                                 failedHealthProvider,
                                 failureStateUpdate,
                                 failedAtMs,
-                                guards,
+                                pendingGuards(guards),
                             ),
                             written => !written,
                         );
@@ -3556,7 +3561,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                             failedHealthProvider,
                             failureStateUpdate,
                             failedAtMs,
-                            failedHealthLifecycleGuards,
+                            pendingGuards(failedHealthLifecycleGuards),
                         );
                     }
                     if (!healthStateWritten) {

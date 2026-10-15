@@ -5776,17 +5776,24 @@ describe('sleep queue', () => {
                 rangeStartMs: Date.parse('2026-04-28T00:00:00Z'), rangeEndMs: Date.parse('2026-04-29T00:00:00Z'),
             }),
         };
+        let claimedOwner = '';
         hoisted.claimSleepQueueRevision.mockImplementation(async (_item, _uid, owner) => {
+            claimedOwner = owner;
             Object.assign(state, { processingOwner: owner, processingRevision: 'revision:retry-status' });
             return 'claimed';
         });
         const ref = { parent: { id: 'sleepSyncQueue' }, update: async (patch: object) => { Object.assign(state, patch); },
             get: async () => ({ exists: true, data: () => ({ ...state }) }) };
         // The live transaction, not this stale input count, owns exhaustion.
-        const result = await processSleepSyncQueueItem({ ...state, retryCount: 0, id: 'health-retry', ref } as unknown as SleepSyncQueueItemInterface);
+        if (outcome === 'pending') delete state.userID; // Legacy durable row; the worker has resolved its owner.
+        const result = await processSleepSyncQueueItem({ ...state, userID: 'test-user-uid', retryCount: 0, id: 'health-retry', ref } as unknown as SleepSyncQueueItemInterface);
         expect(result, JSON.stringify(hoisted.loggerWarn.mock.calls)).toBe(outcome === 'pending' ? QueueResult.RetryIncremented
             : outcome === 'read_failed' ? QueueResult.Failed : QueueResult.MovedToDLQ);
         expect(hoisted.updateHealthSyncState.mock.calls[0][2]).toMatchObject({ status: 'failed', retryPending: true });
+        expect(hoisted.updateHealthSyncState.mock.calls[0][4].additionalRequiredDocumentFieldValues).toContainEqual({
+            documentRef: ref, expectedFields: { processed: false, queueRevision: 'retry-status',
+                processingOwner: claimedOwner, processingRevision: 'revision:retry-status' },
+        });
         if (outcome === 'pending' || outcome === 'replaced' || outcome === 'read_failed') {
             expect(hoisted.updateHealthSyncState).toHaveBeenCalledOnce();
             if (outcome === 'read_failed') {
@@ -5886,7 +5893,12 @@ describe('sleep queue', () => {
                 lastErrorCode: 'suunto_health_sync_failed',
             }),
             expect.any(Number),
-            initialGuards,
+            { ...initialGuards, additionalRequiredDocumentFieldValues: [{
+                documentRef: expect.objectContaining({ update }), expectedFields: {
+                    processed: false, dateCreated: 1_700_000_000_000,
+                    processingOwner: expect.any(String), processingRevision: expect.any(String),
+                },
+            }] },
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             2,
@@ -5897,7 +5909,12 @@ describe('sleep queue', () => {
                 lastErrorCode: 'suunto_health_sync_failed',
             }),
             expect.any(Number),
-            rotatedGuards,
+            { ...rotatedGuards, additionalRequiredDocumentFieldValues: [{
+                documentRef: expect.objectContaining({ update }), expectedFields: {
+                    processed: false, dateCreated: 1_700_000_000_000,
+                    processingOwner: expect.any(String), processingRevision: expect.any(String),
+                },
+            }] },
         );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
