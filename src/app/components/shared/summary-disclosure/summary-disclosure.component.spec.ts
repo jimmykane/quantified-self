@@ -64,7 +64,12 @@ describe('shared summary disclosure shell', () => {
     shell.toggleDetails(); fixture.detectChanges();
     fixture.componentInstance.details.set(false); fixture.detectChanges();
     expect(shell.expanded()).toBe(false); expect(host.querySelector('button')).toBeNull();
+    expect(host.querySelector('#sample-details')).toBeNull();
     shell.toggleDetails(); expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.details.set(true); fixture.detectChanges();
+    expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(true);
+    expect(host.querySelector('#sample-details')?.textContent).toContain('Before and after readings');
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('keeps one headline in flat mode and resets the disclosure on a presentation change', async () => {
     const { fixture, shell, host, haptics } = await render();

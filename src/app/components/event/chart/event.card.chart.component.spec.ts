@@ -194,6 +194,193 @@ describe('EventCardChartComponent', () => {
     }
   }
 
+  function setZoneActivity(): void {
+    const activity = {
+      getID: () => 'zone-activity',
+      type: ActivityTypes.Cycling,
+      intensityZones: [DataHeartRate.type, DataPower.type].map(type => ({
+        type, zone2LowerLimit: 120, zone3LowerLimit: 140,
+      })),
+      getAllStreams: () => [DataHeartRate.type, DataPower.type].map(type => ({ type, getData: () => [100, 130, 150] })),
+    } as unknown as typeof component.selectedActivities[number];
+    component.selectedActivities = [activity];
+    component.event = { ...component.event, getActivities: () => [activity] };
+  }
+
+  it('defaults zone colors on and silently follows saved preferences', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.showIntensityZoneColorsToggle).toBe(true);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), colorIntensityZoneLines: false });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.colorIntensityZoneLines()).toBe(false);
+    expect(component.showIntensityZoneColorsToggle).toBe(true);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }));
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('updates chart colors immediately, saves once, and permits turning them back on before snapshot refresh', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onColorIntensityZoneLinesChange(false);
+    expect(component.colorIntensityZoneLines()).toBe(false);
+    expect(component.isSavingZoneColors()).toBe(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }));
+    expect(component.showIntensityZoneColorsToggle).toBe(true);
+    await component.onColorIntensityZoneLinesChange(true);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finishSave();
+    await save;
+    expect(component.isSavingZoneColors()).toBe(false);
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+    await component.onColorIntensityZoneLinesChange(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(mockUserSettingsQuery.updateChartSettings.mock.calls).toEqual([
+      [{ colorIntensityZoneLines: false }, { force: true, expectedUserID: 'u1' }],
+      [{ colorIntensityZoneLines: true }, { force: true, expectedUserID: 'u1' }],
+    ]);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: true }));
+  });
+
+  it('sends the saved zone-color preference through worker snapshots', async () => {
+    setZoneActivity();
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    const build = vi.spyOn(worker, 'buildPanels').mockResolvedValue([]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: true }), expect.any(Function));
+    await component.onColorIntensityZoneLinesChange(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }), expect.any(Function));
+  });
+
+  it('restores the chart and switch and reports a failed zone-color save', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('offline'));
+    await component.onColorIntensityZoneLinesChange(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.isSavingZoneColors()).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: true }));
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Could not save zone colors. Please try again.', 'OK', expect.any(Object));
+  });
+
+  it.each(['save failure', 'turning colors back on'])('ignores a delayed uncolored worker result after %s', async reason => {
+    setZoneActivity();
+    const coloredPanels: eventDataHelper.EventChartPanelModel[] = [{
+      dataType: DataPower.type, displayName: 'Power', unit: 'W', colorGroupKey: 'Power',
+      minX: 0, maxX: 10,
+      series: [{
+        id: 'zone-activity::Power', activityID: 'zone-activity', activityName: 'Cycling',
+        color: '#ff0000', streamType: DataPower.type, displayName: 'Power', unit: 'W',
+        points: [{ x: 0, y: 100, time: 0 }, { x: 10, y: 150, time: 10 }],
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 120 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 120 },
+        ],
+      }],
+    }];
+    const uncoloredPanels = coloredPanels.map(panel => ({
+      ...panel,
+      series: panel.series.map(({ zoneColorPieces: _zoneColorPieces, ...series }) => series),
+    }));
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    const build = vi.spyOn(worker, 'buildPanels').mockResolvedValue(coloredPanels);
+    const rebuild = (source: string) => (component as unknown as {
+      rebuildPanels(source: string): Promise<void>;
+    }).rebuildPanels(source);
+    await rebuild('initial-zone-colors');
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(component.allChartPanels).toBe(coloredPanels);
+
+    let finishBuild!: (panels: eventDataHelper.EventChartPanelModel[]) => void;
+    build.mockImplementationOnce(() => new Promise(resolve => { finishBuild = resolve; }));
+    let failSave!: (error: Error) => void;
+    if (reason === 'save failure') {
+      mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failSave = reject; }));
+    }
+    const save = component.onColorIntensityZoneLinesChange(false);
+    const delayedRebuild = rebuild('disable-zone-colors');
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }), expect.any(Function));
+
+    if (reason === 'save failure') {
+      failSave(new Error('offline'));
+      await save;
+    } else {
+      await save;
+      await component.onColorIntensityZoneLinesChange(true);
+    }
+    await rebuild('restore-zone-colors');
+    expect(component.isLoading).toBe(false);
+    finishBuild(uncoloredPanels);
+    await delayedRebuild;
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.allChartPanels).toBe(coloredPanels);
+    expect(component.isLoading).toBe(false);
+  });
+
+  it.each([{ isMerge: true }, { benchmarkResults: { test: {} } }])('hides and ignores zone colors for comparisons: %j', async comparison => {
+    setZoneActivity();
+    component.event = { ...component.event, ...comparison };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.showIntensityZoneColorsToggle).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }));
+    await component.onColorIntensityZoneLinesChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('silently ignores unchanged, unavailable and signed-out zone-color choices', async () => {
+    await component.onColorIntensityZoneLinesChange(false);
+    expect(component.showIntensityZoneColorsToggle).toBe(false);
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await component.onColorIntensityZoneLinesChange(true);
+    authUserSubject.next(null);
+    await component.onColorIntensityZoneLinesChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('discards a pending zone-color override and late feedback after an account switch', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onColorIntensityZoneLinesChange(false);
+    authUserSubject.next({ uid: 'u2' } as User);
+    finishSave();
+    await save;
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.isSavingZoneColors()).toBe(false);
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+  });
+
   it('defaults patterns off, silently follows Settings, and ignores unchanged choices', async () => {
     component.event = { ...component.event, isMerge: true } as any;
     expect(component.useDistinctLinePatterns()).toBe(false);

@@ -11,12 +11,14 @@
       <p class="health-change-scope">From your latest sleep and nightly HRV readings.</p>
     }
   </div>
-  <dl summaryDetails class="health-change-evidence">
-    @for (signal of detailSignals(); track signal.id) {
-      <div [attr.data-state]="signal.state">
-        <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
-        <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
-      </div>
-    }
-  </dl>
+  @if (!compact()) {
+    <dl summaryDetails class="health-change-evidence">
+      @for (signal of signals(); track signal.id) {
+        <div [attr.data-state]="signal.state">
+          <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
+          <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
+        </div>
+      }
+    </dl>
+  }
 </app-summary-disclosure>

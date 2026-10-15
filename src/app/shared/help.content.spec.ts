@@ -472,10 +472,11 @@ describe('help.content', () => {
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
-    expect(health).toContain('Dashboard leaves out these extra rows on ordinary days');
+    expect(health).toContain('Dashboard **At a glance** is always sentence-only');
+    expect(health).toContain('no expand button or repeated metric breakdown');
+    expect(health).toContain('including **Mixed** and **Recover** days');
+    expect(health).toContain('existing **Today** card keeps the scores, charts and supporting context');
     expect(health).toContain('existing Readiness, training load, Sleep, HRV and overnight HR assessments');
-    expect(health).toContain('**Mixed** or **Recover** Readiness includes all five contributing signals');
-    expect(health).toContain('including recorded Sleep scores and any still-loading evidence');
     expect(health).toContain('not daily resting HR');
     expect(health).toContain('no new sleep-score threshold is added');
     expect(health).toContain('**Show details** to see the source');
@@ -1492,6 +1493,9 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
+    expect(gettingStartedSection?.content).toContain('**Color by zones** in **Chart options**');
+    expect(gettingStartedSection?.content).toContain('your choice is saved across events');
+    expect(gettingStartedSection?.content).toContain('merged events and benchmark comparisons keep their device colors');
     expect(gettingStartedSection?.content).toContain('**Reset zoom or selection** button');
     expect(gettingStartedSection?.content).toContain('clears the shared chart state for the event');
     expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');

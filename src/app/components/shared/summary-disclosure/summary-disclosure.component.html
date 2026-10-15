@@ -23,7 +23,9 @@
     <p class="summary-disclosure-headline" role="status" aria-atomic="true">{{ headline() }}</p>
   }
   <ng-content select="[summaryOverview]" />
-  <div [id]="summaryId() + '-details'" [hidden]="!expanded() || !detailsAvailable()">
-    <ng-content select="[summaryDetails]" />
-  </div>
+  @if (detailsAvailable()) {
+    <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
+      <ng-content select="[summaryDetails]" />
+    </div>
+  }
 </section>

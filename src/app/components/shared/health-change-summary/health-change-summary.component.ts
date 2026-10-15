@@ -13,14 +13,13 @@ import { SummaryDisclosureComponent, type SummaryDisclosureTone } from '../summa
 export class HealthChangeSummaryComponent {
   readonly signals = input.required<readonly HealthChangeSignal[]>();
   readonly summaryId = input.required<string>();
-  /** Dashboard keeps ordinary days to one sentence; Health retains its full overview. */
+  /** Dashboard is sentence-only in every state; Health retains its evidence disclosure. */
   readonly compact = input(false);
   /** Clear private disclosure state when the account or overview scope changes. */
   readonly scopeKey = input.required<string>();
   readonly summary = computed(() => buildHealthChangeSummary(this.signals()));
   readonly glance = computed(() => buildDashboardGlanceSummary(this.signals()));
-  readonly detailsAvailable = computed(() => !this.compact() || this.glance().attentionSignals.length > 0);
-  readonly detailSignals = computed(() => this.compact() ? this.glance().attentionSignals : this.signals());
+  readonly detailsAvailable = computed(() => !this.compact());
   readonly tone = computed<SummaryDisclosureTone>(() => {
     const state = this.glance().state;
     return state === 'within-range' || state === 'available' ? 'positive'
@@ -31,6 +30,7 @@ export class HealthChangeSummaryComponent {
   readonly expanded = computed(() => this.disclosure()?.expanded() ?? false);
 
   toggleDetails(): void {
+    if (this.compact()) return;
     this.disclosure()?.toggleDetails();
   }
 }
