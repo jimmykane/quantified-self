@@ -107,6 +107,8 @@ export class TrainingDeliveryDialogComponent {
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)
     : this.schedule()?.workouts.find(workout => workout.id === this.data.id));
   readonly workout = computed(() => this.data.scope === 'workout' ? this.schedule()?.workouts.find(item => item.id === this.data.id) : undefined);
+  readonly swimmingGuideStructure = computed(() => this.sameAccount() && this.syncReadState() === 'ready'
+    ? this.workout()?.structure ?? null : null);
   readonly parentPlan = computed(() => this.schedule()?.plans.find(plan => plan.id === this.workout()?.planId));
   readonly scopeTitle = computed(() => this.data.scope === 'plan'
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)?.name ?? this.data.title

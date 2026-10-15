@@ -273,6 +273,13 @@ describe('help.content', () => {
       'removing an average from Work or Rest does not remove automatic laps',
       '**20 seconds or less**', 'does not guarantee an audible or vibrating alert', 'your own Rest instructions still show']) expect(content).toContain(phrase);
   });
+  it('explains truthful swim field availability, compact headings and safe completed/hidden Guide reuse', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Rest 1/10**', 'without using a metric slot', 'one compact planned-distance text field',
+      '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
+      'not guaranteed visible or measured', 'new scheduled copy from your workout library',
+      'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',

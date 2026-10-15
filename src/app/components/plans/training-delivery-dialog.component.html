@@ -137,7 +137,7 @@
     <ng-template #providerDetails let-row>
         <div class="delivery-provider-settings">
           @if (row.provider === 'suunto' && row.setupAvailable && data.scope !== 'history') {
-            <app-suunto-swimming-guide-settings></app-suunto-swimming-guide-settings>
+            <app-suunto-swimming-guide-settings [structure]="swimmingGuideStructure()"></app-suunto-swimming-guide-settings>
           }
           @if (data.scope !== 'history') {
             <p class="delivery-setting-label">{{ row.settingLabel }}</p>

@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { parseWorkoutStructureV1, type WorkoutStructureV1 } from '@shared/planned-workout';
+import { assessPlannedWorkoutProviderMappingV1 } from '@shared/planned-workout-providers';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { planSuuntoSwimmingScreen, suuntoSwimmingOccurrences, suuntoSwimmingRequiredShapes } from '@shared/suunto-swimming-screen';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -9,6 +14,7 @@ type Phase = 'workFields' | 'restFields';
   templateUrl: './suunto-swimming-guide-settings.component.html', styleUrl: './suunto-swimming-guide-settings.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class SuuntoSwimmingGuideSettingsComponent {
+  readonly structure = input<WorkoutStructureV1 | null>(null);
   private readonly users = inject(AppUserService);
   private readonly haptics = inject(AppHapticsService);
   readonly expanded = signal(false);
@@ -16,6 +22,8 @@ export class SuuntoSwimmingGuideSettingsComponent {
   readonly error = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
   readonly draft = signal(defaultSuuntoSwimmingGuideSettings());
+  readonly availabilityExpanded = signal(false);
+  readonly availabilityLimit = signal(6);
   private readonly owner = signal('');
   private readonly baseline = signal(JSON.stringify(defaultSuuntoSwimmingGuideSettings()));
   private observedPreferences = '';
@@ -26,7 +34,40 @@ export class SuuntoSwimmingGuideSettingsComponent {
         choices: section.allowed.map(value => ({ value, label: SUUNTO_SWIM_FIELD_LABELS[value],
           disabled: value !== field && this.draft()[section.key].some(selected => selected === value) })) })) })));
   readonly canSave = computed(() => !this.saving() && this.changed() && !!this.owner() && this.users.user()?.uid === this.owner());
+  readonly availability = computed(() => {
+    const value = this.structure();
+    if (!value || ![ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(value.sport)) return null;
+    try {
+      const structure = parseWorkoutStructureV1(value);
+      if (assessPlannedWorkoutProviderMappingV1('suunto', structure).level === 'unsupported') {
+        return { compact: false, blocked: true, rows: [] };
+      }
+      const occurrences = suuntoSwimmingOccurrences(structure);
+      if (!occurrences) return { compact: true, blocked: false, rows: [] };
+      const units = normalizeUserUnitSettings(this.users.user()?.settings?.unitSettings);
+      const rows = occurrences.flatMap((occurrence, index) => {
+        if (!['work', 'rest'].includes(occurrence.step.purpose)) return [];
+        const result = planSuuntoSwimmingScreen(occurrence.step.purpose === 'rest' ? 'Rest' : 'Work',
+          suuntoSwimmingRequiredShapes(occurrence.step), structure.sport, this.draft(), occurrence,
+          occurrences[index - 1], occurrences[index + 1], units);
+        return [{ ...result, index, rest: occurrence.step.purpose === 'rest',
+          requiredCount: result.fields.length, choices: result.choices.map(choice => ({ ...choice,
+            label: SUUNTO_SWIM_FIELD_LABELS[choice.field],
+            status: choice.state === 'heading' ? 'Heading' : choice.state === 'included' ? 'Included' : 'Omitted' })) }];
+      }).sort((left, right) => Number(right.rest) - Number(left.rest) || left.index - right.index);
+      return { compact: false, blocked: false, rows };
+    } catch { return null; }
+  });
+  readonly visibleAvailabilityRows = computed(() => {
+    const rows = this.availability()?.rows ?? [];
+    const rests = rows.filter(row => row.rest); const work = rows.filter(row => !row.rest);
+    const limit = this.availabilityLimit();
+    // REST first without burying Work behind every repeated Rest occurrence.
+    const restCount = Math.min(rests.length, Math.max(Math.ceil(limit / 2), limit - work.length));
+    return [...rests.slice(0, restCount), ...work.slice(0, limit - restCount)];
+  });
   constructor() {
+    effect(() => { this.structure(); untracked(() => this.availabilityLimit.set(6)); });
     effect(() => {
       const user = this.users.user(); const settings = normalizeSuuntoSwimmingGuideSettings(user?.settings?.suuntoSwimmingGuide);
       untracked(() => {
@@ -41,6 +82,11 @@ export class SuuntoSwimmingGuideSettingsComponent {
     });
   }
   toggle(): void { this.expanded.update(value => !value); this.haptics.selection(); }
+  toggleAvailability(): void { this.availabilityExpanded.update(value => !value); this.haptics.selection(); }
+  showMoreAvailability(): void {
+    if (this.availabilityLimit() >= (this.availability()?.rows.length ?? 0)) return;
+    this.availabilityLimit.update(value => value + 6); this.haptics.selection();
+  }
   choose(phase: Phase, index: number, value: string): void {
     if (this.saving() || this.draft()[phase][index] === value || index < 0 || index >= this.draft()[phase].length) return;
     const fields: string[] = [...this.draft()[phase]]; fields[index] = value;

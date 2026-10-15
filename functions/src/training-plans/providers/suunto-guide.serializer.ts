@@ -16,6 +16,8 @@ import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
 import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { presentSuuntoRestScreens } from './suunto-rest-presentation';
 import { presentSuuntoSwimmingScreens } from './suunto-swimming-presentation';
+import { presentSuuntoSwimmingScreensV15 } from './suunto-swimming-presentation-v15';
+import type { SuuntoSwimmingField } from '../../../../shared/suunto-swimming-screen';
 import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
@@ -32,20 +34,7 @@ export type SuuntoGuideConditionV1 =
     | { type: 'manualLap' }
     | { type: 'or'; conditions: SuuntoGuideConditionV1[] };
 
-export type SuuntoGuideFieldV1 =
-    | { type: SuuntoGuideLiveFieldType; title: string }
-    | { type: 'pace' | 'power' | 'strokeRate' | 'swolf'; title: string; window: 'manualLap'; aggregate: 'average' }
-    | { type: 'distance'; title: string; window: 'step' | 'workout' | 'manualLap' }
-    | { type: 'strokes'; title: string; window: 'workout' | 'manualLap' }
-    | { type: 'duration'; title: string; window: 'step' }
-    | { type: 'text'; value: string }
-    | { type: 'stepDurationCountdown'; value: number; title: string }
-    | { type: 'stepDistanceCountdown'; value: number; title: string }
-    | { type: 'targetHeartRate'; min: number; max: number; title: string }
-    | { type: 'targetPower'; min: number; max: number; title: string }
-    | { type: 'targetSpeed'; min: number; max: number; title: string }
-    | { type: 'targetPace'; min: number; max: number; title: string }
-    | { type: 'targetCadence'; min: number; max: number; title: string };
+export type SuuntoGuideFieldV1 = SuuntoSwimmingField;
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
 type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6' | 'pool-swolf-v7' | 'pool-screens-v9' | 'swim-rest-v10' | 'manual-instructions-v11';
@@ -595,10 +584,11 @@ export function serializeSuuntoGuideJsonV1(
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     // Static compatibility callers keep their existing rendering. Delivery
-    // selects the versioned v14 swimming serializer explicitly, with a snapshot.
+    // selects the versioned swimming serializer explicitly, with a snapshot.
     return serializeSuuntoGuideV12ForRecovery(structureValue, options);
 }
 
+/** Frozen recovery/approval identity. Never change V14 presentation. */
 export function serializeSuuntoSwimmingGuideV14(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
     settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
@@ -607,6 +597,18 @@ export function serializeSuuntoSwimmingGuideV14(structureValue: unknown, options
     }
     const frozen = serializeSuuntoGuideV11ForRecovery(structureValue, options);
     const steps = presentSuuntoSwimmingScreens(structure, frozen.artifact.steps, settings, units,
+        value => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps: value }), 'utf8'));
+    return { ...frozen, artifact: { ...frozen.artifact, steps } };
+}
+
+export function serializeSuuntoSwimmingGuideV15(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const structure = parseWorkoutStructureV1(structureValue);
+    if (![ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)) {
+        return serializeSuuntoGuideV12ForRecovery(structureValue, options);
+    }
+    const frozen = serializeSuuntoGuideV11ForRecovery(structureValue, options);
+    const steps = presentSuuntoSwimmingScreensV15(structure, frozen.artifact.steps, settings, units,
         value => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps: value }), 'utf8'));
     return { ...frozen, artifact: { ...frozen.artifact, steps } };
 }

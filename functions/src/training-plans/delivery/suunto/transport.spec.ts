@@ -14,7 +14,7 @@ import { packageGuide, readGuideArchive } from './archive';
 import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery,
   assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, assessSuuntoGuideV10ForRecovery,
-  assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
+  assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV14ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -169,9 +169,36 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     const recovered = await recover(); if (recovered.kind !== 'accepted') throw new Error('Frozen swimming copy not recovered');
     op.artifact = recovered.artifact; const id = recovered.artifact!.ids.guide;
     op.suuntoSwimmingSettings = defaultSuuntoSwimmingGuideSettings(); next(); await execute();
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v14');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v15');
     expect(server.guides.size).toBe(1); expect(op.artifact!.ids.guide).toBe(id);
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('recovers the exact v14 %s upload before one same-ID v15 update', async sport => {
+    op.suuntoUnitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    op.suuntoSwimmingSettings = { version: 1, workFields: ['pace', 'interval', 'workoutDistance'],
+      restFields: ['interval', 'nextPlannedDistance', 'heartRate'] };
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: true }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    op.digest = assessSuuntoGuideV14ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner,
+      op.suuntoUnitSettings, op.suuntoSwimmingSettings).digest;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v14');
+    const frozen = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(frozen)).toContain('Interval 1/3');
+    server.guides.set('v14-existing', { guide: structuredClone(frozen), pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw Error('Frozen v14 acceptance not proved');
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    op.artifact = recovered.artifact; next(); await execute();
+    const updated = server.guides.get('v14-existing')!;
+    expect(updated.pinned).toBe(true); expect(updated.guide.externalId).toBe(frozen.externalId);
+    expect(updated.guide.steps[0]).toMatchObject({ title: 'Work 1/3' });
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
     expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
   });
   it('uses the snapshotted strength units and updates the same Guide after a unit-only change', async () => {
@@ -286,14 +313,16 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.calls.every(request => request.method === 'GET')).toBe(true);
     op.artifact = recovered.artifact;
     next(); expect(transport.diagnosticMappingVersion(op)).toBe([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)
-      ? 'suunto-guides-v14' : 'suunto-guides-v13');
+      ? 'suunto-guides-v15' : 'suunto-guides-v13');
     await execute();
     const current = server.guides.get('legacy-rest')!;
     expect(current.pinned).toBe(true);
     expect(current.guide.externalId).toBe(old.externalId);
     expect(current.guide.richText).toContain('Repeat 3 times');
     if ([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)) {
-      expect(current.guide.steps[1]).toMatchObject({ title: 'Rest', fields: expect.arrayContaining([{ type: 'text', value: 'Interval 1/3' }]) });
+      expect(current.guide.steps[1]).toMatchObject({ title: 'Rest 1/3', fields: expect.arrayContaining([
+        { type: 'stepDurationCountdown', title: 'Rest rem', value: 15 },
+      ]) });
     } else expect(current.guide.steps[1]).toMatchObject({ title: 'Rest 1/3' });
     expect(await readGuideArchive(await packageGuide(current.guide))).toEqual(current.guide);
     next(); await execute();
@@ -312,7 +341,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
         { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
       ] },
     ] } });
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v14');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v15');
     const currentDigest = op.digest;
     op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(op.digest).not.toBe(currentDigest);

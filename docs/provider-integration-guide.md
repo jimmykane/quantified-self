@@ -521,17 +521,21 @@ metadata. Monitoring is **covered/unchanged** by provider/event filters; no dash
 See [app preview and verification](training-workspace.md#suunto-app-workout-preview-v13) for the impact review and
 separately approved release/app verification still required.
 
-Pool/open-water swimming now selects private v14 for bounded, configurable Work/Rest fields and a dedicated
-planned-interval counter. Native stroke count is separate from stroke rate; previous/next prescription distance
-is explicitly planned, never measured. Short generated timed-Rest popups (at most 20 seconds, no authored note)
+Pool/open-water swimming now selects private v15 for bounded, configurable Work/Rest fields. Selected planned
+interval numbers use the heading (13-character limit), not a text metric slot. Previous/next prescription distances
+share one compact, explicitly planned text field without an ending instruction; Suunto may crop this text beside
+native numbers. A shared allocator drives delivery and the app's per-step Included/Heading/Omitted report, with
+Rest listed first and no watch-visibility promise. Native stroke count remains separate from stroke rate.
+Short generated timed-Rest popups (at most 20 seconds, no authored note)
 are omitted to avoid overlapping the next Work alert, without changing timing/laps or promising forced haptics.
 All other sports retain exactly v13. Canonical owner config preferences become immutable private operation/proof
-snapshots; frozen v13 recovery precedes an eligible same-ID update under unchanged consent/authority/Pro gates.
+snapshots; frozen v14 and earlier recovery precedes an eligible same-ID update under unchanged consent/authority/Pro gates.
 The existing scheduler handles saved display preferences; no new queue, Rules or index is needed. Monitoring is
 **covered/unchanged**; MCP Training schemas/read coverage stay unchanged and reject these private fields.
 Previous-effort Rest statistics, native pace-format overrides, custom beep patterns and earlier pool-distance
 updates remain undocumented capabilities, not guessed upload fields. See the single detailed
-[swimming screen contract and verification](training-workspace.md#configurable-swimming-guide-screens-v14).
+[swimming screen contract](training-workspace.md#configurable-swimming-guide-screens-v14) and
+[v15 allocation/recovery verification](training-workspace.md#swimming-field-allocation-and-headings-v15).
 This change still needs separately approved Functions/frontend deployment and physical watch verification.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the

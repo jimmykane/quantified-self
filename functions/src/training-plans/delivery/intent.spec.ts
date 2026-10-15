@@ -10,7 +10,7 @@ import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
   assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery,
-  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery } from './suunto/mapping';
+  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV14ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -192,6 +192,21 @@ describe('delivery intent', () => {
       ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
     }
   });
+  it('carries a proved v14 full-prescription approval into v15 but not an unproved or edited copy', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const preferences = defaultSuuntoSwimmingGuideSettings();
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 }, targets: [], note: 'A'.repeat(45) }] } };
+    const approved = assessSuuntoGuideV14ForRecovery(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self', units, preferences);
+    const context = { ...base, workout, transport, suuntoUnitSettings: units, suuntoSwimmingSettings: preferences,
+      setting: { ...base.setting!, provider: 'suunto' as const, approvedDigest: approved.digest } };
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: approved.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+  });
   it.each([assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
     'retains legacy approval after the app-preview upgrade and subsequent unit changes (%#)', assessLegacy => {
       const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
@@ -278,7 +293,7 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v14' : 'suunto-guides-v13',
+      mappingVersion: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v15' : 'suunto-guides-v13',
       compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });

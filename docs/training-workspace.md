@@ -3101,6 +3101,53 @@ an existing total-script budget failure, also reproduced on a clean `50432cebb` 
 release builds now pass without raising budgets. No production resource, provider upload or account prescription
 was changed by either task; deployment and physical Guide verification still need separate approval.
 
+##### Swimming field allocation and headings (v15)
+
+Pool and open-water swimming delivery now uses private `suunto-guides-v15`; other sports remain exactly v13.
+V14 is frozen for original-payload recovery and full-loss approval equivalence. The v11 transition/lap graph,
+authored target ranges, durations, notes, current-lap averaging and short-Rest popup policy remain unchanged.
+
+`shared/suunto-swimming-screen.ts` owns the allocation used by the v15 serializer and the frontend's per-step report.
+When selected, prescribed Work occurrence numbers move to the existing phase heading (`Work 1/10`, `Rest 1/10`),
+within Suunto's 13-character limit, without spending a metric slot. Rest following a Work uses its number; no
+counter is invented for leading/unrelated Rest. Removing the interval choice removes the heading number.
+Adjacent distance-ended Work prescriptions use one short `Plan Prev: … / Next: …` text cell in selected priority order,
+formatted by Sports Lib in owner units. Text never includes the ending's `or Lap`, is never truncated into a different
+number, and never claims completed distance. Manual prescriptions and absent neighbors have no guessed distance.
+Suunto still prioritizes native numeric values and may crop static text; this is not a font-size/constant-numeric API.
+
+Countdowns, authored targets/instructions and supported target counterparts reserve their slots. Equivalent requested
+readings/countdowns are marked already included rather than counted twice. Remaining selected choices retain their
+priority, within five total fields. No fake target, prior-effort reading, sensor value, native pace format or alarm
+sequence is introduced. Generated empty-manual-step reminders do not consume an optional field when the occurrence is
+known; authored instructions remain intact. Warm-up, active Recovery, cool-down and completion stay frozen.
+
+In a workout's Suunto details, **Show field availability for this workout** reports each choice as Included, Heading
+or Omitted and explains space, missing adjacent distance, pool-only readings or long instructions. Rest is listed first;
+step numbers preserve prescription order and six rows load at a time. It is the new normal-layout allocation for the
+current draft preferences, not a renderer/readback of an already delivered Guide. Native readings need watch data;
+included fields are not guaranteed visible. Plan-level settings do not invent a representative workout. The report
+is cleared when the same-account schedule is unavailable; no new query, provider read, persistence or mutation is added.
+The existing 1,000-screen/256-KiB enriched-JSON bounds retain compact/frozen fallbacks without speculative numbering;
+the report explicitly warns that size fallback can omit headings/planned context.
+
+Completed/past-copy protection is unchanged: reuse a completed session through a new library placement, not a date
+edit intended to unlock the original Guide. Suunto app removal may hide a retained cloud record; an ordinary same-ID
+edit/resend cannot promise visibility. Help and settings explain this and the new-copy workflow. There is no automatic
+resurrection, replacement upload, reconnect requirement, live QA send or production change in this implementation.
+
+MCP impact: **no wire impact**. Canonical recipes, plan/workout reads, proposal/confirmation contracts, consent,
+scopes and provider actions are unchanged. Private allocation results, headings, fields and diagnostic v15 remain
+outside the strict projections. No catalog refresh or bundled-plugin rebuild is required. Monitoring is
+**covered/unchanged**: existing Suunto provider/event filters cover v15; only the private exact-digest diagnostic
+allowlist expands. No queue, retry, lease, schedule, Rules, index, TTL or resource changes.
+
+Verification: focused shared allocation/serializer/UI tests cover HR/no-target, pool/open-water, duplicate countdowns,
+planned text/owner units, omitted fields, bounded rendering, early-Lap branches, unchanged recorded boundaries and
+authored notes. Synthetic transport and demo-Firestore lifecycle tests cover original v14 recovery before a single
+same-ID update, pinning, consent, exact archives, protected copies and idempotent repeat reconciliation. Physical
+app/watch layout remains a release check; local tests cannot prove text visibility, sensor data or vibration.
+
 ##### Current readings and boundary notifications (#784)
 
 The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),

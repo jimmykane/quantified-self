@@ -1344,6 +1344,7 @@ describe('Training provider delivery controls', () => {
       ['app-training-delivery-dialog', 'src/app/components/plans/training-delivery-dialog.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-service-source-icon', 'src/app/components/event-summary/service-source-icon/service-source-icon.component.css'],
+      ['app-suunto-swimming-guide-settings', 'src/app/components/plans/suunto-swimming-guide-settings.component.scss'],
     ].map(([host, file]) => {
       const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
       return sass.compileString(`${host} { ${readFileSync(file, 'utf8').replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&')} }`).css;
@@ -1463,6 +1464,15 @@ describe('Training provider delivery controls', () => {
       await TestBed.inject(ApplicationRef).whenStable(); render(`verification-${state}`); render(`verification-${state}-dark`); ref.close();
     }
     service.isReady.mockImplementation(provider => provider === 'suunto');
+    const previousSchedule = vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).getMockImplementation()!;
+    vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).mockReturnValue(of({ state: { revision: 3 }, plans: [], workouts: [
+      { id: 'w', planId: null, title: 'Swimming · 10 × 100 m', localDate: '2026-12-31', revision: 2,
+        structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [{ kind: 'repeat', id: 'sets', count: 10, steps: [
+          { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 },
+            targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 150 }] },
+          { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+        ] }] } },
+    ] }) as never);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', status: 'delivered',
       differsFromQS: false, lastAcceptedAtMs: status.lastAttemptAtMs }], verifications: [{ id: status.id, state: 'present',
       canCheck: true, missing: false, lastCheckedAtMs: status.lastAttemptAtMs + 60_000 }] }));
@@ -1480,7 +1490,16 @@ describe('Training provider delivery controls', () => {
     expect(document.body.textContent).not.toContain('Sent means available in the Suunto app');
     expect(document.body.textContent).not.toContain('Last checked:');
     expect(document.querySelector('.delivery-list')?.getAttribute('aria-label')).toBe('Suunto workout delivery records');
+    expect(ref.componentInstance.swimmingGuideStructure()?.sport).toBe(ActivityTypes.Swimming);
+    (document.querySelector('button[aria-controls="suunto-swimming-guide-fields"]') as HTMLButtonElement).click();
+    TestBed.inject(ApplicationRef).tick();
+    (document.querySelector('button[aria-controls="suunto-swim-field-availability"]') as HTMLButtonElement).click();
+    render('suunto-swim-fields'); render('suunto-swim-fields-dark');
+    expect(document.querySelector('#suunto-swim-field-availability')?.hasAttribute('hidden')).toBe(false);
+    expect(document.querySelector('.availability-step h4')?.textContent).toContain('Rest 1/10');
+    expect(document.querySelectorAll('.availability-step')).toHaveLength(6);
     ref.close();
+    vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).mockImplementation(previousSchedule);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
       status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval',
       updatedAtMs: Date.parse('2026-12-29T12:00:00Z'),

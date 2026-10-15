@@ -7,4 +7,7 @@ li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.25rem; }
 mat-form-field { flex: 1 1 14rem; min-width: 0; }
 .field-actions, .save-actions { display: flex; flex-wrap: wrap; align-items: center; }
 .limitations { color: var(--mat-sys-on-surface-variant); }
+.availability-step { margin-block: 0.75rem; }
+.availability-step ul { padding-inline-start: 1.25rem; font: var(--mat-sys-body-small); }
+.availability-step li { display: list-item; overflow-wrap: anywhere; margin-block: 0.25rem; }
 [hidden] { display: none !important; }
