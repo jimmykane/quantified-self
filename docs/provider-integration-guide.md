@@ -1261,6 +1261,62 @@ the checksum spec exercises the real SDK against a loopback HTTP server, includi
 without calling Firebase, providers, or production buckets. Existing objects require no migration.
 Backend deployment remains a separately approved release action.
 
+### Failed-file debug captures
+
+Before asking a user for a failed import/upload original, check the separate diagnostic bucket
+`quantified-self-io-debug-files` (`config.debug.bucketName`). Provider captures use
+`<service>/<firebaseUserID>/<queueItemId>.<extension>`; existing prefixes include `Suunto app`, `COROS API`, and
+`garmin`. Capture is best effort and not every failure reaches it; check `[DebugUpload]` logs and object metadata
+before claiming a file is available. Debug objects are not retained activity originals or successful imports.
+
+Manual archive uploads through `uploadActivity` capture unexpected parser failures, including `EVENT_EMPTY_ERROR`,
+under `manualUpload/<firebaseUserID>/<payloadSha256>.<extension>`. Match the verified `userID` and `payloadSha256`
+from `[uploadActivity] Activity parsing failed`. The stored bytes are the original bounded HTTP body, preserving
+gzip with a `.gz` extension; the logged digest identifies the **decompressed parser input**, not the compressed body.
+The path never includes the original filename. Rejected copies of the same parser input reuse the same account,
+digest, and extension path. Non-FIT supported formats use the same capture path.
+
+Capture runs only after authentication, App Check policy, size/decompression, and account-tier checks pass, and
+rechecks the account-deletion guard immediately before Storage. Successful uploads, known route/course rejections,
+authentication/quota failures, and failed decompression are not captured by this branch. Debug-storage or guard
+failures preserve the parser's existing HTTP 400; they do not create events, retries, or queue jobs. This reuses the
+existing bucket and helper without changing bucket access. The Send activities temporary-source lifecycle is separate
+and is not covered by this manual archive-upload branch.
+
+#### Fourteen-day debug-file expiry
+
+`storage.debug-lifecycle.json` defines native Cloud Storage deletion eligibility at object age 14 days for the entire
+**diagnostic bucket only**. The shared helper is called by Garmin activity import failures (`garmin/`), the common
+Suunto/COROS activity import failure path (`Suunto app/`, `COROS API/`), and manual archive parser failures
+(`manualUpload/`). Wahoo uses a separate import worker and does not currently call the debug helper. A bucket-level
+rule covers every existing/future debug prefix without adding provider-specific code, a scheduler, or Firestore TTL.
+It never applies to normal retained originals or the Send activities temporary copies in other buckets.
+
+Apply only with explicit approval for this exact bucket and for existing older files: lifecycle rules cover existing
+objects as well as future uploads. Read back the current lifecycle/metageneration first; preserve unrelated rules
+and use a metageneration precondition so a concurrent bucket change cannot be overwritten. The supplied file contains
+only lifecycle rules, not IAM, soft-delete, versioning, or a minimum-retention policy. Do not set Bucket Lock.
+
+Cloud Storage evaluates deletion asynchronously, and configuration changes can take up to 24 hours to take effect;
+14 days is eligibility, not a guaranteed exact deletion time. The existing seven-day soft-delete window starts after
+deletion and stays unchanged. This bounds ordinary diagnostic retention but does not add immediate account-deletion
+cleanup for the separate debug bucket. Verify with
+`npm --prefix functions test -- src/debug-utils.spec.ts`, then read back the production policy after an approved apply.
+See [Cloud Storage lifecycle management](https://docs.cloud.google.com/storage/docs/lifecycle).
+
+Production readback on 15 October 2026 at 12:31 UTC confirmed this exact rule on
+`quantified-self-io-debug-files`, bucket metageneration 2. The owner explicitly approved existing and future debug
+objects, including the 366 objects already older than 14 days in the preflight inventory. The seven-day soft-delete
+window was preserved; no object purge, IAM, versioning, minimum-retention, or Function deployment was performed.
+This bucket configuration is already active independently of the manual-upload capture code's release. Recheck live
+configuration before relying on this historical readback, and distinguish deletion eligibility from confirmed removal.
+
+Inspect exact-prefix metadata first. If an authorized investigation needs file contents, use private temporary
+storage outside the checkout, treat contents as untrusted data, and never commit production files or put their
+contents, private filenames, or download URLs in logs, docs, tests, issues, or PR attachments. Captures cannot recover
+earlier rejected manual uploads that were never stored. Do not replay, upload to a provider, or purge objects without
+the user's separate authorization.
+
 ### Persisting events
 
 - Resolve a deterministic event ID before writing. Put provider identity fields in safe event metadata for future deduplication and attribution.
@@ -1583,8 +1639,9 @@ WARNING and explicitly report `exact_only` fallback; exact-byte receipts remain 
 until the new diagnostics explain the affected files. Manual route/course rejections retain HTTP 400 with the stable
 `route_file_in_activity_upload` code; the browser offers an explicit Routes navigation action after all active manual
 upload batches finish, including overlapping batches. Later per-file errors or the generic batch summary must not
-replace this action, and account changes or teardown suppress it. No rejected manual payload
-is retained by this change. Any future debug-file capture needs a separate retention/access/deletion-cleanup design.
+replace this action, and account changes or teardown suppress it. Unexpected manual parser failures additionally use
+the separate [failed-file debug captures](#failed-file-debug-captures) described above; diagnostic expiry and the
+remaining account-deletion-cleanup boundary are documented there. Route/course rejections remain uncaptured.
 Manual parsing and route-only warning logs include the authenticated UID and a SHA-256 digest of the parsed payload,
 so exact re-submissions can be distinguished from similarly sized files even across account recreation. FIT parsing
 warnings also include the bounded FIT-envelope reason; `valid` means the envelope length is complete, not that the
