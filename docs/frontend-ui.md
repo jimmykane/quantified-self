@@ -71,8 +71,13 @@ charts remain mounted and controlled by their existing settings, including the S
 Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. On Health,
 comparison counts stay visible alongside the headline and any outside-range readings; Show details contains the
 source and range breakdown. The visible scope names Sleep and nightly HRV. Dashboard uses the component's compact
-**At a glance** mode: an inline label and one named-signal sentence, wrapping naturally on mobile, without extra
-metadata rows or disclaimer copy. Only outside-range, unavailable or insufficient signals get a Show details action;
+**At a glance** mode: a surface-free accent rail, compact stacked label and one named-signal sentence, wrapping
+naturally on mobile, without extra metadata rows or disclaimer copy. The 3px logical-start rail and right-aligned
+Material status icon use the same dominant evidence state as the sentence. Within-range uses the app success token;
+outside-range uses the Material accent, unavailable uses the error token, and loading, insufficient or merely recorded
+evidence stays neutral. Pair color with the explicit sentence and distinct icons, never an implied all-metrics all-clear.
+The existing Material Show details button sits below the sentence with its 44px target; do not add a box, fill, shadow
+or bottom divider to this compact presentation. Only outside-range, unavailable or insufficient signals get that action;
 the breakdown includes only those signals and closes silently if they resolve. Do not summarize unassessed metrics
 as normal. On Dashboard, the heading's bottom margin and the summary's top padding do not stack. Preserve the reserved
 status line, source/error distinctions, and the disclosure's 44px touch target. This is presentation only; no metric,

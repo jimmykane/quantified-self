@@ -90,7 +90,7 @@ export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal
       ? 'Your latest sleep reading is available.' : `${names} readings are available.`; break;
     default: headline = 'No recent sleep or nightly HRV readings yet.';
   }
-  return { headline, attentionSignals };
+  return { headline, attentionSignals, state: state ?? null };
 }
 
 /** Mirrors Highlight source selection; never combines provider/account or semantic series. */

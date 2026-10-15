@@ -2,6 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { HealthChangeSummaryComponent } from './health-change-summary.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { HealthChangeSignal } from '../../../helpers/health-change-summary.helper';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('Health change summary disclosure', () => {
   const haptics = { selection: vi.fn() };
@@ -24,6 +26,8 @@ describe('Health change summary disclosure', () => {
     const details = host.querySelector<HTMLElement>('#test-summary-details')!;
     expect(details.hidden).toBe(true);
     expect(host.querySelector('h2')?.textContent).toBe('Your recovery');
+    expect(host.querySelector('.health-change-glance-icon')).toBeNull();
+    expect(host.querySelector('section')?.hasAttribute('data-glance-state')).toBe(false);
     expect(host.querySelector('[role="status"]')?.textContent).toContain('outside your usual range');
     expect(host.querySelector('.health-change-scope')?.textContent).toBe('From your latest sleep and nightly HRV readings.');
     const coverage = host.querySelector('.health-change-coverage')!;
@@ -68,6 +72,8 @@ describe('Health change summary disclosure', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('h2')?.textContent).toBe('At a glance');
+    expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe('within-range');
+    expect(host.querySelector('.health-change-glance-icon')?.textContent?.trim()).toBe('check_circle_outline');
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Your 7-day HRV average is within your usual range.');
     expect(host.querySelector('button')).toBeNull();
     expect(host.querySelectorAll('p')).toHaveLength(1);
@@ -93,6 +99,8 @@ describe('Health change summary disclosure', () => {
     const host = fixture.nativeElement as HTMLElement;
     const details = host.querySelector<HTMLElement>('#glance-details')!;
     const button = host.querySelector('button')!;
+    expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe('outside-range');
+    expect(host.querySelector('.health-change-glance-icon')?.textContent?.trim()).toBe('error_outline');
     expect(button.getAttribute('aria-controls')).toBe('glance-details');
     expect(details.hidden).toBe(true);
     button.click(); fixture.detectChanges();
@@ -125,5 +133,36 @@ describe('Health change summary disclosure', () => {
     expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
     expect(details.textContent).toContain('7-day average compared with 60 days');
     expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['unavailable', 'cloud_off'], ['loading', 'hourglass_empty'],
+    ['insufficient', 'info_outline'], ['recorded', 'info_outline'],
+  ] as const)('keeps the %s rail distinct from an assessed within-range reading', (state, icon) => {
+    const fixture = TestBed.createComponent(HealthChangeSummaryComponent);
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('scopeKey', 'owner');
+    fixture.componentRef.setInput('summaryId', 'glance');
+    fixture.componentRef.setInput('signals', [{ id: 'hrv', label: 'HRV', sourceLabel: 'Suunto',
+      state, statusText: state, detailText: 'Same-source evidence' }]);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe(state);
+    expect(host.querySelector('.health-change-glance-icon')?.textContent?.trim()).toBe(icon);
+    expect(host.querySelector('.health-change-glance-icon')?.getAttribute('aria-hidden')).toBe('true');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+});
+
+describe('Dashboard accent rail style contract', () => {
+  it('keeps the rail surface-free with wrapping content and the existing touch target', () => {
+    const styles = readFileSync(resolve(__dirname, 'health-change-summary.component.scss'), 'utf8');
+    expect(styles).toContain('border-inline-start: 3px solid var(--health-glance-accent)');
+    expect(styles).toContain('border-bottom: 0');
+    expect(styles).toContain('grid-template-columns: minmax(0, 1fr) auto');
+    expect(styles).toContain('grid-column: 1 / -1; justify-self: start');
+    expect(styles).toContain('overflow-wrap: anywhere');
+    expect(styles).toContain('min-height: 44px');
+    expect(styles).not.toMatch(/box-shadow|background:|border-radius|::ng-deep|\.mdc-/);
   });
 });

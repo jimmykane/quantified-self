@@ -21,6 +21,15 @@ export class HealthChangeSummaryComponent {
   readonly expanded = signal(false);
   readonly summary = computed(() => buildHealthChangeSummary(this.signals()));
   readonly glance = computed(() => buildDashboardGlanceSummary(this.signals()));
+  readonly glanceIcon = computed(() => {
+    switch (this.glance().state) {
+      case 'within-range': return 'check_circle_outline';
+      case 'outside-range': return 'error_outline';
+      case 'unavailable': return 'cloud_off';
+      case 'loading': return 'hourglass_empty';
+      default: return 'info_outline';
+    }
+  });
   readonly detailsAvailable = computed(() => !this.compact() || this.glance().attentionSignals.length > 0);
   readonly detailSignals = computed(() => this.compact() ? this.glance().attentionSignals : this.signals());
   private readonly haptics = inject(AppHapticsService);

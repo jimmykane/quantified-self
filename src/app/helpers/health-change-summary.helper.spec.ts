@@ -10,15 +10,16 @@ describe('Dashboard at a glance', () => {
   const sleep = (state: HealthChangeSignal['state']) => ({ ...signal(state, 'sleep'), label: 'Sleep' });
   it('uses one specific sentence on a normal day without treating recorded Sleep as a normal-range assessment', () => {
     expect(buildDashboardGlanceSummary([sleep('recorded'), signal('within-range', 'hrv')])).toEqual({
-      headline: 'Your 7-day HRV average is within your usual range.', attentionSignals: [],
+      headline: 'Your 7-day HRV average is within your usual range.', attentionSignals: [], state: 'within-range',
     });
-    expect(buildDashboardGlanceSummary([sleep('recorded')])).toEqual({ headline: 'Your latest sleep reading is available.', attentionSignals: [] });
-    expect(buildDashboardGlanceSummary([])).toEqual({ headline: 'No recent sleep or nightly HRV readings yet.', attentionSignals: [] });
+    expect(buildDashboardGlanceSummary([sleep('recorded')])).toEqual({ headline: 'Your latest sleep reading is available.', attentionSignals: [], state: 'recorded' });
+    expect(buildDashboardGlanceSummary([])).toEqual({ headline: 'No recent sleep or nightly HRV readings yet.', attentionSignals: [], state: null });
   });
   it('keeps outside-range findings ahead of failed, pending or insufficient evidence', () => {
     const outside = signal('outside-range', 'hrv'), missing = sleep('unavailable');
     expect(buildDashboardGlanceSummary([missing, outside, signal('loading'), signal('insufficient')])).toMatchObject({
       headline: 'Your 7-day HRV average is outside your usual range.',
+      state: 'outside-range',
       attentionSignals: [missing, outside, signal('insufficient')],
     });
   });
@@ -27,11 +28,11 @@ describe('Dashboard at a glance', () => {
     ['insufficient', 'Your 7-day HRV average is not ready to compare yet.'],
   ] as const)('offers the %s reason without an all-clear claim', (state, headline) => {
     const unavailable = signal(state, 'hrv');
-    expect(buildDashboardGlanceSummary([unavailable, sleep('recorded')])).toEqual({ headline, attentionSignals: [unavailable] });
+    expect(buildDashboardGlanceSummary([unavailable, sleep('recorded')])).toEqual({ headline, attentionSignals: [unavailable], state });
   });
   it('keeps transient loading compact without offering empty details', () => {
     expect(buildDashboardGlanceSummary([sleep('loading'), signal('within-range', 'hrv')])).toEqual({
-      headline: 'Sleep is still loading.', attentionSignals: [],
+      headline: 'Sleep is still loading.', attentionSignals: [], state: 'loading',
     });
   });
 });

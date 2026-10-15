@@ -1,4 +1,5 @@
-<section class="health-change-summary" [class.health-change-compact]="compact()" [attr.aria-labelledby]="summaryId() + '-title'">
+<section class="health-change-summary" [class.health-change-compact]="compact()"
+  [attr.data-glance-state]="compact() ? glance().state : null" [attr.aria-labelledby]="summaryId() + '-title'">
   <div class="health-change-heading">
     <div class="health-change-intro">
       <h2 [id]="summaryId() + '-title'">{{ compact() ? 'At a glance' : 'Your recovery' }}</h2>
@@ -6,6 +7,9 @@
         <p class="health-change-headline" role="status" aria-atomic="true">{{ glance().headline }}</p>
       }
     </div>
+    @if (compact()) {
+      <mat-icon class="health-change-glance-icon" aria-hidden="true">{{ glanceIcon() }}</mat-icon>
+    }
     @if (detailsAvailable()) {
       <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
         (click)="toggleDetails()">
