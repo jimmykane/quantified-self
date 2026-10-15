@@ -26,6 +26,9 @@ import {
   DataSwimPace,
   DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
+  EventImporterJSON,
+  FileType,
+  Privacy,
   SwimPaceUnits
 } from '@sports-alliance/sports-lib';
 
@@ -206,11 +209,14 @@ describe('EventsExportFormComponent', () => {
       component.user.settings.unitSettings = { ...component.user.settings.unitSettings, distanceUnits };
       component.exportFromGroup.get('name')?.setValue(true);
       component.exportFromGroup.get('duration')?.setValue(true);
-      component.events = [undefined, 0, 600, 90000].map((seconds, index) => ({
-        ...component.events[0],
-        name: `Duration-${index}`,
-        getDuration: () => seconds === undefined ? undefined : new DataDuration(seconds),
-      }));
+      component.events = [undefined, 0, 600, 90000].map((seconds, index) => {
+        const event = EventImporterJSON.getEventFromJSON({
+          name: `Duration-${index}`, startDate: 0, endDate: 90000000, srcFileType: FileType.FIT,
+          description: null, isMerge: false, privacy: Privacy.Private, stats: {}, activities: [],
+        });
+        if (seconds !== undefined) event.setDuration(new DataDuration(seconds));
+        return EventImporterJSON.getEventFromJSON(event.toJSON());
+      });
 
       await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
 

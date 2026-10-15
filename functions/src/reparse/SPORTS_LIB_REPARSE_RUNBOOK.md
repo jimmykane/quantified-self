@@ -272,6 +272,14 @@ campaign, change its target, or update the aligned package versions as part of p
 readers tolerate old documents and project missing timing through their existing contracts. See the Training guide's
 “Contradicted recorded pool timing” section for consumer behavior and eligibility.
 
+The accompanying duration declaration correction makes `getDuration()`, `getTimer()`, `getMovingTime()` and
+`getPause()` explicitly return their Data object or `undefined` on events, activities and laps. This matches their
+existing runtime behavior; it does not introduce a new persisted shape or require a reparse by itself. Keep guarded
+reads in displays, exports, fingerprints and calculations, retaining measured zero. Do not substitute dates, elapsed
+time or zero for rejected active time. Swim-length timing fields and their resolver retain the separate `null` contract.
+Verify consumers against the locally packed candidate before release, with root/Functions dependencies still aligned
+to the published version. This typing-only integration adds no Training/MCP metric, scope, schema or mutation.
+
 ### Sports Lib 21.5.0 recorded swim distance display
 
 Sports Lib 21.5.0 adds optional meter/yard display units to `DataSwimDistance`. Quantified Self selects these units
