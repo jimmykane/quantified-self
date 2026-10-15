@@ -1,5 +1,6 @@
 <h2 mat-dialog-title>{{ title() }}</h2>
 <mat-dialog-content>
+  @if (data.comparisonFailed) { <p class="note-error" role="alert">The comparison could not open. Your note was not changed.</p> }
   @if (error()) {
     <p class="note-error" role="alert">{{ error() }}</p>
     @if (conflict()) {
@@ -19,7 +20,9 @@
         <li><button mat-button type="button" appHapticTap class="note-row" [disabled]="busy()" (click)="edit(row.note)">
           <mat-icon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
           <span class="note-row-content"><strong>{{ row.note.title }}</strong><span>{{ row.category }} · {{ row.dates }}@if (row.hidden) { · Hidden }</span></span>
-        </button></li>
+        </button>
+        <button mat-button type="button" [disabled]="busy()" (click)="compare(row.note)"
+          [attr.aria-label]="'Compare before and after ' + row.note.title"><mat-icon aria-hidden="true">compare_arrows</mat-icon>Compare</button></li>
       } @empty { @if (!busy() && !error()) { <li>No notes yet. Add context such as a vacation or a period of sickness.</li> } }
     </ul>
     <div class="note-pagination">
@@ -71,6 +74,7 @@
 <mat-dialog-actions align="end">
   @if (view() === 'edit') {
     @if (existing()) {
+      <button mat-button type="button" [disabled]="busy() || comparisonHasDraft" (click)="compare(existing()!)">Compare</button>
       <button mat-button type="button" appHapticTap [disabled]="busy()" (click)="remove()">Delete</button>
       @if (existing()?.endDate === null) { <button mat-button type="button" [disabled]="busy()" (click)="endToday()">End today</button> }
     }

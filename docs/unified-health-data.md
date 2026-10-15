@@ -5,6 +5,10 @@ This document is the source of truth for the cross-provider health foundation in
 Issue #614 adds the authenticated **Health** workspace on top of this foundation. Normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can be read on demand for Health without copying them into Health storage or changing the activity contract. Canonical Health Weight can also supply source-separated Training context and the identity-free body-measurement MCP projection; qualifying manual VO2 max can provide a separately labelled Training reference without changing the public MCP wire schema.
 
 Private [Timeline notes](timeline-notes.md) add calendar context to Health's Highlights, detailed metric and normalized Sleep charts.
+The saved-note manager also opens a read-only [before/after comparison](timeline-notes.md#beforeafter-comparisons)
+of main-night duration, nightly HRV and daily resting HR, reusing the same source-separated projection and Health chart.
+It adds no stored metric, provider import or MCP/Assistant data contract. The Timeline notes guide owns its window,
+coverage, date, bounded-read and lifecycle rules.
 They use an independent user-owned collection and shared Material manager, not Health records or Sleep sessions.
 Notes are not filtered by provider and never change measurements, aggregation, or source semantics. Highlights register
 their own trend windows alongside the selected explorer range. The shared chart visibility preference lives in account
@@ -403,6 +407,11 @@ On Health's **All** overview, **Your recovery** sits before the existing highlig
 The same flat shared component uses a compact **At a glance** presentation before Dashboard Today for the signed-in
 owner, following the existing Show/Hide Today preference. It is absent from another person's Dashboard, focused metric history and category views.
 It does not hide, reorder or rewrite saved Dashboard charts or change the Health card availability rules.
+
+The heading, accent rail and disclosure are presentation-only `SummaryDisclosureComponent` inputs/projection slots.
+The same shell hosts `NoteComparisonSummaryComponent` on the private note destination and public homepage/Health
+example, but it does not reuse recovery/Glance classification or headline builders for note differences. Their neutral
+source-labelled rows and optional median table are described in [Timeline notes](timeline-notes.md#beforeafter-comparisons).
 
 Health's recovery summary covers Sleep and nightly HRV from reads already owned by that surface. Existing HRV
 personal-range classifications count as assessed evidence: positive means within range, caution/negative means

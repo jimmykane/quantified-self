@@ -62,9 +62,24 @@ contracts, consent, queries and mutations are unchanged. No backend deployment o
 
 ## Workspace Shells
 
+Signed-in navigation uses flat, labelled sections: **Overview** (Dashboard, Calendar), **Training & health**
+(Training, Plans, Health, Timeline notes, Assistant), **Explore** (Routes, My Tracks), then the existing **Tools**,
+**Account**, and **Preferences**. Reuse the existing section heading and full-level row styling; no expansion controls
+or nested guide rails. Guest navigation keeps its existing destinations without empty signed-in section headings.
+**Timeline notes** retains the existing `event_note` icon.
+Its native Material list button lazily opens the existing manager after the drawer closes, preserving focus return and
+the current workspace. It does not add a duplicate list route or load private note UI for anonymous navigation.
+The action keeps the regular row highlight during note comparisons; the Health overview link uses exact-path matching.
+
 Health All and the owner Dashboard Today share the surface-free summary from
-`components/shared/health-change-summary/`. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
-Health uses the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls` and a mounted hidden region;
+`components/shared/health-change-summary/`. Its presentation delegates to
+`components/shared/summary-disclosure/`, shared with the saved-note and public-example
+`components/shared/note-comparison-summary/`. The shell owns headings, flat/rail layout, Material disclosure, haptics
+and local scope resets only; domain adapters retain their existing calculations. Note comparisons keep source-labelled
+differences and coverage visible and put the median table under **Show details**, without hiding the history chart.
+Their rail stays neutral regardless of the sign of a difference. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
+Health and note comparisons use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls`
+and a mounted hidden region when details are available; Dashboard does not mount a details region.
 do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
 The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
 charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
@@ -300,8 +315,8 @@ desktop width when the viewport narrows. The shared chart host then resizes to t
 
 ## Sidebar navigation
 
-Training remains a direct link to `/training`. Plans links to `/training/plans` as an indented subitem immediately below
-it in a labelled Training group, without an expansion control. Plans is available to every signed-in user; Calendar entry
+Training remains a direct link to `/training`. Plans links to `/training/plans` as a full-level row immediately after
+it in **Training & health**, without an expansion control. Plans is available to every signed-in user; Calendar entry
 points retain their owner-scoped planning access. Training matches only its exact path (ignoring query parameters and
 fragments), so Plans has an independent active state. Both links keep their existing close/haptic action.
 

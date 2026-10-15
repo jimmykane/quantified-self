@@ -1,5 +1,12 @@
 <!-- Google supports data-nosnippet on native div/span/section, not Angular custom elements. -->
 <div class="preview-content" data-nosnippet>
+@if (previewKey() === 'health-note-comparison') {
+  @defer (on viewport) {
+    <app-health-note-comparison-preview></app-health-note-comparison-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--note-comparison" aria-hidden="true"></div>
+  }
+}
 @if (previewKey() === 'health-overview') {
   @defer (on viewport) {
     <app-health-overview-preview></app-health-overview-preview>

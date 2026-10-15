@@ -10,7 +10,10 @@ import {
   orderBy,
   query,
   where,
+  getDocsFromServer,
+  startAfter,
 } from 'app/firebase/firestore';
+import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import { Observable, of, from } from 'rxjs';
 import { map, switchMap, catchError } from 'rxjs/operators';
 import { enrichSleepWithNightlyHrv, nightlyHrvDateRange } from '@shared/nightly-hrv';
@@ -24,6 +27,13 @@ import {
 } from '@shared/sleep';
 import { decodeSleepSessionSportsLibData } from '@shared/sports-lib-health-data';
 import { withHealthSleepAccountKeys, type HealthWorkspaceSleepSession } from '../helpers/health-sleep-account.helper';
+
+export interface SleepSummaryRangeLoad {
+  sessions: HealthWorkspaceSleepSession[];
+  complete: boolean;
+  limitReached: 'records' | 'bytes' | null;
+}
+export const SLEEP_SUMMARY_READ_LIMITS = { page: 32, records: 512, bytes: 8 * 1024 * 1024 } as const;
 
 @Injectable({
   providedIn: 'root',
@@ -68,6 +78,40 @@ export class AppSleepService {
       }),
       switchMap(sessions => from(withHealthSleepAccountKeys(uid, sessions))),
     );
+  }
+
+  /** Bounded native summaries for consumers already loading Health HRV. No enrichment or sample reads. */
+  async loadSummaryRange(uid: string, startMs: number, endMs: number,
+    isCurrent: () => boolean): Promise<SleepSummaryRangeLoad> {
+    if (!uid || !Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs
+      || endMs - startMs > 64 * 86_400_000) throw new Error('Invalid Sleep summary range.');
+    let cursor: QueryDocumentSnapshot | null = null;
+    let records = 0, bytes = 0;
+    const sessions: SleepSession[] = [];
+    const result = (limitReached: SleepSummaryRangeLoad['limitReached']): SleepSummaryRangeLoad => ({
+      sessions, complete: limitReached === null, limitReached,
+    });
+    do {
+      if (!isCurrent()) throw new Error('Sleep summary read cancelled.');
+      const size = Math.min(SLEEP_SUMMARY_READ_LIMITS.page, SLEEP_SUMMARY_READ_LIMITS.records - records);
+      const snapshot = await getDocsFromServer(query(collection(this.firestore, 'users', uid, SLEEP_SESSIONS_COLLECTION_ID),
+        where('startTimeMs', '>=', Math.max(0, startMs - AppSleepService.OVERNIGHT_LOOKBACK_MS)),
+        where('startTimeMs', '<=', endMs), orderBy('startTimeMs', 'desc'),
+        ...(cursor ? [startAfter(cursor)] : []), limit(size + 1)));
+      if (!isCurrent()) throw new Error('Sleep summary read cancelled.');
+      for (const document of snapshot.docs.slice(0, size)) {
+        records++;
+        const raw = document.data();
+        bytes += new TextEncoder().encode(JSON.stringify(raw)).byteLength;
+        if (bytes > SLEEP_SUMMARY_READ_LIMITS.bytes) return result('bytes');
+        const session = decodeSleepSessionSportsLibData({ ...raw, id: document.id } as SleepSession);
+        if (this.overlapsDashboardRange(session, startMs, endMs)) sessions.push(session);
+      }
+      if (snapshot.size <= size) return result(null);
+      if (records >= SLEEP_SUMMARY_READ_LIMITS.records) return result('records');
+      cursor = snapshot.docs[size - 1];
+    } while (cursor);
+    throw new Error('Sleep summary paging could not continue.');
   }
 
   /** Native Sleep records for consumers that already own a complete Health HRV read. */

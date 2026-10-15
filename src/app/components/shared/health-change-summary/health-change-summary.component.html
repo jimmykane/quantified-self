@@ -1,36 +1,24 @@
-<section class="health-change-summary" [class.health-change-compact]="compact()"
-  [attr.data-glance-state]="compact() ? glance().state : null" [attr.aria-labelledby]="summaryId() + '-title'">
-  <div class="health-change-heading">
-    <div class="health-change-intro">
-      <h2 [id]="summaryId() + '-title'">{{ compact() ? 'At a glance' : 'Your recovery' }}</h2>
-      @if (compact()) {
-        <p class="health-change-headline" role="status" aria-atomic="true">{{ glance().headline }}</p>
-      }
-    </div>
+<app-summary-disclosure class="health-change-summary" [attr.data-glance-state]="compact() ? glance().state : null"
+  [summaryId]="summaryId()" [scopeKey]="scopeKey()" [title]="compact() ? 'At a glance' : 'Your recovery'"
+  [variant]="compact() ? 'rail' : 'flat'" [tone]="tone()" [headline]="compact() ? glance().headline : summary().headline"
+  [detailsAvailable]="detailsAvailable()">
+  <div summaryOverview>
     @if (!compact()) {
-      <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
-        (click)="toggleDetails()">
-        {{ expanded() ? 'Hide details' : 'Show details' }}
-        <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-      </button>
+      <p class="health-change-coverage">{{ summary().coverageText }}</p>
+      @for (change of summary().changes; track change.id) {
+        <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
+      }
+      <p class="health-change-scope">From your latest sleep and nightly HRV readings.</p>
     }
   </div>
   @if (!compact()) {
-    <p class="health-change-headline" role="status" aria-atomic="true">{{ summary().headline }}</p>
-    <p class="health-change-coverage">{{ summary().coverageText }}</p>
-    @for (change of summary().changes; track change.id) {
-      <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
-    }
-    <p class="health-change-scope">From your latest sleep and nightly HRV readings.</p>
-    <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
-      <dl class="health-change-evidence">
-        @for (signal of signals(); track signal.id) {
-          <div [attr.data-state]="signal.state">
-            <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
-            <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
-          </div>
-        }
-      </dl>
-    </div>
+    <dl summaryDetails class="health-change-evidence">
+      @for (signal of signals(); track signal.id) {
+        <div [attr.data-state]="signal.state">
+          <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
+          <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
+        </div>
+      }
+    </dl>
   }
-</section>
+</app-summary-disclosure>

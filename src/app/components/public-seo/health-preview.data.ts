@@ -4,6 +4,7 @@ import type { DashboardSleepTrendContext, DashboardSleepTrendPoint } from '../..
 import { localCalendarDate, type HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { healthExampleDay, healthExampleValue } from '../../helpers/health-example-days.helper';
+import { addComparisonDays, comparisonDateCarrier, NOTE_COMPARISON_METRICS, noteComparisonWindow } from '../../helpers/timeline-note-comparison.helper';
 
 export type HealthPreviewKind = 'sleep' | 'hrv' | 'weight';
 export const HEALTH_PREVIEW_END = new Date(2026, 7, 31, 23, 59, 59).getTime();
@@ -21,6 +22,30 @@ export const HEALTH_PREVIEW_NOTES: readonly TimelineNote[] = [
     details: 'Sore throat and a couple of quiet days at home.', startDate: '2026-08-29', endDate: '2026-08-30',
     timeZone: 'UTC', revision: 1, createdAtMs: HEALTH_PREVIEW_END, updatedAtMs: HEALTH_PREVIEW_END },
 ];
+
+/** The existing fictional trip/readings, adapted to the same comparison contract as saved notes. */
+export function buildHealthNoteComparisonExample() {
+  const note = HEALTH_PREVIEW_NOTES[0];
+  const window = noteComparisonWindow(note, 7, Date.parse('2026-09-01T12:00:00Z'));
+  const series: HealthWorkspaceSeries[] = NOTE_COMPARISON_METRICS.map(metric => {
+    const sleep = metric.id === HEALTH_METRIC_IDS.SleepDuration;
+    const resting = metric.id === HEALTH_METRIC_IDS.RestingHeartRate;
+    const template = buildHealthPreviewSeries(sleep ? 'sleep' : 'hrv');
+    return { ...template, id: `sample-note-${metric.id}`, metricId: metric.id,
+      semanticLabel: metric.label, semanticVariant: sleep ? 'session_duration' : resting ? 'daily_resting' : 'overnight_average',
+      aggregation: sleep ? 'total' : 'average', unit: getHealthMetricDefinition(metric.id).canonicalUnit,
+      chartKind: 'line',
+      // Keep the same observations as the other Health examples; the shared helper excludes the change day.
+      points: Array.from({ length: 15 }, (_, index) => {
+        const calendarDate = addComparisonDays(window.before.startDate, index);
+        const offset = Math.round((comparisonDateCarrier('2026-08-31') - comparisonDateCarrier(calendarDate)) / 86_400_000);
+        return { calendarDate, timestampMs: comparisonDateCarrier(calendarDate), timezoneOffsetSeconds: 0,
+          value: healthExampleValue(metric.id, offset), qualityCode: null };
+      }),
+    };
+  });
+  return { note, window, series, complete: { sleep_duration: true, heart_rate_variability: true, resting_heart_rate: true } };
+}
 
 /** Deterministic sample measurements; no account data or runtime reads. */
 export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspaceSeries {

@@ -4,6 +4,11 @@ Timeline notes are private, user-created calendar context, independent of Health
 Every authenticated account can use the compact **Timeline notes** header action in Dashboard, Health, and Calendar, without a
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
 Training charts retain their shared note annotations, but the Training route has no note-manager header action.
+The signed-in sidenav also includes **Timeline notes** as a full-level row after **Health** in **Training & health**,
+with the existing `event_note` icon. This native Material list action closes the drawer before lazily opening the existing manager,
+preserving the current workspace as the comparison return location; there is no new list route, query parameter or
+copy of the editor. Duplicate taps, existing managers, account changes and shell teardown cannot stack a new manager.
+The row remains selected on `/health/compare/:noteId`, while the direct Health link matches only `/health`.
 
 ## Contract and lifecycle
 
@@ -77,7 +82,78 @@ at most 512 records / 2 MiB, across 64-record pages; it reports explicit incompl
 concurrently, then processing prioritizes ongoing notes within the shared caps. This removes a serial network wait
 without changing the indexed queries. If ongoing notes alone exhaust the budget, the closed first page (at most 65
 records including lookahead) has been prefetched but is not processed. The manager separately
-pages all notes, including future notes, newest start date first. No query parameters or navigation destination exist.
+pages all notes, including future notes, newest start date first. The manager has no query parameters. Its saved-note
+Compare action opens the authenticated comparison destination described below.
+
+## Before/after comparisons
+
+Saved notes offer **Compare** in the list and the pristine editor. Unsaved drafts cannot start a comparison. The existing
+manager closes before navigating to `/health/compare/:noteId`; the route re-reads that note from the signed-in owner's
+existing collection. It is auth/onboarding guarded, client-rendered and noindexed, with exact CSR/Hosting and offline
+navigation registration. Its title metadata is static, never private note text. A transient owner-scoped return context
+retains the originating URL and list-page cursors only in memory, bound to that comparison destination. A completed
+navigation away (including browser Back) clears it, so a later direct visit cannot reuse an unrelated return location.
+The in-app Back action returns there and reopens that page; a direct visit falls back to Health and the first notes
+page. Cancelled returns retain their context for retry. Failed comparison navigation restores the manager without
+writing the note.
+
+The MVP compares the **start** of one note, not its end or the end of an intervention. The change day and today's
+incomplete calendar day are excluded. Equal 7/14/28-day windows default to 14. Main-night duration, eligible nightly HRV
+and daily resting HR retain separate provider/account/aggregation/semantic/origin/recording/unit identities. Naps,
+daytime HRV and sleep resting/average/minimum HR never substitute for these metrics. Initial selection prefers a single
+series with evidence on both sides; subsequent source choices stay pinned locally across window changes and do not
+rewrite Health or Dashboard preferences. Missing selections stay unavailable rather than switching one side's source.
+
+Each recorded date contributes one median value; the comparison uses the median of those daily values, before any chart
+downsampling. Existing normalized Sleep grouping and Health reference/HRV identity projections remain authoritative.
+At least 5/7, 10/14 or 20/28 recorded days/nights are required **on each side**. A failed/limited read, source conflict,
+multiple reported devices, known recorded-versus-note timezone calendar mismatch, incomplete requested window or
+insufficient coverage withholds the difference. Values and coverage remain visible. These are product coverage gates,
+not statistical significance, causal evidence, medical interpretation or a training instruction.
+
+Dates retain their provider calendar labels or normalized Sleep wake date; upload time and browser timezone never
+rebucket a reading. The captured note timezone determines the current-day cutoff. Known recorded timezone offsets are
+checked conservatively against that calendar convention; a mismatch withholds the difference rather than shifting data.
+Missing device/timezone metadata is not guessed. Daily chart points use UTC-noon **calendar carriers**, not claimed
+observation instants. The shared Health renderer opts into date-only tooltips, before/after series, a start marker and
+explicit nulls for every missing/change day. Existing Health/Dashboard charts retain their ordinary rendering. An
+ungated two-reading difference is also suppressed in the comparison chart's accessible description, so sparse history
+cannot bypass the comparison's coverage gates. An explicitly selected hidden note can be analyzed; this anchor never
+changes global/per-note chart visibility or exposes
+other notes. Public/profile previews receive no private comparison evidence.
+
+The public homepage and Health feature page highlight comparisons beside the existing HRV example. Their deferred
+`HealthNoteComparisonPreviewComponent` reuses the same comparison helper, canonical formatters and
+`HealthMetricSeriesChartComponent`, with the existing fictional trip and Health example readings. Both public and
+saved-note views render `NoteComparisonSummaryComponent`: compact observed differences with source pickers and
+before/after day counts stay visible; **Show details** reveals the full median/coverage table independently of the
+history chart. `SummaryDisclosureComponent` owns only the shared flat/rail heading, Material disclosure, haptic and
+scope reset behavior also used by Health's **Your recovery** and Dashboard's **At a glance**. Recovery/Glance builders
+and note calculations remain independent; numerical note differences always use a neutral rail, never a good/bad,
+within-range or Readiness classification. Disclosure state resets on owner/note changes without feedback or persistence.
+The public adapter's fixed, completed seven-day windows exclude the change day; its local metric selector changes
+only recorded history, not the three summary rows. It has no
+auth, note, Health-query or Sleep-service dependency, reads no account data, saves nothing and makes no causal claim.
+
+`TimelineNoteComparisonService` reuses `HealthMetricQueryService` for one combined summary-only window per Health metric
+and one native Sleep envelope. No workout/sample query, extra 60-day personal-range baseline, enrichment read or provider
+request is added. `AppSleepService.loadSummaryRange` uses its existing start-time query with 32-record pages plus lookahead,
+512 records and 8 MiB cumulative UTF-8 budget, at most a 64-day envelope, explicit completeness, and account/cancellation
+checks between pages. The existing three-job queue and bounded 60-second cache also cover this path. One closing consumer
+cannot cancel another consumer's active shared read; when the last consumer closes, paging stops after the in-flight
+page and a later view starts a fresh read. Health keeps its existing limits and completeness metadata.
+
+The page fences note/data requests across owner, note, window, mutation and teardown changes; selected-note reads also
+check the service generation after completion. Focus/visibility revalidate, and a visible-tab minute clock notices a
+captured-zone date change without repeatedly aborting a pending read. Same-owner/note completed readings stay mounted
+through refresh and failure, with differences withheld; changed/deleted notes or account switches clear stale evidence.
+Controls reuse Material, app haptics, canonical Sports Lib display/unit settings, the shared header and workspace shell.
+
+No comparison, summary or preference is persisted. There is no new callable, collection, index, Rule, migration, provider
+integration, score, Training calculation, or MCP/Assistant tool/schema/scope/consent change. Frontend/Hosting release is
+separately approved work; no backend deployment is required for this feature.
+
+## Workspace annotation loading
 
 `TimelineNotesWorkspaceComponent` coalesces chart range registrations into a union and supplies explicit chart inputs.
 Health Highlights register their own fixed trend windows alongside the metric explorer's selected window, so navigating

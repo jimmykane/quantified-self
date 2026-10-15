@@ -3,12 +3,13 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 /** Shared public copy and preview selection for home and the Health feature page. */
 export const HEALTH_FEATURE_CONTENT = {
   seo: {
-    description: 'Track sleep, HRV and heart rate. Log blood pressure, weight and other measurements, and add timeline notes for travel, sickness and stress.',
+    description: 'Track sleep, HRV and heart rate. Log measurements and compare recorded health before and after a Timeline note, with sources and missing readings kept clear.',
     featureList: [
       'Health category overview with latest readings, 30-day charts, and detailed metric history',
       'Sleep, heart rate, and HRV trends with source-separated history',
       'Manual blood pressure, weight, body composition, blood oxygen, and VO₂ max logging',
       'Timeline notes for travel, sickness, stress, and time away',
+      'Before-and-after Timeline note comparisons for sleep duration, nightly HRV, and daily resting heart rate',
     ],
   },
   title: 'Your Health, Beyond Training.',
@@ -28,6 +29,11 @@ export const HEALTH_FEATURE_CONTENT = {
       icon: 'monitor_heart', title: 'Get to Know Your Usual',
       copy: 'Follow resting heart rate and HRV over time. Compare nightly HRV with your personal range when enough history is available. Add context with notes about travel, sickness, stress, and time away.',
       preview: 'health-hrv' as PublicFeaturePreviewKey,
+    },
+    {
+      icon: 'compare_arrows', title: 'What Changed Around Your Note?',
+      copy: 'Compare sleep, nightly HRV and daily resting heart rate around a Timeline note in matching 7, 14, or 28-day windows. Same-source readings, with coverage shown. Observed differences, not cause and effect.',
+      preview: 'health-note-comparison' as PublicFeaturePreviewKey,
     },
     {
       icon: 'monitor_weight', title: 'Log Your Measurements',

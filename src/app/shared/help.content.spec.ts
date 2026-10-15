@@ -14,6 +14,30 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the flat Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    expect(copy).toContain("app navigation's **Training & health** section");
+    expect(copy).not.toContain('**Health → Timeline notes**');
+    expect(copy).toContain('same notes manager without leaving your current workspace');
+    expect(copy).toContain('stays highlighted in navigation while comparing');
+    const planning = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(planning).toContain('full-level row in **Training & health**, after **Training**');
+  });
+  it('explains read-only note comparisons and honest coverage/source boundaries without implying an effect', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Compare** beside a saved note', '**14 days on each side**', '**5/7**', '**10/14**', '**20/28**',
+      "note's **start date**", 'choices stay local', 'observed differences, not cause and effect',
+      'Missing days are gaps', 'multiple reported devices', 'previous difference is not shown as a current result']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains compact note differences and the shared disclosure without conflating them with recovery', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('**Before & after this note**');
+    expect(content).toContain('full before/after median table');
+    expect(content).toContain('the history chart stays visible either way');
+    expect(content).toContain('neutral rail does not classify a numerical change as good/bad');
+  });
   it('explains saved Suunto route import scope without enabling outbound directions', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('Suunto also includes existing saved routes');
