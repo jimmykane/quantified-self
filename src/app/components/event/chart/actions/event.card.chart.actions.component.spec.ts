@@ -80,6 +80,69 @@ describe('EventCardChartActionsComponent', () => {
     return { checked, source: { checked: component.useDistinctLinePatterns } } as MatSlideToggleChange;
   }
 
+  function zoneColorToggle(overlay: HTMLElement): HTMLButtonElement | undefined {
+    return Array.from(overlay.querySelectorAll('mat-slide-toggle'))
+      .find(toggle => toggle.textContent?.includes('Color by zones'))
+      ?.querySelector('button[role="switch"]') as HTMLButtonElement | undefined;
+  }
+
+  it('hides zone colors when unavailable, including comparisons', async () => {
+    const overlay = await openOptionsMenu();
+    expect(zoneColorToggle(overlay)).toBeUndefined();
+  });
+
+  it('renders zone colors enabled by default and emits the semantic change without duplicate haptics', async () => {
+    component.showIntensityZoneColorsToggle = true;
+    component.canChangeZoneColors = true;
+    const emit = vi.spyOn(component.colorIntensityZoneLinesChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const toggle = zoneColorToggle(overlay)!;
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    hapticsServiceMock.selection.mockClear();
+    toggle.click();
+    expect(emit).toHaveBeenCalledExactlyOnceWith(false);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'colorIntensityZoneLines' });
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-checked')).toBe('true'); // The parent owns saved state and rollback.
+    expect(overlay.textContent).toContain('Color by zones'); // Keep the menu open.
+  });
+
+  it('renders the saved off choice and saving indicators while disabling further changes', async () => {
+    component.showIntensityZoneColorsToggle = true;
+    component.canChangeZoneColors = true;
+    component.colorIntensityZoneLines = false;
+    component.isSavingZoneColors = true;
+    const emit = vi.spyOn(component.colorIntensityZoneLinesChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const toggle = zoneColorToggle(overlay)!;
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(toggle.getAttribute('aria-disabled')).toBe('true');
+    expect(toggle.tabIndex).toBe(0);
+    expect(overlay.querySelector('[aria-label="Saving zone colors"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Saving chart settings"]')).toBeTruthy();
+    toggle.click();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('ignores unavailable, unauthorized, pending and unchanged zone-color requests', () => {
+    const emit = vi.spyOn(component.colorIntensityZoneLinesChange, 'emit');
+    const change = () => ({ checked: false, source: { checked: false } }) as MatSlideToggleChange;
+    component.onColorIntensityZoneLinesChange(change());
+    component.showIntensityZoneColorsToggle = true;
+    component.onColorIntensityZoneLinesChange(change());
+    component.canChangeZoneColors = true;
+    component.isSavingZoneColors = true;
+    component.onColorIntensityZoneLinesChange(change());
+    component.isSavingZoneColors = false;
+    component.onColorIntensityZoneLinesChange({ checked: true, source: { checked: true } } as MatSlideToggleChange);
+    component.user = null;
+    component.onColorIntensityZoneLinesChange(change());
+    expect(emit).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
   it('hides patterns for ordinary events and opens options with one haptic', async () => {
     expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     const overlay = await openOptionsMenu();

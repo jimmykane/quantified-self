@@ -30,6 +30,7 @@ import { createNominalYardPoolFixture } from './event-swim-distance-display.test
 import {
   buildEventChartPanels,
   hasEventChartableData,
+  hasEventChartIntensityZoneData,
   buildEventLapMarkers,
   buildEventSwimLengthMarkers,
   buildEventLegendItems,
@@ -408,6 +409,31 @@ describe('event-echarts-data.helper', () => {
 
     expect(panels[0].minX).toBe(0);
     expect(panels[0].maxX).toBe(pointCount - 1);
+  });
+
+  it.each([DataHeartRate.type, DataPower.type])('detects usable %s zones independently of the coloring preference', type => {
+    const activity = {
+      intensityZones: [{ type, zone2LowerLimit: 120, zone3LowerLimit: 140 }],
+      getAllStreams: () => [{ type }],
+    } as unknown as Parameters<typeof hasEventChartIntensityZoneData>[0][number];
+    expect(hasEventChartIntensityZoneData([activity])).toBe(true);
+    expect(hasEventChartIntensityZoneData([{ ...activity, getAllStreams: () => [] }])).toBe(false);
+    expect(hasEventChartIntensityZoneData([{ ...activity, intensityZones: [] }])).toBe(false);
+  });
+
+  it.each([
+    { type: DataHeartRate.type, zone2LowerLimit: 120 },
+    { type: DataHeartRate.type, zone2LowerLimit: 140, zone3LowerLimit: 120 },
+    { type: DataHeartRate.type, zone2LowerLimit: 120, zone4LowerLimit: 160 },
+    { type: DataHeartRate.type, zone2LowerLimit: 120, zone3LowerLimit: 'invalid' },
+    { type: DataCadence.type, zone2LowerLimit: 120, zone3LowerLimit: 140 },
+  ])('does not offer zone coloring for unusable boundaries: %j', zones => {
+    const activity = {
+      intensityZones: [zones],
+      getAllStreams: () => [{ type: zones.type }],
+    } as unknown as Parameters<typeof hasEventChartIntensityZoneData>[0][number];
+    expect(hasEventChartIntensityZoneData([activity])).toBe(false);
+    expect(hasEventChartIntensityZoneData([])).toBe(false);
   });
 
   it('adds heart-rate zone color pieces from provider intensity-zone boundaries when enabled', () => {

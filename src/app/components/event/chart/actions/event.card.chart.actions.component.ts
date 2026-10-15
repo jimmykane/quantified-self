@@ -42,6 +42,10 @@ export class EventCardChartActionsComponent {
   @Input() isSavingDistinctLinePatterns = false;
   @Input() showSeriesMenu = false;
   @Input() showAltitudeGradeColorToggle = false;
+  @Input() showIntensityZoneColorsToggle = false;
+  @Input() colorIntensityZoneLines = true;
+  @Input() canChangeZoneColors = false;
+  @Input() isSavingZoneColors = false;
   @Input() seriesMenuSummary = '';
   @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
   @Input() recommendedSeriesMenuItems: ChartSeriesMenuItem[] = [];
@@ -61,6 +65,7 @@ export class EventCardChartActionsComponent {
   @Output() cursorBehaviourChange = new EventEmitter<ChartCursorBehaviours>();
   @Output() syncChartHoverToMapChange = new EventEmitter<boolean>();
   @Output() colorAltitudeByGradeChange = new EventEmitter<boolean>();
+  @Output() colorIntensityZoneLinesChange = new EventEmitter<boolean>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
   @Output() resetToSportDefaults = new EventEmitter<void>();
@@ -141,6 +146,16 @@ export class EventCardChartActionsComponent {
     }
     this.distinctLinePatternsChange.emit(enabled);
     this.analyticsService.logEvent('event_chart_settings_change', { property: 'useDistinctComparisonLinePatterns' });
+  }
+
+  onColorIntensityZoneLinesChange(change: MatSlideToggleChange): void {
+    change.source.checked = this.colorIntensityZoneLines;
+    if (!this.user || !this.showIntensityZoneColorsToggle || !this.canChangeZoneColors
+      || this.isSavingZoneColors || change.checked === this.colorIntensityZoneLines) {
+      return;
+    }
+    this.colorIntensityZoneLinesChange.emit(change.checked);
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'colorIntensityZoneLines' });
   }
 
   async onShowLapsToggle(checked: boolean) {

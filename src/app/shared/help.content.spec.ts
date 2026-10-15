@@ -1468,6 +1468,9 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
+    expect(gettingStartedSection?.content).toContain('**Color by zones** in **Chart options**');
+    expect(gettingStartedSection?.content).toContain('your choice is saved across events');
+    expect(gettingStartedSection?.content).toContain('merged events and benchmark comparisons keep their device colors');
     expect(gettingStartedSection?.content).toContain('**Reset zoom or selection** button');
     expect(gettingStartedSection?.content).toContain('clears the shared chart state for the event');
     expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');

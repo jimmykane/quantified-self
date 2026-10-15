@@ -712,7 +712,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.
 - When an overlay is active, the primary metric keeps its normal line and fill, while the overlay normally renders as a plain solid no-fill line using the overlay metric's series color. Enabling **Distinct line patterns** applies the device pattern to both metrics on merged and benchmark events. On merged and benchmark events, overlay legend and tooltip rows include both metric and activity labels.
 - When Grade Smooth or Grade streams are available, **Altitude** charts can color the altitude line by grade; the chart option **Color Altitude by Grade** is on by default and can be turned off from Chart options.
-- When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines and visible fill by zone.`,
+- When provider heart-rate or power zone boundaries are available on non-merged events, the **Heart Rate** and **Power** charts color their lines and visible fill by zone by default. Use **Color by zones** in **Chart options** to turn this on or off for both metrics. Turning it off uses each metric's normal series color, and your choice is saved across events. This option appears only when the selected activities have usable heart-rate or power zones; merged events and benchmark comparisons keep their device colors.`,
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
