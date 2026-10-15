@@ -1565,10 +1565,14 @@ describe('SummariesComponent', () => {
     const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
     component.user = { uid: 'owner', settings: { dashboardSettings } } as any;
     component.showActions = true; component.isOwnerDashboard = true;
+    component.dashboardTodayReadiness.changeSignals = [{ id: 'hrv', label: 'HRV',
+      sourceLabel: 'Suunto · Overnight average', state: 'outside-range',
+      statusText: 'Below your usual range', detailText: '7-day average compared with 60 days' }];
     const host = fixture.nativeElement as HTMLElement;
     fixture.detectChanges();
     const summary = host.querySelector('app-health-change-summary')!;
-    expect(summary.textContent).toContain('Your recovery');
+    expect(summary.textContent).toContain('At a glance');
+    expect(summary.querySelector('.health-change-coverage')).toBeNull();
     expect(host.querySelector('.dashboard-summary-heading')?.classList.contains('dashboard-summary-heading--with-recovery')).toBe(true);
     summary.querySelector('button')!.click(); fixture.detectChanges();
     expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
@@ -1578,6 +1582,24 @@ describe('SummariesComponent', () => {
     component['changeDetector'].markForCheck(); fixture.detectChanges();
     expect(host.querySelector('app-health-change-summary')).toBeNull();
     expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
+  });
+
+  it('keeps ordinary Today recovery context to one named-signal sentence', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    component.dashboardTodayReadiness.changeSignals = [
+      { id: 'hrv', label: 'HRV', sourceLabel: 'Suunto · Overnight average', state: 'within-range',
+        statusText: 'Within your usual range', detailText: '7-day average compared with 60 days' },
+      { id: 'sleep', label: 'Sleep', sourceLabel: 'Suunto', state: 'recorded',
+        statusText: 'Latest night', detailText: 'Recorded sleep' },
+    ];
+    fixture.detectChanges();
+    const summary = (fixture.nativeElement as HTMLElement).querySelector('app-health-change-summary')!;
+    expect(summary.querySelector('h2')?.textContent).toBe('At a glance');
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Your 7-day HRV average is within your usual range.');
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('.health-change-scope')).toBeNull();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {

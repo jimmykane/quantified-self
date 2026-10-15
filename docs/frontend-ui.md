@@ -62,16 +62,19 @@ contracts, consent, queries and mutations are unchanged. No backend deployment o
 
 ## Workspace Shells
 
-Health All and the owner Dashboard Today share the surface-free **Your recovery** summary from
-`components/shared/health-change-summary/`. Keep established changes visible while evidence details are collapsed.
+Health All and the owner Dashboard Today share the surface-free summary from
+`components/shared/health-change-summary/`. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
 Use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls` and a mounted hidden region;
 do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
 The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
 charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
-Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. Comparison
-counts stay visible at a glance alongside the headline and any outside-range readings; Show details contains the
-source and range breakdown. The visible scope names Sleep and nightly HRV. On Dashboard, the heading's bottom
-margin and the summary's top padding do not stack between the greeting and recovery title. Preserve the reserved
+Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. On Health,
+comparison counts stay visible alongside the headline and any outside-range readings; Show details contains the
+source and range breakdown. The visible scope names Sleep and nightly HRV. Dashboard uses the component's compact
+**At a glance** mode: an inline label and one named-signal sentence, wrapping naturally on mobile, without extra
+metadata rows or disclaimer copy. Only outside-range, unavailable or insufficient signals get a Show details action;
+the breakdown includes only those signals and closes silently if they resolve. Do not summarize unassessed metrics
+as normal. On Dashboard, the heading's bottom margin and the summary's top padding do not stack. Preserve the reserved
 status line, source/error distinctions, and the disclosure's 44px touch target. This is presentation only; no metric,
 readiness calculation, query, persistence, or MCP/Assistant contract changes.
 

@@ -1,9 +1,39 @@
-import { buildHealthChangeSummary, buildHealthHighlightChangeSignals, personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from './health-change-summary.helper';
+import { buildDashboardGlanceSummary, buildHealthChangeSummary, buildHealthHighlightChangeSignals, personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from './health-change-summary.helper';
 import type { HealthPriorityCardView } from '../components/health/health-priority-summary.component';
 import type { HealthWorkspaceSeries } from './health-workspace.helper';
 
 const signal = (state: HealthChangeSignal['state'], id: string = state): HealthChangeSignal => ({
   id, state, label: 'HRV', sourceLabel: 'Suunto · Overnight average', statusText: state, detailText: 'Same-source evidence',
+});
+
+describe('Dashboard at a glance', () => {
+  const sleep = (state: HealthChangeSignal['state']) => ({ ...signal(state, 'sleep'), label: 'Sleep' });
+  it('uses one specific sentence on a normal day without treating recorded Sleep as a normal-range assessment', () => {
+    expect(buildDashboardGlanceSummary([sleep('recorded'), signal('within-range', 'hrv')])).toEqual({
+      headline: 'Your 7-day HRV average is within your usual range.', attentionSignals: [],
+    });
+    expect(buildDashboardGlanceSummary([sleep('recorded')])).toEqual({ headline: 'Your latest sleep reading is available.', attentionSignals: [] });
+    expect(buildDashboardGlanceSummary([])).toEqual({ headline: 'No recent sleep or nightly HRV readings yet.', attentionSignals: [] });
+  });
+  it('keeps outside-range findings ahead of failed, pending or insufficient evidence', () => {
+    const outside = signal('outside-range', 'hrv'), missing = sleep('unavailable');
+    expect(buildDashboardGlanceSummary([missing, outside, signal('loading'), signal('insufficient')])).toMatchObject({
+      headline: 'Your 7-day HRV average is outside your usual range.',
+      attentionSignals: [missing, outside, signal('insufficient')],
+    });
+  });
+  it.each([
+    ['unavailable', 'Your 7-day HRV average is unavailable right now.'],
+    ['insufficient', 'Your 7-day HRV average is not ready to compare yet.'],
+  ] as const)('offers the %s reason without an all-clear claim', (state, headline) => {
+    const unavailable = signal(state, 'hrv');
+    expect(buildDashboardGlanceSummary([unavailable, sleep('recorded')])).toEqual({ headline, attentionSignals: [unavailable] });
+  });
+  it('keeps transient loading compact without offering empty details', () => {
+    expect(buildDashboardGlanceSummary([sleep('loading'), signal('within-range', 'hrv')])).toEqual({
+      headline: 'Sleep is still loading.', attentionSignals: [],
+    });
+  });
 });
 
 describe('Health change summary', () => {

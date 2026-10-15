@@ -69,6 +69,30 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
   return { changes, headline, coverageText: parts.join(' · ') };
 }
 
+/** Dashboard copy only: name the evidence checked, never imply an all-metrics assessment. */
+export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal[]) {
+  const attentionSignals = signals.filter(signal => signal.state === 'outside-range'
+    || signal.state === 'unavailable' || signal.state === 'insufficient');
+  const priority: readonly HealthChangeState[] = ['outside-range', 'unavailable', 'loading', 'insufficient', 'within-range', 'recorded'];
+  const state = priority.find(state => signals.some(signal => signal.state === state));
+  const selected = signals.filter(signal => signal.state === state);
+  const labels = selected.map(signal => signal.id === 'hrv' ? 'Your 7-day HRV average' : signal.label);
+  const names = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0];
+  const verb = labels.length > 1 ? 'are' : 'is';
+  let headline: string;
+  switch (state) {
+    case 'outside-range': headline = `${names} ${verb} outside your usual range.`; break;
+    case 'unavailable': headline = `${names} ${verb} unavailable right now.`; break;
+    case 'loading': headline = `${names} ${verb} still loading.`; break;
+    case 'insufficient': headline = `${names} ${verb} not ready to compare yet.`; break;
+    case 'within-range': headline = `${names} ${verb} within your usual range.`; break;
+    case 'recorded': headline = selected.length === 1 && selected[0].id === 'sleep'
+      ? 'Your latest sleep reading is available.' : `${names} readings are available.`; break;
+    default: headline = 'No recent sleep or nightly HRV readings yet.';
+  }
+  return { headline, attentionSignals };
+}
+
 /** Mirrors Highlight source selection; never combines provider/account or semantic series. */
 export function buildHealthHighlightChangeSignals(
   cards: readonly (HealthPriorityCardView & { comparisonUnavailable?: boolean })[],
