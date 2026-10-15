@@ -15,8 +15,9 @@ passed. This completes #832's operational activation evidence, distinct from the
 successful deployment/apply alone.
 The durable-workspace extension was applied with owner approval on 15 October 2026,
 expanding this same bundle to fourteen metrics and nine enabled policies. Configuration,
-query and serial-reapplication checks passed; #876 retains the first natural hourly
-cleanup heartbeat/time-series verification before operational completion.
+query and serial-reapplication checks passed. The first natural hourly cleanup and
+positive post-creation heartbeat/sample series were verified, satisfying #876's
+operational activation requirements.
 Monitoring adds no scheduler, paid warm instance or email Function. The workspace's
 existing hourly source cleanup is observed without invoking an extra cleanup run. Cloud
 Monitoring sends opening/closing notifications to the existing enabled Alerts email
@@ -316,7 +317,7 @@ Cloud Monitoring dashboard changes no user action or public provider capability.
 
 ## Activity workspace extension
 
-Deletion-surviving temporary upload reservations are **covered/unchanged** by this extension: the existing hourly cleanup job reconciles them in bounded pages and includes retained Storage/Firestore failures in the same fixed `send_cleanup` failure/heartbeat observation. Account-prefix cleanup also invokes the same reconciler, with native retry-enabled trigger errors for failures. Active upload/cleanup leases and resumable previews are expected waits, not processing failures. No new scheduler, metric, label, dashboard or threshold is required; #876 still owns deployment/apply/readback. Exact paths and digests remain backend-only and never enter telemetry.
+Deletion-surviving temporary upload reservations are **covered/unchanged** by this extension: the existing hourly cleanup job reconciles them in bounded pages and includes retained Storage/Firestore failures in the same fixed `send_cleanup` failure/heartbeat observation. Account-prefix cleanup also invokes the same reconciler, with native retry-enabled trigger errors for failures. Active upload/cleanup leases and resumable previews are expected waits, not processing failures. No new scheduler, metric, label, dashboard or threshold is required; #876 records deployment/apply/readback evidence. Exact paths and digests remain backend-only and never enter telemetry.
 
 The fixed mode allowlist includes `direct` only for `manualUpload` routes. This labels private staged recordings without identifying their owners or objects. Confirmed workspace processing failures emit `processing_failed` after a guarded terminal write and contribute to processing-failure alerts; uncertain acceptance contributes to unresolved-outcome alerts and cannot authorize replay. The existing bounded probe treats direct files as destination-only manual sends.
 
@@ -354,7 +355,24 @@ bundles passed. Direct manual-upload dimensions and committed processing failure
 are covered by fixture/unit evidence, not a fabricated production upload or outage.
 Existing same-channel opened/closed email evidence from #655 is reused.
 
-The first natural cleanup is due at 12:23 Europe/Helsinki (09:23 UTC) on 15 October.
-An approved automatic follow-up after that run must verify its completed heartbeat
-and post-creation metric series, plus recent samples for all three destinations,
-before closing #876. Configuration presence or a missing series is not live readiness.
+The first natural cleanup completed at 09:23:07 UTC (12:23 Helsinki) on 15 October.
+The approved read-only follow-up at approximately 09:31 UTC verified a positive
+`qs_activity_delivery_send_cleanup_runs_v1` count in the 09:22:52–09:23:52 UTC
+interval, after metric creation. The unchanged hourly scheduler recorded its natural
+09:23 attempt successfully; no manual invocation was used.
+
+Suunto, Wahoo and COROS each had a positive post-creation queue-heartbeat count and
+real due/age distribution observations in the 08:59:52–09:00:52 UTC interval. Each
+distribution had one observation with mean zero, rather than an inferred empty series.
+The corresponding 09:00 logs and next natural 09:30 samples reported zero due, age,
+unknown and excluded values without truncation. No cleanup-failure or probe-failure
+series appeared in the checked window; this is not production failure-injection proof
+or a complete global-backlog guarantee.
+
+Final readback retained the same dashboard, fourteen metrics, nine enabled policies
+and all eleven condition identities; all twenty-seven chart/condition queries passed.
+Every metric, policy, dashboard and notification-channel configuration hash was
+unchanged from the successful serial reapplication. Combined with the separately
+verified runtime, Rules/index release and reused email evidence above, these live
+observations complete #876's activation verification without another deployment,
+configuration apply, provider call, replay, test email or operator-initiated deletion.

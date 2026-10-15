@@ -1,21 +1,31 @@
-<section class="health-change-summary" [attr.aria-labelledby]="summaryId() + '-title'">
+<section class="health-change-summary" [class.health-change-compact]="compact()"
+  [attr.data-glance-state]="compact() ? glance().state : null" [attr.aria-labelledby]="summaryId() + '-title'">
   <div class="health-change-heading">
-    <h2 [id]="summaryId() + '-title'">What changed?</h2>
-    <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
-      (click)="toggleDetails()">
-      {{ expanded() ? 'Hide details' : 'Show details' }}
-      <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-    </button>
+    <div class="health-change-intro">
+      <h2 [id]="summaryId() + '-title'">{{ compact() ? 'At a glance' : 'Your recovery' }}</h2>
+      @if (compact()) {
+        <p class="health-change-headline" role="status" aria-atomic="true">{{ glance().headline }}</p>
+      }
+    </div>
+    @if (detailsAvailable()) {
+      <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
+        (click)="toggleDetails()">
+        {{ expanded() ? 'Hide details' : 'Show details' }}
+        <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+      </button>
+    }
   </div>
-  <p class="health-change-headline" role="status" aria-atomic="true">{{ summary().headline }}</p>
-  <p class="health-change-coverage">{{ summary().coverageText }}</p>
-  @for (change of summary().changes; track change.id) {
-    <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
+  @if (!compact()) {
+    <p class="health-change-headline" role="status" aria-atomic="true">{{ summary().headline }}</p>
+    <p class="health-change-coverage">{{ summary().coverageText }}</p>
+    @for (change of summary().changes; track change.id) {
+      <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
+    }
+    <p class="health-change-scope">From your latest sleep and nightly HRV readings.</p>
   }
-  <p class="health-change-scope">Sleep and nightly HRV · Existing range evidence, not a new score.</p>
-  <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
+  <div [id]="summaryId() + '-details'" [hidden]="!expanded() || !detailsAvailable()">
     <dl class="health-change-evidence">
-      @for (signal of signals(); track signal.id) {
+      @for (signal of detailSignals(); track signal.id) {
         <div [attr.data-state]="signal.state">
           <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
           <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
