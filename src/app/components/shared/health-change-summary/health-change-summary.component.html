@@ -7,9 +7,6 @@
         <p class="health-change-headline" role="status" aria-atomic="true">{{ glance().headline }}</p>
       }
     </div>
-    @if (compact()) {
-      <mat-icon class="health-change-glance-icon" aria-hidden="true">{{ glanceIcon() }}</mat-icon>
-    }
     @if (detailsAvailable()) {
       <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
         (click)="toggleDetails()">

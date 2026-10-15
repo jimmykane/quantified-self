@@ -406,7 +406,7 @@ other metrics are not implicitly assessed. No anomaly engine, extra score, thres
 
 Health keeps its comparison counts and outside-range signals visible with their source. Dashboard shows only one
 sentence naming the evidence checked on ordinary days, without counts, scope rows, repeated notices or disclaimer copy.
-Its surface-free accent rail and decorative Material icon reflect that same dominant state; recorded, insufficient and
+Its surface-free accent rail reflects that same dominant state without a separate status icon; recorded, insufficient and
 loading evidence stay neutral rather than borrowing the within-range appearance. Color is supplementary to the sentence.
 It prioritizes outside-range, unavailable, loading, insufficient, within-range, then recorded states so missing data
 cannot become an all-clear. **Show details** is available there only for outside-range, unavailable or insufficient

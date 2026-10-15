@@ -73,7 +73,7 @@ describe('Health change summary disclosure', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('h2')?.textContent).toBe('At a glance');
     expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe('within-range');
-    expect(host.querySelector('.health-change-glance-icon')?.textContent?.trim()).toBe('check_circle_outline');
+    expect(host.querySelector('.health-change-glance-icon')).toBeNull();
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Your 7-day HRV average is within your usual range.');
     expect(host.querySelector('button')).toBeNull();
     expect(host.querySelectorAll('p')).toHaveLength(1);
@@ -100,7 +100,7 @@ describe('Health change summary disclosure', () => {
     const details = host.querySelector<HTMLElement>('#glance-details')!;
     const button = host.querySelector('button')!;
     expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe('outside-range');
-    expect(host.querySelector('.health-change-glance-icon')?.textContent?.trim()).toBe('error_outline');
+    expect(host.querySelector('.health-change-glance-icon')).toBeNull();
     expect(button.getAttribute('aria-controls')).toBe('glance-details');
     expect(details.hidden).toBe(true);
     button.click(); fixture.detectChanges();
@@ -135,10 +135,7 @@ describe('Health change summary disclosure', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    ['unavailable', 'cloud_off'], ['loading', 'hourglass_empty'],
-    ['insufficient', 'info_outline'], ['recorded', 'info_outline'],
-  ] as const)('keeps the %s rail distinct from an assessed within-range reading', (state, icon) => {
+  it.each(['within-range', 'outside-range', 'unavailable', 'loading', 'insufficient', 'recorded'] as const)('uses a %s rail without a standalone status icon', state => {
     const fixture = TestBed.createComponent(HealthChangeSummaryComponent);
     fixture.componentRef.setInput('compact', true);
     fixture.componentRef.setInput('scopeKey', 'owner');
@@ -148,8 +145,8 @@ describe('Health change summary disclosure', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe(state);
-    expect(host.querySelector('.health-change-glance-icon')?.textContent?.trim()).toBe(icon);
-    expect(host.querySelector('.health-change-glance-icon')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('.health-change-glance-icon')).toBeNull();
+    expect(host.querySelector('.health-change-heading > mat-icon')).toBeNull();
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 });
@@ -159,7 +156,8 @@ describe('Dashboard accent rail style contract', () => {
     const styles = readFileSync(resolve(__dirname, 'health-change-summary.component.scss'), 'utf8');
     expect(styles).toContain('border-inline-start: 3px solid var(--health-glance-accent)');
     expect(styles).toContain('border-bottom: 0');
-    expect(styles).toContain('grid-template-columns: minmax(0, 1fr) auto');
+    expect(styles).toContain('grid-template-columns: minmax(0, 1fr); align-items: start');
+    expect(styles).not.toContain('grid-template-columns: minmax(0, 1fr) auto');
     expect(styles).toContain('grid-column: 1 / -1; justify-self: start');
     expect(styles).toContain('overflow-wrap: anywhere');
     expect(styles).toContain('min-height: 44px');

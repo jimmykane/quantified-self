@@ -11,9 +11,8 @@
   &[data-glance-state='within-range'] { --health-glance-accent: var(--qs-theme-success); }
   &[data-glance-state='outside-range'] { --health-glance-accent: var(--mat-sys-tertiary); }
   &[data-glance-state='unavailable'] { --health-glance-accent: var(--mat-sys-error); }
-  .health-change-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0.25rem 0.5rem; }
+  .health-change-heading { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 0.25rem; }
   .health-change-intro { display: grid; gap: 0.25rem; grid-column: 1; grid-row: 1; }
-  .health-change-glance-icon { color: var(--health-glance-accent); grid-column: 2; grid-row: 1; }
   .health-change-heading button { grid-column: 1 / -1; justify-self: start; padding-inline: 0; }
   h2 { font: var(--mat-sys-title-small); }
   .health-change-headline { overflow-wrap: anywhere; }
