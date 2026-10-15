@@ -50,6 +50,21 @@ describe('downloadCOROSFITFile', () => {
     await expect(downloadCOROSFITFile(cloudFrontFitUrl)).resolves.toEqual(payload);
   });
 
+  it.each([
+    // Sanitized reproduction of the extra-directory URL rejected in production.
+    'https://d31oxp44ddzkyk.cloudfront.net/fit/ab/account/workout.fit',
+    'https://oss.coros.com/fit/activity.fit',
+    'https://d31oxp44ddzkyk.cloudfront.net/exports/2026/10/workout.v2.fit',
+    'https://oss.coros.com/download/opaque-id?signature=secret-value',
+    'https://d31oxp44ddzkyk.cloudfront.net/fit/account/file%20name.fit',
+  ])('treats a provider-returned download path as opaque: %s', async url => {
+    const payload = fitPayload();
+    fetchMock.mockResolvedValue(response(200, payload));
+
+    await expect(downloadCOROSFITFile(url)).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(url, expect.objectContaining({ redirect: 'manual' }));
+  });
+
   it('rejects unsafe URLs before fetching', async () => {
     await expect(downloadCOROSFITFile(ossFitUrl.replace('https:', 'http:'))).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
     await expect(downloadCOROSFITFile('https://example.com/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
@@ -57,14 +72,34 @@ describe('downloadCOROSFITFile', () => {
     await expect(downloadCOROSFITFile('https://d31oxp44ddzkyk.cloudfront.net.evil.example/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
     await expect(downloadCOROSFITFile('https://127.0.0.1/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
     await expect(downloadCOROSFITFile('https://user:pass@oss.coros.com/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
-    await expect(downloadCOROSFITFile('https://d31oxp44ddzkyk.cloudfront.net/not-fit/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://oss.coros.com:8443/download/opaque-id')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('validates every redirect destination', async () => {
-    fetchMock.mockResolvedValue(response(302, null, { location: 'https://attacker.example/fit/407419767966679040/418408855184113664.fit' }));
+  it.each([
+    'https://attacker.example/fit/account/workout.fit',
+    'http://oss.coros.com/download/opaque-id',
+    'https://127.0.0.1/download/opaque-id',
+    'https://user:pass@oss.coros.com/download/opaque-id',
+    'https://oss.coros.com:8443/download/opaque-id',
+    'https://d31oxp44ddzkyk.cloudfront.net.evil.example/download/opaque-id',
+  ])('rejects an unsafe redirect regardless of its path: %s', async location => {
+    fetchMock.mockResolvedValue(response(302, null, { location }));
 
     await expect(downloadCOROSFITFile(ossFitUrl)).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts a different allowed redirect path while still validating the FIT body', async () => {
+    const url = 'https://d31oxp44ddzkyk.cloudfront.net/fit/ab/account/workout.fit';
+    const payload = fitPayload();
+    fetchMock.mockResolvedValueOnce(response(302, null, { location: url }))
+      .mockResolvedValueOnce(response(200, payload));
+    await expect(downloadCOROSFITFile(ossFitUrl)).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, url, expect.objectContaining({ redirect: 'manual' }));
+
+    fetchMock.mockResolvedValueOnce(response(200, Buffer.from('not a FIT')));
+    await expect(downloadCOROSFITFile(url)).rejects.toThrow('COROS file is not a valid FIT payload.');
   });
 
   it('rejects oversized and malformed FIT payloads permanently', async () => {
