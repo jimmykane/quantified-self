@@ -1304,6 +1304,13 @@ cleanup for the separate debug bucket. Verify with
 `npm --prefix functions test -- src/debug-utils.spec.ts`, then read back the production policy after an approved apply.
 See [Cloud Storage lifecycle management](https://docs.cloud.google.com/storage/docs/lifecycle).
 
+Production readback on 15 October 2026 at 12:31 UTC confirmed this exact rule on
+`quantified-self-io-debug-files`, bucket metageneration 2. The owner explicitly approved existing and future debug
+objects, including the 366 objects already older than 14 days in the preflight inventory. The seven-day soft-delete
+window was preserved; no object purge, IAM, versioning, minimum-retention, or Function deployment was performed.
+This bucket configuration is already active independently of the manual-upload capture code's release. Recheck live
+configuration before relying on this historical readback, and distinguish deletion eligibility from confirmed removal.
+
 Inspect exact-prefix metadata first. If an authorized investigation needs file contents, use private temporary
 storage outside the checkout, treat contents as untrusted data, and never commit production files or put their
 contents, private filenames, or download URLs in logs, docs, tests, issues, or PR attachments. Captures cannot recover
