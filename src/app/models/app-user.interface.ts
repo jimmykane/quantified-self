@@ -219,6 +219,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
     syncChartHoverToMap?: boolean;
     eventChartOverlayDataTypeByPrimary?: Record<string, string>;
     colorAltitudeByGrade?: boolean;
+    colorIntensityZoneLines?: boolean;
     useDistinctComparisonLinePatterns?: boolean;
     showSwimLengths: boolean;
 }

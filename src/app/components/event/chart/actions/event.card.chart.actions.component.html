@@ -42,9 +42,9 @@
     <button mat-icon-button type="button"
       class="qs-action-menu-icon-button event-chart-actions__icon-button"
       [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
-      [attr.aria-busy]="isSavingDistinctLinePatterns"
+      [attr.aria-busy]="isSavingDistinctLinePatterns || isSavingZoneColors"
       aria-label="Chart options" (menuOpened)="onOptionsMenuOpened()">
-      @if (isSavingDistinctLinePatterns) {
+      @if (isSavingDistinctLinePatterns || isSavingZoneColors) {
       <mat-progress-spinner diameter="24" mode="indeterminate" aria-label="Saving chart settings"></mat-progress-spinner>
       } @else {
       <mat-icon>tune</mat-icon>
@@ -132,6 +132,25 @@
       <span class="chart-options-menu__pattern-status">
         @if (isSavingDistinctLinePatterns) {
         <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
+        }
+      </span>
+    </div>
+  </section>
+  }
+
+  @if (showIntensityZoneColorsToggle) {
+  <section mat-menu-item [attr.aria-busy]="isSavingZoneColors"
+    matTooltip="Saved to your chart settings. Colors Heart Rate and Power by their recorded zones." matTooltipPosition="above">
+    <div class="chart-options-menu__pattern-row">
+      <mat-slide-toggle [checked]="colorIntensityZoneLines"
+        [disabled]="!user || !canChangeZoneColors || isSavingZoneColors"
+        [disabledInteractive]="isSavingZoneColors"
+        (click)="$event.stopPropagation()" (change)="onColorIntensityZoneLinesChange($event)">
+        Color by zones
+      </mat-slide-toggle>
+      <span class="chart-options-menu__pattern-status">
+        @if (isSavingZoneColors) {
+        <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving zone colors"></mat-progress-spinner>
         }
       </span>
     </div>

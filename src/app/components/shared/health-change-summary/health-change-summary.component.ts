@@ -14,28 +14,25 @@ import { buildDashboardGlanceSummary, buildHealthChangeSummary, type HealthChang
 export class HealthChangeSummaryComponent {
   readonly signals = input.required<readonly HealthChangeSignal[]>();
   readonly summaryId = input.required<string>();
-  /** Dashboard keeps ordinary days to one sentence; Health retains its full overview. */
+  /** Dashboard is sentence-only in every state; Health retains its evidence disclosure. */
   readonly compact = input(false);
   /** Clear private disclosure state when the account or overview scope changes. */
   readonly scopeKey = input.required<string>();
   readonly expanded = signal(false);
   readonly summary = computed(() => buildHealthChangeSummary(this.signals()));
   readonly glance = computed(() => buildDashboardGlanceSummary(this.signals()));
-  readonly detailsAvailable = computed(() => !this.compact() || this.glance().attentionSignals.length > 0);
-  readonly detailSignals = computed(() => this.compact() ? this.glance().attentionSignals : this.signals());
   private readonly haptics = inject(AppHapticsService);
 
   constructor() {
     effect(() => {
       this.scopeKey();
       this.compact();
-      this.detailsAvailable();
       this.expanded.set(false);
     });
   }
 
   toggleDetails(): void {
-    if (!this.detailsAvailable()) return;
+    if (this.compact()) return;
     this.haptics.selection();
     this.expanded.update(expanded => !expanded);
   }

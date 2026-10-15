@@ -311,6 +311,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private touchInteraction: EventChartTouchInteraction | null = null;
   private pinchInteraction: PanelPinchInteraction | null = null;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
+  private renderedZoneColoredSeriesKey = '[]';
   private pendingAxisScaleFrame: number | null = null;
   private lastKnownVisibleZoomRange: EventChartRange | null = null;
   private pendingFullscreenZoomRange: EventChartRange | null | undefined = undefined;
@@ -752,6 +753,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (!this.panel) {
       this.seriesByID.clear();
+      this.renderedZoneColoredSeriesKey = '[]';
       this.rangeStats = [];
       if (this.showZoomBar) {
         this.chartHost.setOption(this.buildZoomBarOnlyOption(), { notMerge: true, lazyUpdate: true });
@@ -774,6 +776,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (!this.panel.series.length) {
       this.seriesByID.clear();
+      this.renderedZoneColoredSeriesKey = '[]';
       this.rangeStats = [];
       this.syncAxisPointerCursorEmitBinding();
       this.chartHost.setOption({
@@ -786,12 +789,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
+    const zoneColoredSeriesKey = JSON.stringify(this.panel.series
+      .filter(series => series.zoneColorPieces?.length)
+      .map(series => series.id));
+    // Merging retains removed visual maps and explicit line colors. Replace the
+    // option when zone coloring changes, then restore the shared zoom/selection.
+    const replaceOption = mode === 'replace' || zoneColoredSeriesKey !== this.renderedZoneColoredSeriesKey;
     this.chartHost.setOption(
       this.buildOption(),
-      mode === 'replace'
+      replaceOption
         ? { notMerge: true, lazyUpdate: false }
         : ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS
     );
+    this.renderedZoneColoredSeriesKey = zoneColoredSeriesKey;
     this.syncAxisPointerCursorEmitBinding();
     this.applyCanonicalAxisScales();
     this.syncInteractionMode();
