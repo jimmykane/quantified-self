@@ -2407,6 +2407,33 @@ describe('sports-lib-reparse.service', () => {
         expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue() ?? null).toBe(expectedMethod);
     });
 
+    it.each(['reimport', 'regenerate'] as const)('preserves fresh parent-only totals in %s, not stale stored stats', async mode => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const makeSource = () => sports.EventImporterJSON.getEventFromJSON({
+            name: 'Synthetic parent observation', startDate: 0, endDate: 10000,
+            stats: { Distance: 54900, Energy: 200 },
+            activities: [{ startDate: 0, endDate: 10000, type: sports.ActivityTypes.Running,
+                creator: { name: 'Test' }, stats: { Distance: 0, Duration: 10 },
+                laps: [], streams: [], intensityZones: [] }],
+        } as any);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            activity => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity));
+        hoisted.evaluateTrainingStressScore.mockImplementation(activity => sports.ActivityUtilities.evaluateTrainingStressScore(activity));
+        for (let pass = 0; pass < 2; pass++) {
+            hoisted.reGenerateStatsForEvent.mockImplementationOnce(event => sports.EventUtilities.reGenerateStatsForEvent(event));
+            const parsedEvent = makeSource();
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode,
+                eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.fit' }, stats: { Distance: 1, Energy: 1 } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(hoisted.mockWriteAllEventData.mock.calls.at(-1)?.[1]).toBe(parsedEvent);
+            expect(parsedEvent.getDistance()?.getValue()).toBe(54900);
+            expect(parsedEvent.getStat(sports.DataEnergy.type)?.getValue()).toBe(200);
+            expect(parsedEvent.getFirstActivity().getDistance()?.getValue()).toBe(0);
+            expect(parsedEvent.getFirstActivity().getStat(sports.DataEnergy.type)).toBeUndefined();
+        }
+    });
+
     it.each([
         { preserveImportedTss: undefined, ftp: 250 },
         { preserveImportedTss: true, ftp: 250 },
@@ -2913,7 +2940,9 @@ describe('sports-lib-reparse.service', () => {
                     activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
                 expect(result.status).toBe('completed');
                 expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(expectedDistance, 1);
-                expect(parsedEvent.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(expectedDistance, 1);
+                // The source parent still reports 1000 in the synthetic child-missing cases.
+                // Regeneration can fill the leg's distance without replacing that independent observation.
+                expect(parsedEvent.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(derivesDistance ? 1000 : expectedDistance, 1);
                 if (recordedCounter) expect(activity.getStreamData(sports.DataDistance.type)).toEqual(recordedCounter);
                 expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expectedEvaluations);
                 expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(60);

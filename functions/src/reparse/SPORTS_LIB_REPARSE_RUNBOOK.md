@@ -597,6 +597,21 @@ Notes:
 - this doc is user-writable by product decision
 - users can influence only their own eligibility by modifying it
 
+## Pending source-summary and round-trip corrections
+
+Both `reimport` and `regenerate` preserve finite nonnegative fresh parent distance/energy observations that differ from
+the available child totals. Capture occurs before edit carryover, only for one unmerged parsed source. Restoration
+requires the same source legs, sport types and time windows. Old stored stats are never used, matching child sums remain
+free to regenerate, and parent-only observations are never distributed to legs. Multi-file and explicitly merged events
+continue to rebuild summaries from their children. This changes no child TSS, Training policy or load metadata, and
+adds no stored fields or reads. Existing readers of recorded parent totals see the preserved source observations.
+
+The pending Sports Lib candidate also preserves valid native JSON lap IDs and independently sums complete multisport
+`Timer time`/`Elapsed time` values. Once adopted, existing child timing can be aggregated locally; recovering previously
+lost source-only parent observations or already-renumbered lap IDs requires retained originals through the normal
+reparse lifecycle. The candidate is unreleased; root and Functions remain on the same published package. No production
+reparse or scanner enablement is authorized by these fixes.
+
 ## Parse + Write Rules
 - Supported source types: `fit`, `gpx`, `tcx`, `json`, `sml` (also `.gz` variants)
 - Strictness: if any source file parse fails, event fails for that run

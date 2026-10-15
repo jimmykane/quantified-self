@@ -58,6 +58,7 @@ import {
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { shouldPreserveParsedDistance } from './regeneration-distance';
+import { preserveFreshSourceEventSummary } from './source-event-summary';
 
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
@@ -1968,6 +1969,9 @@ export async function reparseEventFromOriginalFiles(
             existingActivityDocsCount: eventAndActivities.activityDocs.length,
         });
         const reparsedEvent = parseResult.finalEvent;
+        const restoreSourceEventSummary = preserveFreshSourceEventSummary(
+            reparsedEvent, parseResult.parsedEvents, autoHealResult.eventData.isMerge === true,
+        );
         reparsedEvent.setID(eventId);
         applyPreservedFields(reparsedEvent, autoHealResult.eventData);
         const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
@@ -2052,6 +2056,7 @@ export async function reparseEventFromOriginalFiles(
             });
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
+        restoreSourceEventSummary();
         // Event regeneration may hydrate source-level name/description values. User edits remain authoritative.
         applyPreservedFields(reparsedEvent, autoHealResult.eventData);
         const transformDurationMs = Date.now() - transformStartedAtMs;

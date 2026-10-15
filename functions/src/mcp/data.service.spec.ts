@@ -1625,7 +1625,7 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('private-rowing-source');
   });
 
-  it('does not mislabel pre-19 lap stroke rate as cadence', async () => {
+  it.each([0, 7, 9])('preserves source lap ID %s without mislabeling pre-19 stroke rate as cadence', async lapId => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument({ type: ActivityTypes.Rowing }),
     ]);
@@ -1642,7 +1642,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         type: ActivityTypes.Rowing,
         laps: [{
-          lapId: 1,
+          lapId,
           type: 'Manual',
           startDate: Date.parse('2026-07-01T08:00:00.000Z'),
           endDate: Date.parse('2026-07-01T08:10:00.000Z'),
@@ -1659,6 +1659,7 @@ describe('MCP data service', () => {
       activityRef: listed.activities[0].activityRef,
     });
 
+    expect(result.items[0].lapNumber).toBe(lapId);
     expect(result.items[0].stats).toMatchObject({
       averageCadenceRpm: null,
       maximumCadenceRpm: null,
