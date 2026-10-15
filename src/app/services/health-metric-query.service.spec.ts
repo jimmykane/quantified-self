@@ -13,7 +13,7 @@ import { nightlyHealthAccountKey } from '@shared/nightly-hrv';
 describe('shared Health request queue', () => {
   const user = signal<{uid:string}|null>({uid:'owner'});
   const health = { loadMetricRange: vi.fn() };
-  const sleep = { watchForDashboard: vi.fn() };
+  const sleep = { watchForDashboard: vi.fn(), loadSummaryRange: vi.fn() };
   const pending: Array<() => void> = [];
   const request = (day:number) => ({metricId:'steps' as const,startDate:`2026-09-${String(day).padStart(2,'0')}`,endDate:'2026-09-30',includeSamples:false});
   const flush = async () => { for(let i=0;i<12;i++) await Promise.resolve(); };
@@ -54,6 +54,24 @@ describe('shared Health request queue', () => {
     pending[1](); pending[2](); await flush(); pending[3](); pending[4](); await Promise.all(reads);
     await service.loadMetricRange('owner',request(5));
     expect(health.loadMetricRange).toHaveBeenCalledTimes(5);
+  });
+  it('shares bounded native Sleep reads without calling the enriching Dashboard path', async () => {
+    sleep.loadSummaryRange.mockResolvedValue({ sessions: [], complete: false, limitReached: 'records' });
+    const service = TestBed.inject(HealthMetricQueryService);
+    const first = service.loadSleepSummaryRange('owner', 1, 2);
+    expect(service.loadSleepSummaryRange('owner', 1, 2)).toBe(first);
+    expect(await first).toEqual({ sessions: [], complete: false, limitReached: 'records' });
+    expect(sleep.loadSummaryRange).toHaveBeenCalledOnce(); expect(sleep.watchForDashboard).not.toHaveBeenCalled();
+  });
+  it('does not let one closed consumer cancel an active native Sleep read shared by another', async () => {
+    let finish: () => void;
+    sleep.loadSummaryRange.mockImplementation((_uid, _start, _end, current) => new Promise(resolve => {
+      finish = () => { expect(current()).toBe(true); resolve({ sessions: [], complete: true, limitReached: null }); };
+    }));
+    const service = TestBed.inject(HealthMetricQueryService), a = new AbortController(), b = new AbortController();
+    const first = service.loadSleepSummaryRange('owner', 1, 2, 10, a.signal);
+    expect(service.loadSleepSummaryRange('owner', 1, 2, 10, b.signal)).toBe(first);
+    await flush(); a.abort(); finish!(); expect((await first).complete).toBe(true);
   });
   it('rejects public reads and results belonging to a previous account', async () => {
     const service=TestBed.inject(HealthMetricQueryService);

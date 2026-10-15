@@ -11,6 +11,9 @@
 .note-row > mat-icon { flex-shrink: 0; }
 .note-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .note-list { list-style: none; padding: 0; margin: 8px 0; }
+.note-list li { display: flex; align-items: center; gap: 4px; }
+.note-list li .note-row { flex: 1; min-width: 0; }
+.note-list li > button:last-child { flex-shrink: 0; }
 .note-list li + li { border-top: 1px solid var(--mat-sys-outline-variant); }
 .note-row { width: 100%; height: auto; min-height: 48px; justify-content: flex-start; text-align: start; }
 .note-row-content { display: flex; flex-direction: column; align-items: flex-start; padding-block: 6px; white-space: normal; overflow-wrap: anywhere; }

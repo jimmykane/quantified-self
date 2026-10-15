@@ -1,0 +1,77 @@
+<main class="note-comparison qs-workspace-page" aria-labelledby="note-comparison-title">
+  <button mat-button type="button" class="comparison-back" [disabled]="returning()" (click)="back()">
+    <mat-icon aria-hidden="true">arrow_back</mat-icon>Timeline notes
+  </button>
+  @if (returnError()) { <p class="comparison-error" role="alert">{{ returnError() }}</p> }
+  <app-page-header titleId="note-comparison-title" [title]="note()?.title || 'Note comparison'"
+    leadingIcon="compare_arrows" eyebrow="Before & after" [subtitle]="subtitle()" />
+  @if (note()?.details) { <p class="comparison-details">{{ note().details }}</p> }
+  @if (note()?.showOnCharts === false) { <p class="comparison-meta">Hidden on other charts. This comparison does not change note visibility.</p> }
+  <div class="comparison-controls">
+    <div><span class="comparison-label">Days on each side</span>
+      <mat-button-toggle-group aria-label="Comparison window length" [value]="days()" (change)="chooseWindow($event.value)" [hideSingleSelectionIndicator]="true">
+        @for (days of windowOptions; track days) { <mat-button-toggle [value]="days">{{ days }} days</mat-button-toggle> }
+      </mat-button-toggle-group>
+    </div>
+    <button mat-button type="button" appHapticTap [attr.aria-expanded]="methodExpanded()" aria-controls="comparison-method"
+      (click)="methodExpanded.set(!methodExpanded())"><mat-icon aria-hidden="true">info</mat-icon>How we compare</button>
+  </div>
+  <div id="comparison-method" class="comparison-method comparison-meta" [hidden]="!methodExpanded()">
+    <p>Each recorded day or main night has equal weight. We compare the median daily values, using the same provider, account and reading definition on both sides. Naps and daytime HRV are not substituted.</p>
+    <p>Sleep retains its recorded wake-up date; daily summaries retain their provider calendar dates. Dates are not shifted using upload times or your browser timezone. The note’s captured timezone determines completed days. Known timezone calendar mismatches and multiple reported devices withhold a difference; unreported device/timezone metadata is not guessed.</p>
+    <p>At least {{ days() === 7 ? 5 : days() === 14 ? 10 : 20 }} recorded days/nights are required on each side. A changed source, sparse coverage, incomplete window or failed/limited read withholds the difference. This threshold is not statistical significance.</p>
+    <p>For a date-range note, “after” means after its start, not after the period ended. Other changes are not controlled for.</p>
+  </div>
+  <div class="comparison-progress" role="status" [attr.aria-busy]="loading()">
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate" aria-hidden="true" />
+      <span class="comparison-meta">{{ evidence() ? 'Updating comparison · Previous readings shown; differences withheld' : 'Loading comparison…' }}</span>
+    }
+  </div>
+  @if (error()) { <p class="comparison-error" role="alert">{{ error() }} <button mat-button type="button" appHapticTap [disabled]="loading()" (click)="retry()">Retry</button></p> }
+  @if (window(); as window) {
+    <div class="comparison-periods">
+      <div><span class="comparison-label">Before</span><strong>{{ periods().before }}</strong></div>
+      <div><span class="comparison-label">After the note started</span><strong>{{ periods().after }}</strong></div>
+    </div>
+    <p class="comparison-meta">Note timezone: {{ window.timeZone }} · Change day excluded · Today’s incomplete day excluded</p>
+    @if (window.incomplete) { <p class="comparison-notice" role="status">The after window is still in progress. Available readings are shown; differences remain withheld until the requested window is complete.</p> }
+    @for (notice of evidence().notices; track notice) { <p class="comparison-notice" role="status">{{ notice }}</p> }
+    <table class="comparison-table" aria-label="Recorded metric medians and coverage before and after the note" aria-live="polite">
+      <thead><tr><th scope="col">Metric &amp; source</th><th scope="col">Before median</th><th scope="col">After median</th><th scope="col">Observed difference</th></tr></thead>
+      <tbody>
+        @for (row of rows(); track row.metricId) {
+          <tr><th scope="row"><strong>{{ row.label }}</strong>
+            @if (row.choices.length || row.selectedKey) {
+              <app-chart-source-picker [choices]="row.choices" [selectedKey]="row.selectedKey" [chartTitle]="row.label"
+                [disabled]="loading()" (selected)="chooseSource(row.metricId, $event)" />
+              @if (row.series?.deviceLabel) { <span class="comparison-meta">Reported device: {{ row.series.deviceLabel }}</span> }
+            } @else { <span class="comparison-meta">No eligible recorded source</span> }
+          </th>
+          <td data-label="Before median"><strong class="comparison-number">{{ row.beforeText }}</strong><span class="comparison-meta">{{ row.beforeCount }}/{{ window.days }} {{ row.countLabel }}</span></td>
+          <td data-label="After median"><strong class="comparison-number">{{ row.afterText }}</strong><span class="comparison-meta">{{ row.afterCount }}/{{ window.days }} {{ row.countLabel }}</span></td>
+          <td data-label="Difference"><strong class="comparison-number">{{ row.differenceText }}</strong><span class="comparison-meta">{{ row.reason }}</span></td></tr>
+        }
+      </tbody>
+    </table>
+    <section class="comparison-history" aria-labelledby="comparison-history-title">
+      <div class="comparison-history-heading"><h2 id="comparison-history-title">Recorded history</h2>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Metric</mat-label>
+          <mat-select aria-label="History metric" [value]="historyMetric()" (selectionChange)="chooseMetric($event.value)" (openedChange)="$event && haptics.selection()">
+            @for (metric of metrics; track metric.id) { <mat-option [value]="metric.id">{{ metric.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      </div>
+      @if (chart(); as chart) {
+        <p class="comparison-meta">{{ chart.source }} · Daily recorded values</p>
+        @if (chart.status) { <p class="comparison-notice">{{ chart.status }}. Available readings remain visible.</p> }
+        <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="chart.start" [endTimeMs]="chart.end"
+          [darkTheme]="darkTheme()" [unitSettings]="units()" [comparisonWindow]="chart.window"
+          statusDescription="Daily medians of recorded values; missing days are gaps. The note marker does not imply cause and effect." />
+      } @else { <p class="comparison-empty">No recorded history for the selected source and reading in this window.</p> }
+      <p class="comparison-meta">Recorded days only · Missing days and the change day are gaps, not filled values</p>
+    </section>
+    <p class="comparison-caveat comparison-meta">Observed differences, not cause and effect. Training, travel, illness and measurement timing may also have changed. This view does not prescribe what to do differently.</p>
+    <button mat-button type="button" appHapticTap [disabled]="loading()" (click)="retry()"><mat-icon aria-hidden="true">refresh</mat-icon>Refresh readings</button>
+  }
+</main>

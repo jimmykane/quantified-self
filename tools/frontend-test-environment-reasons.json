@@ -43,8 +43,20 @@
     "environment": "angular",
     "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."
   },
+  "src/app/components/timeline-notes/timeline-note-comparison-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the comparison route with real Material controls and shared header/source picker to verify signal bindings, disclosure accessibility, loading and owner fences, local selection and haptic ownership."
+  },
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
+  },
+  "src/app/services/timeline-note-comparison-navigation.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed for the injected Router and account signal/effect lifecycle, verifying owner-scoped return navigation and memory invalidation."
+  },
+  "src/app/services/timeline-note-comparison.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Instantiates the injected comparison read adapter with TestBed to verify shared-query dependencies, bounded requests, account fences and independent source failures."
   }
 }

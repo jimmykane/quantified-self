@@ -68,6 +68,16 @@ The manager lists all notes, including future plans, newest start date first. Yo
 
 In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.
 
+### Compare before and after a note
+
+Choose **Compare** beside a saved note in the manager, or from its editor before making draft changes. Compare main-night **Sleep duration**, **Nightly HRV** and **Daily resting heart rate** around the note's **start date**. A date-range note does not compare against its end. The default is **14 days on each side**; choose **7**, **14** or **28 days**. Back returns to the notes manager and its previous page. Comparing a hidden note does not turn its chart visibility on.
+
+Each recorded day/night has equal weight: the view compares medians of daily values and shows the recorded count beside each period. A metric keeps the same provider, account and reading definition on both sides. Choose another source explicitly when available; choices stay local and do not change your saved Health or Dashboard selections. Sleep HR, naps and daytime HRV are not substituted for daily resting HR or nightly HRV.
+
+The change day and today's incomplete day are excluded. The note's captured timezone determines completed days; Sleep keeps its recorded wake-up date and daily summaries keep their provider calendar dates. The minimum is **5/7**, **10/14** or **20/28** recorded days/nights on each side. Too few readings, an incomplete after-window, a failed or limited read, conflicts, multiple reported devices or known timezone calendar mismatches withhold the difference. Available readings remain visible, including while refreshing, but a previous difference is not shown as a current result. Missing days are gaps, not zeroes or filled values. Unreported device/timezone information is never guessed.
+
+These are **observed differences, not cause and effect** or statistical significance. Training, travel, illness, measurement timing and other changes may also matter. This view does not prescribe what to do differently, create a score, save a comparison, change measurements, or grant the Assistant/MCP client additional access.
+
 Notes never change your measurements, readiness, or forecasts. Ongoing shading stops today. Source and sport filters do not hide notes. If a view reaches its note limit or cannot load notes, it says so while keeping your metric charts available. Notes stay private and are not sent to connected providers or public shares. Full titles and details, including notes hidden from charts, can be read only when you separately enable **Timeline notes** for an MCP client or in the Assistant. An external MCP client also needs **Change Timeline notes** before it can create, edit, or permanently delete a note; those tools use the MCP client's approval controls. In the built-in Assistant, turn on **Timeline notes** and **Timeline note changes**, ask for one exact change, then review and apply or dismiss the proposal in Quantified Self. Gemini cannot apply it. Deletion is permanent. This may include sensitive health or personal text. Chart visibility is not an access permission. Disconnecting a provider keeps notes; deleting your account removes them.
 `;
 

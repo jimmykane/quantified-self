@@ -1,7 +1,7 @@
 import { effect, inject, Injectable } from '@angular/core';
 import { firstValueFrom, Subject } from 'rxjs';
 import { AppHealthService, type HealthWorkspaceRangeRequest, type HealthWorkspaceRangeLoad } from './app.health.service';
-import { AppSleepService } from './app.sleep.service';
+import { AppSleepService, type SleepSummaryRangeLoad } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { HealthActivityQueryService } from '../components/health/health-activity-query.service';
 import type { ActivityHealthRangeRequest, ActivityHealthRangeResult } from '@shared/activity-health';
@@ -60,6 +60,13 @@ export class HealthMetricQueryService {
     loadSleepRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<HealthWorkspaceSleepSession[]> {
         return this.read(uid, ['sleep', startMs, endMs], () => firstValueFrom(this.sleep.watchForDashboard(uid, startMs, endMs))
             .then(sessions => withHealthSleepAccountKeys(uid, sessions)), priority, signal);
+    }
+    loadSleepSummaryRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<SleepSummaryRangeLoad> {
+        this.syncOwner();
+        const generation = this.generation;
+        return this.read(uid, ['sleep-summary', startMs, endMs], () => this.sleep.loadSummaryRange(uid, startMs, endMs,
+            () => this.isOwner(uid) && generation === this.generation)
+            .then(async result => ({ ...result, sessions: await withHealthSleepAccountKeys(uid, result.sessions) })), priority, signal);
     }
     invalidate(uid: string): void {
         for (const [key, entry] of this.cache)

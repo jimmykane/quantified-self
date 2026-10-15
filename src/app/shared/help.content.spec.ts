@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains read-only note comparisons and honest coverage/source boundaries without implying an effect', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Compare** beside a saved note', '**14 days on each side**', '**5/7**', '**10/14**', '**20/28**',
+      "note's **start date**", 'choices stay local', 'observed differences, not cause and effect',
+      'Missing days are gaps', 'multiple reported devices', 'previous difference is not shown as a current result']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains saved Suunto route import scope without enabling outbound directions', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('Suunto also includes existing saved routes');

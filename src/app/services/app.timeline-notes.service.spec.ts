@@ -68,6 +68,15 @@ describe('AppTimelineNotesService', () => {
   });
   let clock: ReturnType<typeof vi.spyOn>;
   afterEach(() => clock?.mockRestore());
+  it('fences a selected-note read across mutation/account invalidation, even if the owner later matches again', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(getDocsFromServer).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }) as never);
+    const pending = service.get('owner', row(1).id);
+    const rejected = expect(pending).rejects.toThrow('cancelled');
+    service.invalidate();
+    finish({ empty: false, docs: [{ id: row(1).id, data: () => data }] });
+    await rejected;
+  });
   it('reuses a recent snapshot across route returns and refreshes expired data without clearing it', async () => {
     clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 12));
     vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [{ id: row(1).id, data: () => data }], size: 1 } as never);
