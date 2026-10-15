@@ -47,4 +47,14 @@ describe('Training delivery explanations', () => {
     expect(trainingDeliveryCommandError({ name: 'TimeoutError' }, true)).toContain('same request');
     expect(trainingDeliveryCommandError({ name: 'TimeoutError' }, true)).not.toContain('No sync settings');
   });
+  it('explains fresh Guide blockers and keeps unknown confirmation results receipt-safe', () => {
+    for (const code of ['failed-precondition', 'functions/failed-precondition']) {
+      const message = trainingDeliveryCommandError({ code, message: 'private remote identity' }, true, 'fresh-guide');
+      expect(message).toContain('Resolve unfinished sends');
+      expect(message).toContain('Repeat on another date');
+      expect(message).toContain('eight fresh copies');
+      expect(message).not.toContain('private');
+    }
+    expect(trainingDeliveryCommandError({ code: 'functions/unavailable' }, true, 'fresh-guide')).toContain('same request');
+  });
 });

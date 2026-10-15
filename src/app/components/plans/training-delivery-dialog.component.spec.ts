@@ -25,6 +25,7 @@ import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import type { TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
 import { GARMIN_WORKOUT_NOT_FOUND_ISSUE } from '@shared/training-provider-delivery';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 
 describe('Training provider delivery controls', () => {
   const user = signal<{ uid: string } | null>({ uid: 'owner' });
@@ -59,6 +60,7 @@ describe('Training provider delivery controls', () => {
       } },
       { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
       { provide: AppHapticsService, useValue: haptics }, { provide: TrainingDeliveryService, useValue: service },
+      { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn(async () => null) } },
       { provide: AppEventService, useValue: { getEventMetaDataKeys: vi.fn() } },
       { provide: MAT_DIALOG_DATA, useValue: { scope: 'workout', id: 'w', title: 'Morning run' } },
       { provide: MatDialogRef, useValue: { close } }, { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -115,6 +117,44 @@ describe('Training provider delivery controls', () => {
     expect(fixture.componentInstance.dialogTitle()).toBe('Create replacement Garmin copy?');
     await fixture.componentInstance.confirm();
     expect(service.mutate.mock.calls[0][0]).toMatchObject({ action: 'replace', provider: 'garmin', approvalDigest: 'a'.repeat(64), mutationId: 'mutation' });
+  });
+  it('reviews a fresh Suunto Guide explicitly and replays an uncertain confirmation with its original receipt', async () => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'suunto', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' }],
+      statuses: [{ ...status, provider: 'suunto', status: 'delivered', lastAcceptedAtMs: 1 }] }));
+    service.preview.mockResolvedValue({ available: true, connection: 'connected', hasPro: true, effect: 'fresh-guide',
+      eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: 'b'.repeat(64) });
+    service.mutate.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({});
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.trim() === 'Send a fresh Guide') as HTMLButtonElement;
+    expect(button).toBeDefined(); expect(haptics.selection).not.toHaveBeenCalled();
+    button.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(service.mutate).not.toHaveBeenCalled();
+    expect(service.preview.mock.calls[0][0]).toMatchObject({ action: 'fresh-guide', provider: 'suunto' });
+    expect(service.preview.mock.calls[0][0]).not.toHaveProperty('timeZone');
+    expect(fixture.nativeElement.textContent).toContain('duplicate is possible');
+    await fixture.componentInstance.confirm(); const request = service.mutate.mock.calls[0][0];
+    expect(request).toMatchObject({ action: 'fresh-guide', approvalDigest: 'b'.repeat(64), mutationId: 'mutation' });
+    await fixture.componentInstance.review(); expect(service.preview).toHaveBeenCalledOnce();
+    await fixture.componentInstance.confirm(); expect(service.mutate.mock.calls[1][0]).toEqual(request);
+    expect(haptics.success).toHaveBeenCalledOnce(); expect(haptics.error).toHaveBeenCalledOnce();
+  });
+  it('offers Repeat on another date for a completed workout without resending its old Guide', async () => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', status: 'completed', lastAcceptedAtMs: 1 }] }));
+    const duplicate = vi.fn(async () => ({ kind: 'duplicated-workout', workoutId: 'fresh-workout', localDate: '2026-10-20', planId: null }));
+    TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Send a fresh Guide')).toBe(false);
+    expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Send to Suunto')).toBe(false);
+    await fixture.componentInstance.begin('suunto', 'send'); expect(service.preview).not.toHaveBeenCalled();
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.trim() === 'Repeat on another date') as HTMLButtonElement;
+    expect(button).toBeDefined(); button.click(); await fixture.whenStable();
+    expect(duplicate).toHaveBeenCalledWith('owner', expect.objectContaining({ id: 'w' }), expect.any(Function));
+    expect(navigate).toHaveBeenCalledWith(['/training/plans/workout', 'fresh-workout']);
+    expect(close).toHaveBeenCalledOnce(); expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled(); // Duplicate service owns success.
   });
   it.each(['unknown', 'failed', 'completed'] as const)('does not offer replacement for an ordinary %s result', async state => {
     service.isReady.mockReturnValue(true);
@@ -1500,6 +1540,29 @@ describe('Training provider delivery controls', () => {
     expect(document.querySelector('.availability-step h4')?.textContent).toContain('Rest 1/10');
     expect(document.querySelectorAll('.availability-step')).toHaveLength(6);
     ref.close();
+    // Actual Angular/Material render exports for offline visual QA only.
+    vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).mockReturnValue(of({ state: { revision: 3 }, plans: [], workouts: [
+      { id: 'w', planId: null, title: 'Swimming · 10 × 100 m', localDate: '2026-12-31', revision: 2, lifecycle: 'planned' },
+    ] }) as never);
+    service.preview.mockResolvedValue({ available: true, connection: 'connected', hasPro: true, timeZone: 'Europe/Helsinki',
+      effect: 'fresh-guide', eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: 'b'.repeat(64) });
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'workout', id: 'w', title: 'Swimming · 10 × 100 m' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-fresh-action'); render('suunto-fresh-action-dark');
+    await ref.componentInstance.begin('suunto', 'fresh-guide');
+    TestBed.inject(ApplicationRef).tick(); render('suunto-fresh-review'); render('suunto-fresh-review-dark');
+    expect(ref.componentInstance.confirmLabel()).toBe('Send a fresh Guide');
+    expect(ref.componentInstance.canConfirm()).toBe(true);
+    ref.componentInstance.phase.set('saving'); render('suunto-fresh-saving'); render('suunto-fresh-saving-dark');
+    ref.componentInstance.phase.set(null); ref.close();
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', status: 'completed', lastAcceptedAtMs: 1 }] }));
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'workout', id: 'w', title: 'Swimming · 10 × 100 m' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-completed-repeat'); render('suunto-completed-repeat-dark');
+    expect(document.body.textContent).toContain('Repeat on another date');
+    expect(Array.from(document.querySelectorAll('button')).some(item => item.textContent.trim() === 'Send a fresh Guide')).toBe(false); ref.close();
     vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).mockImplementation(previousSchedule);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
       status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval',

@@ -44,6 +44,8 @@ export interface DeliveryArtifact {
   timeZone?: string;
 }
 export interface DeliveryOperation {
+  /** Explicit fresh Suunto copy identity; immutable once an attempt starts. */
+  suuntoGuideGeneration?: number;
   /** Private bounded display snapshot; never an authored field or consent. */
   suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings;
   /** Private Wahoo Plan incarnation, reserved only after confirmed withdrawal. */
@@ -155,7 +157,7 @@ export interface TrainingDeliveryTransport {
     suuntoUnitSettings?: UserUnitSettingsInterface,
     suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[],
     suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings,
-    suuntoApprovalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[]): DeliveryAssessment;
+    suuntoApprovalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[], suuntoGuideGeneration?: number): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval?: boolean): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
@@ -215,6 +217,11 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** App-confirmed Guide incarnations. Older copies remain untouched, never automatically repaired. */
+  suuntoGuideGeneration?: number;
+  suuntoRetiredGuides?: Array<DeliveryArtifact & { planId: string | null }>;
+  /** Bounded reverse lookup for recordings made with a retained earlier Guide. */
+  suuntoRetiredExternalIds?: string[];
   /** Wahoo's next/current Plan incarnation; preserved across reconciliation. */
   wahooPlanGeneration?: number;
   /** Private proof of exact approval equivalence across a presentation-only

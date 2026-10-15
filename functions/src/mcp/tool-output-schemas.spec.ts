@@ -2511,7 +2511,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
       for (const field of ['id','owner','destinationKey','approvalDigest','issues','remoteWorkoutId','receipt',
         'suuntoSwimmingGuide','suuntoSwimmingSettings','suuntoApprovedSwimmingSettings','suuntoMappingSwimmingSettings',
-        'guideMappingVersion','guideFields','fieldAllocation']) {
+        'guideMappingVersion','guideFields','fieldAllocation','suuntoGuideGeneration','suuntoRetiredGuides','suuntoRetiredExternalIds']) {
         service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-TRAINING-CANARY' });
         const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
         expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
@@ -2563,7 +2563,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(service.getTrainingChangeStatus).not.toHaveBeenCalled();
     }
     for (const field of ['uid', 'scheduleRequests', 'accessGeneration', 'destinationKey', 'approvalDigest', 'remoteWorkoutId', 'leaseUntilMs',
-      'suuntoSwimmingSettings', 'suuntoApprovedSwimmingSettings', 'suuntoMappingSwimmingSettings']) {
+      'suuntoSwimmingSettings', 'suuntoApprovedSwimmingSettings', 'suuntoMappingSwimmingSettings',
+      'suuntoGuideGeneration', 'suuntoRetiredGuides', 'suuntoRetiredExternalIds']) {
       for (const projection of [{ ...fixture, [field]: 'PRIVATE-RECOVERY-CANARY' },
         { ...fixture, result: { ...fixture.result, [field]: 'PRIVATE-RECOVERY-CANARY' } },
         { ...fixture, result: { ...fixture.result, changes: [{ ...fixture.result!.changes[0], [field]: 'PRIVATE-RECOVERY-CANARY' }] } },

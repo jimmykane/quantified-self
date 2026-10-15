@@ -538,6 +538,15 @@ updates remain undocumented capabilities, not guessed upload fields. See the sin
 [v15 allocation/recovery verification](training-workspace.md#swimming-field-allocation-and-headings-v15).
 This change still needs separately approved Functions/frontend deployment and physical watch verification.
 
+An explicit **Send a fresh Guide** review can reserve a new Suunto external identity for the same eligible QS workout,
+without changing or deleting the earlier Guide. This is not absence detection or automatic repair: hidden Guides may
+still exist, duplicates are disclosed, and current consent/Pro/date/completion/unfinished-attempt gates still apply.
+Receipt-bound generation snapshots retain exact lost-ACK recovery; bounded aliases retain old/new FIT correlation.
+**Repeat on another date** reuses the existing scheduled-workout duplicate path for completed sessions, across providers.
+Monitoring remains covered by the existing Suunto worker/outcome/queue filters. No new endpoint, Rules, index or resource
+is introduced. Native-app fresh-Guide consent does not expand MCP/Assistant provider actions. See
+[fresh identity and completion protections](training-workspace.md#explicit-fresh-suunto-guide-and-completed-workout-reuse).
+
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
 target types. Its measured `strokeRate` and `swolf` examples are not native target examples. Suunto's partner resource

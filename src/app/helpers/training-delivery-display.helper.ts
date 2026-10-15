@@ -54,6 +54,9 @@ export function trainingDeliveryCommandError(error: unknown, saving: boolean, ac
   if (action === 'replace' && (code === 'functions/failed-precondition' || code === 'failed-precondition')) {
     return 'Replacement is unavailable for the current state. Cancel this review, check Garmin again, then review the latest workout. Past or completed workouts and unfinished sends cannot be replaced.';
   }
+  if (action === 'fresh-guide' && (code === 'functions/failed-precondition' || code === 'failed-precondition')) {
+    return 'A fresh Guide is unavailable for this state. Resolve unfinished sends and check current sync consent first. Past or completed workouts cannot be resent this way; use Repeat on another date for a completed workout. After eight fresh copies, duplicate the workout instead.';
+  }
   if (saving) return 'Saving was not confirmed. Retry this confirmation safely with the same request, or close and check the sync status.';
   if (code === 'functions/deadline-exceeded' || code === 'deadline-exceeded' || name === 'TimeoutError') {
     return 'The sync check timed out. No sync settings were changed. Check your connection and try again.';

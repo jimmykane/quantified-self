@@ -22,6 +22,8 @@ import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import type { TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
+import { Router } from '@angular/router';
 
 const PROVIDER_PRESENTATIONS = {
   garmin: buildDestinationProviderPresentation(ServiceNames.GarminAPI),
@@ -54,6 +56,8 @@ export class TrainingDeliveryDialogComponent {
   private readonly dialog = inject(MatDialog);
   readonly delivery = inject(TrainingDeliveryService);
   private readonly plans = inject(TrainingPlansService);
+  private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly router = inject(Router);
   private readonly users = inject(AppUserService);
   readonly haptics = inject(AppHapticsService);
   private readonly destroyRef = inject(DestroyRef);
@@ -66,7 +70,7 @@ export class TrainingDeliveryDialogComponent {
   private readonly initialUid = this.users.user()?.uid;
   private readonly sameAccount = computed(() => !!this.initialUid && this.uid() === this.initialUid && this.users.user()?.uid === this.initialUid);
   readonly error = signal<string | null>(null);
-  readonly phase = signal<'preview' | 'saving' | 'checking' | null>(null);
+  readonly phase = signal<'preview' | 'saving' | 'checking' | 'copying' | null>(null);
   readonly checkingProvider = signal<PlannedWorkoutProviderId | null>(null);
   readonly busy = computed(() => this.phase() !== null);
   readonly notice = signal<string | null>(null);
@@ -107,6 +111,9 @@ export class TrainingDeliveryDialogComponent {
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)
     : this.schedule()?.workouts.find(workout => workout.id === this.data.id));
   readonly workout = computed(() => this.data.scope === 'workout' ? this.schedule()?.workouts.find(item => item.id === this.data.id) : undefined);
+  readonly canRepeatWorkout = computed(() => this.canSend() && !!this.workout()
+    && (this.completions().some(item => item.workoutId === this.data.id && item.planId === this.workout()?.planId)
+      || this.statuses().some(item => item.status === 'completed')));
   readonly swimmingGuideStructure = computed(() => this.sameAccount() && this.syncReadState() === 'ready'
     ? this.workout()?.structure ?? null : null);
   readonly parentPlan = computed(() => this.schedule()?.plans.find(plan => plan.id === this.workout()?.planId));
@@ -163,6 +170,7 @@ export class TrainingDeliveryDialogComponent {
       case 'approve': return `Review ${this.draftLabel()} differences`;
       case 'retry': return this.data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync';
       case 'replace': return 'Create replacement Garmin copy?';
+      case 'fresh-guide': return 'Send a fresh Suunto Guide?';
       default: {
         const provider = this.providerDetailVisible() ? this.activeRow()?.displayLabel : null;
         if (this.data.scope === 'history') return provider ? `${provider} sync history` : 'Workout sync history';
@@ -182,6 +190,7 @@ export class TrainingDeliveryDialogComponent {
       case 'stop': return this.stopLabel();
       case 'retry': return 'Request recovery';
       case 'replace': return 'Create replacement Garmin copy';
+      case 'fresh-guide': return 'Send a fresh Guide';
       case 'approve': return 'Approve differences';
       case 'resume': return 'Resume workout sync';
       case 'configure': return 'Enable plan sync';
@@ -262,6 +271,10 @@ export class TrainingDeliveryDialogComponent {
         && !this.completions().some(item => item.workoutId === this.data.id && item.planId === this.workout()?.planId)
         && statuses.some(item => item.status === 'needs_attention' && item.issues.includes(GARMIN_WORKOUT_NOT_FOUND_ISSUE)
           && item.verification?.state === 'unknown' && item.verification.canCheck),
+      canFreshGuide: provider === 'suunto' && this.data.scope === 'workout' && this.workout()?.lifecycle === 'planned'
+        && !this.completions().some(item => item.workoutId === this.data.id && item.planId === this.workout()?.planId)
+        && !statuses.some(item => item.status === 'completed')
+        && statuses.some(item => item.hasRemoteCopy && item.lastAcceptedAtMs !== null && ['delivered', 'pending'].includes(item.status)),
       wahooReconnect: provider === 'wahoo' && statuses.some(item => item.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE)),
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
@@ -295,7 +308,7 @@ export class TrainingDeliveryDialogComponent {
     return !!preview && (preview.command.action === 'stop'
       || (preview.result.available && (preview.result.hasPro || preview.command.action === 'retry') && preview.result.connection === 'connected'
         && (!['send', 'resume'].includes(preview.command.action) || preview.result.workoutCompatibility !== 'unsupported')
-        && (!['approve', 'replace'].includes(preview.command.action) || !!preview.result.approvalDigest)));
+        && (!['approve', 'replace', 'fresh-guide'].includes(preview.command.action) || !!preview.result.approvalDigest)));
   });
 
   constructor() {
@@ -340,8 +353,10 @@ export class TrainingDeliveryDialogComponent {
       || !this.delivery.isVisible(provider) || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
     const setupAction = ['configure', 'send', 'resume'].includes(action);
+    if (this.canRepeatWorkout() && (action === 'resume' || action === 'send' && (!setting?.enabled || renewConsent))) return;
     if (setupAction && !this.delivery.isSetupAvailable(provider, this.planDelivery())) return;
     if (action === 'replace' && !this.rows().some(row => row.provider === provider && row.canReplace)) return;
+    if (action === 'fresh-guide' && !this.rows().some(row => row.provider === provider && row.canFreshGuide)) return;
     // Historical copies can still need consent for an old account. They must not
     // silently turn opening current settings into enabling delivery again.
     const editingSettings = !!setting?.enabled && !renewConsent && (action === 'configure' || action === 'send');
@@ -416,7 +431,7 @@ export class TrainingDeliveryDialogComponent {
         ...(draft.action === 'approve' ? { approvalDigest: draft.approvalDigest } : {}) };
       const result = await this.delivery.preview(command, current);
       if (!current()) return;
-      this.preview.set({ result, command: ['approve', 'replace'].includes(command.action) && result.approvalDigest
+      this.preview.set({ result, command: ['approve', 'replace', 'fresh-guide'].includes(command.action) && result.approvalDigest
         ? { ...command, approvalDigest: result.approvalDigest } : command });
     } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, false, draft.action)); this.haptics.error(); } }
     finally { if (current()) this.phase.set(null); }
@@ -434,12 +449,25 @@ export class TrainingDeliveryDialogComponent {
       await this.delivery.mutate(preview.command, current);
       if (!current()) return;
       this.notice.set(preview.command.action === 'stop' ? `${this.stopLabel()} saved. Eligible copies will be removed in the background.`
+        : preview.command.action === 'fresh-guide' ? 'Fresh Guide requested. The earlier Guide is unchanged; delivery continues in the background. Sync the Suunto app and check your watch afterwards.'
         : preview.command.action === 'replace' ? 'Garmin replacement requested. Status will update after the recheck and delivery.'
         : preview.command.action === 'retry' ? 'Recovery requested. Service retry limits still apply.'
           : 'Sync settings saved. Workout delivery continues in the background.');
       this.preview.set(null); this.draft.set(null); this.closeOnCancel = false; this.haptics.success();
     } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true, preview.command.action)); this.haptics.error(); } }
     finally { if (current()) this.phase.set(null); }
+  }
+  async repeatWorkout(): Promise<void> {
+    const workout = this.workout(); const uid = this.uid();
+    if (!workout || !this.sameAccount() || !this.canReview() || !this.canRepeatWorkout() || this.busy()) return;
+    this.phase.set('copying');
+    try {
+      const result = await this.duplicateService.duplicate(uid, workout, () => this.sameAccount()
+        && this.syncReadState() === 'ready' ? this.schedule() : null);
+      if (!result || this.destroyRef.destroyed || !this.sameAccount()) return;
+      this.dialogRef.close();
+      await this.router.navigate(trainingPlansWorkoutRoute(result.workoutId));
+    } finally { if (!this.destroyRef.destroyed) this.phase.set(null); }
   }
   private clearTimeZoneReview(): void {
     if (this.timeZoneReviewTimer !== undefined) clearTimeout(this.timeZoneReviewTimer);

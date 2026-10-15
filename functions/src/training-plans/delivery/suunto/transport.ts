@@ -72,9 +72,9 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null,
     suuntoWeightUnits?: WeightUnits, suuntoUnitSettings?: UserUnitSettingsInterface,
     suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[], swimmingSettings?: SuuntoSwimmingGuideSettings,
-    approvalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[]) {
+    approvalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[], generation = 0) {
     return assessSuuntoGuide(workout, destination, zone, this.owner, strength, suuntoWeightUnits, suuntoUnitSettings,
-      suuntoApprovalUnitSettings, swimmingSettings, approvalSwimmingSettings);
+      suuntoApprovalUnitSettings, swimmingSettings, approvalSwimmingSettings, generation);
   }
   diagnosticMappingVersion(operation: DeliveryOperation): string | null {
     return guideMappingForRecovery(operation, this.owner)?.mappingVersion ?? null;
@@ -99,7 +99,7 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
     if (operation.artifact) {
       guideId(operation.artifact.ids.guide);
       if (operation.artifact.ids.owner !== this.owner || !/^qs-suunto-[A-Za-z0-9_-]{43}$/.test(operation.artifact.ids.externalId)) throw new TrainingDeliveryTransportError('uncertain');
-      if (operation.workout && operation.artifact.ids.externalId !== guideExternalId(operation.destinationKey, operation.workout.id)) throw new TrainingDeliveryTransportError('uncertain');
+      if (operation.workout && operation.artifact.ids.externalId !== guideExternalId(operation.destinationKey, operation.workout.id, operation.suuntoGuideGeneration)) throw new TrainingDeliveryTransportError('uncertain');
     }
   }
   private async read(artifact: DeliveryArtifact, guard: DeliveryRequestGuard): Promise<Record<string, unknown> | null> {
@@ -165,10 +165,10 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
       await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null;
     }
     const assessment = this.assess(operation.workout!, operation.destinationKey, operation.timeZone, operation.strength,
-      operation.suuntoWeightUnits, operation.suuntoUnitSettings, undefined, operation.suuntoSwimmingSettings);
+      operation.suuntoWeightUnits, operation.suuntoUnitSettings, undefined, operation.suuntoSwimmingSettings, undefined, operation.suuntoGuideGeneration);
     if (assessment.digest !== operation.digest || assessment.level === 'unsupported') throw new TrainingDeliveryTransportError('terminal');
     const payload = guideMapping(operation.workout!, operation.destinationKey, this.owner, operation.strength,
-      operation.suuntoWeightUnits, operation.suuntoUnitSettings, operation.suuntoSwimmingSettings).artifact;
+      operation.suuntoWeightUnits, operation.suuntoUnitSettings, operation.suuntoSwimmingSettings, operation.suuntoGuideGeneration).artifact;
     if (operation.artifact) {
       const raw = await this.read(operation.artifact, guard);
       if (!raw || (raw.localDate !== operation.artifact.localDate && raw.localDate !== payload.localDate)) throw new TrainingDeliveryTransportError('uncertain');

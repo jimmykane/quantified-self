@@ -102,10 +102,15 @@ function activityLinkId(uid: string, eventId: string, sessionIndex: number): str
   return createHash('sha256').update(JSON.stringify([uid, eventId, sessionIndex])).digest('hex');
 }
 
+function guideArtifacts(ledger: DeliveryLedgerV1) {
+  return [ledger.actual, ...(ledger.suuntoRetiredGuides ?? []).filter(artifact => artifact.planId === ledger.planId)];
+}
+
 function candidateLedger(snapshot: QueryDocumentSnapshot, destinationKey: string, externalId: string): DeliveryLedgerV1 | null {
   const data = snapshot.data() as DeliveryLedgerV1;
   if (data.schemaVersion !== 1 || data.provider !== 'suunto' || data.destinationKey !== destinationKey
-    || data.actual?.ids.externalId !== externalId || data.actual.completed !== false) return null;
+    || data.actual?.completed || data.completionLinkId
+    || !guideArtifacts(data).some(artifact => artifact?.ids.externalId === externalId && !artifact.completed)) return null;
   // Completion must serialize with delivery writes. Retrying the import after
   // the short delivery lease is safer than allowing a late checkpoint to erase it.
   if (data.attempt || data.lease) throw new Error('Training completion link deferred while delivery is changing.');
@@ -152,12 +157,20 @@ export async function retainSuuntoGuideCompletions(
         exactIds.slice(index * FIRESTORE_IN_QUERY_LIMIT, (index + 1) * FIRESTORE_IN_QUERY_LIMIT),
       )),
     ));
+    const retiredSnapshots = await Promise.all(Array.from(
+      { length: Math.ceil(exactIds.length / FIRESTORE_IN_QUERY_LIMIT) },
+      (_, index) => tx.get(user.collection(DELIVERY_LEDGER).where('suuntoRetiredExternalIds', 'array-contains-any',
+        exactIds.slice(index * FIRESTORE_IN_QUERY_LIMIT, (index + 1) * FIRESTORE_IN_QUERY_LIMIT))),
+    ));
     const ledgersByExternalId = new Map<string, DeliveryLedgerV1[]>();
-    for (const document of ledgerSnapshots.flatMap(snapshot => snapshot.docs)) {
-      const externalId = document.data()?.actual?.ids?.externalId;
-      if (typeof externalId !== 'string') continue;
-      const ledger = candidateLedger(document, authority.connection.destinationKey, externalId);
-      if (ledger) ledgersByExternalId.set(externalId, [...(ledgersByExternalId.get(externalId) ?? []), ledger]);
+    const documents = new Map([...ledgerSnapshots, ...retiredSnapshots].flatMap(snapshot => snapshot.docs).map(document => [document.id, document]));
+    for (const document of documents.values()) {
+      const data = document.data() as DeliveryLedgerV1;
+      for (const externalId of exactIds) {
+        if (!guideArtifacts(data).some(artifact => artifact?.ids.externalId === externalId)) continue;
+        const ledger = candidateLedger(document, authority.connection.destinationKey, externalId);
+        if (ledger) ledgersByExternalId.set(externalId, [...(ledgersByExternalId.get(externalId) ?? []), ledger]);
+      }
     }
 
     const uniqueByWorkout = new Map<string, { session: SuuntoGuideCompletion; ledger: DeliveryLedgerV1 }>();
@@ -218,7 +231,8 @@ export async function retainSuuntoGuideCompletions(
         && existingReverse.workoutId === workout.id && existingReverse.eventId === eventId
         && existingReverse.sourceSessionIndex === session.sessionIndex && existingReverse.provider === 'suunto';
       if (!sameCompletion && (workout.id !== ledger.workoutId || workout.planId !== ledger.planId
-        || workout.localDate !== ledger.actual?.localDate)) {
+        || !guideArtifacts(ledger).some(artifact => artifact?.localDate === workout.localDate
+          && session.externalIds.includes(artifact.ids.externalId)))) {
         matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
         continue;
       }
@@ -260,7 +274,7 @@ export async function retainSuuntoGuideCompletions(
         completionLinkId: candidate.reverseId,
         desired: 'preserve',
         status: 'completed',
-        actual: { ...ledger.actual!, completed: true },
+        actual: ledger.actual ? { ...ledger.actual, completed: true } : null,
         updatedAtMs: nowMs,
       };
       tx.set(user.collection(DELIVERY_LEDGER).doc(ledger.id), completedLedger);

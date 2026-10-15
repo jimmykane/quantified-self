@@ -5,8 +5,8 @@ export const TRAINING_DELIVERY_SETTINGS = 'trainingDeliverySettings';
 export const TRAINING_DELIVERY_STATUSES = 'trainingDeliveryStatuses';
 export const TRAINING_DELIVERY_PAGE_SIZE = 25;
 export type TrainingDeliveryScope = 'plan' | 'workout';
-/** Replace is an app-only, explicitly reviewed Garmin recovery action, not part of the registered MCP v1 enum. */
-export type TrainingDeliveryAction = 'configure' | 'send' | 'resume' | 'stop' | 'approve' | 'retry' | 'check' | 'replace';
+/** Replace/fresh-guide are app-only, explicitly reviewed actions, never registered MCP v1 actions. */
+export type TrainingDeliveryAction = 'configure' | 'send' | 'resume' | 'stop' | 'approve' | 'retry' | 'check' | 'replace' | 'fresh-guide';
 export const GARMIN_WORKOUT_NOT_FOUND_ISSUE = 'Garmin did not find the previously sent workout. Check Garmin Connect, then review creating a replacement copy. No automatic replacement was made.';
 export const GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE = 'Garmin did not find the previously sent workout but still returned its calendar entry. Review it in Garmin Connect; replacement is unavailable for this relationship state.';
 export type TrainingDeliveryStatus = 'pending' | 'delivered' | 'removed' | 'stopped' | 'paused_plan'
@@ -71,7 +71,7 @@ export interface TrainingDeliveryPreviewV1 {
   connection: 'connected' | 'reconnect_required' | 'connection_repair';
   hasPro: boolean;
   timeZone: string;
-  effect: 'enable' | 'remove-future-copies' | 'retry' | 'approve' | 'replace';
+  effect: 'enable' | 'remove-future-copies' | 'retry' | 'approve' | 'replace' | 'fresh-guide';
   settingsRevision: number;
   eligibleCount: number;
   warningCount: number;
@@ -120,7 +120,7 @@ export function parseTrainingDeliveryCommandV1(value: unknown): TrainingDelivery
   }
   if (!['plan', 'workout'].includes(input.scope as string)
     || !PLANNED_WORKOUT_PROVIDER_IDS.includes(input.provider as PlannedWorkoutProviderId)
-    || !['configure', 'send', 'resume', 'stop', 'approve', 'retry', 'check', 'replace'].includes(input.action as string)) {
+    || !['configure', 'send', 'resume', 'stop', 'approve', 'retry', 'check', 'replace', 'fresh-guide'].includes(input.action as string)) {
     throw new TrainingDeliveryContractError('Unknown delivery action, scope, or provider.');
   }
   for (const key of ['expectedScheduleRevision', 'expectedScopeRevision', 'expectedSettingsRevision']) {
@@ -133,11 +133,14 @@ export function parseTrainingDeliveryCommandV1(value: unknown): TrainingDelivery
   if (input.action === 'replace' && (input.scope !== 'workout' || input.provider !== 'garmin' || 'timeZone' in input)) {
     throw new TrainingDeliveryContractError('Replacement requires a Garmin workout and its existing time zone.');
   }
+  if (input.action === 'fresh-guide' && (input.scope !== 'workout' || input.provider !== 'suunto' || 'timeZone' in input)) {
+    throw new TrainingDeliveryContractError('A fresh Guide requires a Suunto workout and its existing time zone.');
+  }
   if (input.action === 'approve' && !('approvalDigest' in input)) {
     throw new TrainingDeliveryContractError('Approval requires the current preview digest.');
   }
   if ('approvalDigest' in input) {
-    if (!['approve', 'send', 'replace'].includes(input.action as string)) {
+    if (!['approve', 'send', 'replace', 'fresh-guide'].includes(input.action as string)) {
       throw new TrainingDeliveryContractError('Unexpected approval digest.');
     }
     if (typeof input.approvalDigest !== 'string' || !/^[a-f0-9]{64}$/.test(input.approvalDigest)) {

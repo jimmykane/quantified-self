@@ -27,6 +27,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   });
   const today = trainingDeliveryLocalDate(nowMs, timeZone);
   const retained = [ledger?.actual, ledger?.repair?.original].filter(artifact => !!artifact);
+  if (ledger?.completionLinkId) return result('preserve', 'completed');
   if (retained.some(artifact => artifact.completed)) return result('preserve', 'completed');
   const past = retained.some(artifact => artifact.localDate < (artifact.timeZone
     ? trainingDeliveryLocalDate(nowMs, artifact.timeZone) : today)) || (workout && workout.localDate < today);
@@ -61,7 +62,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     [ledger?.mappingApprovalProof?.suuntoApprovedUnitSettings, ledger?.mappingApprovalProof?.suuntoMappingUnitSettings]
       .filter((units): units is NonNullable<typeof units> => !!units), context.suuntoSwimmingSettings,
     [ledger?.mappingApprovalProof?.suuntoApprovedSwimmingSettings, ledger?.mappingApprovalProof?.suuntoMappingSwimmingSettings]
-      .filter((preferences): preferences is NonNullable<typeof preferences> => !!preferences));
+      .filter((preferences): preferences is NonNullable<typeof preferences> => !!preferences), ledger?.suuntoGuideGeneration);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
   // A legacy payload digest can omit truncated authored text. Carry approval

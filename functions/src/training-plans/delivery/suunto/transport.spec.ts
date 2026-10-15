@@ -484,6 +484,10 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(guideExternalId('a', 'w')).not.toBe(guideExternalId('b', 'w'));
     expect(guideExternalId('a', 'w')).not.toBe(guideExternalId('a', 'copy'));
     expect(guideExternalId('a', 'w').length).toBeLessThanOrEqual(64);
+    expect(guideExternalId('a', 'w', 0)).toBe(guideExternalId('a', 'w'));
+    expect(guideExternalId('a', 'w', 1)).not.toBe(guideExternalId('a', 'w'));
+    expect(guideExternalId('a', 'w', 2)).not.toBe(guideExternalId('a', 'w', 1));
+    for (const generation of [-1, 0.5, 9, NaN]) expect(() => guideExternalId('a', 'w', generation)).toThrow();
   });
   it('recovers accepted create after a lost response without another POST', async () => {
     server.afterHandle = async req => { if (req.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); } };
@@ -492,6 +496,23 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(await recover()).toMatchObject({ kind: 'accepted' });
     expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
   });
+  it.each([ActivityTypes.Running, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'freezes and recovers the fresh %s Guide identity independently of later preferences', async sport => {
+      op.workout = { ...op.workout!, structure: { ...op.workout!.structure, sport } };
+      op.suuntoGuideGeneration = 1;
+      op.digest = transport.assess(op.workout, op.destinationKey, op.timeZone, undefined, undefined, undefined,
+        undefined, undefined, undefined, 1).digest;
+      const payload = guidePayloadForRecovery(op, owner)!;
+      expect(payload.externalId).toBe(guideExternalId(op.destinationKey, op.workout.id, 1));
+      expect(guidePayloadForRecovery({ ...op, suuntoGuideGeneration: 0 }, owner)).toBeNull();
+      server.afterHandle = async request => {
+        if (request.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); }
+      };
+      await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+      expect(await recover()).toMatchObject({ kind: 'accepted', artifact: { ids: { externalId: payload.externalId } } });
+      expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+      expect(server.guides.get('guide-1')!.guide).toEqual(payload);
+    });
   it.each([false, true])('does not rewrite unchanged content when default notification enrichment is %s', async enriched => {
     server.addDefaultNotificationType = enriched;
     const original = (await execute())!;

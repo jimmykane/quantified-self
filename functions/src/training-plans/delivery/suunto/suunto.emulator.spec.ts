@@ -44,6 +44,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       ...(action === 'send' ? { timeZone: 'Europe/Helsinki' } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
+  const freshRequest = async () => ({ schemaVersion: 1 as const, mutationId: randomUUID(), scope: 'workout' as const, scopeId: 'w',
+    provider: 'suunto' as const, action: 'fresh-guide' as const, expectedScheduleRevision: 1,
+    expectedScopeRevision: (await user().collection('scheduledWorkouts').doc('w').get()).get('revision'),
+    expectedSettingsRevision: (await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).get('revision') ?? 0 });
+  const requestFresh = async () => {
+    const request = await freshRequest();
+    const preview = await trainingDeliveryCommand(runtime, uid, request, true) as { approvalDigest: string };
+    const approved = { ...request, approvalDigest: preview.approvalDigest };
+    await trainingDeliveryCommand(runtime, uid, approved, false);
+    return approved;
+  };
   const currentRecipes = [
     { sport: ActivityTypes.Running, manual: false, version: 'v13' },
     { sport: ActivityTypes.Running, manual: true, version: 'v13' },
@@ -120,6 +131,110 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     }
     await db.terminate();
   });
+  it('creates one explicitly reviewed fresh identity for the same QS workout without changing the earlier Guide', async () => {
+    const first = await send(); const original = structuredClone(server.guides.get(first.actual!.ids.guide));
+    const workout = (await user().collection('scheduledWorkouts').doc('w').get()).data();
+    const request = await freshRequest(); const calls = server.calls.length;
+    const preview = await trainingDeliveryCommand(runtime, uid, request, true) as { effect: string; approvalDigest: string; issues: string[] };
+    expect(preview.effect).toBe('fresh-guide'); expect(preview.issues.join(' ')).toContain('may still be visible');
+    expect(server.calls).toHaveLength(calls); expect((await ledger()).suuntoGuideGeneration).toBeUndefined();
+    await expect(trainingDeliveryCommand(runtime, uid, request, false)).rejects.toMatchObject({ code: 'aborted' });
+    const approved = { ...request, approvalDigest: preview.approvalDigest! };
+    const receipt = await trainingDeliveryCommand(runtime, uid, approved, false);
+    expect(await trainingDeliveryCommand(runtime, uid, approved, false)).toEqual(receipt);
+    await expect(trainingDeliveryCommand(runtime, uid, { ...approved, mutationId: randomUUID() }, false)).rejects.toMatchObject({ code: 'aborted' });
+    await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const fresh = await ledger();
+    expect(fresh).toMatchObject({ status: 'delivered', suuntoGuideGeneration: 1, suuntoRetiredGuides: [{ ...first.actual, planId: first.planId }],
+      suuntoRetiredExternalIds: [first.actual!.ids.externalId] });
+    expect(fresh.actual!.ids.externalId).toBe(guideExternalId(first.destinationKey, 'w', 1));
+    expect(fresh.actual!.ids.guide).not.toBe(first.actual!.ids.guide);
+    expect(server.guides.get(first.actual!.ids.guide)).toEqual(original);
+    expect((await user().collection('scheduledWorkouts').get()).size).toBe(1);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).data()).toEqual(workout);
+    await mark(); await processTrainingDelivery(runtime, uid, first.id);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    expect(server.calls.filter(call => call.method === 'DELETE')).toHaveLength(0);
+    await user().collection('scheduledWorkouts').doc('w').update({ title: 'Updated fresh copy', revision: 2 });
+    await mark(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(server.guides.get(fresh.actual!.ids.guide)!.guide.name).toBe('Updated fresh copy');
+    expect(server.guides.get(first.actual!.ids.guide)).toEqual(original);
+    await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(server.guides.has(fresh.actual!.ids.guide)).toBe(false);
+    expect(server.guides.get(first.actual!.ids.guide)).toEqual(original);
+  });
+  it('recovers a fresh Guide lost acknowledgement without another POST or another identity', async () => {
+    const first = await send(); await requestFresh(); await drain();
+    server.afterHandle = async request => {
+      if (request.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); }
+    };
+    await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const unresolved = await ledger(); expect(unresolved.attempt?.suuntoGuideGeneration).toBe(1);
+    expect(unresolved.status).toBe('retrying');
+    expect(unresolved.attempt?.progress).toMatchObject({ step: 'create', state: 'started' });
+    await expect(trainingDeliveryCommand(runtime, uid, await freshRequest(), true)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', attempt: null, suuntoGuideGeneration: 1 });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it('renews a plan-inherited Guide without opting other workouts or providers into delivery', async () => {
+    await user().collection('trainingPlans').doc('p').set({ id: 'p', revision: 1, lifecycle: 'active' });
+    await user().collection('scheduledWorkouts').doc('w').update({ planId: 'p' });
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
+      provider: 'suunto', action: 'configure', timeZone: 'Europe/Helsinki', expectedScheduleRevision: 1,
+      expectedScopeRevision: 1, expectedSettingsRevision: 0 }, false);
+    await drain(); const first = await ledger(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const planSettings = (await user().collection('trainingDeliverySettings').doc('plan_p_suunto').get()).data();
+    await requestFresh(); await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', planId: 'p', suuntoGuideGeneration: 1 });
+    expect((await user().collection('trainingDeliverySettings').doc('plan_p_suunto').get()).data()).toEqual(planSettings);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    expect((await user().collection('scheduledWorkouts').get()).size).toBe(1);
+  });
+  it.each(['old', 'fresh', 'before-send'] as const)('links %s Guide recordings to the same workout after identity renewal', async mode => {
+    const first = await send(); await requestFresh(); await drain();
+    if (mode !== 'before-send') { await processTrainingDelivery(runtime, uid, first.id); await drain(); }
+    const current = await ledger();
+    await user().collection('events').doc('recording').set({ test: true });
+    const externalId = mode === 'fresh' ? current.actual!.ids.externalId : first.actual!.ids.externalId;
+    const result = await retainSuuntoGuideCompletions(db, uid, 'recording', 'account', 'retained', suuntoFitFixture(['qs'], [externalId]), 'qs', [], now);
+    expect(result.linkedWorkoutIds).toEqual(['w']);
+    await mark(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'completed', desired: 'preserve', completionLinkId: expect.any(String) });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(mode === 'before-send' ? 1 : 2);
+    await expect(trainingDeliveryCommand(runtime, uid, await freshRequest(), true)).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+  it.each(['date', 'plan'] as const)('does not link a retired Guide from an earlier %s occurrence', async changed => {
+    const first = await send(); await requestFresh(); await drain();
+    await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const retained = await ledger();
+    if (changed === 'date') await user().collection('scheduledWorkouts').doc('w').update({ localDate: '2026-09-18', revision: 2 });
+    else {
+      await user().collection('scheduledWorkouts').doc('w').update({ planId: 'new-plan', revision: 2 });
+      await user().collection(DELIVERY_LEDGER).doc(retained.id).update({ planId: 'new-plan' });
+    }
+    await user().collection('events').doc('older-recording').set({ test: true });
+    expect((await retainSuuntoGuideCompletions(db, uid, 'older-recording', 'account', 'retained',
+      suuntoFitFixture(['qs'], [first.actual!.ids.externalId]), 'qs', [], now)).linkedWorkoutIds).toEqual([]);
+    expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+  });
+  it.each(['past', 'completed', 'linked', 'unfinished', 'no-consent', 'no-pro', 'limit', 'epoch', 'deleted'] as const)(
+    'rejects fresh Guide admission for %s without provider calls', async condition => {
+      const first = await send();
+      if (condition === 'past') now += 3 * 86_400_000;
+      if (condition === 'completed') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ 'actual.completed': true });
+      if (condition === 'linked') await user().collection('trainingWorkoutCompletions').doc('w').set({ fixture: true });
+      if (condition === 'unfinished') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ attempt: { id: 'unknown' } });
+      if (condition === 'no-consent') await command('stop');
+      if (condition === 'no-pro') pro = false;
+      if (condition === 'limit') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ suuntoGuideGeneration: 8 });
+      if (condition === 'epoch') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ connectionEpoch: 99 });
+      if (condition === 'deleted') await user().collection('scheduledWorkouts').doc('w').update({ lifecycle: 'deleted' });
+      const calls = server.calls.length;
+      await expect(trainingDeliveryCommand(runtime, uid, await freshRequest(), true)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(server.calls).toHaveLength(calls);
+      expect(server.guides.size).toBe(1);
+    });
   const useCreate200Http = () => {
     server.createStatus = 200;
     // Exercise the real HTTP envelope decoder, never the real provider: the
