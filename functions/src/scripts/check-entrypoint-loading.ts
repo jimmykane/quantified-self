@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 172;
+const EXPECTED_FULL_EXPORT_COUNT = 178;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -113,7 +113,7 @@ const RUNTIME_CONTRACT_TARGETS = [
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
-  trigger: 'http' | 'event' | 'task';
+  trigger: 'http' | 'event' | 'task' | 'callable';
   secrets?: readonly string[];
   eventDocument?: string;
   eventType?: string;
@@ -163,6 +163,11 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
     eventDocument: 'users/{userId}/events/{eventId}',
     eventType: 'google.cloud.firestore.document.v1.deleted', eventRetry: false,
   },
+  activitySendCommand: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable', maxInstances: 10 },
+  uploadActivitySendFile: { memoryMb: 512, timeoutSeconds: 120, trigger: 'http', concurrency: 1, maxInstances: 10 },
+  admitActivitySend: { memoryMb: 512, timeoutSeconds: 300, trigger: 'event', eventDocument: 'users/{uid}/activitySendOperations/{batchId}', eventType: 'google.cloud.firestore.document.v1.written' },
+  projectActivitySendDelivery: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'activitySyncQueue/{queueId}', eventType: 'google.cloud.firestore.document.v1.written' },
+  cleanupActivitySendOnDelete: { memoryMb: 256, timeoutSeconds: 300, trigger: 'event', eventDocument: 'users/{uid}', eventType: 'google.cloud.firestore.document.v1.deleted' },
   uploadActivity: { memoryMb: 4096, timeoutSeconds: 3600, trigger: 'http', cpu: 2, concurrency: 1, maxInstances: 20 },
   fanOutSuuntoHealthWebhookIngress: {
     memoryMb: 512, timeoutSeconds: 120, trigger: 'event', concurrency: 1, maxInstances: 50,
@@ -176,9 +181,12 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
 };
 const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
   timeoutSeconds: number;
+  memoryMb?: number;
+  schedule?: string;
   maxInstances?: number;
   secrets?: readonly string[];
 }>> = {
+  cleanupActivitySends: { timeoutSeconds: 300, memoryMb: 256, schedule: 'every 60 minutes' },
   scheduleSuuntoHealthSync: { timeoutSeconds: 300 },
   scheduleSuuntoSleepSync: { timeoutSeconds: 300 },
   redriveRejectedRouteOriginalCleanup: { timeoutSeconds: 540, maxInstances: 1 },
@@ -650,6 +658,8 @@ async function check(): Promise<void> {
       `${target} trigger kind changed.`);
       if (expected.trigger === 'http') {
         assert(JSON.stringify(endpoint.httpsTrigger) === '{}', `${target} HTTP invoker configuration changed.`);
+      } else if (expected.trigger === 'callable') {
+        assert(endpoint.callableTrigger !== undefined, `${target} callable trigger changed.`);
       } else if (expected.trigger === 'event') {
         assert(endpoint.eventTrigger?.eventType === (expected.eventType ?? 'google.cloud.firestore.document.v1.created')
           && endpoint.eventTrigger.eventFilterPathPatterns?.document === expected.eventDocument
@@ -692,7 +702,7 @@ async function check(): Promise<void> {
       `${target} trigger kind changed.`);
     } else if (SCHEDULED_MAINTENANCE_TARGET_METADATA[target]) {
       const expected = SCHEDULED_MAINTENANCE_TARGET_METADATA[target];
-      assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
+      assert(endpoint.availableMemoryMb === (expected.memoryMb ?? 512), `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === expected.timeoutSeconds, `${target} timeout configuration changed.`);
       assert(endpoint.cpu === undefined, `${target} CPU configuration changed.`);
       assert(JSON.stringify(endpoint.concurrency) === 'null'
@@ -700,7 +710,7 @@ async function check(): Promise<void> {
         && JSON.stringify(endpoint.maxInstances) === JSON.stringify(expected.maxInstances ?? null),
       `${target} instance settings changed.`);
       assert(arraysEqual(secretKeys, [...(expected.secrets || [])].sort()), `${target} secret bindings changed.`);
-      assert(endpoint.scheduleTrigger?.schedule === 'every 30 minutes'
+      assert(endpoint.scheduleTrigger?.schedule === (expected.schedule ?? 'every 30 minutes')
         && endpoint.scheduleTrigger.timeZone === undefined
         && JSON.stringify(endpoint.scheduleTrigger.retryConfig) === '{}',
       `${target} schedule or retry configuration changed.`);

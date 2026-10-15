@@ -1,3 +1,4 @@
+import { Auth } from 'app/firebase/auth';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -96,6 +97,16 @@ export interface EventTableEventsChange {
 })
 
 export class EventTableComponent extends DataTableAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+  private readonly sendAuth = inject(Auth, { optional: true });
+  get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid && (!this.targetUser || this.targetUser.uid === this.user.uid); }
+  async sendToService(): Promise<void> {
+    if (!this.canSendOwnedActivities) return;
+    const ids = this.selection.selected.map(row => row.Event.getID());
+    if (!ids.length || ids.length > 50) { this.snackBar.open('Select up to 50 activities to send.', undefined, { duration: 4000 }); return; }
+    const opened = await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    if (opened) this.hapticsService.selection();
+  }
+
   @Input() user!: User;
   @Input() events!: EventInterface[];
   @Input() targetUser!: User;

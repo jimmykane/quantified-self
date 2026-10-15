@@ -33,6 +33,46 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Activity send projections', () => {
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/send-owner/activitySends/batch').set({ provider: 'suunto', state: 'confirmed' });
+                await context.firestore().doc('users/send-owner/activitySends/batch/rows/row').set({ status: 'processing' });
+                await context.firestore().doc('users/send-owner/activitySendOperations/batch').set({ providerAccount: 'private-canary' });
+                await context.firestore().doc('users/send-owner/activitySendOperations/batch/rows/row').set({ digest: 'private-canary' });
+                await context.firestore().doc('activitySendUploadCleanup/private-upload').set({ userID: 'send-owner', path: 'private-canary' });
+            });
+        });
+        it('lets the owner read retained results without Pro and denies other readers', async () => {
+            await assertSucceeds(testEnv.authenticatedContext('send-owner').firestore().doc('users/send-owner/activitySends/batch').get());
+            await assertSucceeds(testEnv.authenticatedContext('send-owner').firestore().doc('users/send-owner/activitySends/batch/rows/row').get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc('users/send-owner/activitySends/batch').get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc('users/send-owner/activitySends/batch').get());
+        });
+        it('denies projection writes and all private operation/quota access', async () => {
+            const owner = testEnv.authenticatedContext('send-owner').firestore();
+            await assertFails(owner.doc('users/send-owner/activitySends/batch').update({ state: 'complete' }));
+            await assertFails(owner.doc('users/send-owner/activitySends/batch/rows/row').update({ status: 'delivered' }));
+            await assertFails(owner.doc('users/send-owner/activitySendOperations/batch').get());
+            await assertFails(owner.doc('users/send-owner/activitySendOperations/batch/rows/row').get());
+            await assertFails(owner.doc('users/send-owner/activitySendQuota/current').set({ bytes: 0 }));
+        });
+        it('denies upload-cleanup access and descendants for owners, other users, admins and anonymous clients', async () => {
+            const contexts = [testEnv.authenticatedContext('send-owner'), testEnv.authenticatedContext('other'),
+                testEnv.authenticatedContext('admin', { admin: true }), testEnv.unauthenticatedContext()];
+            for (const context of contexts) {
+                const db = context.firestore();
+                const ref = db.doc('activitySendUploadCleanup/private-upload');
+                await assertFails(ref.get());
+                await assertFails(ref.update({ userID: 'other' }));
+                await assertFails(ref.delete());
+                await assertFails(db.doc('activitySendUploadCleanup/new-upload').set({ userID: 'send-owner' }));
+                await assertFails(ref.collection('unexpected').doc('child').set({ path: 'archive-canary' }));
+                await assertFails(ref.collection('unexpected').doc('child').get());
+            }
+        });
+    });
+
     describe('Private workout reflection leaves', () => {
         const path = 'users/owner/events/e/workoutReflections/recording';
         const value = { schemaVersion: 1, revision: 1, deleted: false,

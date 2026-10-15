@@ -1,4 +1,8 @@
 {
+  "src/app/components/activity-send/activity-send-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
+  },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
@@ -38,5 +42,9 @@
   "src/app/components/tags/tags-page.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."
+  },
+  "src/app/services/activity-send.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
   }
 }

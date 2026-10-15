@@ -566,6 +566,18 @@ const topLevelRoutes: Routes = [
     data: { title: 'Payment Cancelled' }
   },
   {
+    path: 'send-activities/:provider',
+    loadComponent: () => import('./components/activity-send/activity-send-page.component').then(module => module.ActivitySendPageComponent),
+    canMatch: [authGuard, onboardingGuard],
+    data: { title: 'Send activities', robots: 'noindex, follow' },
+  },
+  {
+    path: 'send-activities',
+    loadComponent: () => import('./components/activity-send/activity-send-page.component').then(module => module.ActivitySendPageComponent),
+    canMatch: [authGuard, onboardingGuard],
+    data: { title: 'Send activities', robots: 'noindex, follow' },
+  },
+  {
     path: 'services',
     loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule),
     data: { title: 'Services', animation: 'Services', preload: true },

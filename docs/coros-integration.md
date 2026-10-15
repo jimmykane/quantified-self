@@ -400,3 +400,7 @@ Connections offers **Import history from this service**, selected by default for
 COROS imports activities and uses one combined daily operation for Sleep and Health. The run binds the single newly authorized active account and stays within the provider’s existing date limits.
 
 See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.
+
+## Activity sending workspace
+
+One-time recorded-activity sending now links from Connections to the dedicated, owner-only `/send-activities` workspace. It supports reviewed local FIT/FIT.gz and eligible retained QS originals, enforces Pro before new preparation/delivery, and retains results across navigation/reload. Existing automatic delivery and route tools keep their separate settings and contracts. See [the activity workspace lifecycle](activity-sending-workspace.md) for account pinning, bounded staging, recovery, stopping, deletion and release verification.

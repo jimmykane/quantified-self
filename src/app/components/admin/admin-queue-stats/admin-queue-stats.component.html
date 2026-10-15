@@ -366,8 +366,8 @@
         </div>
 
         <mat-card class="activity-sync-breakdown" *ngIf="queueView === 'activity-sync' && stats?.activitySync?.breakdowns">
-            <h4>Historical delivery breakdown</h4>
-            <p>Manual uploads are included in historical sends. Counts cover retained queue and dead-letter records, not all-time deliveries. Needs review means provider reconciliation and can overlap with dead letter.</p>
+            <h4>Activity delivery breakdown</h4>
+            <p>Manual uploads include retained QS originals and private temporary files. Direct files are not added to the activity archive. Counts cover retained queue and dead-letter records, not all-time deliveries. Needs review means provider reconciliation and can overlap with dead letter.</p>
             <div class="activity-sync-breakdown-row">
                 <strong>Historical sends</strong>
                 <dl>
@@ -386,6 +386,16 @@
                     <div><dt>Stuck</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.stuck ?? 'N/A' }}</dd></div>
                     <div><dt>Needs review</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.manualReconciliationRequired ?? 'N/A' }}</dd></div>
                     <div><dt>Dead letter</dt><dd>{{ stats?.activitySync?.breakdowns?.manualUploads?.dead ?? 'N/A' }}</dd></div>
+                </dl>
+            </div>
+            <div class="activity-sync-breakdown-row">
+                <strong>Direct temporary files</strong>
+                <dl>
+                    <div><dt>Pending</dt><dd>{{ stats?.activitySync?.breakdowns?.directFiles?.pending ?? 'N/A' }}</dd></div>
+                    <div><dt>Succeeded</dt><dd>{{ stats?.activitySync?.breakdowns?.directFiles?.succeeded ?? 'N/A' }}</dd></div>
+                    <div><dt>Stuck</dt><dd>{{ stats?.activitySync?.breakdowns?.directFiles?.stuck ?? 'N/A' }}</dd></div>
+                    <div><dt>Needs review</dt><dd>{{ stats?.activitySync?.breakdowns?.directFiles?.manualReconciliationRequired ?? 'N/A' }}</dd></div>
+                    <div><dt>Dead letter</dt><dd>{{ stats?.activitySync?.breakdowns?.directFiles?.dead ?? 'N/A' }}</dd></div>
                 </dl>
             </div>
         </mat-card>

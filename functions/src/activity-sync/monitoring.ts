@@ -3,7 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getActivityDeliveryRoute, type ActivityDeliveryRouteId, type ActivityDeliverySource } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 
-export type ActivityDeliveryOutcome = 'delivered' | 'skipped' | 'dead_lettered' | 'manual_reconciliation' | 'provider_pending' | 'retry' | 'expected_contention';
+export type ActivityDeliveryOutcome = 'delivered' | 'processing_failed' | 'skipped' | 'dead_lettered' | 'manual_reconciliation' | 'provider_pending' | 'retry' | 'expected_contention';
 export type ActivityDeliveryAttempt = 'acknowledged' | 'already_processed' | 'already_failed' | 'cleanup_removed' | 'stale' | 'deferred' | 'provider_pending' | 'manual_reconciliation' | 'dead_lettered' | 'retry' | 'failed' | 'expected_contention';
 const PROVIDERS = new Map<unknown, string>([[ServiceNames.GarminAPI, 'garmin'], [ServiceNames.SuuntoApp, 'suunto'], [ServiceNames.WahooAPI, 'wahoo'], [ServiceNames.COROSAPI, 'coros'], ['manualUpload', 'manualUpload']]);
 
@@ -20,7 +20,9 @@ export function activityDeliveryFields(value: unknown) {
     return {
         source: valid ? PROVIDERS.get(route.sourceServiceName)! : 'unknown',
         destination: valid ? PROVIDERS.get(route.destinationServiceName)! : 'unknown',
-        mode: valid && (route.sourceServiceName as ActivityDeliverySource) === 'manualUpload' && item.deliveryMode !== 'historical' ? 'unknown'
+        mode: !valid ? 'unknown' : item.deliveryMode === 'direct'
+            ? (route.sourceServiceName as ActivityDeliverySource) === 'manualUpload' ? 'direct' : 'unknown'
+            : (route.sourceServiceName as ActivityDeliverySource) === 'manualUpload' && item.deliveryMode !== 'historical' ? 'unknown'
             : item.deliveryMode === 'historical' ? 'historical'
             : item.deliveryMode == null || item.deliveryMode === 'automatic' ? 'automatic' : 'unknown',
     };
@@ -38,7 +40,8 @@ export function recordActivityDeliveryCommit(item: unknown, outcome: ActivityDel
 
 export function recordActivityDeliveryCompletion(item: unknown, additionalData?: Record<string, unknown>): void {
     if (additionalData?.resultStatus === 'success') recordActivityDeliveryCommit(item, 'delivered');
-    else if (additionalData?.resultStatus === 'skipped') recordActivityDeliveryCommit(item, 'skipped');
+    else if (record(item).sendBatchID && additionalData?.resultStatus === 'manual_reconciliation_required') recordActivityDeliveryCommit(item, 'manual_reconciliation');
+    else if (additionalData?.resultStatus === 'skipped') recordActivityDeliveryCommit(item, additionalData.sendConfirmedFailure === true ? 'processing_failed' : 'skipped');
 }
 
 export function activityDeliveryFailureOutcome(error: unknown): 'failed' | 'expected_contention' {
@@ -59,4 +62,8 @@ export function recordActivityDeliverySample(destination: string, fields?: Recor
     if (!['suunto', 'wahoo', 'coros'].includes(destination)) return;
     try { logger.info('[ActivityDelivery]', { telemetryVersion: 1, source: 'all', destination, mode: 'all',
         event: fields ? 'queue_sample' : 'queue_sample_unavailable', ...fields }); } catch { /* best effort */ }
+}
+
+export function recordActivitySendCleanup(outcome: 'completed' | 'failed'): void {
+    emit(null, 'send_cleanup', { outcome });
 }

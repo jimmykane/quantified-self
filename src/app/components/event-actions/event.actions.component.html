@@ -8,6 +8,7 @@
   }
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel">
+  @if (canSendOwnedActivities) { <button mat-menu-item (click)="sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
   @if (!isPubliclyShared) {
   <button mat-menu-item (click)="shareEventLink()" [disabled]="isSharing">
     <mat-icon>share</mat-icon>

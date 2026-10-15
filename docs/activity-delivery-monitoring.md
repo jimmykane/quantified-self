@@ -2,7 +2,7 @@
 
 This bundle monitors **outbound recorded activities** in `activitySyncQueue`,
 `processActivitySyncTask` and `dispatchActivitySyncQueue`. Automatic cross-provider
-routes, historical sends and retained manual FIT uploads are included. Suunto, Wahoo
+routes, historical sends, retained manual FIT uploads and private temporary direct-file sends are included. Suunto, Wahoo
 and COROS are delivery destinations; Garmin is a source, not a recorded-activity
 upload destination. This is neither inbound import monitoring (#829), Health/Sleep
 ingestion (#830), route delivery (#833), nor Training planned-workout delivery (#655).
@@ -101,7 +101,7 @@ or continuation payloads, write records, or call providers.
 New undispatched candidates require zero retries, no active operation/lease, current
 Pro access (cached per user for this invocation), an existing non-deleting user,
 connected token roots/token presence and the applicable enabled automatic route.
-Historical/manual sends need only their destination connection and do not require
+Historical/manual/direct sends need only their destination connection and do not require
 an automatic-route setting or the source connection. These are conservative lifecycle
 checks, not proof that a token is refreshable or a provider will accept the file.
 
@@ -296,3 +296,13 @@ reads, schemas, scopes, consent, Assistant permissions, provider actions, activi
 data projections or bundled skills change. Training planning is untouched. Existing
 Activity sync Help/status explanations were reviewed and remain accurate; an admin
 Cloud Monitoring dashboard changes no user action or public provider capability.
+
+## Activity workspace extension
+
+Deletion-surviving temporary upload reservations are **covered/unchanged** by this extension: the existing hourly cleanup job reconciles them in bounded pages and includes retained Storage/Firestore failures in the same fixed `send_cleanup` failure/heartbeat observation. Account-prefix cleanup also invokes the same reconciler, with native retry-enabled trigger errors for failures. Active upload/cleanup leases and resumable previews are expected waits, not processing failures. No new scheduler, metric, label, dashboard or threshold is required; #876 still owns deployment/apply/readback. Exact paths and digests remain backend-only and never enter telemetry.
+
+The fixed mode allowlist includes `direct` only for `manualUpload` routes. This labels private staged recordings without identifying their owners or objects. Confirmed workspace processing failures emit `processing_failed` after a guarded terminal write and contribute to processing-failure alerts; uncertain acceptance contributes to unresolved-outcome alerts and cannot authorize replay. The existing bounded probe treats direct files as destination-only manual sends.
+
+The hourly cleanup function emits a fixed `send_cleanup` completion/failure observation. `qs_activity_delivery_send_cleanup_failures_v1` alerts on two failed runs in three hours, avoiding the delivery-attempt threshold designed for higher volume. The fixed hourly `send_cleanup_runs` heartbeat also alerts after three hours without a sample, including idle runs; activation requires proof of its first positive series. The expanded bundle has 14 metrics and nine policies, with idempotent ownership-preserving application. Retention/source expiry is covered by isolated emulator tests and the private account/generation guards.
+
+Activation requires separately approved runtime deployment and monitoring reapplication/readback. Offline definition/provisioning tests prove filtering, ownership, thresholds and no duplicate writes; they do not establish live coverage. Activation is tracked in [#876](https://github.com/jimmykane/quantified-self/issues/876), linked from the feature PR. No provider calls, emails, queue replays, data purges or production configuration changes are part of local verification.

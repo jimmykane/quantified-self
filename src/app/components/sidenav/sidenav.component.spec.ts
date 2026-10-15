@@ -295,8 +295,11 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
         expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
-        expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
-            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/routes', '/mytracks']);
+        expect(navigationItems.slice(0, 8).map(item => item.nativeElement.getAttribute('routerlink')))
+            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/send-activities', '/routes', '/mytracks']);
+        const sendItem = navigationItems.find(item => item.nativeElement.getAttribute('routerlink') === '/send-activities');
+        expect(sendItem?.nativeElement.textContent).toContain('Send activities');
+        expect(sendItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
         healthItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
@@ -429,6 +432,7 @@ describe('SideNavComponent', () => {
         const plansItem = navigationItems.find(item => item.nativeElement.textContent.includes('Plans'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
+        const sendItem = navigationItems.find(item => item.nativeElement.textContent.includes('Send activities'));
         const tagsItem = navigationItems.find(item => item.nativeElement.textContent.includes('Tags'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
         const assistantItem = navigationItems.find(item => item.nativeElement.textContent.includes('Assistant'));
@@ -440,6 +444,7 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
+        expect(sendItem).toBeTruthy();
         expect(tagsItem).toBeUndefined();
         expect(myTracksItem).toBeTruthy();
         expect(assistantItem).toBeTruthy();
@@ -451,6 +456,7 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
+            navigationItems.indexOf(sendItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
             navigationItems.indexOf(compareFilesItem!),
@@ -465,6 +471,7 @@ describe('SideNavComponent', () => {
             dashboardIndex + 6,
             dashboardIndex + 7,
             dashboardIndex + 8,
+            dashboardIndex + 9,
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');

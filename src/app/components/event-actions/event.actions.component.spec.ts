@@ -195,6 +195,30 @@ describe('EventActionsComponent', () => {
         fixture.detectChanges();
     });
 
+    it('opens an owned activity selection without starting provider delivery', async () => {
+        component.user = { uid: 'test-user' } as any;
+        component.event = { getID: () => 'owned-event' } as any;
+        await component.sendToService();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ['owned-event'], activitySendOwner: 'test-user' } });
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+    it('does not send a shared activity owned by another account', async () => {
+        component.user = { uid: 'other-user' } as any;
+        await component.sendToService();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+    it.each([true, false])('waits for accepted activity-send navigation before feedback: %s', async opened => {
+        component.user = { uid: 'test-user' } as typeof component.user;
+        let finishNavigation!: (result: boolean) => void;
+        mockRouter.navigate.mockReturnValueOnce(new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+        const action = component.sendToService();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        finishNavigation(opened); await action;
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(Number(opened));
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
+    });
     it('should create', () => {
         expect(component).toBeTruthy();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();

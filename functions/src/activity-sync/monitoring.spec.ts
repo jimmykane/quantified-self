@@ -48,3 +48,10 @@ describe('recorded activity delivery telemetry', () => {
         expect(() => recordActivityDeliveryCommit(item, 'delivered')).not.toThrow();
     });
 });
+
+it('labels direct temporary uploads with fixed categories and records confirmed processing failures', () => {
+  const direct = { routeId: 'ManualUpload_to_WahooAPI', sourceServiceName: 'manualUpload', destinationServiceName: ServiceNames.WahooAPI, deliveryMode: 'direct', ref: { parent: { id: 'activitySyncQueue' } } };
+  expect(activityDeliveryFields(direct)).toEqual({ source: 'manualUpload', destination: 'wahoo', mode: 'direct' });
+  recordActivityDeliveryCompletion(direct, { resultStatus: 'skipped', sendConfirmedFailure: true });
+  expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ mode: 'direct', outcome: 'processing_failed' }));
+});

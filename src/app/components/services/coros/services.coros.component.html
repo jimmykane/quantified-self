@@ -203,7 +203,7 @@
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
             <mat-icon>cloud_upload</mat-icon>
-            <span>Upload FIT Activity</span>
+            <span>Send activities</span>
           </div>
           @if (corosServiceMeta && corosServiceMeta.uploadedActivitiesCount && corosServiceMeta.uploadedActivitiesCount > 0) {
           <span class="tool-subsection-meta">{{ corosServiceMeta.uploadedActivitiesCount }} uploaded</span>
@@ -219,8 +219,7 @@
           Reconnect COROS before uploading activities.
         </app-status-info>
         } @else if (isConnectedToService()) {
-        <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"
-          [serviceName]="serviceName"></app-upload-activity-to-service>
+        <a mat-stroked-button routerLink="/send-activities/coros" appHapticTap>Open activity sending workspace</a>
         } @else {
         <app-status-info type="info" title="Connect Account First">
           You need to connect your COROS account before uploading activities.

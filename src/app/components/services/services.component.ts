@@ -30,7 +30,7 @@ import {
 } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.helper';
 
 type ServiceSectionId = ProviderServiceSectionId | 'mcp';
-type ServiceToolId = 'history' | 'uploads' | 'historical-send' | ProviderDataFlowToolId;
+type ServiceToolId = 'history' | 'uploads' | 'historical-send' | 'send-activities' | ProviderDataFlowToolId;
 type ServiceDataFlowActivityDestination = ProviderDataFlowActivityDestination;
 
 interface ServiceSectionOption {
@@ -258,12 +258,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'routes',
       },
       {
-        title: 'Upload activities and routes',
-        description: 'Send FIT activity files or GPX/FIT route files to the Suunto app.',
-        detail: 'FIT activity and GPX/FIT route uploads',
+        title: 'Send activities',
+        description: 'Review local FIT files or saved activities and send them to Suunto in the background.',
+        detail: 'Recorded activity delivery',
         icon: 'cloud_upload',
-        actionLabel: 'Upload files',
-        tool: 'uploads',
+        actionLabel: 'Send activities',
+        tool: 'send-activities',
       },
       {
         title: 'Send past activities to Suunto',
@@ -281,6 +281,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         actionLabel: 'Activity sync settings',
         tool: 'activity-sync',
       },
+      { title: 'Send route files', description: 'Send GPX or FIT route files to Suunto.', detail: 'Route delivery', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
     coros: [
       {
@@ -300,12 +301,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Send activity files',
+        title: 'Send activities',
         description: 'Send a FIT activity directly to COROS without adding it to your Quantified Self archive.',
-        detail: 'Direct FIT activity delivery',
-        icon: 'cloud_upload',
-        actionLabel: 'Send files',
-        tool: 'uploads',
+        detail: 'Recorded activity delivery',
+        icon: 'send',
+        actionLabel: 'Send activities',
+        tool: 'send-activities',
       },
       {
         title: 'Send past activities to COROS',
@@ -323,6 +324,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
       },
+      { title: 'Send route files', description: 'Send GPX or FIT route files to COROS.', detail: 'Route delivery', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
     wahoo: [
       {
@@ -334,12 +336,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Send activity or route files',
-        description: 'Send a FIT activity or GPX/FIT course/route directly to Wahoo without adding it to your Quantified Self archive.',
-        detail: 'Direct file delivery',
-        icon: 'cloud_upload',
-        actionLabel: 'Send files',
-        tool: 'uploads',
+        title: 'Send activities',
+        description: 'Review local FIT files or saved activities and send them to Wahoo in the background.',
+        detail: 'Recorded activity delivery',
+        icon: 'send',
+        actionLabel: 'Send activities',
+        tool: 'send-activities',
       },
       {
         title: 'Send past activities to Wahoo',
@@ -357,6 +359,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
       },
+      { title: 'Send route files', description: 'Send GPX or FIT route files to Wahoo.', detail: 'Route delivery', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
   };
   public serviceNames = ServiceNames;
@@ -463,6 +466,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   public openServiceTools(section: ProviderServiceSectionId, toolLaunch: ServiceToolLaunch): void {
+    if (section !== 'garmin' && (toolLaunch.tool === 'send-activities' || toolLaunch.tool === 'historical-send')) {
+      void this.router.navigate(['/send-activities', section], { queryParams: { source: toolLaunch.tool === 'historical-send' ? 'saved' : 'files' } });
+      return;
+    }
     if (!this.hasProAccess) {
       this.openProPlans(section, 'capability_card', toolLaunch.tool);
       return;
