@@ -1,6 +1,6 @@
 <section class="health-change-summary" [attr.aria-labelledby]="summaryId() + '-title'">
   <div class="health-change-heading">
-    <h2 [id]="summaryId() + '-title'">What changed?</h2>
+    <h2 [id]="summaryId() + '-title'">Your recovery</h2>
     <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
       (click)="toggleDetails()">
       {{ expanded() ? 'Hide details' : 'Show details' }}
@@ -8,12 +8,12 @@
     </button>
   </div>
   <p class="health-change-headline" role="status" aria-atomic="true">{{ summary().headline }}</p>
-  <p class="health-change-coverage">{{ summary().coverageText }}</p>
   @for (change of summary().changes; track change.id) {
     <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
   }
-  <p class="health-change-scope">Sleep and nightly HRV · Existing range evidence, not a new score.</p>
+  <p class="health-change-scope">From your latest sleep and nightly HRV readings.</p>
   <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
+    <p class="health-change-coverage">{{ summary().coverageText }}</p>
     <dl class="health-change-evidence">
       @for (signal of signals(); track signal.id) {
         <div [attr.data-state]="signal.state">

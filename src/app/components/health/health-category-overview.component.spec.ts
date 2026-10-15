@@ -60,7 +60,7 @@ describe('Health category overview', () => {
     const host = fixture.nativeElement as HTMLElement;
     const summary = host.querySelector('app-health-change-summary')!;
     const originalCards = fixture.componentInstance.cards().map(card => card.id);
-    expect(summary.textContent).toContain('More evidence is needed');
+    expect(summary.textContent).toContain('More readings are needed to find your usual range.');
     expect(summary.compareDocumentPosition(host.querySelector('.health-overview-grid')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     summary.querySelector('button')!.click(); fixture.detectChanges();
     expect(summary.textContent).toContain('6/14 nights');

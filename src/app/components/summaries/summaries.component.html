@@ -1,7 +1,7 @@
 @if (tiles.length || showActions || showTodaySummary || derivedMetricsBanner) {
 <section class="pie" [attr.data-chart-preload]="isOwnerDashboard ? 'background' : null">
   @if (showTodaySummary || showActions || derivedMetricsBanner) {
-  <div class="dashboard-summary-heading">
+  <div class="dashboard-summary-heading" [class.dashboard-summary-heading--with-recovery]="showTodaySummary && isOwnerDashboard">
   <app-page-header
     class="dashboard-summary-header"
     variant="compact"

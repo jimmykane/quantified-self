@@ -1568,7 +1568,8 @@ describe('SummariesComponent', () => {
     const host = fixture.nativeElement as HTMLElement;
     fixture.detectChanges();
     const summary = host.querySelector('app-health-change-summary')!;
-    expect(summary.textContent).toContain('What changed?');
+    expect(summary.textContent).toContain('Your recovery');
+    expect(host.querySelector('.dashboard-summary-heading')?.classList.contains('dashboard-summary-heading--with-recovery')).toBe(true);
     summary.querySelector('button')!.click(); fixture.detectChanges();
     expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();

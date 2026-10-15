@@ -23,7 +23,10 @@ describe('Health change summary disclosure', () => {
     const button = host.querySelector('button')!;
     const details = host.querySelector<HTMLElement>('#test-summary-details')!;
     expect(details.hidden).toBe(true);
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('outside its usual range');
+    expect(host.querySelector('h2')?.textContent).toBe('Your recovery');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('outside your usual range');
+    expect(host.querySelector('.health-change-scope')?.textContent).toBe('From your latest sleep and nightly HRV readings.');
+    expect(details.contains(host.querySelector('.health-change-coverage'))).toBe(true);
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector('.health-change-notice')?.textContent).toContain('Outside personal range');
     expect(haptics.selection).not.toHaveBeenCalled();

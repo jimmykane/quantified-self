@@ -52,18 +52,20 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
   const recorded = count('recorded');
   const parts = [
     changes.length ? `${changes.length} outside usual range` : '',
-    within ? `${within} within range` : '',
-    insufficient ? `${insufficient} ${insufficient === 1 ? 'needs' : 'need'} more evidence` : '',
-    recorded ? `${recorded} recorded only` : '',
+    within ? `${within} within usual range` : '',
+    insufficient ? `${insufficient} ${insufficient === 1 ? 'needs' : 'need'} more readings` : '',
+    recorded ? `${recorded} ${recorded === 1 ? 'reading' : 'readings'} shown without comparison` : '',
     loading ? `${loading} loading` : '',
     unavailable ? `${unavailable} unavailable` : '',
   ].filter(Boolean);
   const headline = changes.length
-    ? changes.length === 1 ? 'One signal is outside its usual range.' : `${changes.length} signals are outside their usual ranges.`
-    : loading ? 'Some signals are still loading.'
-    : unavailable ? 'Some evidence is unavailable.'
-    : within ? 'Assessed signals are within their personal ranges.'
-    : 'More evidence is needed to assess changes.';
+    ? changes.length === 1 ? 'One reading is outside your usual range.' : `${changes.length} readings are outside your usual range.`
+    : loading ? 'We’re still loading some of your readings.'
+    : unavailable ? 'We couldn’t load some of your readings.'
+    : within ? 'The readings we can compare are within your usual range.'
+    : insufficient ? 'More readings are needed to find your usual range.'
+    : recorded ? 'Your latest readings are shown below.'
+    : 'No sleep or nightly HRV readings to compare yet.';
   return { changes, headline, coverageText: parts.join(' · ') };
 }
 
