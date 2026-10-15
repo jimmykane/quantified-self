@@ -21,6 +21,10 @@
       </a>
     }
   </div>
+  @if (canRepeatWorkout() && !draft()) {
+    <p class="delivery-caption">This workout has been completed. Changing its date does not resend its protected provider copy. Repeat it as a new scheduled workout; the original recording and completion stay unchanged.</p>
+    <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="repeatWorkout()">{{ phase() === 'copying' ? 'Repeating workout…' : 'Repeat on another date' }}</button>
+  }
   @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
   @if (notice()) { <p role="status">{{ notice() }}</p> }
   @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load sync settings. Close and reopen this dialog to try again.' }}</p> }
@@ -36,6 +40,9 @@
       } @else if (draft.action === 'replace') {
         <p>Create one new Garmin copy of this workout after rechecking the earlier copy. Check Garmin Connect first: a not-found response is not proof of deletion, so a duplicate is possible if the old copy reappears. If QS finds the old copy again before sending, it reuses that copy and applies the workout and date you reviewed.</p>
         <p>Your QS workout, other providers and completed activities stay unchanged. If Garmin may have accepted a send but its response was lost, QS stops for attention instead of blindly sending again.</p>
+      } @else if (draft.action === 'fresh-guide') {
+        <p>Use this only if the earlier Guide is missing from your Suunto app. QS cannot detect whether you hid or removed it. This sends one fresh Guide with a new identity for the same QS workout.</p>
+        <p>The earlier Guide is left untouched and may still be visible, so a duplicate is possible. Other providers, recordings and completion links are unchanged. An unfinished send must be resolved first; retrying this confirmation does not request another fresh identity.</p>
       } @else if (editingSettings()) {
         <p>Sync with {{ draftLabel() }} is already enabled. Change the time zone used for scheduled workout dates.</p>
       } @else if (draft.action !== 'approve') {
@@ -63,7 +70,7 @@
       @if (busy()) {
         <div class="delivery-progress" role="status">
           <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
-          <span>{{ phase() === 'preview' ? 'Checking availability and workout compatibility…' : draft.action === 'replace' ? 'Requesting the reviewed Garmin replacement…' : 'Saving your sync settings…' }}</span>
+          <span>{{ phase() === 'preview' ? 'Checking availability and workout compatibility…' : draft.action === 'fresh-guide' ? 'Requesting the reviewed fresh Guide…' : draft.action === 'replace' ? 'Requesting the reviewed Garmin replacement…' : 'Saving your sync settings…' }}</span>
         </div>
         <p class="delivery-caption">{{ phase() === 'preview' ? 'Nothing is sent until you confirm.' : 'You can close this dialog. Sync status will update in the background.' }}</p>
       }
@@ -74,7 +81,7 @@
             <p>Removal must wait until this service is available and the same account is connected. Copies left after disconnect may need removing in the connected app.</p>
           }
         } @else {
-          @if (draft.action !== 'retry' && draft.action !== 'approve' && draft.action !== 'replace') {
+          @if (draft.action !== 'retry' && draft.action !== 'approve' && draft.action !== 'replace' && draft.action !== 'fresh-guide') {
             <p class="delivery-caption">{{ preview.result.eligibleCount }} {{ preview.result.eligibleCount === 1 ? 'workout' : 'workouts' }} in the scheduling window. Workouts already sent for past dates or completed workouts are kept.</p>
           }
           @if (!preview.result.hasPro) { <p>Pro is required for creates and updates. Removal and recovery remain available. <a routerLink="/subscriptions" (click)="dialogRef.close()" appHapticTap>View Pro</a></p> }
@@ -137,7 +144,7 @@
     <ng-template #providerDetails let-row>
         <div class="delivery-provider-settings">
           @if (row.provider === 'suunto' && row.setupAvailable && data.scope !== 'history') {
-            <app-suunto-swimming-guide-settings></app-suunto-swimming-guide-settings>
+            <app-suunto-swimming-guide-settings [structure]="swimmingGuideStructure()"></app-suunto-swimming-guide-settings>
           }
           @if (data.scope !== 'history') {
             <p class="delivery-setting-label">{{ row.settingLabel }}</p>
@@ -176,17 +183,20 @@
                     {{ checkingProvider() === row.provider ? 'Queuing check…' : 'Check ' + row.label }}
                   </button>
                 }
-                @if (row.setupAvailable && canSend() && (!planBound() || row.canResume)) {
+                @if (row.setupAvailable && canSend() && (!planBound() || row.canResume) && (!canRepeatWorkout() || (!planBound() && row.setting?.enabled))) {
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
                     {{ planBound() ? 'Resume workout sync' : row.setting?.enabled ? data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings' : data.scope === 'plan' ? 'Sync plan with ' + row.label : 'Send to ' + row.label }}
                   </button>
                 }
-                @if (row.setupAvailable && canSend() && !planBound() && row.setting?.enabled && row.needsFreshConsent) {
+                @if (row.setupAvailable && canSend() && !planBound() && row.setting?.enabled && row.needsFreshConsent && !canRepeatWorkout()) {
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : 'send', undefined, true)">Review sync setup</button>
                 }
                 @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">{{ data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync' }}</button> }
                 @if (row.canReplace) {
                   <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'replace')">Create replacement Garmin copy</button>
+                }
+                @if (row.canFreshGuide && row.setupAvailable && canSend()) {
+                  <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'fresh-guide')">Send a fresh Guide</button>
                 }
                 @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
                   <button mat-flat-button appHapticTap type="button" [attr.aria-label]="'Review workout changes for ' + row.label" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'approve', row.approvalDigest)">Review</button>

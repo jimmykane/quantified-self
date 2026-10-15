@@ -1,4 +1,6 @@
 import { inject, Injectable } from '@angular/core';
+import { getEventTags } from '@shared/event-tags';
+import type { AppEventInterface } from '@shared/app-event.interface';
 import {
   ActivityTypesHelper,
   DataActivityTypes,
@@ -138,6 +140,7 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
   return {
     name,
     description,
+    tags: getEventTags({ tags: document.tags, benchmarkReviewTags: document.benchmarkReviewTags }),
     startDate,
     getID: () => id,
     getStat: (type) => {
@@ -146,7 +149,7 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
     },
     getActivityTypesAsArray: () => activityTypes,
     getActivityTypesAsString: () => activityTypes.join(', '),
-  } as EventInterface;
+  } as AppEventInterface;
 }
 
 function resolveDate(value: unknown): Date | null {

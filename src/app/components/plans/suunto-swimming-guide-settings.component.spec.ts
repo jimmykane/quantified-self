@@ -1,4 +1,6 @@
 import { signal } from '@angular/core';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,6 +30,30 @@ describe('Suunto swimming screen preferences', () => {
     expect(element.querySelector('section')?.hidden).toBe(false);
     expect(element.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
   });
+  it('binds each disclosure to its own region when plan and workout dialogs coexist', () => {
+    const first = render(); const second = render();
+    // TestBed's root renderer may detach the earlier fixture. Keep both real
+    // component hosts attached, as overlapping Material dialogs would be.
+    document.body.append(first.nativeElement, second.nativeElement);
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 }, targets: [] },
+    ] };
+    for (const fixture of [first, second]) {
+      fixture.componentRef.setInput('structure', structure); fixture.detectChanges();
+    }
+    const ids = new Set<string>();
+    for (const fixture of [first, second]) {
+      const host = fixture.nativeElement as HTMLElement;
+      for (const toggle of Array.from(host.querySelectorAll('button[aria-controls]'))) {
+        const id = toggle.getAttribute('aria-controls')!;
+        expect(ids.has(id)).toBe(false);
+        ids.add(id);
+        expect(host.querySelector(`[id="${id}"]`)).not.toBeNull();
+        expect(document.getElementById(id)).toBe(host.querySelector(`[id="${id}"]`));
+      }
+    }
+    expect(ids.size).toBe(4); expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('changes/reorders choices with one feedback owner, ignoring duplicates and no-ops', () => {
     const component = render().componentInstance;
     component.choose('workFields', 0, 'strokes'); component.move('workFields', 0, 1);
@@ -43,6 +69,55 @@ describe('Suunto swimming screen preferences', () => {
     component.choose('restFields', 0, 'previousLapPace');
     expect(component.changed()).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('reports per-step target pressure, heading allocation and absent planned distances using the saved recipe', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 150 }] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] }] };
+    fixture.componentRef.setInput('structure', structure);
+    component.add('workFields'); component.choose('workFields', 4, 'workoutDistance');
+    component.toggle(); component.toggleAvailability(); fixture.detectChanges();
+    const rows = component.availability()!.rows;
+    expect(rows[0].title).toBe('Rest 1/1'); // REST first, chronological step retained.
+    expect(rows[0].index).toBe(1);
+    expect(rows[0].choices.find(choice => choice.field === 'nextPlannedDistance')).toMatchObject({ state: 'omitted' });
+    expect(rows[1].choices.find(choice => choice.field === 'interval')).toMatchObject({ state: 'heading' });
+    expect(rows[1].choices.find(choice => choice.field === 'workoutDistance')).toMatchObject({ state: 'omitted' });
+    expect(fixture.nativeElement.textContent).toContain('No space after');
+    expect(fixture.nativeElement.textContent).toContain('not guaranteed visible');
+    fixture.componentRef.setInput('structure', null); fixture.detectChanges();
+    expect(component.availability()).toBeNull();
+    expect(fixture.nativeElement.querySelector(`[id="${component.availabilityRegionId}"]`)).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('bounds availability rendering and silently resets paging when the recipe changes', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.OpenWaterSwimming, nodes: [
+      { kind: 'repeat', id: 'sets', count: 10, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 }, targets: [] },
+        { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] }] }] };
+    fixture.componentRef.setInput('structure', structure); component.toggleAvailability(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.availability-step')).toHaveLength(6);
+    expect(component.visibleAvailabilityRows().map(row => row.title)).toEqual([
+      'Rest 1/10', 'Rest 2/10', 'Rest 3/10', 'Work 1/10', 'Work 2/10', 'Work 3/10',
+    ]);
+    component.showMoreAvailability(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.availability-step')).toHaveLength(12);
+    const count = haptics.selection.mock.calls.length;
+    fixture.componentRef.setInput('structure', { ...structure }); fixture.detectChanges();
+    expect(component.availabilityLimit()).toBe(6); expect(haptics.selection).toHaveBeenCalledTimes(count);
+  });
+  it('does not claim included fields for an unsupported swim prescription', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    fixture.componentRef.setInput('structure', { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'repetitions', repetitions: 10 }, targets: [] },
+    ] } satisfies WorkoutStructureV1);
+    component.toggleAvailability(); fixture.detectChanges();
+    expect(component.availability()).toMatchObject({ blocked: true, rows: [] });
+    expect(fixture.nativeElement.textContent).toContain('cannot currently be sent as a Suunto Guide');
+    expect(save).not.toHaveBeenCalled();
+  });
   it('bounds choices at five and restores defaults without sending or changing a recipe', () => {
     const component = render().componentInstance;
     for (let i = 0; i < 10; i++) component.add('workFields');
@@ -57,6 +132,18 @@ describe('Suunto swimming screen preferences', () => {
     expect(save).toHaveBeenCalledExactlyOnceWith(user(), { settings: { suuntoSwimmingGuide: component.draft() } });
     expect(component.notice()).toContain('already opted into sync');
     expect(haptics.success).toHaveBeenCalledOnce(); expect(component.canSave()).toBe(false);
+  });
+  it('clears stale save feedback only after accepted draft edits, without another write', async () => {
+    const component = render().componentInstance;
+    component.choose('workFields', 0, 'strokes'); await component.save();
+    const success = component.notice();
+    component.choose('workFields', 0, 'strokes');
+    expect(component.notice()).toBe(success); // An unchanged selection is silent.
+    component.choose('workFields', 0, 'heartRate');
+    expect(component.notice()).toBeNull(); expect(component.canSave()).toBe(true);
+    expect(save).toHaveBeenCalledOnce();
+    component.error.set('Previous save failed'); component.move('workFields', 0, 1);
+    expect(component.error()).toBeNull(); expect(save).toHaveBeenCalledOnce();
   });
   it('preserves choices on failed save and reports success only after a successful retry', async () => {
     save.mockRejectedValueOnce(new Error('fixture'));

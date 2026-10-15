@@ -134,6 +134,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ...(kind === 'upsert' && context.suuntoWeightUnits !== undefined ? { suuntoWeightUnits: context.suuntoWeightUnits } : {}),
         ...(kind === 'upsert' && context.suuntoUnitSettings !== undefined ? { suuntoUnitSettings: context.suuntoUnitSettings } : {}),
         ...(kind === 'upsert' && context.suuntoSwimmingSettings ? { suuntoSwimmingSettings: context.suuntoSwimmingSettings } : {}),
+        ...(ledger.suuntoGuideGeneration !== undefined ? { suuntoGuideGeneration: ledger.suuntoGuideGeneration } : {}),
         artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
         ...(kind === 'remove' && context.pastCleanup ? { allowPastRemoval: true } : {}),
         ...(ledger.provider === 'wahoo' ? { wahooPlanGeneration: wahooPlanGeneration(ledger.wahooPlanGeneration === undefined

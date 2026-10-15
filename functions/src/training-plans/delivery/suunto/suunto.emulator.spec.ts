@@ -17,7 +17,7 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
-import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV13ForRecovery, guidePayloadForRecovery } from './mapping';
+import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV13ForRecovery, assessSuuntoGuideV14ForRecovery, guidePayloadForRecovery } from './mapping';
 import { defaultSuuntoSwimmingGuideSettings } from '../../../../../shared/suunto-swimming-guide-settings';
 import { deliveryIdentity } from '../intent';
 import { retainGarminFITWorkoutReferences } from '../../completion/fit-workout-evidence';
@@ -44,13 +44,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       ...(action === 'send' ? { timeZone: 'Europe/Helsinki' } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
+  const freshRequest = async () => ({ schemaVersion: 1 as const, mutationId: randomUUID(), scope: 'workout' as const, scopeId: 'w',
+    provider: 'suunto' as const, action: 'fresh-guide' as const, expectedScheduleRevision: 1,
+    expectedScopeRevision: (await user().collection('scheduledWorkouts').doc('w').get()).get('revision'),
+    expectedSettingsRevision: (await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).get('revision') ?? 0 });
+  const requestFresh = async () => {
+    const request = await freshRequest();
+    const preview = await trainingDeliveryCommand(runtime, uid, request, true) as { approvalDigest: string };
+    const approved = { ...request, approvalDigest: preview.approvalDigest };
+    await trainingDeliveryCommand(runtime, uid, approved, false);
+    return approved;
+  };
   const currentRecipes = [
     { sport: ActivityTypes.Running, manual: false, version: 'v13' },
     { sport: ActivityTypes.Running, manual: true, version: 'v13' },
     { sport: ActivityTypes.Walking, manual: true, version: 'v13' },
     { sport: ActivityTypes.Cycling, manual: true, version: 'v13' },
-    { sport: ActivityTypes.Swimming, manual: true, version: 'v14' },
-    { sport: ActivityTypes.OpenWaterSwimming, manual: true, version: 'v14' },
+    { sport: ActivityTypes.Swimming, manual: true, version: 'v15' },
+    { sport: ActivityTypes.OpenWaterSwimming, manual: true, version: 'v15' },
     { sport: ActivityTypes.Rowing, manual: true, version: 'v13' },
   ] as const;
   const useManualRecipe = async (sport: ActivityTypes) => user().collection('scheduledWorkouts').doc('w').update({
@@ -61,9 +72,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   });
   // Simulate a journal and provider archive written by the previous deployed
   // serializer. The fixture, Firestore and all provider HTTP remain local/demo.
-  const startedLegacy = async (version: 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v9' | 'v10' | 'v11' | 'v12' | 'v13' = 'v2') => {
+  const startedLegacy = async (version: 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v9' | 'v10' | 'v11' | 'v12' | 'v13' | 'v14' = 'v2') => {
     const row = await ledger(); const operation = row.attempt!;
-    operation.digest = version === 'v13' ? assessSuuntoGuideV13ForRecovery(operation.workout!, operation.destinationKey,
+    operation.digest = version === 'v14' ? assessSuuntoGuideV14ForRecovery(operation.workout!, operation.destinationKey,
+      operation.timeZone, 'Quantified Self', operation.suuntoUnitSettings, operation.suuntoSwimmingSettings).digest
+      : version === 'v13' ? assessSuuntoGuideV13ForRecovery(operation.workout!, operation.destinationKey,
       operation.timeZone, 'Quantified Self', operation.suuntoUnitSettings).digest
       : (version === 'v2' ? assessSuuntoGuideV2ForRecovery : version === 'v3' ? assessSuuntoGuideV3ForRecovery
       : version === 'v4' ? assessSuuntoGuideV4ForRecovery : version === 'v5' ? assessSuuntoGuideV5ForRecovery
@@ -107,6 +120,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
         nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } });
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+  // Recursive cleanup covers every fixture user in the full provider matrix.
   afterAll(async () => {
     for (const id of users) {
       await db.recursiveDelete(db.collection('users').doc(id)); await db.recursiveDelete(db.collection('suuntoAppAccessTokens').doc(id));
@@ -117,7 +131,111 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       for (const doc of (await db.collection(DELIVERY_QUEUE).where('uid', '==', id).get()).docs) await db.recursiveDelete(doc.ref);
     }
     await db.terminate();
+  }, 120_000);
+  it('creates one explicitly reviewed fresh identity for the same QS workout without changing the earlier Guide', async () => {
+    const first = await send(); const original = structuredClone(server.guides.get(first.actual!.ids.guide));
+    const workout = (await user().collection('scheduledWorkouts').doc('w').get()).data();
+    const request = await freshRequest(); const calls = server.calls.length;
+    const preview = await trainingDeliveryCommand(runtime, uid, request, true) as { effect: string; approvalDigest: string; issues: string[] };
+    expect(preview.effect).toBe('fresh-guide'); expect(preview.issues.join(' ')).toContain('may still be visible');
+    expect(server.calls).toHaveLength(calls); expect((await ledger()).suuntoGuideGeneration).toBeUndefined();
+    await expect(trainingDeliveryCommand(runtime, uid, request, false)).rejects.toMatchObject({ code: 'aborted' });
+    const approved = { ...request, approvalDigest: preview.approvalDigest! };
+    const receipt = await trainingDeliveryCommand(runtime, uid, approved, false);
+    expect(await trainingDeliveryCommand(runtime, uid, approved, false)).toEqual(receipt);
+    await expect(trainingDeliveryCommand(runtime, uid, { ...approved, mutationId: randomUUID() }, false)).rejects.toMatchObject({ code: 'aborted' });
+    await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const fresh = await ledger();
+    expect(fresh).toMatchObject({ status: 'delivered', suuntoGuideGeneration: 1, suuntoRetiredGuides: [{ ...first.actual, planId: first.planId }],
+      suuntoRetiredExternalIds: [first.actual!.ids.externalId] });
+    expect(fresh.actual!.ids.externalId).toBe(guideExternalId(first.destinationKey, 'w', 1));
+    expect(fresh.actual!.ids.guide).not.toBe(first.actual!.ids.guide);
+    expect(server.guides.get(first.actual!.ids.guide)).toEqual(original);
+    expect((await user().collection('scheduledWorkouts').get()).size).toBe(1);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).data()).toEqual(workout);
+    await mark(); await processTrainingDelivery(runtime, uid, first.id);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    expect(server.calls.filter(call => call.method === 'DELETE')).toHaveLength(0);
+    await user().collection('scheduledWorkouts').doc('w').update({ title: 'Updated fresh copy', revision: 2 });
+    await mark(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(server.guides.get(fresh.actual!.ids.guide)!.guide.name).toBe('Updated fresh copy');
+    expect(server.guides.get(first.actual!.ids.guide)).toEqual(original);
+    await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(server.guides.has(fresh.actual!.ids.guide)).toBe(false);
+    expect(server.guides.get(first.actual!.ids.guide)).toEqual(original);
   });
+  it('recovers a fresh Guide lost acknowledgement without another POST or another identity', async () => {
+    const first = await send(); await requestFresh(); await drain();
+    server.afterHandle = async request => {
+      if (request.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); }
+    };
+    await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const unresolved = await ledger(); expect(unresolved.attempt?.suuntoGuideGeneration).toBe(1);
+    expect(unresolved.status).toBe('retrying');
+    expect(unresolved.attempt?.progress).toMatchObject({ step: 'create', state: 'started' });
+    await expect(trainingDeliveryCommand(runtime, uid, await freshRequest(), true)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', attempt: null, suuntoGuideGeneration: 1 });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it('renews a plan-inherited Guide without opting other workouts or providers into delivery', async () => {
+    await user().collection('trainingPlans').doc('p').set({ id: 'p', revision: 1, lifecycle: 'active' });
+    await user().collection('scheduledWorkouts').doc('w').update({ planId: 'p' });
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
+      provider: 'suunto', action: 'configure', timeZone: 'Europe/Helsinki', expectedScheduleRevision: 1,
+      expectedScopeRevision: 1, expectedSettingsRevision: 0 }, false);
+    await drain(); const first = await ledger(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const planSettings = (await user().collection('trainingDeliverySettings').doc('plan_p_suunto').get()).data();
+    await requestFresh(); await drain(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', planId: 'p', suuntoGuideGeneration: 1 });
+    expect((await user().collection('trainingDeliverySettings').doc('plan_p_suunto').get()).data()).toEqual(planSettings);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    expect((await user().collection('scheduledWorkouts').get()).size).toBe(1);
+  });
+  it.each(['old', 'fresh', 'before-send'] as const)('links %s Guide recordings to the same workout after identity renewal', async mode => {
+    const first = await send(); await requestFresh(); await drain();
+    if (mode !== 'before-send') { await processTrainingDelivery(runtime, uid, first.id); await drain(); }
+    const current = await ledger();
+    await user().collection('events').doc('recording').set({ test: true });
+    const externalId = mode === 'fresh' ? current.actual!.ids.externalId : first.actual!.ids.externalId;
+    const result = await retainSuuntoGuideCompletions(db, uid, 'recording', 'account', 'retained', suuntoFitFixture(['qs'], [externalId]), 'qs', [], now);
+    expect(result.linkedWorkoutIds).toEqual(['w']);
+    await mark(); await processTrainingDelivery(runtime, uid, first.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'completed', desired: 'preserve', completionLinkId: expect.any(String) });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(mode === 'before-send' ? 1 : 2);
+    await expect(trainingDeliveryCommand(runtime, uid, await freshRequest(), true)).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+  it.each(['date', 'plan'] as const)('does not link a retired Guide from an earlier %s occurrence', async changed => {
+    const first = await send(); await requestFresh(); await drain();
+    await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const retained = await ledger();
+    if (changed === 'date') await user().collection('scheduledWorkouts').doc('w').update({ localDate: '2026-09-18', revision: 2 });
+    else {
+      await user().collection('scheduledWorkouts').doc('w').update({ planId: 'new-plan', revision: 2 });
+      await user().collection(DELIVERY_LEDGER).doc(retained.id).update({ planId: 'new-plan' });
+    }
+    await user().collection('events').doc('older-recording').set({ test: true });
+    expect((await retainSuuntoGuideCompletions(db, uid, 'older-recording', 'account', 'retained',
+      suuntoFitFixture(['qs'], [first.actual!.ids.externalId]), 'qs', [], now)).linkedWorkoutIds).toEqual([]);
+    expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+  });
+  it.each(['past', 'completed', 'linked', 'unfinished', 'no-consent', 'no-pro', 'limit', 'epoch', 'deleted'] as const)(
+    'rejects fresh Guide admission for %s without provider calls', async condition => {
+      const first = await send();
+      if (condition === 'past') now += 3 * 86_400_000;
+      if (condition === 'completed') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ 'actual.completed': true });
+      if (condition === 'linked') await user().collection('trainingWorkoutCompletions').doc('w').set({ fixture: true });
+      if (condition === 'unfinished') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ attempt: { id: 'unknown' } });
+      if (condition === 'no-consent') await command('stop');
+      if (condition === 'no-pro') pro = false;
+      if (condition === 'limit') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ suuntoGuideGeneration: 8 });
+      if (condition === 'epoch') await user().collection(DELIVERY_LEDGER).doc(first.id).update({ connectionEpoch: 99 });
+      if (condition === 'deleted') await user().collection('scheduledWorkouts').doc('w').update({ lifecycle: 'deleted' });
+      const calls = server.calls.length;
+      await expect(trainingDeliveryCommand(runtime, uid, await freshRequest(), true)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(server.calls).toHaveLength(calls);
+      expect(server.guides.size).toBe(1);
+    });
   const useCreate200Http = () => {
     server.createStatus = 200;
     // Exercise the real HTTP envelope decoder, never the real provider: the
@@ -613,10 +731,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     ] });
     if (manual && sport !== ActivityTypes.Rowing) {
       const swim = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport);
-      expect(remote.guide.steps[0]).toMatchObject({ type: 'fields', title: swim ? 'Work' : 'Work 1/3' });
-      expect(remote.guide.steps[1]).toMatchObject({ type: 'fields', title: swim ? 'Rest' : 'Rest 1/3', fields: [
+      expect(remote.guide.steps[0]).toMatchObject({ type: 'fields', title: 'Work 1/3' });
+      expect(remote.guide.steps[1]).toMatchObject({ type: 'fields', title: 'Rest 1/3', fields: [
         { type: 'stepDurationCountdown', title: 'Rest rem', value: 15 },
-        ...(swim ? [{ type: 'text', value: 'Interval 1/3' }, { type: 'heartRate', title: 'HR' }]
+        ...(swim ? [{ type: 'heartRate', title: 'HR' }]
           : [{ type: 'heartRate', title: 'HR' }, { type: 'text', value: 'Next: Work 2/3' }]),
       ] });
     }
@@ -679,6 +797,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     { sport: ActivityTypes.OpenWaterSwimming, version: 'v10' as const },
     { sport: ActivityTypes.Swimming, version: 'v13' as const },
     { sport: ActivityTypes.OpenWaterSwimming, version: 'v13' as const },
+    { sport: ActivityTypes.Swimming, version: 'v14' as const },
+    { sport: ActivityTypes.OpenWaterSwimming, version: 'v14' as const },
   ])('recovers frozen $version $sport acceptance before updating Rest once in place', async ({ sport, version }) => {
     await useManualRecipe(sport);
     server.afterHandle = async request => { if (request.method === 'POST') {
@@ -700,8 +820,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids: { guide: legacy.id } } });
     expect(server.guides.get(legacy.id)).toMatchObject({ pinned: true, guide: { steps: [
-      expect.objectContaining({ title: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'Work' : 'Work 1/3' }),
-      expect.objectContaining({ title: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'Rest' : 'Rest 1/3' }),
+      expect.objectContaining({ title: 'Work 1/3' }),
+      expect.objectContaining({ title: 'Rest 1/3' }),
       expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(),
     ] } });
     await mark(); await processTrainingDelivery(runtime, uid, original.id); await drain();
@@ -820,7 +940,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     } };
     const original = await send(); expect(original.status).toBe('retrying');
     expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'failure', guideMappingVersion: sport === 'swimming' ? 'suunto-guides-v14' : 'suunto-guides-v13', deliveryPhase: 'execute',
+      event: 'failure', guideMappingVersion: sport === 'swimming' ? 'suunto-guides-v15' : 'suunto-guides-v13', deliveryPhase: 'execute',
     }));
     const legacy = await startedLegacy(version);
     expect(JSON.stringify(legacy.payload).includes('notification')).toBe(version !== 'v2');
@@ -854,12 +974,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       ] : [
         { type: 'stepDurationCountdown', value: 600, title: 'Time rem' },
         { type: 'distance', title: 'Swum', window: 'step' }, { type: 'duration', title: 'Elapsed', window: 'step' },
-        { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' }, { type: 'text', value: 'Interval 1/1' },
+        { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
       ] });
       expect(guide.steps.at(-1)).toMatchObject({ createManualLap: true });
     }
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: sport === 'swimming' ? 'suunto-guides-v14' : 'suunto-guides-v13', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: sport === 'swimming' ? 'suunto-guides-v15' : 'suunto-guides-v13', deliveryPhase: 'execute',
     }));
     const logs = JSON.stringify([...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]);
     for (const value of [uid, legacy.id, legacy.operation.digest, legacy.operation.destinationKey, 'notification', 'Squat']) {
@@ -1372,18 +1492,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     const steps = server.guides.get(legacy.id)!.guide.steps;
-    expect(steps[0]).toMatchObject({ notification: { title: 'Work', text: 'Swim now. Press Lap to finish this interval.' }, fields: [
-      ...(sport === ActivityTypes.OpenWaterSwimming ? [{ type: 'text', value: 'Press lap' }] : []),
+    expect(steps[0]).toMatchObject({ title: 'Work 1/1', notification: { title: 'Work 1/1', text: 'Swim now. Press Lap to finish this interval.' }, fields: [
       { type: 'distance', title: 'Swum', window: 'step' }, { type: 'duration', title: 'Elapsed', window: 'step' },
       { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
-      { type: 'text', value: 'Interval 1/1' },
     ] });
     expect(steps[1]).not.toHaveProperty('notification');
-    expect(steps[1]).toMatchObject({ fields: [
-      { type: 'stepDurationCountdown', value: 15, title: 'Rest rem' }, { type: 'text', value: 'Interval 1/1' }, { type: 'heartRate', title: 'HR' },
+    expect(steps[1]).toMatchObject({ title: 'Rest 1/1', fields: [
+      { type: 'stepDurationCountdown', value: 15, title: 'Rest rem' }, { type: 'heartRate', title: 'HR' },
     ] });
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: 'suunto-guides-v14', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v15', deliveryPhase: 'execute',
     }));
     expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(structure);
     expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(consent);

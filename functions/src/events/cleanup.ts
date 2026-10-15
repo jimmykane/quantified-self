@@ -147,11 +147,11 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
             if (!snapshot.exists) return;
             const ledger = snapshot.data() as DeliveryLedgerV1;
             if (ledger.schemaVersion !== 1 || ledger.completionLinkId !== completionBindings[index].linkId
-                || !ledger.actual?.completed) return;
+                || (!ledger.actual?.completed && !(ledger.provider === 'suunto' && !ledger.actual && ledger.suuntoRetiredGuides?.length))) return;
             const nextLedger: DeliveryLedgerV1 = {
                 ...ledger,
                 completionLinkId: null,
-                actual: { ...ledger.actual, completed: false },
+                actual: ledger.actual ? { ...ledger.actual, completed: false } : null,
                 desiredGeneration: ledger.desiredGeneration + 1,
                 desired: 'preserve',
                 status: 'pending',

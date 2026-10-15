@@ -1,7 +1,7 @@
 import { effect, inject, Injectable } from '@angular/core';
 import { firstValueFrom, Subject } from 'rxjs';
 import { AppHealthService, type HealthWorkspaceRangeRequest, type HealthWorkspaceRangeLoad } from './app.health.service';
-import { AppSleepService } from './app.sleep.service';
+import { AppSleepService, type SleepSummaryRangeLoad } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { HealthActivityQueryService } from '../components/health/health-activity-query.service';
 import type { ActivityHealthRangeRequest, ActivityHealthRangeResult } from '@shared/activity-health';
@@ -61,13 +61,17 @@ export class HealthMetricQueryService {
         return this.read(uid, ['sleep', startMs, endMs], () => firstValueFrom(this.sleep.watchForDashboard(uid, startMs, endMs))
             .then(sessions => withHealthSleepAccountKeys(uid, sessions)), priority, signal);
     }
+    loadSleepSummaryRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<SleepSummaryRangeLoad> {
+        return this.read(uid, ['sleep-summary', startMs, endMs], isCurrent => this.sleep.loadSummaryRange(uid, startMs, endMs, isCurrent)
+            .then(async result => ({ ...result, sessions: await withHealthSleepAccountKeys(uid, result.sessions) })), priority, signal);
+    }
     invalidate(uid: string): void {
         for (const [key, entry] of this.cache)
             if (entry.uid === uid)
                 this.cache.delete(key);
         this.invalidated$.next(uid);
     }
-    private read<T>(uid: string, parts: unknown[], run: () => Promise<T>, priority: number, signal?: AbortSignal): Promise<T> {
+    private read<T>(uid: string, parts: unknown[], run: (isCurrent: () => boolean) => Promise<T>, priority: number, signal?: AbortSignal): Promise<T> {
         this.syncOwner();
         if (signal?.aborted)
             return Promise.reject(new DOMException('Health read cancelled.', 'AbortError'));
@@ -83,7 +87,12 @@ export class HealthMetricQueryService {
             return cached.promise as Promise<T>;
         }
         let job!: ReadJob;
-        const promise = new Promise<T>((resolve, reject) => { job = { generation: this.generation, key, uid, priority, run, resolve, reject }; this.queue.push(job); });
+        const promise = new Promise<T>((resolve, reject) => {
+            job = { generation: this.generation, key, uid, priority,
+                run: () => run(() => this.isOwner(uid) && job.generation === this.generation
+                    && (entry.persistent || entry.listeners.size > 0)), resolve, reject };
+            this.queue.push(job);
+        });
         const entry: CachedRead = { uid, promise, job, expires: Infinity, persistent: false, listeners: new Set() };
         this.retain(entry, signal);
         this.cache.set(key, entry);
@@ -109,9 +118,11 @@ export class HealthMetricQueryService {
             entry.listeners.delete(token);
             signal.removeEventListener('abort', release);
             const index = this.queue.indexOf(entry.job);
-            if (signal.aborted && !entry.persistent && !entry.listeners.size && index >= 0) {
-                this.queue.splice(index, 1);
-                entry.job.reject(new DOMException('Health read cancelled.', 'AbortError'));
+            if (signal.aborted && !entry.persistent && !entry.listeners.size) {
+                if (index >= 0) {
+                    this.queue.splice(index, 1);
+                    entry.job.reject(new DOMException('Health read cancelled.', 'AbortError'));
+                }
                 if (this.cache.get(entry.job.key) === entry)
                     this.cache.delete(entry.job.key);
             }

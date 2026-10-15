@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, injec
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
+import { getEventTags } from '@shared/event-tags';
+import type { AppEventInterface } from '@shared/app-event.interface';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { AppThemes, type EventInterface } from '@sports-alliance/sports-lib';
 import { SharedModule } from '../../../modules/shared.module';
@@ -31,6 +33,7 @@ import { TrainingImpactComponent } from '../../training-impact/training-impact.c
 import { buildTrainingDayImpactView, buildTrainingSessionImpactView } from '../../../helpers/training-impact.helper';
 import type { TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
+import { CalendarActivityTagsComponent } from '../calendar-activity-tags/calendar-activity-tags.component';
 
 interface HealthState {
   status: 'loading' | 'ready' | 'private' | 'hidden';
@@ -48,7 +51,7 @@ interface HealthState {
     '[class.calendar-day-context--calm-month]': 'calmMonth()',
     '[class.calendar-day-context--compact]': 'compact()',
   },
-  imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent, CalendarActivityTagsComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -161,6 +164,7 @@ export class CalendarDayContextComponent {
   readonly activities = computed(() => this.day().events.map((event: EventInterface) => ({
     id: `${event.getID?.() || ''}`,
     name: resolveActivityCalendarEventLabel(event),
+    tags: getEventTags(event as AppEventInterface),
     activityType: `${event.getActivityTypesAsString?.() || 'Activity'}`,
     duration: (() => {
       const seconds = resolveActivityCalendarEventDurationSeconds(event);

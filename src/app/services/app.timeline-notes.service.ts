@@ -161,9 +161,11 @@ export class AppTimelineNotesService {
   }
   async get(uid: string, id: string): Promise<TimelineNote | null> {
     this.assertOwner(uid);
+    const generation = this.generation;
     if (!/^[a-f0-9]{64}$/.test(id)) throw new Error('Invalid note identifier.');
     const snapshot = await getDocsFromServer(query(collection(this.db, 'users', uid, TIMELINE_NOTES_COLLECTION), where(documentId(), '==', id), limit(1)));
     this.assertOwner(uid);
+    if (generation !== this.generation) throw new Error('Timeline request was cancelled.');
     return snapshot.empty ? null : decodeTimelineNote(id, snapshot.docs[0].data());
   }
   async save(uid: string, request: SaveTimelineNoteRequest): Promise<TimelineNote> {

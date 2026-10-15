@@ -1,0 +1,7 @@
+<mat-chip-set role="list" aria-label="Activity tags">
+  @for (tag of tags(); track tag) {
+    <mat-chip role="listitem" [disableRipple]="true">
+      <span class="calendar-activity-tag-label">{{ tag }}</span>
+    </mat-chip>
+  }
+</mat-chip-set>

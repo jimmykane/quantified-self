@@ -1805,7 +1805,7 @@ return entry when available and otherwise replaces a direct deep link with its s
 Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
 and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. The
 canonical route is `/training/plans`; `/plans` and the former query-parameter editor shapes are not registered and have
-no compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and carries a visible
+no compatibility redirects. The sidebar entry is a full-level row immediately after Training in **Training & health** and carries a visible
 **Beta** status label.
 
 Training Planning has no UID presentation rollout. Every signed-in owner can open the authenticated `/training/plans`
@@ -3100,6 +3100,108 @@ an existing total-script budget failure, also reproduced on a clean `50432cebb` 
 [lazy chart import fix](frontend-ui.md#lazy-chart-code-and-release-bundle-budgets) resolves it: beta and production
 release builds now pass without raising budgets. No production resource, provider upload or account prescription
 was changed by either task; deployment and physical Guide verification still need separate approval.
+
+##### Swimming field allocation and headings (v15)
+
+Pool and open-water swimming delivery now uses private `suunto-guides-v15`; other sports remain exactly v13.
+V14 is frozen for original-payload recovery and full-loss approval equivalence. The v11 transition/lap graph,
+authored target ranges, durations, notes, current-lap averaging and short-Rest popup policy remain unchanged.
+
+`shared/suunto-swimming-screen.ts` owns the allocation used by the v15 serializer and the frontend's per-step report.
+When selected, prescribed Work occurrence numbers move to the existing phase heading (`Work 1/10`, `Rest 1/10`),
+within Suunto's 13-character limit, without spending a metric slot. Rest following a Work uses its number; no
+counter is invented for leading/unrelated Rest. Removing the interval choice removes the heading number.
+Adjacent distance-ended Work prescriptions use one short `Plan Prev: … / Next: …` text cell in selected priority order,
+formatted by Sports Lib in owner units. Text never includes the ending's `or Lap`, is never truncated into a different
+number, and never claims completed distance. Manual prescriptions and absent neighbors have no guessed distance.
+Suunto still prioritizes native numeric values and may crop static text; this is not a font-size/constant-numeric API.
+
+Countdowns, authored targets/instructions and supported target counterparts reserve their slots. Equivalent requested
+readings/countdowns are marked already included rather than counted twice. Remaining selected choices retain their
+priority, within five total fields. No fake target, prior-effort reading, sensor value, native pace format or alarm
+sequence is introduced. Generated empty-manual-step reminders do not consume an optional field when the occurrence is
+known; authored instructions remain intact. Warm-up, active Recovery, cool-down and completion stay frozen.
+
+In a workout's Suunto details, **Show field availability for this workout** reports each choice as Included, Heading
+or Omitted and explains space, missing adjacent distance, pool-only readings or long instructions. Rest is listed first;
+step numbers preserve prescription order and six rows load at a time. It is the new normal-layout allocation for the
+current draft preferences, not a renderer/readback of an already delivered Guide. Native readings need watch data;
+included fields are not guaranteed visible. Plan-level settings do not invent a representative workout. The report
+is cleared when the same-account schedule is unavailable; no new query, provider read, persistence or mutation is added.
+Disclosure targets use per-instance IDs so stacked plan/workout dialogs cannot control another dialog's region.
+Accepted draft edits clear old save success/error messages; unchanged or rejected selections remain silent and
+never imply that a later draft was saved. Both behaviors have focused Angular regression coverage.
+The existing 1,000-screen/256-KiB enriched-JSON bounds retain compact/frozen fallbacks without speculative numbering;
+the report explicitly warns that size fallback can omit headings/planned context.
+
+Completed/past-copy protection is unchanged: reuse a completed session through Duplicate to… or a new library placement, not a date
+edit intended to unlock the original Guide. Suunto app removal may hide a retained cloud record; an ordinary same-ID
+edit/resend cannot promise visibility. Help and settings explain this and the new-copy workflow. The v15 screen
+presentation never triggers recreation; the separately reviewed fresh-Guide action below is explicit user opt-in.
+There is no automatic resurrection, reconnect requirement, live QA send or production change in this implementation.
+
+MCP impact: **no wire impact**. Canonical recipes, plan/workout reads, proposal/confirmation contracts, consent,
+scopes and provider actions are unchanged. Private allocation results, headings, fields and diagnostic v15 remain
+outside the strict projections. No catalog refresh or bundled-plugin rebuild is required. Monitoring is
+**covered/unchanged**: existing Suunto provider/event filters cover v15; only the private exact-digest diagnostic
+allowlist expands. No queue, retry, lease, schedule, Rules, index, TTL or resource changes.
+
+Verification: focused shared allocation/serializer/UI tests cover HR/no-target, pool/open-water, duplicate countdowns,
+planned text/owner units, omitted fields, bounded rendering, early-Lap branches, unchanged recorded boundaries and
+authored notes. Synthetic transport and demo-Firestore lifecycle tests cover original v14 recovery before a single
+same-ID update, pinning, consent, exact archives, protected copies and idempotent repeat reconciliation. Physical
+app/watch layout remains a release check; local tests cannot prove text visibility, sensor data or vibration.
+
+##### Explicit fresh Suunto Guide and completed-workout reuse
+
+Workout sync details expose **Repeat on another date** when completion is known, for every provider. It reuses the
+existing date-reviewed `copy-workout` workflow (also available as **Duplicate to…**), not a new library requirement.
+The copy has a new QS identity, no completion link and no standalone consent. Plan copies inherit only the existing
+plan's sending policy; range extension still needs its existing confirmation. The original prescription, recordings,
+completion and protected provider copies are unchanged. Editing an old date still never unlocks those copies.
+
+For Suunto only, an upcoming uncompleted workout with confirmed earlier acceptance offers **Send a fresh Guide**.
+The app-only `fresh-guide` command uses the existing preview/mutate callable and receipt, not a new endpoint or
+automatic absence repair. Preview is provider-I/O-free; confirmation binds schedule/scope/settings revisions, the
+old artifact, current destination/epoch/scope generation and exact new mapping digest. Current Pro, sending consent,
+plan activity, date window and mapping approval must hold. Active/uncertain attempts, repairs, known completions,
+expired authority, deleted/past sources and more than eight explicit renewals fail closed.
+
+Confirmation reserves the next bounded private `suuntoGuideGeneration` and retains the old artifact in
+`suuntoRetiredGuides`/`suuntoRetiredExternalIds`. The generation changes only the deterministic Guide external ID;
+zero/missing generation reproduces every historical identity and digest. The immutable operation records its generation,
+so lost responses recover that exact archive/identity before any retry. The same receipt cannot allocate twice.
+Ordinary edits update only the new Guide; the old one is never deleted, repinned or rewritten. No extra QS workout or
+other-provider action is created. Stop/normal withdrawal concerns the current Guide only; the review warns that the
+earlier copy may still be visible. App/watch visibility still cannot be proved and needs physical verification.
+
+The bounded aliases preserve late FIT correlation from either old or fresh Guide through the same owner/account,
+date, scope, ambiguity, revision and reverse-link fences. Completion arriving before the fresh send starts protects
+the workout without sending; completion during an attempt defers until delivery settles. Event deletion clears only
+its exact reverse-linked protection, including a completion with only a retired artifact; it never deletes a recording
+or provider Guide. The extra alias query uses the existing automatic single-field array index; no Rules/index/TTL
+or cleanup-root changes are required. Ledgers and receipts remain under the existing owner subtree cleanup.
+
+MCP impact: canonical plan/workout/completion/delivery reads remain unchanged and private generations/aliases are
+excluded by strict projection tests. Existing copy-workout proposals already cover completed-workout reuse; the new
+native-app **fresh-guide** action is deliberately not added to MCP/Assistant provider-action unions or permissions.
+It needs a separately scoped approval contract before external clients can request it; the shared native enum never
+authorizes that implicitly. No registered schema, scope, catalog or bundled-plugin change is made.
+Monitoring is **covered/unchanged**: existing Suunto delivery acceptance/recovery/failure and queue-health filters apply
+to the same worker, attempt journal, backlog, leases and retry limits. No new high-cardinality log or queue is introduced.
+Verification uses synthetic provider HTTP and isolated demo Firestore only. Deployment and live watch/app checks remain
+separate; this implementation authorizes no live send, replacement, removal or infrastructure mutation.
+
+Local verification: 263 focused frontend/help/hosting/duplicate-flow tests; 313 provider/completion/strict-contract
+tests and 180 general delivery/runtime/cleanup regressions passed (the two backend selections overlap).
+The final isolated Suunto and MCP write suites passed all 287 tests with no skips; the seven other delivery suites
+passed their 358 tests separately. Coverage includes same-receipt replay, new identity only once, unchanged old
+Guide, current-only edits/Stop, lost-ACK recovery, plan-inherited consent, old/fresh/before-send FIT completion,
+date/plan alias fences and past/completed/unfinished/authority/limit rejection. Functions TypeScript, production
+frontend build, frontend policy, emulator registry and 13 monitoring checks pass. The MCP contract remains compatible
+with its existing developer-refresh advisory. Synthetic Angular/Material browser renders at 320px and 1280px verified
+light/dark confirmation and pending states, readable duplicate disclosure, no page horizontal overflow and keyboard
+focus; this is not live app visibility, sensor or physical watch verification.
 
 ##### Current readings and boundary notifications (#784)
 

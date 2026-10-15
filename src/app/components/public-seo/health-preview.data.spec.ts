@@ -1,13 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { HEALTH_PROVIDERS, HEALTH_RECORDING_METHODS, HEALTH_VALUE_ORIGINS } from '@shared/health';
 import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@shared/manual-health';
-import { buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START, HEALTH_PREVIEW_NOTES } from './health-preview.data';
+import { buildHealthNoteComparisonExample, buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START, HEALTH_PREVIEW_NOTES } from './health-preview.data';
+import { buildNoteComparisonRows } from '../../helpers/timeline-note-comparison.helper';
+import { healthExampleValue } from '../../helpers/health-example-days.helper';
 import { validateTimelineFields } from '@shared/timeline-notes';
 import { addTimelineNotesToChart } from '../../helpers/timeline-notes-chart.helper';
 import { buildDashboardHealthExample } from '../../helpers/dashboard-health-preview.helper';
 import { resolveHealthWorkspaceWindow } from '../../helpers/health-workspace.helper';
 
 describe('public Health sample data', () => {
+  it('adapts the existing fictional trip and canonical readings through real comparison coverage gates', () => {
+    const example = buildHealthNoteComparisonExample();
+    expect(example.note).toBe(HEALTH_PREVIEW_NOTES[0]);
+    expect(example.window).toMatchObject({ days: 7, anchor: '2026-08-21', incomplete: false });
+    const rows = buildNoteComparisonRows(example.series, example.window, example.complete);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.status).toBe('comparable');
+      expect(row.beforeCount).toBe(7); expect(row.afterCount).toBe(7);
+      expect(row.difference).toBe(row.after! - row.before!);
+      expect(row.dailySeries!.points).toHaveLength(14);
+      expect(row.dailySeries!.points.some(point => point.calendarDate === example.window.anchor)).toBe(false);
+      for (const point of row.series!.points) {
+        const offset = Math.round((Date.parse('2026-08-31T12:00:00Z') - point.timestampMs) / 86_400_000);
+        expect(point.value).toBe(healthExampleValue(row.metricId, offset));
+      }
+    }
+    // Public samples cannot bypass the same minimum-days rule as the private comparison.
+    const sparse = example.series.map(series => ({ ...series, points: series.points.slice(0, 3) }));
+    expect(buildNoteComparisonRows(sparse, example.window, example.complete).every(row => row.difference === null)).toBe(true);
+  });
   it('uses valid fictional notes within the visible window without changing HRV values', () => {
     expect(HEALTH_PREVIEW_NOTES.map(note => note.category)).toEqual(['travel', 'stress', 'sickness']);
     for (const note of HEALTH_PREVIEW_NOTES) {

@@ -82,7 +82,7 @@ describe('Suunto private FIT Guide evidence', () => {
       'qs',
     )).resolves.toEqual({ retained: true, linkedWorkoutIds: [] });
 
-    expect(queryPages.map(page => page.length)).toEqual([30, 1]);
+    expect(queryPages.map(page => page.length)).toEqual([30, 1, 30, 1]); // Current identities, then bounded retired aliases.
     expect(writes).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ path: 'users/uid/events/event/trainingCompletionEvidence/fit' }),
       expect.objectContaining({ sourceProvider: 'suunto' }),

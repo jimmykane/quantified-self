@@ -14,6 +14,30 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the flat Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    expect(copy).toContain("app navigation's **Training & health** section");
+    expect(copy).not.toContain('**Health → Timeline notes**');
+    expect(copy).toContain('same notes manager without leaving your current workspace');
+    expect(copy).toContain('stays highlighted in navigation while comparing');
+    const planning = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(planning).toContain('full-level row in **Training & health**, after **Training**');
+  });
+  it('explains read-only note comparisons and honest coverage/source boundaries without implying an effect', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Compare** beside a saved note', '**14 days on each side**', '**5/7**', '**10/14**', '**20/28**',
+      "note's **start date**", 'choices stay local', 'observed differences, not cause and effect',
+      'Missing days are gaps', 'multiple reported devices', 'previous difference is not shown as a current result']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains compact note differences and the shared disclosure without conflating them with recovery', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('**Before & after this note**');
+    expect(content).toContain('full before/after median table');
+    expect(content).toContain('the history chart stays visible either way');
+    expect(content).toContain('neutral rail does not classify a numerical change as good/bad');
+  });
   it('explains saved Suunto route import scope without enabling outbound directions', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('Suunto also includes existing saved routes');
@@ -249,6 +273,15 @@ describe('help.content', () => {
       'removing an average from Work or Rest does not remove automatic laps',
       '**20 seconds or less**', 'does not guarantee an audible or vibrating alert', 'your own Rest instructions still show']) expect(content).toContain(phrase);
   });
+  it('explains truthful swim field availability, compact headings and safe completed/hidden Guide reuse', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Rest 1/10**', 'without using a metric slot', 'one compact planned-distance text field',
+      '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
+      'not guaranteed visible or measured', 'new scheduled copy from your workout library',
+      'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides']) expect(content).toContain(phrase);
+    for (const phrase of ['**Repeat on another date**', '**Send a fresh Guide**', '**same QS workout**',
+      'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
@@ -448,10 +481,11 @@ describe('help.content', () => {
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
-    expect(health).toContain('Dashboard leaves out these extra rows on ordinary days');
+    expect(health).toContain('Dashboard **At a glance** is always sentence-only');
+    expect(health).toContain('no expand button or repeated metric breakdown');
+    expect(health).toContain('including **Mixed** and **Recover** days');
+    expect(health).toContain('existing **Today** card keeps the scores, charts and supporting context');
     expect(health).toContain('existing Readiness, training load, Sleep, HRV and overnight HR assessments');
-    expect(health).toContain('**Mixed** or **Recover** Readiness includes all five contributing signals');
-    expect(health).toContain('including recorded Sleep scores and any still-loading evidence');
     expect(health).toContain('not daily resting HR');
     expect(health).toContain('no new sleep-score threshold is added');
     expect(health).toContain('**Show details** to see the source');
@@ -536,6 +570,8 @@ describe('help.content', () => {
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
+    expect(calendar).toContain('Activity tags appear beneath each activity name');
+    expect(calendar).toContain('All tags stay visible and wrap on narrow screens');
     expect(calendar).toContain('a slim colored tick on the right marks days');
     expect(calendar).toContain('notes and their individual colors');
     expect(calendar).toContain('the Today mini-calendar, a slim colored tick on the right marks days');
@@ -639,6 +675,9 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
+    expect(healthSection?.content).toContain('**Retrying** means a temporary sync error is being retried automatically');
+    expect(healthSection?.content).toContain('automatic retries are exhausted or the job cannot be retried');
+    expect(healthSection?.content).toContain('not the failed attempt time');
     expect(healthSection?.content).toContain('**Sources** beside the Health title');
     expect(healthSection?.content).toContain('filter Highlights and every metric');
     expect(healthSection?.content).toContain('compact range dropdown between the older/newer arrows');
@@ -1468,6 +1507,9 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('provider heart-rate or power zone boundaries');
     expect(gettingStartedSection?.content).toContain('non-merged events');
+    expect(gettingStartedSection?.content).toContain('**Color by zones** in **Chart options**');
+    expect(gettingStartedSection?.content).toContain('your choice is saved across events');
+    expect(gettingStartedSection?.content).toContain('merged events and benchmark comparisons keep their device colors');
     expect(gettingStartedSection?.content).toContain('**Reset zoom or selection** button');
     expect(gettingStartedSection?.content).toContain('clears the shared chart state for the event');
     expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');

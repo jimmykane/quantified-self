@@ -14,6 +14,7 @@ import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.help
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
 import { HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { noteComparisonWindow, comparisonDateCarrier } from './timeline-note-comparison.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -91,6 +92,23 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
+  it('opts into daily before/after phases with explicit null gaps, without changing ordinary charts', () => {
+    const window = noteComparisonWindow({ startDate: '2026-09-30', timeZone: 'Europe/Helsinki' }, 7, Date.parse('2026-10-15T10:00:00Z'));
+    const points = ['2026-09-23', '2026-09-24', '2026-09-26', '2026-10-01', '2026-10-03'].map(calendarDate => ({
+      calendarDate, timestampMs: comparisonDateCarrier(calendarDate), timezoneOffsetSeconds: 0, value: 55, qualityCode: null,
+    }));
+    const model = buildHealthChartModels([series({ points })], comparisonDateCarrier(window.before.startDate), comparisonDateCarrier(window.after.endDate))[0];
+    const style = buildDashboardEChartsStyleTokens(false, 800);
+    const ordinary = buildHealthMetricEChartsOption(model, points[0].timestampMs, comparisonDateCarrier(window.after.endDate), style, false);
+    const option = buildHealthMetricEChartsOption(model, points[0].timestampMs, comparisonDateCarrier(window.after.endDate), style, false, null, false, null, window);
+    const phases = option.series as Array<{ name: string; data: Array<[number, number | null]>; connectNulls: boolean }>;
+    expect(phases.map(phase => phase.name)).toEqual(['Before', 'After']);
+    expect(phases.every(phase => phase.connectNulls === false)).toBe(true);
+    expect(phases[0].data.find(([time]) => time === comparisonDateCarrier('2026-09-25'))?.[1]).toBeNull();
+    expect(phases.every(phase => phase.data.find(([time]) => time === comparisonDateCarrier(window.anchor))?.[1] === null)).toBe(true);
+    expect((ordinary.series as unknown[])).toHaveLength(1);
+    expect(model.displayedPoints).toHaveLength(5);
+  });
   it('compares exactly two same-series readings using recorded dates and the selected weight units without inferring a trend', () => {
     const points = [
       { timestampMs: 0, calendarDate: '1970-01-01', value: 72, qualityCode: null },
@@ -110,6 +128,16 @@ describe('Health metric chart helpers', () => {
     const model = buildHealthChartModels([series({ points: [0, 1].map(index => ({ timestampMs: index * DAY_MS,
       calendarDate: `1970-01-0${index + 1}`, value: 50 + index * change, qualityCode: null })) })], 0, 2 * DAY_MS)[0];
     expect(model.twoReadingComparisonText).toContain(`Recorded change: ${change > 0 ? '+' : ''}${formatHealthValue(HEALTH_METRIC_IDS.RestingHeartRate, change, 'bpm', false)}`);
+  });
+
+  it('can withhold the independent two-reading announcement for a coverage-gated comparison', () => {
+    const candidate = series({ points: series().points.slice(0, 2) });
+    const model = buildHealthChartModels([candidate], 0, 2 * DAY_MS, null, { includeTwoReadingComparison: false })[0];
+    expect(model.twoReadingComparisonText).toBeNull();
+    expect(model.ariaLabel).not.toContain('Recorded change:');
+    expect(model.ariaLabel).toContain('Latest');
+    expect(model.displayedPoints).toEqual(candidate.points);
+    expect(buildHealthChartModels([candidate], 0, 2 * DAY_MS)[0].ariaLabel).toContain('Recorded change:');
   });
 
   it('does not compare native scales, categories, totals, invalid dates, repeated timestamps or more than two records', () => {

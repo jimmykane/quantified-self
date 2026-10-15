@@ -194,7 +194,7 @@ mat-nav-list {
   width: 100%;
 }
 
-mat-list-item {
+mat-list-item, button[mat-list-item] {
   margin: 2px 0;
   border-radius: 0 !important;
   transition: all 0.2s ease;
@@ -202,36 +202,18 @@ mat-list-item {
   width: 100%;
 }
 
-.sidenav-subitem-guide {
-  position: relative;
-  margin-inline-start: 20px;
-  padding-inline-start: 12px;
+button[mat-list-item].sidenav-notes-item {
+  padding-inline-start: 16px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
 }
 
-.sidenav-subitem-guide::before {
-  content: '';
-  position: absolute;
-  inset-block: 6px;
-  inset-inline-start: 0;
-  width: 2px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--mat-sys-on-surface) 18%, transparent);
-  transition: background-color 0.2s ease;
-}
-
-.sidenav-subitem-guide-active::before {
-  background: var(--mat-sys-primary);
-}
-
-mat-list-item.sidenav-subitem {
-  padding-inline-start: 0;
-}
-
-mat-list-item.sidenav-subitem mat-icon {
-  width: 20px;
-  height: 20px;
-  margin-inline: 4px 12px;
-  font-size: 20px;
+// Match the icon spacing of route rows while keeping the native Material action.
+.sidenav-notes-item mat-icon {
+  margin-inline: 8px 16px;
 }
 
 .sidenav-status-label {
@@ -284,13 +266,6 @@ mat-list-item.active:hover {
   background: linear-gradient(90deg,
       color-mix(in srgb, var(--mat-sys-primary) 18%, transparent),
       color-mix(in srgb, var(--mat-sys-primary) 8%, transparent)) !important;
-}
-
-// The guide rail is the nested route's active indicator. Keep this after the
-// generic light/dark active rules so a second inset border cannot win the cascade.
-mat-list-item.sidenav-subitem.active {
-  border-left: 0 !important;
-  border-inline-start: 0 !important;
 }
 
 /* Icon Styling */
@@ -556,8 +531,9 @@ mat-divider {
     height: 42px;
   }
 
-  mat-list-item {
+  mat-list-item, button[mat-list-item] {
     margin: 2px 4px;
+    width: calc(100% - 8px);
   }
 }
 

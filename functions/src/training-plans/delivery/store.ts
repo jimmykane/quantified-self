@@ -138,6 +138,9 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const retried = settingRevision !== previous?.settingsRevision;
   const mappingApprovalProof = intent.mappingApprovalProof ?? previous?.mappingApprovalProof;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(previous?.suuntoGuideGeneration !== undefined ? { suuntoGuideGeneration: previous.suuntoGuideGeneration } : {}),
+    ...(previous?.suuntoRetiredGuides ? { suuntoRetiredGuides: previous.suuntoRetiredGuides,
+      suuntoRetiredExternalIds: previous.suuntoRetiredExternalIds ?? previous.suuntoRetiredGuides.map(item => item.ids.externalId) } : {}),
     ...(previous?.wahooPlanGeneration !== undefined ? { wahooPlanGeneration: previous.wahooPlanGeneration } : {}),
     ...(mappingApprovalProof ? { mappingApprovalProof } : {}),
     ...(context.pastCleanup ? { pastCleanup: context.pastCleanup } : {}),

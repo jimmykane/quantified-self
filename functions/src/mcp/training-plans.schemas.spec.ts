@@ -129,6 +129,7 @@ describe('additive Garmin replacement boundary', () => {
     const change = { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'owner-bound-ref' }, providers: ['garmin'] };
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry' }).success).toBe(true);
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'replace' }).success).toBe(false);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, providers: ['suunto'], action: 'fresh-guide' }).success).toBe(false);
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry', manualReplacement: true }).success).toBe(false);
   });
 });

@@ -113,9 +113,42 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     const strengths = await Promise.all(workouts.map(item => readStrengthDetailsForDelivery(tx, user, item)));
     const preferences = await readSuuntoGuideOwnerPreferences(tx, user, command.provider, workouts);
     const suuntoUnitSettings = preferences.unitSettings;
+    const suuntoLedgers = command.provider === 'suunto' ? await Promise.all(workouts.map(item => tx.get(user.collection(DELIVERY_LEDGER)
+      .doc(deliveryIdentity(uid, 'suunto', connection.destinationKey, item.id))))) : [];
     const assessments = workouts.map((item, index) => transport?.assess(item, connection.destinationKey, timeZone,
-      strengths[index], strengths[index] ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings, undefined, preferences.swimmingSettings)
+      strengths[index], strengths[index] ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings, undefined, preferences.swimmingSettings,
+      undefined, suuntoLedgers[index]?.get('suuntoGuideGeneration'))
       ?? assessTrainingDeliveryMapping(command.provider, item, connection.destinationKey, timeZone, strengths[index]));
+    const fresh = command.action === 'fresh-guide' ? suuntoLedgers[0]?.data() as DeliveryLedgerV1 | undefined : undefined;
+    let freshDigest: string | null = null;
+    let freshAssessment: ReturnType<NonNullable<typeof transport>['assess']> | null = null;
+    if (command.action === 'fresh-guide') {
+      const context = fresh && workout ? await readDeliveryContext(runtime, tx, uid, workout, 'suunto', pro, workout.id, fresh) : null;
+      const completion = await tx.get(user.collection('trainingWorkoutCompletions').doc(command.scopeId));
+      const intent = context && fresh ? resolveDeliveryIntent(context, fresh) : null;
+      const generation = fresh?.suuntoGuideGeneration ?? 0;
+      const retiredGuides = fresh?.suuntoRetiredGuides ?? [];
+      if (!fresh || !workout || !context || !transport || !pro || connection.state !== 'connected'
+        || fresh.provider !== 'suunto' || fresh.planId !== workout.planId || fresh.destinationKey !== connection.destinationKey || fresh.connectionEpoch !== connection.epoch
+        || fresh.attempt || fresh.repair || fresh.lease && fresh.lease.expiresAtMs > runtime.now()
+        || !fresh.actual?.ids.guide || !fresh.actual.ids.externalId || !fresh.actual.ids.owner
+        || fresh.actual.completed || fresh.completionLinkId || completion.exists
+        || !Number.isSafeInteger(generation) || generation < 0 || generation >= 8 || retiredGuides.length >= 8
+        || retiredGuides.some(item => item.completed) || fresh.actual.localDate < today
+        || typeof fresh.lastAcceptedAtMs !== 'number' || !Number.isSafeInteger(fresh.lastAcceptedAtMs) || fresh.lastAcceptedAtMs < 0
+        || intent?.desired !== 'present' || !['delivered', 'pending'].includes(intent.status)
+        || !['delivered', 'pending'].includes(fresh.status)) {
+        throw new HttpsError('failed-precondition', 'A fresh Guide requires an upcoming, uncompleted workout with current sync consent and a confirmed earlier send. Resolve unfinished sends first. After eight fresh copies, duplicate the workout instead.');
+      }
+      freshAssessment = transport.assess(workout, connection.destinationKey, timeZone, context.strength,
+        context.suuntoWeightUnits, context.suuntoUnitSettings, undefined, context.suuntoSwimmingSettings, undefined, generation + 1);
+      if (freshAssessment.level === 'unsupported') throw new HttpsError('failed-precondition', 'This workout cannot be sent as a Suunto Guide.');
+      freshDigest = hashTrainingScheduleRequestPayload({ action: 'fresh-guide', generation, artifact: fresh.actual,
+        destination: connection.destinationKey, epoch: connection.epoch, scopeGeneration: context.scopeGeneration,
+        digest: freshAssessment.digest, contentDigest: fresh.contentDigest,
+        scheduleRevision: command.expectedScheduleRevision, scopeRevision: command.expectedScopeRevision,
+        settingsRevision: command.expectedSettingsRevision });
+    }
     // No provider HTTP in previews/transactions. Only the server's current, complete
     // inspection can offer recovery; the worker independently reinspects before POST.
     const replacementRef = command.action === 'replace' ? user.collection(DELIVERY_LEDGER).doc(
@@ -152,20 +185,23 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     }
     const preview: TrainingDeliveryPreviewV1 = { schemaVersion: 1, available: !!transport,
       connection: connection.state, hasPro: pro, timeZone,
-      effect: command.action === 'replace' ? 'replace' : command.action === 'stop' ? 'remove-future-copies' : command.action === 'retry' ? 'retry' : command.action === 'approve' ? 'approve' : 'enable',
+      effect: command.action === 'fresh-guide' ? 'fresh-guide' : command.action === 'replace' ? 'replace' : command.action === 'stop' ? 'remove-future-copies' : command.action === 'retry' ? 'retry' : command.action === 'approve' ? 'approve' : 'enable',
       settingsRevision: previous?.revision ?? 0,
       eligibleCount: workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
         && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length,
       warningCount: assessments.filter(item => item.level !== 'exact').length,
       approvalRequiredCount: assessments.filter(requiresDeliveryMappingApproval).length,
-      issues: [...new Set([...(replacementDigest ? [GARMIN_WORKOUT_NOT_FOUND_ISSUE,
+      issues: [...new Set([...(freshDigest ? ['Suunto app/watch visibility cannot be checked. This creates a new Guide identity; the earlier Guide is left untouched and may still be visible. Your QS workout, other providers and recordings stay unchanged.'] : []), ...(replacementDigest ? [GARMIN_WORKOUT_NOT_FOUND_ISSUE,
         'Creating a new Garmin copy can leave a duplicate if the old copy becomes visible again. QS will recheck before sending; other providers and completed activities are unchanged.'] : []),
         ...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
-      approvalDigest: replacementDigest ?? (workout && requiresDeliveryMappingApproval(assessments[0]) ? assessments[0].digest : null),
+      approvalDigest: freshDigest ?? replacementDigest ?? (workout && requiresDeliveryMappingApproval(assessments[0]) ? assessments[0].digest : null),
       workoutCompatibility: workout ? assessments[0]?.level ?? null : null };
     if (previewOnly) return preview;
     if (command.action === 'replace' && command.approvalDigest !== replacementDigest) {
       throw new HttpsError('aborted', 'Review and confirm the latest Garmin replacement preview.');
+    }
+    if (command.action === 'fresh-guide' && command.approvalDigest !== freshDigest) {
+      throw new HttpsError('aborted', 'Review and confirm the latest fresh Guide preview.');
     }
     const removal = command.action === 'stop';
     // Retry never grants consent. Workers still enforce Pro for creates/updates, while
@@ -217,6 +253,19 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       replacement.verification = { ...replacement.verification!, state: 'restoring' };
       replacement.updatedAtMs = runtime.now();
       writeDelivery(runtime, tx, uid, replacement);
+    }
+    if (fresh && freshAssessment) {
+      // Rotate identity only under this explicit receipt-bound approval. Never
+      // delete the earlier Guide or reinterpret app hiding as authoritative absence.
+      result.approvedDigest = requiresDeliveryMappingApproval(freshAssessment) ? freshAssessment.digest : previous?.approvedDigest ?? null;
+      fresh.suuntoGuideGeneration = (fresh.suuntoGuideGeneration ?? 0) + 1;
+      fresh.suuntoRetiredGuides = [...(fresh.suuntoRetiredGuides ?? []), { ...fresh.actual!, planId: fresh.planId }];
+      fresh.suuntoRetiredExternalIds = fresh.suuntoRetiredGuides.map(item => item.ids.externalId);
+      fresh.actual = null; fresh.acceptedDigest = null; fresh.acceptedContentDigest = null;
+      fresh.status = 'pending'; fresh.lease = null;
+      delete fresh.verification;
+      fresh.updatedAtMs = runtime.now();
+      writeDelivery(runtime, tx, uid, fresh);
     }
     tx.set(settingRef, result);
     tx.set(privateState, { revision }, { merge: true });

@@ -32,6 +32,14 @@ describe('Training delivery contracts', () => {
       expect(() => parseTrainingDeliveryCommandV1({ ...base, action: 'replace', ...patch })).toThrow();
     }
   });
+  it('limits fresh Guides to an explicit Suunto workout action with no remote IDs or new time zone', () => {
+    const { timeZone, ...base } = command;
+    const fresh = { ...base, provider: 'suunto', action: 'fresh-guide', approvalDigest: 'b'.repeat(64) };
+    expect(parseTrainingDeliveryCommandV1(fresh).action).toBe('fresh-guide');
+    for (const patch of [{ provider: 'garmin' }, { scope: 'plan' }, { timeZone }, { guideId: 'old' }, { suuntoGuideGeneration: 1 }]) {
+      expect(() => parseTrainingDeliveryCommandV1({ ...fresh, ...patch })).toThrow();
+    }
+  });
   it.each(['retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const)(
     'keeps %s as a fixed private diagnostic, not arbitrary provider evidence', wahooContractCheck => {
       const error = new TrainingDeliveryTransportError('uncertain', 0, {

@@ -5,6 +5,10 @@ This document is the source of truth for the cross-provider health foundation in
 Issue #614 adds the authenticated **Health** workspace on top of this foundation. Normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can be read on demand for Health without copying them into Health storage or changing the activity contract. Canonical Health Weight can also supply source-separated Training context and the identity-free body-measurement MCP projection; qualifying manual VO2 max can provide a separately labelled Training reference without changing the public MCP wire schema.
 
 Private [Timeline notes](timeline-notes.md) add calendar context to Health's Highlights, detailed metric and normalized Sleep charts.
+The saved-note manager also opens a read-only [before/after comparison](timeline-notes.md#beforeafter-comparisons)
+of main-night duration, nightly HRV and daily resting HR, reusing the same source-separated projection and Health chart.
+It adds no stored metric, provider import or MCP/Assistant data contract. The Timeline notes guide owns its window,
+coverage, date, bounded-read and lifecycle rules.
 They use an independent user-owned collection and shared Material manager, not Health records or Sleep sessions.
 Notes are not filtered by provider and never change measurements, aggregation, or source semantics. Highlights register
 their own trend windows alongside the selected explorer range. The shared chart visibility preference lives in account
@@ -168,6 +172,12 @@ Chunks are permanent leaf documents by schema. Firestore Rules do not grant acce
 `users/{uid}/healthSyncState/{provider}` stores the safe aggregate state shown by Health: ready, permission missing, reconnect required, failed, unsupported, or disconnected, plus bounded timestamps and an opaque error code. Raw error messages and payload excerpts are rejected.
 
 This collection is not the OAuth connection source of truth. Provider credentials and stable raw account identity remain in their existing server-owned integration stores.
+
+For Garmin, Suunto and COROS, failed attempts carry the optional `retryPending` flag: true displays **Retrying**, while false or absent displays **Sync failed**. Successful and authoritative lifecycle status updates clear the flag; stale updates preserve newer state and source timestamps. Existing failed records keep their legacy display until a subsequent update; no migration or stored status-enum change is required. The flag is app-only operational metadata and is not added to MCP projections or consent.
+
+Final failure status uses the queue's existing retry-exhaustion callback and commits with the live retry counter's DLQ transition. Only this status bookkeeping resolves a current credential inside the transaction, requiring the same account and OAuth generation and retaining all connection/root guards. Queue utilities, ownership, retry policy, provider requests and data/recovery write paths remain unchanged. Release the Health frontend and the existing Health/Sleep workers through separately approved deployments.
+
+Pending status also requires the current queue revision and processing lease. The existing claim authorizes the owner without requiring legacy rows to have a stored UID; no queue ownership migration is introduced.
 
 ### Sports Lib scalar serialization boundary
 
@@ -398,6 +408,11 @@ The same flat shared component uses a compact **At a glance** presentation befor
 owner, following the existing Show/Hide Today preference. It is absent from another person's Dashboard, focused metric history and category views.
 It does not hide, reorder or rewrite saved Dashboard charts or change the Health card availability rules.
 
+The heading, accent rail and disclosure are presentation-only `SummaryDisclosureComponent` inputs/projection slots.
+The same shell hosts `NoteComparisonSummaryComponent` on the private note destination and public homepage/Health
+example, but it does not reuse recovery/Glance classification or headline builders for note differences. Their neutral
+source-labelled rows and optional median table are described in [Timeline notes](timeline-notes.md#beforeafter-comparisons).
+
 Health's recovery summary covers Sleep and nightly HRV from reads already owned by that surface. Existing HRV
 personal-range classifications count as assessed evidence: positive means within range, caution/negative means
 outside range, and neutral/missing baseline or recent average means insufficient evidence. Within range is not
@@ -416,13 +431,13 @@ loading evidence stay neutral rather than borrowing the within-range appearance.
 The combined Dashboard summary prioritizes existing caution/outside-range, unavailable, insufficient and loading
 states before the normal-day sentence, showing at most two attention clauses. `attention`/`available` presentation
 states preserve existing assessments without calling them personal ranges. Missing data cannot become an all-clear.
-**Show details** is available for existing caution, outside-range, unavailable or insufficient signals. Mixed/Recover
-Readiness includes all five contributing signals, including recorded Sleep scores and still-loading evidence; otherwise
-details contain only signals needing attention. Yesterday's sleep cannot satisfy today's Readiness gate and any older
-score is explicitly last available. TSS training state stays independent when sleep is loading or fails, and a missing
-training-state classification cannot become available. A pure loading state remains a loading sentence without an empty disclosure.
-The disclosure closes silently when its attention signals resolve, the owner changes or the presentation changes.
-**Show details** reveals source-separated evidence, existing range/baseline wording and recorded dates using shared local date and canonical metric formatters.
+Dashboard is always sentence-only: no disclosure control or mounted evidence breakdown, including Mixed/Recover,
+missing, failed and loading states. The existing Today card retains the scores, charts and supporting evidence instead
+of duplicating them under the sentence. Yesterday's sleep cannot satisfy today's Readiness gate and any older score
+in Today is explicitly last available. TSS training state stays independent when sleep is loading or fails, and a missing
+training-state classification cannot become available. Loading remains a loading sentence.
+Health retains its **Show details** disclosure for source-separated evidence, existing range/baseline wording and recorded
+dates using shared local date and canonical metric formatters. It resets silently when the owner or presentation changes.
 Loading, failed refreshes, bounded incomplete reads and missing evidence remain distinct from within range.
 Health follows the same selected Highlight account and semantic series, with missing or filtered choices unavailable without
 overwriting preferences. Dashboard attributes Sleep and HRV independently from their already-loaded evidence,

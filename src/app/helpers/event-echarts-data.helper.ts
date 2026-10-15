@@ -525,6 +525,16 @@ function createSnapshotStream(snapshot: EventChartStreamSnapshot): StreamInterfa
   } as unknown as StreamInterface;
 }
 
+export function hasEventChartIntensityZoneData(activities: ActivityInterface[]): boolean {
+  return (activities || []).some(activity => {
+    const streamTypes = new Set((activity.getAllStreams?.() || []).map(stream => stream.type));
+    return EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES.some(type => {
+      const zones = activity.intensityZones?.find(zone => zone?.type === type);
+      return streamTypes.has(type) && !!zones && readIntensityZoneLowerLimits(zones).length > 0;
+    });
+  });
+}
+
 function buildIntensityZoneColorPieces(
   activity: ActivityInterface,
   streamType: string,

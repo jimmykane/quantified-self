@@ -71,6 +71,8 @@ export interface HealthWriterDependencies {
 
 export interface HealthSyncStateWriterDependencies {
     db?: admin.firestore.Firestore;
+    /** Stage status in the existing queue transaction; its caller owns commit. */
+    transaction?: admin.firestore.Transaction;
     /** Skip the state transition if this lifecycle authority document exists. */
     requiredMissingDocumentRef?: admin.firestore.DocumentReference;
     /** Skip the state transition if this lifecycle authority document is absent. */
@@ -801,6 +803,7 @@ export async function replaceHealthSourceRecord(
 
 export interface HealthSyncStateUpdate {
     status?: HealthSyncStatus;
+    retryPending?: boolean;
     lastWebhookAtMs?: number | null;
     lastPollAtMs?: number | null;
     lastSyncedAtMs?: number | null;
@@ -849,6 +852,12 @@ function validateSyncUpdate(provider: unknown, value: unknown): { provider: Heal
         }
         status = input.status as HealthSyncStatus;
     }
+    if (input.retryPending !== undefined && typeof input.retryPending !== 'boolean') {
+        throw new HealthWriteValidationError('retryPending must be a boolean.');
+    }
+    if (input.retryPending === true && status !== HEALTH_SYNC_STATUSES.Failed) {
+        throw new HealthWriteValidationError('A pending retry requires a failed sync attempt.');
+    }
     let lastErrorCode: string | null | undefined;
     if (input.lastErrorCode === null) {
         lastErrorCode = null;
@@ -865,6 +874,7 @@ function validateSyncUpdate(provider: unknown, value: unknown): { provider: Heal
         provider,
         update: {
             status,
+            retryPending: input.retryPending as boolean | undefined,
             lastWebhookAtMs: optionalSyncTime(input.lastWebhookAtMs, 'lastWebhookAtMs'),
             lastPollAtMs: optionalSyncTime(input.lastPollAtMs, 'lastPollAtMs'),
             lastSyncedAtMs: optionalSyncTime(input.lastSyncedAtMs, 'lastSyncedAtMs'),
@@ -904,7 +914,7 @@ export async function updateHealthSyncState(
         : null;
     const db = dependencies.db || admin.firestore();
     const stateRef = userHealthCollection(db, userID, HEALTH_SYNC_STATE_COLLECTION_ID).doc(provider);
-    const written = await db.runTransaction(async transaction => {
+    const writeInTransaction = async (transaction: admin.firestore.Transaction): Promise<boolean> => {
         await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
@@ -969,6 +979,11 @@ export async function updateHealthSyncState(
             status: preserveNewerStatus
                 ? undefined
                 : effectiveUpdate.status ?? (snapshot.exists ? undefined : HEALTH_SYNC_STATUSES.Ready),
+            retryPending: preserveNewerStatus
+                ? undefined
+                : effectiveUpdate.status !== undefined
+                    ? effectiveUpdate.status === HEALTH_SYNC_STATUSES.Failed && effectiveUpdate.retryPending === true
+                    : effectiveUpdate.retryPending,
             lastWebhookAtMs: monotonicSyncTime(effectiveUpdate.lastWebhookAtMs, existing?.lastWebhookAtMs, staleUpdate),
             lastPollAtMs: monotonicSyncTime(effectiveUpdate.lastPollAtMs, existing?.lastPollAtMs, staleUpdate),
             lastSyncedAtMs: monotonicSyncTime(effectiveUpdate.lastSyncedAtMs, existing?.lastSyncedAtMs, staleUpdate),
@@ -978,8 +993,11 @@ export async function updateHealthSyncState(
         });
         transaction.set(stateRef, state, { merge: true });
         return true;
-    });
-    logger.info('[HealthSync] Health sync state write completed.', { provider, written });
+    };
+    const written = dependencies.transaction
+        ? await writeInTransaction(dependencies.transaction)
+        : await db.runTransaction(writeInTransaction);
+    if (!dependencies.transaction) logger.info('[HealthSync] Health sync state write completed.', { provider, written });
     return written;
 }
 

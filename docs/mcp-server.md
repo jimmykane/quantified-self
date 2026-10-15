@@ -382,6 +382,17 @@ targets and strength details supply the preview; the Guide text, immutable unit 
 remain private and are explicitly rejected by strict recipe/status regressions. Delivery proposals assess the same
 owner units as native apply, without adding inputs, outputs, scopes, consent, tools or provider actions. No contract
 promotion, client refresh or plugin rebuild is needed. See [app preview impact review](training-workspace.md#suunto-app-workout-preview-v13).
+Swimming v15's shared field allocation, compact interval headings and local Included/Heading/Omitted report are
+also private presentation only. Canonical recipes, planned/saved-workout reads, strict proposals/confirmations,
+scopes, consent and provider actions stay unchanged; Guide fields, allocation results and mapping/recovery metadata
+remain excluded. No catalog refresh, contract promotion or plugin rebuild is needed. See
+[swimming allocation and recovery](training-workspace.md#swimming-field-allocation-and-headings-v15).
+The native-app **Repeat on another date** shortcut reuses the existing scheduled-workout copy contract; existing
+read projections expose the new planned copy without copying completion/delivery state. Native **Send a fresh Guide**
+is a new app-only explicit action, not an addition to the registered MCP/Assistant provider-action union. Strict
+proposals reject `fresh-guide` and reads exclude its private generation/retired-artifact metadata. External-client
+support would require its own deliberately reviewed approval contract, not inference from shared native types.
+No public tool, scope, schema, contract digest or bundled-plugin change is included.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

@@ -472,7 +472,7 @@ describe('cleanupEventFile', () => {
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef2');
     });
 
-    it('should remove owner-visible completion projections and private reverse links for the deleted event', async () => {
+    it.each([false, true])('removes completion projections and reverse links (retired Suunto Guide only: %s)', async retiredOnly => {
         const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
         const event = { data: snap, params: { userId: 'testUser', eventId: 'testEvent' } };
@@ -493,7 +493,8 @@ describe('cleanupEventFile', () => {
                     schemaVersion: 1, id: 'delivery', workoutId: 'workout', planId: 'plan', provider: 'suunto',
                     destinationKey: 'destination', desiredGeneration: 1, connectionEpoch: 0, settingsRevision: 1,
                     desiredDigest: 'digest', desired: 'preserve', status: 'completed', timeZone: 'Europe/Helsinki',
-                    issues: [], approvalDigest: null, actual: { ids: { externalId: 'guide' }, localDate: '2026-09-17', completed: true },
+                    issues: [], approvalDigest: null, actual: retiredOnly ? null : { ids: { externalId: 'guide' }, localDate: '2026-09-17', completed: true },
+                    ...(retiredOnly ? { suuntoRetiredGuides: [{ ids: { externalId: 'old-guide' }, localDate: '2026-09-17', completed: false }] } : {}),
                     acceptedDigest: 'digest', contentDigest: 'content', acceptedContentDigest: 'content', attempt: null,
                     lease: null, retries: 0, retryAtMs: 0, blockedConnectionGeneration: null, lastAttemptAtMs: null,
                     lastAcceptedAtMs: 1, updatedAtMs: 1, completionLinkId: 'reverse-link',
@@ -509,7 +510,7 @@ describe('cleanupEventFile', () => {
         expect(mocks.transactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/testUser/trainingDeliveryLedger/delivery' }),
             expect.objectContaining({ status: 'pending', desired: 'preserve', desiredGeneration: 2,
-                actual: expect.objectContaining({ completed: false }) }),
+                actual: retiredOnly ? null : expect.objectContaining({ completed: false }) }),
         );
         expect(mocks.transactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: expect.stringMatching(/^trainingDeliveryQueue\/reconcile_/) }),

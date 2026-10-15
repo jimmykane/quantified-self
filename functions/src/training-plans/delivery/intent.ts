@@ -27,6 +27,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   });
   const today = trainingDeliveryLocalDate(nowMs, timeZone);
   const retained = [ledger?.actual, ledger?.repair?.original].filter(artifact => !!artifact);
+  if (ledger?.completionLinkId) return result('preserve', 'completed');
   if (retained.some(artifact => artifact.completed)) return result('preserve', 'completed');
   const past = retained.some(artifact => artifact.localDate < (artifact.timeZone
     ? trainingDeliveryLocalDate(nowMs, artifact.timeZone) : today)) || (workout && workout.localDate < today);
@@ -61,7 +62,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     [ledger?.mappingApprovalProof?.suuntoApprovedUnitSettings, ledger?.mappingApprovalProof?.suuntoMappingUnitSettings]
       .filter((units): units is NonNullable<typeof units> => !!units), context.suuntoSwimmingSettings,
     [ledger?.mappingApprovalProof?.suuntoApprovedSwimmingSettings, ledger?.mappingApprovalProof?.suuntoMappingSwimmingSettings]
-      .filter((preferences): preferences is NonNullable<typeof preferences> => !!preferences));
+      .filter((preferences): preferences is NonNullable<typeof preferences> => !!preferences), ledger?.suuntoGuideGeneration);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
   // A legacy payload digest can omit truncated authored text. Carry approval
@@ -84,8 +85,8 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
-  const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
-  const suuntoMappingSwimmingSettings = assessment.mappingVersion === 'suunto-guides-v14' ? context.suuntoSwimmingSettings : undefined;
+  const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14', 'suunto-guides-v15'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
+  const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15'].includes(assessment.mappingVersion) ? context.suuntoSwimmingSettings : undefined;
   const recordSuuntoPresentation = !!(suuntoMappingUnits || suuntoMappingSwimmingSettings)
     && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
   const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval

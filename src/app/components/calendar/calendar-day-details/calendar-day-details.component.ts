@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, type Signal } from '@angular/core';
 import { TIMELINE_NOTE_LABELS, timelineNoteDates, type TimelineNote } from '@shared/timeline-notes';
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
+import { getEventTags } from '@shared/event-tags';
+import type { AppEventInterface } from '@shared/app-event.interface';
+import { CalendarActivityTagsComponent } from '../calendar-activity-tags/calendar-activity-tags.component';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import { AppUserService } from '../../../services/app.user.service';
@@ -70,6 +73,7 @@ interface CalendarDayEventRow {
   id: string;
   familyId: string | null;
   label: string;
+  tags: string[];
   activityType: string;
   detailLabel: string;
   detailParts: CalendarDayEventDetailPart[];
@@ -86,7 +90,7 @@ interface CalendarDayEventDetailPart {
 @Component({
   selector: 'app-calendar-day-details',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent, CalendarDayContextComponent, TrainingImpactComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent, CalendarDayContextComponent, TrainingImpactComponent, CalendarActivityTagsComponent],
   templateUrl: './calendar-day-details.component.html',
   styleUrls: ['./calendar-day-details.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -221,6 +225,7 @@ export class CalendarDayDetailsComponent {
       id: eventId || `${startDate?.getTime() || 'activity'}`,
       familyId: eventFamily?.id || null,
       label,
+      tags: getEventTags(event as AppEventInterface),
       activityType: activityTypeLabel,
       detailLabel: detailParts.map(part => part.text).join(' - '),
       detailParts,

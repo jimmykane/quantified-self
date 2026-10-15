@@ -30,6 +30,25 @@ import { buildTrainingLoadPoints } from '@shared/training-load';
 const planningUserUid = 'planning-user';
 
 describe('CalendarDayDetailsComponent', () => {
+  it('shows read-only tags beneath linked and unlinked activity titles without adding tap targets', async () => {
+    const fixture = await renderDayDetails([
+      Object.assign(createEvent(), { tags: [' Race ', 'race', 'Autumn build'], benchmarkReviewTags: ['Old tag'] }),
+      Object.assign(createEvent('Evening run', undefined, 'Running', {}, ''), { benchmarkReviewTags: ['Easy'] }),
+      Object.assign(createEvent('Untagged run', undefined, 'Running', {}, 'untagged'), { tags: [], benchmarkReviewTags: ['Hidden legacy'] }),
+    ]);
+    const rows = [...fixture.nativeElement.querySelectorAll('.calendar-day-event-item')] as HTMLElement[];
+    expect(rows.map(row => [...row.querySelectorAll('.calendar-activity-tag-label')].map(tag => tag.textContent)))
+      .toEqual([['Race', 'Autumn build'], ['Easy'], []]);
+    expect(rows[0].querySelector('.calendar-day-entry-title')?.nextElementSibling?.tagName)
+      .toBe('APP-CALENDAR-ACTIVITY-TAGS');
+    expect(rows[0].querySelector('button, [tabindex="0"]')).toBeNull();
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    (rows[0].querySelector('.calendar-activity-tag-label') as HTMLElement).click();
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+  });
+
   it('offers the selected full day from the Today sheet and preserves the return date', async () => {
     const fixture = await renderDayDetails([]);
     const link = fixture.nativeElement.querySelector('.calendar-day-details-full-day') as HTMLAnchorElement;

@@ -40,6 +40,7 @@ import {
     replaceHealthSourceRecord,
     replaceHealthSourceRecords,
     updateHealthSyncState,
+    type HealthSyncStateWriterDependencies,
 } from '../health/writer';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import * as requestPromise from '../request-helper';
@@ -615,9 +616,10 @@ function isSameQueuePayload(
     return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
 }
 
-function healthStateGuardsForCurrentQueueRevision<T extends GarminHealthWriteLifecycleGuards | SuuntoHealthWriteLifecycleGuards>(
+function healthStateGuardsForCurrentQueueRevision<T extends HealthSyncStateWriterDependencies>(
     queueItem: SleepSyncQueueItemInterface,
     guards: T,
+    requireStoredOwner = true,
 ): T {
     if (!queueItem.ref) return guards;
     const queueRevision = typeof queueItem.queueRevision === 'string'
@@ -625,7 +627,7 @@ function healthStateGuardsForCurrentQueueRevision<T extends GarminHealthWriteLif
         : '';
     const expectedFields: Record<string, unknown> = {
         processed: false,
-        ...(queueItem.userID ? { userID: queueItem.userID } : {}),
+        ...(requireStoredOwner && queueItem.userID ? { userID: queueItem.userID } : {}),
         ...(queueRevision
             ? { queueRevision }
             : { dateCreated: queueItem.dateCreated }),
@@ -3178,7 +3180,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         if (error instanceof ProviderOperationStillInFlightError) throw error;
         if (error instanceof SuuntoCredentialRotationRetryableError) {
             logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');
-            return increaseRetryCountForQueueItem(queueItem, error);
+            if (!isSuuntoHealthQueueItem(queueItem)) return increaseRetryCountForQueueItem(queueItem, error);
         }
         if (error instanceof SuuntoSleepLifecycleChangedError) {
             return markQueueItemSkipped(
@@ -3443,6 +3445,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 ? sanitizeCOROSDailyErrorForTelemetry(error)
                 : error;
+        let onHealthRetryExhausted: Parameters<typeof increaseRetryCountForQueueItem>[5];
         if (queueItem.userID) {
             const sleepErrorStateWritten = isHealthQueueItem(queueItem)
                 ? undefined
@@ -3495,15 +3498,42 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     : corosLifecycleGuards;
             const failedHealthUserID = queueItem.userID;
             if (failedHealthProvider && failedHealthLifecycleGuards && failedHealthUserID) {
+                // The claim already authenticated the owner; legacy rows may lack a durable UID.
+                const pendingGuards = (guards: typeof failedHealthLifecycleGuards) =>
+                    healthStateGuardsForCurrentQueueRevision(queueItem, guards, false);
                 try {
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
                         status: HEALTH_SYNC_STATUSES.Failed,
+                        retryPending: true,
                         lastErrorCode: isSuuntoHealthQueueItem(queueItem)
                             ? 'suunto_health_sync_failed'
                             : isGarminHealthQueueItem(queueItem)
                                 ? 'garmin_health_sync_failed'
                                 : 'coros_daily_sync_failed',
+                    };
+                    onHealthRetryExhausted = async transaction => {
+                        const guards = isSuuntoHealthQueueItem(queueItem)
+                            ? suuntoHealthLifecycleGuards || failedHealthLifecycleGuards
+                            : failedHealthLifecycleGuards;
+                        const tokenRef = guards.requiredExistingDocumentRef;
+                        const credential = guards.requiredExistingTokenCredential;
+                        // Resolve only the status credential inside this transaction. Import authority is unchanged.
+                        const snapshot = tokenRef && credential
+                            ? await transaction.get(tokenRef).catch(() => {
+                                throw new Error('Health retry status could not be finalized.');
+                            }) : null;
+                        const currentCredential = snapshot ? getTokenCredentialSnapshot(snapshot.data()) : credential;
+                        const accountField = isGarminHealthQueueItem(queueItem) ? 'userID'
+                            : isSuuntoHealthQueueItem(queueItem) ? 'userName' : 'openId';
+                        if (snapshot && (!snapshot.exists
+                            || currentCredential?.credentialGeneration !== credential?.credentialGeneration
+                            || snapshot.data()?.[accountField] !== queueItem.providerUserId)) return;
+                        await updateHealthSyncState(failedHealthUserID, failedHealthProvider,
+                            { ...failureStateUpdate, retryPending: false }, failedAtMs, {
+                                ...guards, transaction,
+                                requiredExistingTokenCredential: currentCredential,
+                            });
                     };
                     let healthStateWritten: boolean;
                     if (isSuuntoHealthQueueItem(queueItem)
@@ -3519,7 +3549,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                                 failedHealthProvider,
                                 failureStateUpdate,
                                 failedAtMs,
-                                guards,
+                                pendingGuards(guards),
                             ),
                             written => !written,
                         );
@@ -3531,7 +3561,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                             failedHealthProvider,
                             failureStateUpdate,
                             failedAtMs,
-                            failedHealthLifecycleGuards,
+                            pendingGuards(failedHealthLifecycleGuards),
                         );
                     }
                     if (!healthStateWritten) {
@@ -3569,6 +3599,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         return increaseRetryCountForQueueItem(
             queueItem,
             telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),
+            1, undefined, undefined, onHealthRetryExhausted,
         );
     } finally {
         if (isSuuntoHealthQueueItem(queueItem)) {

@@ -32,6 +32,7 @@ import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echar
 import { MaterialModule } from '../../../../modules/material.module';
 import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { init } from 'echarts';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -1644,6 +1645,57 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(option?.visualMap).toBeUndefined();
     expect(option?.yAxis?.splitArea).toBeUndefined();
+  });
+
+  it.each([DataHeartRate.type, DataPower.type])('removes and restores %s zone colors in the same ECharts instance', async type => {
+    const plainPanel = {
+      ...component.panel!, dataType: type,
+      series: component.panel!.series.map(series => ({ ...series, streamType: type })),
+    };
+    const coloredPanel = {
+      ...plainPanel,
+      series: plainPanel.series.map(series => ({
+        ...series,
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 110 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 110, lt: 130 },
+          { zone: 'Zone 3', color: '#ffaa00', gte: 130 },
+        ],
+      })),
+    };
+    component.panel = coloredPanel;
+    component.sharedZoomRange = { start: 2, end: 8 };
+    await renderComponent();
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    const applyLastUpdate = () => {
+      const update = eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series?.length);
+      rendered.setOption(update![1], { ...update![2], lazyUpdate: false });
+    };
+    try {
+      applyLastUpdate();
+      expect(rendered.getOption().visualMap).toHaveLength(1);
+      component.panel = plainPanel;
+      component.ngOnChanges({ panel: new SimpleChange(coloredPanel, plainPanel, false) });
+      await flushQueuedChartRefreshes();
+      applyLastUpdate();
+      expect(rendered.getOption().visualMap || []).toHaveLength(0);
+      expect(rendered.getOption().dataZoom).toEqual(expect.arrayContaining([
+        expect.objectContaining({ startValue: 2, endValue: 8 }),
+      ]));
+
+      component.panel = coloredPanel;
+      component.ngOnChanges({ panel: new SimpleChange(plainPanel, coloredPanel, false) });
+      await flushQueuedChartRefreshes();
+      applyLastUpdate();
+      expect(rendered.getOption().visualMap).toHaveLength(1);
+      const series = rendered.getOption().series as Array<{ lineStyle?: { color?: string } }>;
+      expect(series[0].lineStyle?.color).toBeUndefined();
+      expect(rendered.renderToSVGString()).toContain('<svg');
+    } finally {
+      rendered.dispose();
+      canvasContext.mockRestore();
+    }
   });
 
   it('renders heart-rate zone visual maps scoped to the matching series index', async () => {
