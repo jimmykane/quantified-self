@@ -1175,8 +1175,8 @@ export function buildSleepPriorityRows(
     );
     const details = [
       scoreText !== '—' ? { label: 'Score', valueText: scoreText } : null,
-      hrvText !== '—' ? { label: 'HRV', valueText: hrvText } : null,
-      heartRateText !== '—' ? { label: 'Avg HR', valueText: heartRateText } : null,
+      hrvText !== '—' ? { label: 'Sleep HRV', valueText: hrvText } : null,
+      heartRateText !== '—' ? { label: 'Average sleep HR', valueText: heartRateText } : null,
     ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
       id,

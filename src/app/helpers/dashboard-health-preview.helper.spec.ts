@@ -55,6 +55,7 @@ describe('Health library examples', () => {
     const basalEnergy = values('basal_energy');
     expect(values('total_energy')).toEqual(activeEnergy.map((value, index) => value + basalEnergy[index]));
     expect(month('body_weight').selected!.model.series).toMatchObject({ aggregation: 'measurement', recordingMethod: 'manual' });
+    expect(month('resting_heart_rate').selected!.model.readingLabel).toBe('Daily resting HR');
     expect(month('vo2_max').selected!.model.series.aggregation).toBe('latest');
     expect(month('altitude').selected!.model.series.aggregation).toBe('average');
     const settings = { metric: 'steps' as const, range: 'today' as const };

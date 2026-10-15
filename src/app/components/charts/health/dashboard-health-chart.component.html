@@ -34,7 +34,12 @@
   }
   @if (displayContext(); as view) {
     @if (view.selected; as chart) {
-      @if (thumbnail()) { <span class="health-thumbnail-value">{{ chart.latestValueText }}</span> }
+      @if (thumbnail()) {
+        <div class="health-thumbnail-summary" [attr.aria-label]="chart.model.ariaLabel">
+          <span class="health-thumbnail-source">{{ chart.model.series.sourceLabel }}</span>
+          <span class="health-thumbnail-value">{{ chart.latestValueText }}</span>
+        </div>
+      }
       @if (!thumbnail()) {
         <div class="health-tile-summary">
           <div class="health-value-row">
@@ -42,9 +47,13 @@
             @if (!showingExample() && context(); as sourceView) {
               <app-chart-source-picker [choices]="sourceView.sources" [selectedKey]="sourceView.selectedKey"
                 [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" />
+            } @else {
+              <span class="health-example-attribution">Example data · {{ chart.model.readingLabel }}</span>
             }
           </div>
-          @if (overview() && recordedDate()) { <span class="health-recorded-date">Recorded {{ recordedDate() }}</span> }
+          @if (recordedDate()) { <span class="health-recorded-date">Recorded {{ recordedDate() }}</span> }
+          @if (chart.model.series.deviceLabel) { <span class="health-device-label">Device: {{ chart.model.series.deviceLabel }}</span> }
+          <span class="health-evidence-text">{{ chart.model.evidenceText }}</span>
           @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
         </div>
       }
@@ -52,8 +61,13 @@
         [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [compact]="overview()" [thumbnail]="thumbnail()"
         [timelineNotes]="thumbnail() || showingExample() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
     } @else if (settings().metric === 'sleep' && view.hasData) {
-      @if (thumbnail()) { <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" /> }
-      @else { <app-sleep-trend-chart [hideTitle]="true" [overview]="overview()" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" /> }
+      @if (thumbnail()) {
+        <span class="health-thumbnail-source">{{ selectedSourceLabel() }}</span>
+        <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" />
+      } @else {
+        @if (!showSleepSourcePicker()) { <span class="health-sleep-attribution">{{ selectedSourceLabel() }} · Sleep overview</span> }
+        <app-sleep-trend-chart [hideTitle]="true" [overview]="overview()" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" />
+      }
     } @else if (!thumbnail()) {
       <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('90d')">Show 90 days</button> }</div>
     } @else { <span class="health-thumbnail-empty">—</span> }
