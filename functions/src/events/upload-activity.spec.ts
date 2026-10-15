@@ -861,7 +861,7 @@ describe('uploadActivity', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
 
-  it('retains original compressed bytes with the decompressed parser digest for empty-activity failures', async () => {
+  it.each(['fit', 'fit.gz'])('retains original gzip bytes with the parser digest when the declared extension is %s', async extension => {
     const payload = Buffer.from('synthetic sessionless FIT');
     const rawBody = gzipSync(payload);
     hoisted.mockVerifyIdToken.mockResolvedValueOnce({ uid: 'verified-user' });
@@ -873,7 +873,7 @@ describe('uploadActivity', () => {
     await invokeUploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check',
-        'X-File-Extension': 'fit.gz', 'X-Original-Filename': '../../Private-place-name.fit.gz',
+        'X-File-Extension': extension, 'X-Original-Filename': '../../Private-place-name.fit.gz',
         'X-User-Id': 'spoofed-user',
       },
       rawBody,
@@ -884,6 +884,7 @@ describe('uploadActivity', () => {
     expect(hoisted.mockUploadDebugFile).toHaveBeenCalledExactlyOnceWith(
       rawBody, 'fit.gz', createHash('sha256').update(payload).digest('hex'), 'manualUpload', 'verified-user',
     );
+    expect(arrayBufferToBuffer(hoisted.mockFITImporter.getFromArrayBuffer.mock.calls[0][0])).toEqual(payload);
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private-place-name');
   });
@@ -954,6 +955,12 @@ describe('uploadActivity', () => {
       createHash('sha256').update(rawBody).digest('hex'),
       createHash('sha256').update(rawBody).digest('hex'),
     ]);
+    expect(hoisted.mockUploadDebugFile).toHaveBeenNthCalledWith(
+      1, rawBody, 'fit', createHash('sha256').update(rawBody).digest('hex'), 'manualUpload', 'old-user',
+    );
+    expect(hoisted.mockUploadDebugFile).toHaveBeenNthCalledWith(
+      2, rawBody, 'fit', createHash('sha256').update(rawBody).digest('hex'), 'manualUpload', 'new-user',
+    );
   });
 
   it('logs both failed JSON attempts in one warning while retaining the 400 response', async () => {

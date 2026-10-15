@@ -130,8 +130,8 @@ function getBaseExtension(extension: string): string {
 function getRejectedUploadContext(userID: string, payload: Buffer, extension: string) {
   return {
     userID,
-    // A content digest links exact re-uploads, including after account recreation,
-    // without retaining the file or logging its potentially private filename.
+    // A content digest links exact parser inputs and their debug captures across re-uploads,
+    // including after account recreation, without logging potentially private filenames.
     payloadSha256: createHash('sha256').update(payload).digest('hex'),
     ...(getBaseExtension(extension) === 'fit'
       ? { fitEnvelopeReason: inspectFitPayload(payload).reason }
