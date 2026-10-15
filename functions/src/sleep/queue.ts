@@ -3178,7 +3178,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         if (error instanceof ProviderOperationStillInFlightError) throw error;
         if (error instanceof SuuntoCredentialRotationRetryableError) {
             logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');
-            return increaseRetryCountForQueueItem(queueItem, error);
+            if (!isSuuntoHealthQueueItem(queueItem)) return increaseRetryCountForQueueItem(queueItem, error);
         }
         if (error instanceof SuuntoSleepLifecycleChangedError) {
             return markQueueItemSkipped(
@@ -3443,6 +3443,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 ? sanitizeCOROSDailyErrorForTelemetry(error)
                 : error;
+        let onHealthRetryExhausted: Parameters<typeof increaseRetryCountForQueueItem>[5];
         if (queueItem.userID) {
             const sleepErrorStateWritten = isHealthQueueItem(queueItem)
                 ? undefined
@@ -3499,11 +3500,35 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
                         status: HEALTH_SYNC_STATUSES.Failed,
+                        retryPending: true,
                         lastErrorCode: isSuuntoHealthQueueItem(queueItem)
                             ? 'suunto_health_sync_failed'
                             : isGarminHealthQueueItem(queueItem)
                                 ? 'garmin_health_sync_failed'
                                 : 'coros_daily_sync_failed',
+                    };
+                    onHealthRetryExhausted = async transaction => {
+                        const guards = isSuuntoHealthQueueItem(queueItem)
+                            ? suuntoHealthLifecycleGuards || failedHealthLifecycleGuards
+                            : failedHealthLifecycleGuards;
+                        const tokenRef = guards.requiredExistingDocumentRef;
+                        const credential = guards.requiredExistingTokenCredential;
+                        // Resolve only the status credential inside this transaction. Import authority is unchanged.
+                        const snapshot = tokenRef && credential
+                            ? await transaction.get(tokenRef).catch(() => {
+                                throw new Error('Health retry status could not be finalized.');
+                            }) : null;
+                        const currentCredential = snapshot ? getTokenCredentialSnapshot(snapshot.data()) : credential;
+                        const accountField = isGarminHealthQueueItem(queueItem) ? 'userID'
+                            : isSuuntoHealthQueueItem(queueItem) ? 'userName' : 'openId';
+                        if (snapshot && (!snapshot.exists
+                            || currentCredential?.credentialGeneration !== credential?.credentialGeneration
+                            || snapshot.data()?.[accountField] !== queueItem.providerUserId)) return;
+                        await updateHealthSyncState(failedHealthUserID, failedHealthProvider,
+                            { ...failureStateUpdate, retryPending: false }, failedAtMs, {
+                                ...guards, transaction,
+                                requiredExistingTokenCredential: currentCredential,
+                            });
                     };
                     let healthStateWritten: boolean;
                     if (isSuuntoHealthQueueItem(queueItem)
@@ -3569,6 +3594,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         return increaseRetryCountForQueueItem(
             queueItem,
             telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),
+            1, undefined, undefined, onHealthRetryExhausted,
         );
     } finally {
         if (isSuuntoHealthQueueItem(queueItem)) {

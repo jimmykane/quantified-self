@@ -5728,6 +5728,81 @@ describe('sleep queue', () => {
         },
     );
 
+    it.each([
+        ['GarminAPI', 'pending'], ['SuuntoApp', 'pending'], ['COROSAPI', 'pending'],
+        ['GarminAPI', 'exhausted'], ['SuuntoApp', 'exhausted'], ['COROSAPI', 'exhausted'],
+        ['GarminAPI', 'refreshed'], ['SuuntoApp', 'refreshed'], ['COROSAPI', 'refreshed'],
+        ['GarminAPI', 'replaced'], ['SuuntoApp', 'replaced'], ['COROSAPI', 'replaced'],
+        ['GarminAPI', 'read_failed'], ['SuuntoApp', 'read_failed'], ['COROSAPI', 'read_failed'],
+    ] as const)('reports %s Health retries from the existing queue transition: %s', async (provider, outcome) => {
+        hoisted.disabledProviders.splice(0);
+        const account = `${provider}-account`;
+        const accountField = provider === 'GarminAPI' ? 'userID' : provider === 'SuuntoApp' ? 'userName' : 'openId';
+        const tokenData = { [accountField]: account, accessToken: 'original-token', tokenCredentialGeneration: 'original-generation' };
+        let tokenReadFailed = false;
+        const tokenRef = { path: `${provider}/test-user-uid/tokens/account`, parent: { parent: { id: 'test-user-uid' } },
+            get: async () => {
+                if (tokenReadFailed) throw new Error('PRIVATE_TOKEN_DOCUMENT_PATH');
+                return { exists: true, data: () => tokenData };
+            } };
+        const token = { id: account, exists: true, ref: tokenRef, data: () => tokenData };
+        const guards = { requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: getTokenCredentialSnapshot(tokenData),
+            requiredDocumentFieldValues: { documentRef: { path: 'connection' }, expectedFields: { connectionStateGeneration: 'connection-1' } },
+            additionalRequiredDocumentFieldValues: [] };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [token], empty: false });
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(token);
+        hoisted.getServiceConnectionMeta.mockResolvedValue({ providerUserId: account, connectionState: 'connected', connectionStateGeneration: 'connection-1' });
+        hoisted.captureActiveGarminHealthWriteLifecycleGuards.mockResolvedValue(guards);
+        hoisted.captureSuuntoHealthWriteLifecycleGuards.mockResolvedValue(guards);
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+        if (provider === 'GarminAPI') hoisted.processGarminHealthQueueItem.mockRejectedValue(new Error('provider unavailable'));
+        else if (provider === 'SuuntoApp') hoisted.processSuuntoHealthQueueItem.mockRejectedValue(new Error('provider unavailable'));
+        else hoisted.requestGet.mockRejectedValue(new Error('provider unavailable'));
+        hoisted.updateHealthSyncState.mockImplementationOnce(async () => {
+            if (outcome === 'refreshed') tokenData.accessToken = 'refreshed-token';
+            if (outcome === 'replaced') tokenData.tokenCredentialGeneration = 'replacement-generation';
+            if (outcome === 'read_failed') tokenReadFailed = true;
+            return true;
+        });
+        const state: Record<string, unknown> = {
+            provider, providerUserId: account, userID: 'test-user-uid', dateCreated: 1_700_000_000_000,
+            processed: false, queueRevision: 'retry-status', retryCount: outcome === 'pending' ? 0 : 9,
+            type: provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll',
+            ...(provider === 'GarminAPI' ? { garminSummaryType: 'dailies',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=fixture-token',
+            } : { ...(provider === 'SuuntoApp' ? { healthTrigger: 'poll' } : {}),
+                rangeStartMs: Date.parse('2026-04-28T00:00:00Z'), rangeEndMs: Date.parse('2026-04-29T00:00:00Z'),
+            }),
+        };
+        hoisted.claimSleepQueueRevision.mockImplementation(async (_item, _uid, owner) => {
+            Object.assign(state, { processingOwner: owner, processingRevision: 'revision:retry-status' });
+            return 'claimed';
+        });
+        const ref = { parent: { id: 'sleepSyncQueue' }, update: async (patch: object) => { Object.assign(state, patch); },
+            get: async () => ({ exists: true, data: () => ({ ...state }) }) };
+        // The live transaction, not this stale input count, owns exhaustion.
+        const result = await processSleepSyncQueueItem({ ...state, retryCount: 0, id: 'health-retry', ref } as unknown as SleepSyncQueueItemInterface);
+        expect(result, JSON.stringify(hoisted.loggerWarn.mock.calls)).toBe(outcome === 'pending' ? QueueResult.RetryIncremented
+            : outcome === 'read_failed' ? QueueResult.Failed : QueueResult.MovedToDLQ);
+        expect(hoisted.updateHealthSyncState.mock.calls[0][2]).toMatchObject({ status: 'failed', retryPending: true });
+        if (outcome === 'pending' || outcome === 'replaced' || outcome === 'read_failed') {
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledOnce();
+            if (outcome === 'read_failed') {
+                expect(hoisted.batchDelete).not.toHaveBeenCalled();
+                expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('PRIVATE_TOKEN_DOCUMENT_PATH');
+            }
+        } else {
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
+            expect(hoisted.updateHealthSyncState.mock.calls[1][2]).toMatchObject({ status: 'failed', retryPending: false });
+            expect(hoisted.updateHealthSyncState.mock.calls[1][4]).toMatchObject({
+                transaction: expect.anything(), requiredExistingTokenCredential: getTokenCredentialSnapshot(tokenData),
+            });
+            expect(hoisted.updateHealthSyncState.mock.calls[1][3]).toBe(hoisted.updateHealthSyncState.mock.calls[0][3]);
+        }
+    });
+
     it('rebases a credential-only rotation before recording a Suunto Health failure', async () => {
         const healthUserID = 'suunto-health-user';
         const tokenRef = {

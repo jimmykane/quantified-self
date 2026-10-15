@@ -675,6 +675,58 @@ describe('health writer', () => {
         expect(built.chunks[0].qualityCodes).toBeNull();
     });
 
+    it.each([true, false])('records pending and exhausted retries: %s', async retryPending => {
+        const fake = fakeDatabase();
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending,
+        }, 10_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'failed', retryPending });
+    });
+
+    it('clears retry metadata on recovery and preserves it against an older failure', async () => {
+        const fake = fakeDatabase();
+        fake.stored.set('users/user-1/healthSyncState/COROSAPI', {
+            status: 'failed', retryPending: true, lastSyncedAtMs: 8_000, updatedAtMs: 10_000,
+        });
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+        }, 11_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'ready', retryPending: false });
+        fake.stored.set('users/user-1/healthSyncState/COROSAPI', {
+            status: 'ready', retryPending: false, lastSyncedAtMs: 8_000, updatedAtMs: 11_000,
+        });
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending: false,
+        }, 9_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[1][1]).not.toHaveProperty('retryPending');
+        expect(fake.sets.mock.calls[1][1]).not.toHaveProperty('status');
+        expect(fake.sets.mock.calls[1][1]).not.toHaveProperty('lastSyncedAtMs');
+    });
+
+    it('stages terminal status in the caller transaction without nesting transactions', async () => {
+        const fake = fakeDatabase();
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending: false,
+        }, 10_000, { db: fake.db as never, transaction: fake.transaction as never });
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'failed', retryPending: false });
+    });
+
+    it.each(['true', 1, null])('rejects invalid retry metadata: %s', async retryPending => {
+        const fake = fakeDatabase();
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: 'failed', retryPending,
+        }, 10_000, { db: fake.db as never })).rejects.toThrow('retryPending must be a boolean');
+        expect(fake.sets).not.toHaveBeenCalled();
+    });
+
+    it('rejects a pending retry on a successful state', async () => {
+        const fake = fakeDatabase();
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: 'ready', retryPending: true,
+        }, 10_000, { db: fake.db as never })).rejects.toThrow('pending retry requires a failed');
+    });
+
     it('writes only opaque sync error codes', async () => {
         const fake = fakeDatabase();
         await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {

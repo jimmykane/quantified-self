@@ -169,6 +169,10 @@ Chunks are permanent leaf documents by schema. Firestore Rules do not grant acce
 
 This collection is not the OAuth connection source of truth. Provider credentials and stable raw account identity remain in their existing server-owned integration stores.
 
+For Garmin, Suunto and COROS, failed attempts carry the optional `retryPending` flag: true displays **Retrying**, while false or absent displays **Sync failed**. Successful and authoritative lifecycle status updates clear the flag; stale updates preserve newer state and source timestamps. Existing failed records keep their legacy display until a subsequent update; no migration or stored status-enum change is required. The flag is app-only operational metadata and is not added to MCP projections or consent.
+
+Final failure status uses the queue's existing retry-exhaustion callback and commits with the live retry counter's DLQ transition. Only this status bookkeeping resolves a current credential inside the transaction, requiring the same account and OAuth generation and retaining all connection/root guards. Queue utilities, ownership, retry policy, provider requests and data/recovery write paths remain unchanged. Release the Health frontend and the existing Health/Sleep workers through separately approved deployments.
+
 ### Sports Lib scalar serialization boundary
 
 Quantified Self pins `@sports-alliance/sports-lib@21.0.3` and uses its exported Health and Sleep data classes as the

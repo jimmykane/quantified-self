@@ -1,5 +1,7 @@
 # Provider Integration Implementation Guide
 
+Health Sources distinguishes automatic retries from exhausted failures for Garmin, Suunto and COROS; Wahoo remains unsupported for Health. This is status bookkeeping on the existing retry lifecycle. See [Health sync state](unified-health-data.md#sync-state) for the flag, compatibility and transaction contract.
+
 This document is the durable implementation guide for adding or materially changing a connected provider such as Garmin, Suunto, COROS, or Wahoo. It describes the repository-wide contract rather than any one partner API.
 
 Keep it current in the same change whenever a provider is added, removed, renamed, gains a capability, changes a lifecycle rule, or changes operational support. The root `AGENTS.md` makes that update mandatory.
