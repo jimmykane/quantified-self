@@ -3058,6 +3058,28 @@ describe('HealthWorkspaceComponent', () => {
     expect(priorityGrid?.textContent).not.toContain('Loading sources…');
   });
 
+  it.each([HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.SuuntoApp, HEALTH_PROVIDERS.COROSAPI])(
+    'distinguishes pending retries, exhausted failures and recovery for %s', async provider => {
+      await createComponent();
+      const lastSyncedAtMs = todayStartMs + 1_000;
+      const view = () => component.syncStateViews().find(row => row.provider === provider)!;
+      syncStates.next([{ provider, status: HEALTH_SYNC_STATUSES.Failed, retryPending: true, lastSyncedAtMs, updatedAtMs: 2 }]);
+      fixture.detectChanges();
+      expect(view()).toMatchObject({ statusLabel: 'Retrying', tone: 'delayed' });
+      expect(view().statusTooltip).toContain('retry automatically; no action is needed');
+      const updateText = view().lastUpdateText;
+      syncStates.next([{ provider, status: HEALTH_SYNC_STATUSES.Failed, retryPending: false, lastSyncedAtMs, updatedAtMs: 3 }]);
+      fixture.detectChanges();
+      expect(view()).toMatchObject({ statusLabel: 'Sync failed', tone: 'error', lastUpdateText: updateText });
+      syncStates.next([{ provider, status: HEALTH_SYNC_STATUSES.Ready, lastSyncedAtMs, updatedAtMs: 4 }]);
+      fixture.detectChanges();
+      expect(view().statusLabel).toBe('Current');
+      syncStates.next([{ provider, status: HEALTH_SYNC_STATUSES.Failed, lastSyncedAtMs, updatedAtMs: 5 }]);
+      fixture.detectChanges();
+      expect(view().statusLabel).toBe('Sync failed');
+    },
+  );
+
   it('shows the newest provider sync timestamp even when an older field is also present', async () => {
     await createComponent();
     const newestTimestamp = todayStartMs + (2 * 60 * 60 * 1000);

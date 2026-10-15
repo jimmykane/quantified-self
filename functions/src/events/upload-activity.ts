@@ -35,6 +35,7 @@ import { parseActivityFilePayload } from '../shared/activity-file-parser';
 import type { JsonParserFailures } from '../shared/activity-file-parser';
 import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
 import { inspectFitPayload } from '../shared/fit-payload';
+import { uploadDebugFile } from '../debug-utils';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
@@ -129,8 +130,8 @@ function getBaseExtension(extension: string): string {
 function getRejectedUploadContext(userID: string, payload: Buffer, extension: string) {
   return {
     userID,
-    // A content digest links exact re-uploads, including after account recreation,
-    // without retaining the file or logging its potentially private filename.
+    // A content digest links exact parser inputs and their debug captures across re-uploads,
+    // including after account recreation, without logging potentially private filenames.
     payloadSha256: createHash('sha256').update(payload).digest('hex'),
     ...(getBaseExtension(extension) === 'fit'
       ? { fitEnvelopeReason: inspectFitPayload(payload).reason }
@@ -459,10 +460,25 @@ export const uploadActivity = onRequest({
         });
         throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
       }
+      const rejectedUploadContext = getRejectedUploadContext(userID, payloadForParsing, resolvedExtension);
       logger.warn('[uploadActivity] Activity parsing failed', {
         ...getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension, jsonParserFailures),
-        ...getRejectedUploadContext(userID, payloadForParsing, resolvedExtension),
+        ...rejectedUploadContext,
       });
+      try {
+        await assertEventWriteUserActive(userID, 'activity_upload_debug_file');
+        // Retain bounded original bytes (including gzip), keyed by the logged parser-payload digest.
+        await uploadDebugFile(
+          rawBody,
+          resolveStoredExtension(resolvedExtension, rawBody),
+          rejectedUploadContext.payloadSha256,
+          'manualUpload',
+          userID,
+        );
+      } catch {
+        // Diagnostic storage or a failed deletion check must not replace the parser's HTTP 400.
+        logger.warn('[uploadActivity] Could not retain rejected upload for debugging', rejectedUploadContext);
+      }
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 

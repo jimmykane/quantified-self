@@ -675,6 +675,9 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
+    expect(healthSection?.content).toContain('**Retrying** means a temporary sync error is being retried automatically');
+    expect(healthSection?.content).toContain('automatic retries are exhausted or the job cannot be retried');
+    expect(healthSection?.content).toContain('not the failed attempt time');
     expect(healthSection?.content).toContain('**Sources** beside the Health title');
     expect(healthSection?.content).toContain('filter Highlights and every metric');
     expect(healthSection?.content).toContain('compact range dropdown between the older/newer arrows');

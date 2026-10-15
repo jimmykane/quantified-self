@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import debugLifecycle from '../../storage.debug-lifecycle.json';
 
 // Hoisted mocks
 const { mockBucket, mockFile, mockSave, mockBucketFn } = vi.hoisted(() => {
@@ -43,6 +44,12 @@ describe('uploadDebugFile', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    it('expires every debug prefix after 14 days without adding a minimum-retention lock', () => {
+        expect(debugLifecycle).toEqual({
+            rule: [{ action: { type: 'Delete' }, condition: { age: 14 } }],
+        });
     });
 
     it('should upload file to specific debug path', async () => {

@@ -2084,6 +2084,7 @@ function syncStateView(
     case HEALTH_SYNC_STATUSES.ReconnectRequired:
       return withStatus('Reconnect required', 'error');
     case HEALTH_SYNC_STATUSES.Failed:
+      if (state.retryPending === true) return withStatus('Retrying', 'delayed');
       return withStatus('Sync failed', 'error');
     case HEALTH_SYNC_STATUSES.Unsupported:
       return withStatus('Not supported', 'neutral');
@@ -2110,6 +2111,9 @@ function healthSyncRecency(
 }
 
 function healthSyncStatusTooltip(statusLabel: string, tone: HealthSyncTone): string {
+  if (statusLabel === 'Retrying') {
+    return 'Retrying: a temporary sync error occurred. We will retry automatically; no action is needed. The date shows the latest source update.';
+  }
   switch (tone) {
     case 'current':
       return 'Current: the latest source update arrived within the last 36 hours.';

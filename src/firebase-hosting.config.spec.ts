@@ -370,6 +370,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
+    // Health Sources help also explains automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // The same-day Suunto Help update covers explicit fresh Guides and completed-workout reuse.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
