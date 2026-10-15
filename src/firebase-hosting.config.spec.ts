@@ -366,7 +366,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
-    // Calmer overview help, including independent source attribution and HRV average/latest wording, is in this revision.
+    // This same-day Help revision covers all five existing Dashboard assessments and the separate Health recovery overview.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

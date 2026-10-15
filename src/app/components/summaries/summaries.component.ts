@@ -6,6 +6,8 @@ import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealt
 import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
 import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
 import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
+import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
+import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -261,6 +263,7 @@ interface DashboardTodayTrainingStateViewModel {
   caption: string;
   scalePosition: number | null;
   scaleTone: DashboardTodayReadinessTone;
+  contextText?: string;
 }
 
 function createEmptyDashboardTodayReadinessViewModel(loading = false): DashboardTodayReadinessViewModel {
@@ -490,6 +493,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
   public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
+  public dashboardGlanceSignals = buildDashboardGlanceSignals(
+    createEmptyDashboardTodayReadinessViewModel(true), createEmptyDashboardTodayTrainingStateViewModel(), 'loading');
   public readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];
 
   private readonly onDocumentVisibilityChange = (): void => {
@@ -2043,6 +2048,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedTrainingDurabilityStatus = 'missing';
     this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
     this.dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
+    this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, 'loading');
     this.refreshDerivedMetricsBannerState();
   }
 
@@ -2138,7 +2144,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         { id: 'sleep', label: 'Sleep', sourceLabel,
           state: warningText ? 'unavailable' : context.latestSleepAtMs === null ? 'insufficient' : 'recorded',
           statusText: warningText ? 'Evidence unavailable' : context.latestSleepAtMs === null ? 'No eligible current night' : 'Recorded context',
-          detailText: warningText || `${recordedText} No change assessment for this metric.` },
+          detailText: warningText || recordedText },
       ],
       loading: false,
       awaitingSleep,
@@ -2182,11 +2188,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private buildDashboardTodayTrainingState(): DashboardTodayTrainingStateViewModel {
-    const state = buildCurrentTrainingStateContext({
+    const context = buildCurrentTrainingStateContext({
       formPoints: this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
       fallbackFormNow: this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null,
       fallbackRampRate: this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null,
-    }).state;
+    });
+    const state = context.state;
+    const loadDates = [context.formNow?.latestDayMs, context.rampRate?.latestDayMs]
+      .filter((value): value is number => value != null && Number.isFinite(value));
     const label = state.label || 'Awaiting data';
     const scale = resolveDashboardTodayTrainingStateScale(label);
     return {
@@ -2194,12 +2203,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       caption: state.caption || 'TSS-derived state is preparing',
       scalePosition: scale.position,
       scaleTone: scale.tone,
+      contextText: loadDates.length ? `Derived load through ${getDateTimeFormatter(this.locale, {
+        dateStyle: 'medium', timeZone: 'UTC',
+      }).format(Math.min(...loadDates))}.` : '',
     };
   }
 
   private refreshDashboardTodaySignals(): void {
     this.dashboardTodayTrainingState = this.buildDashboardTodayTrainingState();
     this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+    const uid = `${this.user?.uid || ''}`.trim();
+    const loadHydrated = this.derivedMetricsHydrated && !!uid && this.derivedMetricsUserUID?.startsWith(`${uid}:`);
+    const loadStatuses = [this.derivedFormStatus, this.derivedFormNowStatus, this.derivedRampRateStatus];
+    const loadAvailability = !loadHydrated ? 'loading' : this.dashboardTodayTrainingState.scalePosition !== null ? 'available'
+      : loadStatuses.includes('failed') ? 'unavailable' : loadStatuses.some(isDerivedMetricPendingStatus) ? 'loading' : 'insufficient';
+    this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, loadAvailability);
   }
 
   private formatDashboardTodayMetric(value: number | null | undefined, signed = false): string {

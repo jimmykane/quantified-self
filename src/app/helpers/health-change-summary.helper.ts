@@ -4,7 +4,8 @@ import type { HealthPriorityCardView } from '../components/health/health-priorit
 import { selectDefaultHealthSourceKey } from './health-source-selection.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
 
-export type HealthChangeState = 'outside-range' | 'within-range' | 'insufficient' | 'recorded' | 'loading' | 'unavailable';
+export type HealthChangeState = 'outside-range' | 'within-range' | 'insufficient' | 'recorded' | 'loading' | 'unavailable'
+  | 'attention' | 'available';
 
 /** Presentation of existing evidence only. This is not an anomaly detector or a score. */
 export interface HealthChangeSignal {
@@ -14,6 +15,8 @@ export interface HealthChangeSignal {
   state: HealthChangeState;
   statusText: string;
   detailText: string;
+  /** Dashboard clause from an existing assessment, not a new personal-range classification. */
+  summaryText?: string;
 }
 
 interface PersonalRangeSummary {
@@ -52,19 +55,69 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
   const recorded = count('recorded');
   const parts = [
     changes.length ? `${changes.length} outside usual range` : '',
-    within ? `${within} within range` : '',
-    insufficient ? `${insufficient} ${insufficient === 1 ? 'needs' : 'need'} more evidence` : '',
-    recorded ? `${recorded} recorded only` : '',
+    within ? `${within} within usual range` : '',
+    insufficient ? `${insufficient} ${insufficient === 1 ? 'needs' : 'need'} more readings` : '',
+    recorded ? `${recorded} ${recorded === 1 ? 'reading' : 'readings'} shown without comparison` : '',
     loading ? `${loading} loading` : '',
     unavailable ? `${unavailable} unavailable` : '',
   ].filter(Boolean);
   const headline = changes.length
-    ? changes.length === 1 ? 'One signal is outside its usual range.' : `${changes.length} signals are outside their usual ranges.`
-    : loading ? 'Some signals are still loading.'
-    : unavailable ? 'Some evidence is unavailable.'
-    : within ? 'Assessed signals are within their personal ranges.'
-    : 'More evidence is needed to assess changes.';
+    ? changes.length === 1 ? 'One reading is outside your usual range.' : `${changes.length} readings are outside your usual range.`
+    : loading ? 'We’re still loading some of your readings.'
+    : unavailable ? 'We couldn’t load some of your readings.'
+    : within ? 'The readings we can compare are within your usual range.'
+    : insufficient ? 'More readings are needed to find your usual range.'
+    : recorded ? 'Your latest readings are shown below.'
+    : 'No sleep or nightly HRV readings to compare yet.';
   return { changes, headline, coverageText: parts.join(' · ') };
+}
+
+/** Dashboard copy only: name the evidence checked, never imply an all-metrics assessment. */
+export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal[]) {
+  if (signals.some(signal => signal.id === 'readiness')) return buildDashboardAssessmentSummary(signals);
+  const attentionSignals = signals.filter(signal => signal.state === 'outside-range'
+    || signal.state === 'unavailable' || signal.state === 'insufficient');
+  const priority: readonly HealthChangeState[] = ['outside-range', 'unavailable', 'loading', 'insufficient', 'within-range', 'recorded'];
+  const state = priority.find(state => signals.some(signal => signal.state === state));
+  const selected = signals.filter(signal => signal.state === state);
+  const labels = selected.map(signal => signal.id === 'hrv' ? 'Your 7-day HRV average' : signal.label);
+  const names = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0];
+  const verb = labels.length > 1 ? 'are' : 'is';
+  let headline: string;
+  switch (state) {
+    case 'outside-range': headline = `${names} ${verb} outside your usual range.`; break;
+    case 'unavailable': headline = `${names} ${verb} unavailable right now.`; break;
+    case 'loading': headline = `${names} ${verb} still loading.`; break;
+    case 'insufficient': headline = `${names} ${verb} not ready to compare yet.`; break;
+    case 'within-range': headline = `${names} ${verb} within your usual range.`; break;
+    case 'recorded': headline = selected.length === 1 && selected[0].id === 'sleep'
+      ? 'Your latest sleep reading is available.' : `${names} readings are available.`; break;
+    default: headline = 'No recent sleep or nightly HRV readings yet.';
+  }
+  return { headline, attentionSignals, state: state ?? null };
+}
+
+function buildDashboardAssessmentSummary(signals: readonly HealthChangeSignal[]) {
+  const issues = signals.filter(signal => signal.state === 'attention' || signal.state === 'outside-range');
+  const unavailable = signals.filter(signal => signal.state === 'unavailable');
+  const missing = signals.filter(signal => signal.state === 'insufficient');
+  const loading = signals.filter(signal => signal.state === 'loading');
+  const selected = issues.length ? issues : unavailable.length ? unavailable : missing.length ? missing : loading;
+  const readiness = signals.find(signal => signal.id === 'readiness');
+  // A Mixed/Recover assessment needs its contributing evidence, including recorded Sleep scores.
+  const attentionSignals = readiness?.state === 'attention'
+    ? [...signals]
+    : signals.filter(signal => ['attention', 'outside-range', 'unavailable', 'insufficient'].includes(signal.state));
+  const clauseSignals = selected[0]?.id === 'readiness' && selected[0].state !== 'attention' ? selected.slice(0, 1) : selected.slice(0, 2);
+  const clauses = clauseSignals.map(signal => signal.summaryText || `${signal.label}: ${signal.statusText}`);
+  if (clauses.length) clauses[0] = clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1);
+  const training = signals.find(signal => signal.id === 'training-load');
+  const sleep = signals.find(signal => signal.id === 'sleep');
+  const headline = clauses.length ? `${clauses.join('; ')}.`
+    : readiness?.state === 'available' && training?.state === 'available' && sleep?.state === 'recorded'
+      ? `Readiness is Ready, training state is ${training.statusText}, and today’s sleep is recorded.`
+      : 'Your available current assessments are shown below.';
+  return { headline, attentionSignals, state: selected[0]?.state ?? (readiness?.state === 'available' ? 'available' : null) };
 }
 
 /** Mirrors Highlight source selection; never combines provider/account or semantic series. */

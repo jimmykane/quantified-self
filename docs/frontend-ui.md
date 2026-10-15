@@ -62,12 +62,30 @@ contracts, consent, queries and mutations are unchanged. No backend deployment o
 
 ## Workspace Shells
 
-Health All and the owner Dashboard Today share the surface-free **What changed?** summary from
-`components/shared/health-change-summary/`. Keep established changes visible while evidence details are collapsed.
+Health All and the owner Dashboard Today share the surface-free summary from
+`components/shared/health-change-summary/`. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
 Use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls` and a mounted hidden region;
 do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
 The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
 charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
+Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. On Health,
+comparison counts stay visible alongside the headline and any outside-range readings; Show details contains the
+source and range breakdown. The visible scope names Sleep and nightly HRV. Dashboard uses the component's compact
+**At a glance** mode: a surface-free accent rail, compact stacked label and one sentence using the existing Readiness,
+training state, Sleep, HRV and overnight-HR assessments, wrapping
+naturally on mobile, without extra metadata rows or disclaimer copy. The 3px logical-start rail uses the same dominant
+evidence state as the sentence, without a standalone status icon or an empty icon column. Available/within-range uses the app success token;
+existing caution/outside-range uses the Material accent, unavailable uses the error token, and loading, insufficient or merely recorded
+evidence stays neutral. Pair color with the explicit sentence, never an implied all-metrics all-clear.
+The existing Material Show details button sits below the sentence with its 44px target; do not add a box, fill, shadow
+or bottom divider to this compact presentation. Existing caution, outside-range, unavailable or insufficient signals get that action.
+Mixed/Recover Readiness includes all five contributing signals, including recorded Sleep and still-loading evidence;
+otherwise the breakdown includes only signals needing attention and closes silently if they resolve. Normal days combine
+the existing Ready label, training-state label and recorded sleep in one sentence, without a second score. Sleep has no
+new good/bad threshold, and overnight HR is distinct from daily resting HR. Do not summarize unassessed metrics
+as normal. On Dashboard, the heading's bottom margin and the summary's top padding do not stack. Preserve the reserved
+status line, source/error distinctions, and the disclosure's 44px touch target. This is presentation only; no metric,
+readiness calculation, query, persistence, or MCP/Assistant contract changes.
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
