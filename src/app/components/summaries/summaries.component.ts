@@ -70,7 +70,7 @@ import {
   buildDashboardReadinessSignalsContext,
   resolveDashboardReadinessSleepRefreshAtMs,
 } from '../../helpers/dashboard-training-insights.helper';
-import { formatDashboardRelativeDay } from '../../helpers/dashboard-relative-date.helper';
+import { buildDashboardTodaySleepStatus } from '../../helpers/dashboard-relative-date.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import {
   buildDashboardTodayLoadBars,
@@ -226,6 +226,7 @@ type DashboardTodayReadinessTone = 'positive' | 'negative' | 'neutral';
 interface DashboardTodayReadinessViewModel {
   changeSignals: HealthChangeSignal[];
   loading: boolean;
+  awaitingSleep: boolean;
   warningText: string;
   label: string;
   score: number | null;
@@ -246,6 +247,7 @@ interface DashboardTodayReadinessViewModel {
   overnightHeartRateText: string;
   overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
+  overnightHeartRateContextText: string;
   recoveryText: string;
   recoveryRemainingPercent: number | null;
   recoveryFinishTimeMs: number | null;
@@ -268,6 +270,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
       statusText: loading ? 'Loading evidence' : 'Not enough comparable evidence',
       detailText: loading ? 'Waiting for the existing source reads to finish.' : 'No eligible current sleep evidence.' })),
     loading,
+    awaitingSleep: !loading,
     warningText: '',
     label: loading ? 'Loading readiness…' : 'Awaiting data',
     score: null,
@@ -288,6 +291,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     overnightHeartRateText: '--',
     overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
+    overnightHeartRateContextText: '',
     recoveryText: '--',
     recoveryRemainingPercent: null,
     recoveryFinishTimeMs: null,
@@ -1216,13 +1220,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private updateReadinessSleepRefreshTimer(): void {
     this.clearReadinessSleepRefreshTimer();
     const nowMs = Date.now();
-    const refreshAtMs = resolveDashboardReadinessSleepRefreshAtMs(
+    const evidenceRefreshAtMs = resolveDashboardReadinessSleepRefreshAtMs(
       buildDashboardSleepTrendContext(this.readinessSleepSessions),
       nowMs,
     );
-    if (refreshAtMs === null) {
-      return;
-    }
+    const refreshAtMs = Math.min(
+      evidenceRefreshAtMs ?? Infinity,
+      buildDashboardTodaySleepStatus(null, { nowMs }).refreshAtMs,
+    );
     const delayMs = refreshAtMs - nowMs;
     if (delayMs <= 0) {
       return;
@@ -2072,6 +2077,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend,
       nowMs,
     });
+    const sleepStatus = buildDashboardTodaySleepStatus(context?.latestSleepAtMs, { nowMs, locale: this.locale });
+    const awaitingSleep = !warningText && sleepStatus.awaitingSleep;
     const recovery = buildDashboardRecoveryPresentation(
       this.derivedRecoveryNowStatus === 'ready' ? this.derivedRecoveryNowContext : null, {
       locale: this.locale,
@@ -2092,8 +2099,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         ...createEmptyDashboardTodayReadinessViewModel(),
         ...(warningText ? { changeSignals: ['Sleep', 'HRV'].map(label => ({ id: label.toLowerCase(), label,
           sourceLabel: 'Source unavailable', state: 'unavailable' as const, statusText: 'Evidence unavailable', detailText: warningText })) } : {}),
+        awaitingSleep,
+        label: warningText ? 'Readiness unavailable' : 'Awaiting today’s sleep',
+        scoreText: '',
         warningText,
-        sleepContextText: warningText ? 'Sleep unavailable' : 'No eligible night',
+        sleepContextText: warningText ? 'Sleep unavailable' : sleepStatus.contextText,
         recoveryText,
         recoveryRemainingPercent,
         recoveryFinishTimeMs,
@@ -2131,10 +2141,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           detailText: warningText || `${recordedText} No change assessment for this metric.` },
       ],
       loading: false,
+      awaitingSleep,
       warningText,
-      label: context.label,
-      score: context.score,
-      scoreText: `${this.formatDashboardTodayMetric(context.score)}/100`,
+      label: warningText ? 'Readiness unavailable' : awaitingSleep ? 'Awaiting today’s sleep' : context.label,
+      score: awaitingSleep || warningText ? null : context.score,
+      scoreText: awaitingSleep || warningText ? '' : `${this.formatDashboardTodayMetric(context.score)}/100`,
       confidenceText: `${context.confidence.charAt(0).toUpperCase()}${context.confidence.slice(1)} confidence`,
       evidenceText: `${context.availableSignalCount}/${context.totalSignalCount} signals`,
       availableSignalCount: context.availableSignalCount,
@@ -2143,7 +2154,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepScore: context.sleepScore,
       sleepContextText: warningText && context.latestSleepAtMs === null
         ? 'Sleep unavailable'
-        : formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
+        : sleepStatus.contextText,
       hrvText: hrv.valueText,
       hrvStatusText: hrv.statusText,
       hrvRangeText: hrv.rangeText,
@@ -2155,6 +2166,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         ? null
         : (context.overnightHeartRateRatio - 1) * 100,
       overnightHeartRateTone,
+      overnightHeartRateContextText: context.overnightHeartRateRatio !== null
+        ? sleepStatus.contextText : '',
       recoveryText,
       recoveryRemainingPercent,
       recoveryFinishTimeMs,

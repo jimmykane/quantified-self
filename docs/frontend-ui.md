@@ -50,6 +50,16 @@ Above 720 px, Today uses tighter cell padding and smaller minimum heights for th
 and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
 with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
 
+Today distinguishes calculation evidence from same-day presentation. Once both initial reads settle, it withholds the
+Readiness score, confidence and signal indicators until the latest eligible completed main night ends on the current
+browser-local date. It says **Awaiting today’s sleep**, retaining the independent TSS-only Training state, eligible
+previous-night Sleep and Overnight HR values labelled **Last available** with their date, and the weekly HRV average
+with its latest reading's date. A failed Sleep read says **Readiness unavailable** and clears that evidence. The existing
+refresh timer also reevaluates at local midnight using calendar arithmetic, including DST, and remains owner/disposal
+scoped. The score slot and minimum layout reservations remain mounted while awaiting sleep. This is a Dashboard Today
+presentation change: the shared 48-hour formula, Training workspace, saved daily history, Calendar and MCP/Assistant
+contracts, consent, queries and mutations are unchanged. No backend deployment or data migration is required.
+
 ## Workspace Shells
 
 Health All and the owner Dashboard Today share the surface-free **What changed?** summary from
