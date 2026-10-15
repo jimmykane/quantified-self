@@ -30,6 +30,11 @@ describe('Health change summary disclosure', () => {
     button.click(); fixture.detectChanges();
     expect(details.hidden).toBe(false);
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(details.textContent).toContain('Suunto · Overnight average');
+    expect(details.textContent).toContain('7-day average compared with 60 days');
+    expect(details.querySelector('.health-change-footnote')).toBeNull();
+    expect(details.textContent).not.toContain('This is not medical advice');
+    expect(details.textContent).not.toContain('Your charts remain below');
     expect(haptics.selection).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('signals', [{ ...signals[0], state: 'within-range', statusText: 'Within personal range' }]);
     fixture.detectChanges();

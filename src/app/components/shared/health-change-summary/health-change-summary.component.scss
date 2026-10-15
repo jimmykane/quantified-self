@@ -5,7 +5,7 @@ h2 { font: var(--mat-sys-title-medium); margin: 0; }
 p { margin: 0; }
 .health-change-headline { font: var(--mat-sys-body-medium); }
 .health-change-heading button { flex: 0 0 auto; min-height: 44px; }
-.health-change-coverage, .health-change-scope, .health-change-footnote { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); margin-top: 0.35rem; }
+.health-change-coverage, .health-change-scope { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); margin-top: 0.35rem; }
 .health-change-notice { display: flex; align-items: start; gap: 0.5rem; margin-top: 0.5rem; font: var(--mat-sys-body-medium); }
 .health-change-notice mat-icon { color: var(--mat-sys-primary); flex-shrink: 0; }
 small { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); overflow-wrap: anywhere; }
