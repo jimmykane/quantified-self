@@ -324,7 +324,8 @@ vi.mock('../garmin/health-flags', () => ({
     isGarminHealthSyncEnabled: vi.fn(() => true),
 }));
 
-vi.mock('../garmin/health-lifecycle', () => ({
+vi.mock('../garmin/health-lifecycle', async importOriginal => ({
+    ...await importOriginal<typeof import('../garmin/health-lifecycle')>(),
     captureActiveGarminHealthWriteLifecycleGuards:
         hoisted.captureActiveGarminHealthWriteLifecycleGuards,
     GarminHealthAccountValidationError: class GarminHealthAccountValidationError extends Error {
@@ -468,7 +469,7 @@ describe('sleep queue', () => {
         hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken.mockResolvedValue('current');
         hoisted.areSuuntoWebhookWriteLifecycleGuardsContinuous.mockReturnValue(true);
         const garminHealthGuards = {
-            requiredExistingDocumentRef: { path: 'garmin-token' },
+            requiredExistingDocumentRef: { path: 'garmin-token', get: async () => ({ exists: false }) },
             requiredExistingTokenCredential: {
                 accessToken: 'garmin-access-token',
                 credentialGeneration: 'garmin-token-generation-1',
@@ -5729,10 +5730,14 @@ describe('sleep queue', () => {
     );
 
     it.each((['GarminAPI', 'SuuntoApp', 'COROSAPI'] as const).flatMap(provider =>
-        [0, 9].map(retryCount => ({ provider, retryCount, rotateCredentials: false })),
-    ).concat([{ provider: 'SuuntoApp', retryCount: 9, rotateCredentials: true }]))(
-    'projects Health retries for $provider at retry $retryCount (credential rotation: $rotateCredentials)',
-    async ({ provider, retryCount, rotateCredentials }) => {
+        [0, 9].map(retryCount => ({ provider, retryCount, rotateCredentials: false, replaceConnection: false })),
+    ).concat(
+        (['SuuntoApp', 'GarminAPI', 'COROSAPI'] as const).map(provider => ({ provider, retryCount: 9, rotateCredentials: true, replaceConnection: false })),
+        (['GarminAPI', 'COROSAPI'] as const).map(provider => ({ provider, retryCount: 0, rotateCredentials: true, replaceConnection: false })),
+        (['GarminAPI', 'COROSAPI'] as const).map(provider => ({ provider, retryCount: 9, rotateCredentials: true, replaceConnection: true })),
+    ))(
+    'projects Health retries for $provider at retry $retryCount (rotation: $rotateCredentials, replacement: $replaceConnection)',
+    async ({ provider, retryCount, rotateCredentials, replaceConnection }) => {
         hoisted.disabledProviders.splice(0);
         const providerUserId = provider === 'GarminAPI' ? 'garmin-user-1'
             : provider === 'SuuntoApp' ? 'suunto-user-1' : 'coros-user-1';
@@ -5740,7 +5745,7 @@ describe('sleep queue', () => {
             id: providerUserId,
             data: () => ({ serviceName: provider, userID: providerUserId, userName: providerUserId,
                 openId: providerUserId, accessToken: 'fixture-access-token' }),
-            ref: { parent: { parent: { id: 'test-user-uid' } } },
+            ref: { parent: { parent: { id: 'test-user-uid' } }, get: vi.fn() },
         };
         hoisted.tokenRootGet.mockResolvedValue({ docs: [token], empty: false });
         hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(token);
@@ -5748,6 +5753,14 @@ describe('sleep queue', () => {
         hoisted.processSuuntoHealthQueueItem.mockRejectedValue(new Error('temporary provider failure'));
         hoisted.requestGet.mockRejectedValue(new Error('temporary provider failure'));
         if (rotateCredentials) {
+            if (provider === 'GarminAPI') {
+                const initial = await hoisted.captureActiveGarminHealthWriteLifecycleGuards();
+                hoisted.captureActiveGarminHealthWriteLifecycleGuards
+                    .mockResolvedValueOnce({ ...initial, requiredExistingDocumentRef: token.ref })
+                    .mockResolvedValue({ ...initial, requiredExistingDocumentRef: token.ref,
+                        ...(replaceConnection ? { connectionStateGeneration: 'replacement' } : {}),
+                        requiredExistingTokenCredential: { ...initial.requiredExistingTokenCredential, accessToken: 'rotated-access-token' } });
+            }
             hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue({
                 requiredExistingDocumentRef: { path: 'suunto-token' },
                 requiredExistingTokenCredential: { accessToken: 'rotated-access-token' },
@@ -5757,8 +5770,22 @@ describe('sleep queue', () => {
                 },
                 additionalRequiredDocumentFieldValues: [],
             });
-            // The pending write succeeds; credentials rotate before the terminal transaction.
-            hoisted.updateHealthSyncState.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValue(true);
+            if (retryCount === 0) {
+                hoisted.updateHealthSyncState.mockResolvedValueOnce(false).mockResolvedValue(true);
+            } else {
+                // The pending write succeeds; credentials rotate before the terminal transaction.
+                hoisted.updateHealthSyncState.mockImplementationOnce(async () => {
+                    if (replaceConnection && provider === 'COROSAPI') {
+                        hoisted.getServiceConnectionMeta.mockResolvedValue({ providerUserId,
+                            connectionState: 'connected', connectionStateGeneration: 'replacement' });
+                    }
+                    return true;
+                }).mockResolvedValueOnce(false).mockResolvedValue(true);
+            }
+            token.ref.get.mockResolvedValue({ ...token, exists: true, data: () => ({ ...token.data(),
+                accessToken: 'rotated-access-token',
+                ...(provider === 'GarminAPI' ? { tokenCredentialGeneration: 'garmin-token-generation-1' } : {}),
+            }) });
         }
         const item: SleepSyncQueueItemInterface = {
             id: `health-retry-${provider}-${retryCount}`, dateCreated: 1_700_000_000_000,
@@ -5784,6 +5811,20 @@ describe('sleep queue', () => {
 
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(1, 'test-user-uid', provider,
             expect.objectContaining({ status: 'failed', retryPending: true }), expect.any(Number), expect.any(Object));
+        if (rotateCredentials && provider !== 'SuuntoApp') {
+            expect(hoisted.batchDelete).not.toHaveBeenCalled();
+            expect(item.retryCount).toBe(retryCount);
+            if (replaceConnection) {
+                expect(result).toBe(QueueResult.Processed);
+                expect(update).toHaveBeenCalledWith(expect.objectContaining({ resultStatus: 'skipped' }));
+                return;
+            }
+            expect(result).toBe(QueueResult.Failed);
+            expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ processed: true }));
+            // Redelivery captures current credentials and can finish the same live retry.
+            expect(await processSleepSyncQueueItem(item)).toBe(retryCount === 9 ? QueueResult.MovedToDLQ : QueueResult.RetryIncremented);
+            return;
+        }
         if (retryCount === 9) {
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith('test-user-uid', provider,

@@ -147,6 +147,7 @@ import {
     GARMIN_HEALTH_BACKFILL_SECOND_MS,
 } from '../garmin/health-backfill-range';
 import {
+    areGarminHealthWriteLifecycleGuardsContinuous,
     captureActiveGarminHealthWriteLifecycleGuards,
     GarminHealthAccountValidationError,
     type GarminHealthWriteLifecycleGuards,
@@ -1641,6 +1642,38 @@ function assertCOROSLifecycleContinuity(
     if (initialGeneration !== currentGeneration) {
         throw new COROSDailyAccountValidationError();
     }
+}
+
+/** Detect a refresh so the worker can retry; this never adopts new write authority. */
+async function didHealthFailureCredentialRotate(
+    queueItem: SleepSyncQueueItemInterface,
+    userID: string,
+    guards: HealthSyncStateWriterDependencies,
+): Promise<boolean> {
+    if (!isGarminHealthQueueItem(queueItem) && queueItem.provider !== SLEEP_PROVIDERS.COROSAPI) return false;
+    const tokenRef = guards.requiredExistingDocumentRef;
+    const previous = guards.requiredExistingTokenCredential;
+    if (!tokenRef || !previous) return false;
+    const snapshot = await tokenRef.get();
+    if (!snapshot.exists) return false;
+    const credential = getTokenCredentialSnapshot(snapshot.data() as Record<string, unknown> | undefined);
+    if (!credential.accessToken || credential.credentialGeneration !== previous.credentialGeneration
+        || areTokenCredentialSnapshotsEqual(previous, credential)) return false;
+    if (isGarminHealthQueueItem(queueItem)) {
+        const current = await captureActiveGarminHealthWriteLifecycleGuards(
+            admin.firestore(), userID, queueItem.providerUserId, snapshot,
+        );
+        return !!current && areGarminHealthWriteLifecycleGuardsContinuous(
+            guards as GarminHealthWriteLifecycleGuards, current,
+        );
+    }
+    if (snapshot.data()?.openId !== queueItem.providerUserId) return false;
+    const current = await getServiceConnectionMeta(userID, ServiceNames.COROSAPI);
+    const previousFields = guards.requiredDocumentFieldValues?.expectedFields;
+    return !!previousFields && !!current && !isServiceUnavailableForSyncConnection(current)
+        && previousFields.providerUserId === current.providerUserId
+        && previousFields.connectionState === current.connectionState
+        && previousFields.connectionStateGeneration === current.connectionStateGeneration;
 }
 
 function corosCredentialFromSnapshot(tokenSnapshot: TokenSnapshot): TokenCredentialSnapshot {
@@ -3446,6 +3479,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                 ? sanitizeCOROSDailyErrorForTelemetry(error)
                 : error;
         let retryExhaustedHealthState: Parameters<typeof increaseRetryCountForQueueItem>[5];
+        let retryCredentialRotationCheck: (() => Promise<boolean>) | undefined;
         let terminalHealthGuardRejected = false;
         if (queueItem.userID) {
             const sleepErrorStateWritten = isHealthQueueItem(queueItem)
@@ -3499,6 +3533,9 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     : corosLifecycleGuards;
             const failedHealthUserID = queueItem.userID;
             if (failedHealthProvider && failedHealthLifecycleGuards && failedHealthUserID) {
+                retryCredentialRotationCheck = () => didHealthFailureCredentialRotate(
+                    queueItem, failedHealthUserID, failedHealthLifecycleGuards,
+                );
                 try {
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
@@ -3560,6 +3597,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                         );
                     }
                     if (!healthStateWritten) {
+                        if (await retryCredentialRotationCheck()) return QueueResult.Failed;
                         return markQueueItemSkipped(
                             queueItem,
                             undefined,
@@ -3616,6 +3654,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         }
         // A failed commit is not a confirmed lifecycle rejection; keep the job retryable.
         if (retryResult === QueueResult.Processed && terminalHealthGuardRejected) {
+            if (await retryCredentialRotationCheck?.()) return QueueResult.Failed;
             return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                 skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD', sessionsWritten: 0, sessionsSkipped: 0,
             });

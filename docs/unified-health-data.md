@@ -175,6 +175,8 @@ The worker first records a guarded pending retry. Only the live queue retry coun
 
 The guarded processing claim pins the token-resolved owner on legacy provider-only queue rows before status writers require that owner. A different stored owner still rejects the claim. Repeated Suunto credential-rotation errors use the same pending/final Health status path as other retryable failures. A failed transaction commit is never treated as a confirmed lifecycle rejection: the job remains queued for recovery instead of being marked skipped.
 
+If Garmin or COROS refreshes credentials between a failed attempt and its Health status write, the worker distinguishes that refresh from a changed OAuth generation or connection. Same-connection refreshes leave the queue row and retry count intact for automatic task redelivery, which captures current guards before attempting ingestion again. They never grant the old attempt fresh write authority. Reconnects and replacement accounts still invalidate old work. This uses the existing worker failure/redelivery path and monitoring outcomes, with no retry-policy or alert-filter changes.
+
 Release the Health frontend and affected `processSleepSyncTask` / `processGarminHealthBackfillTask` consumers through the normal separately approved deployment. Either order is schema-compatible; frontend first recognizes the flag as soon as workers emit it. Older failed records retain their legacy display until subsequent worker/lifecycle updates; no production migration is part of this change. The flag is app-owned operational state, outside MCP Health/Sleep projections, grants, Assistant data and bundled skill contracts.
 
 ### Sports Lib scalar serialization boundary
