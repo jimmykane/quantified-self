@@ -62,10 +62,14 @@ contracts, consent, queries and mutations are unchanged. No backend deployment o
 
 ## Workspace Shells
 
-Signed-in navigation groups **Timeline notes** under **Health** using the same nested guide rail as **Plans**.
+Signed-in navigation uses flat, labelled sections: **Overview** (Dashboard, Calendar), **Training & health**
+(Training, Plans, Health, Timeline notes, Assistant), **Explore** (Routes, My Tracks), then the existing **Tools**,
+**Account**, and **Preferences**. Reuse the existing section heading and full-level row styling; no expansion controls
+or nested guide rails. Guest navigation keeps its existing destinations without empty signed-in section headings.
+**Timeline notes** retains the existing `event_note` icon.
 Its native Material list button lazily opens the existing manager after the drawer closes, preserving focus return and
 the current workspace. It does not add a duplicate list route or load private note UI for anonymous navigation.
-The nested action and rail stay selected during note comparisons; the Health overview link uses exact-path matching.
+The action keeps the regular row highlight during note comparisons; the Health overview link uses exact-path matching.
 
 Health All and the owner Dashboard Today share the surface-free summary from
 `components/shared/health-change-summary/`. Its presentation delegates to
@@ -311,8 +315,8 @@ desktop width when the viewport narrows. The shared chart host then resizes to t
 
 ## Sidebar navigation
 
-Training remains a direct link to `/training`. Plans links to `/training/plans` as an indented subitem immediately below
-it in a labelled Training group, without an expansion control. Plans is available to every signed-in user; Calendar entry
+Training remains a direct link to `/training`. Plans links to `/training/plans` as a full-level row immediately after
+it in **Training & health**, without an expansion control. Plans is available to every signed-in user; Calendar entry
 points retain their owner-scoped planning access. Training matches only its exact path (ignoring query parameters and
 fragments), so Plans has an independent active state. Both links keep their existing close/haptic action.
 

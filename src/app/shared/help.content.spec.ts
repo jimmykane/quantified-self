@@ -14,11 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
-  it('explains the nested Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
+  it('explains the flat Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
-    expect(copy).toContain('**Health → Timeline notes**');
+    expect(copy).toContain("app navigation's **Training & health** section");
+    expect(copy).not.toContain('**Health → Timeline notes**');
     expect(copy).toContain('same notes manager without leaving your current workspace');
     expect(copy).toContain('stays highlighted in navigation while comparing');
+    const planning = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(planning).toContain('full-level row in **Training & health**, after **Training**');
   });
   it('explains read-only note comparisons and honest coverage/source boundaries without implying an effect', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;

@@ -291,7 +291,7 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
-    it.each(['free', 'basic', 'pro'])('orders signed-in %s navigation as Dashboard, Calendar, Training, Plans, Health', stripeRole => {
+    it.each(['free', 'basic', 'pro'])('uses flat labelled navigation sections for signed-in %s accounts', stripeRole => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             stripeRole,
@@ -308,7 +308,20 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
         expect(navigationItems.slice(0, 8).map(item => item.injector.get(RouterLink).urlTree?.toString()))
-            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/routes', '/mytracks', '/ai-insights']);
+            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/ai-insights', '/routes', '/mytracks']);
+        const expectedGroups = [
+            ['sidenav-overview-heading', ['Dashboard', 'Calendar']],
+            ['sidenav-training-health-heading', ['Training', 'Plans', 'Health', 'Timeline notes', 'Assistant']],
+            ['sidenav-explore-heading', ['Routes', 'My Tracks']],
+            ['sidenav-tools-heading', ['Compare Files', 'Send activities']],
+        ] as const;
+        for (const [headingId, expectedLabels] of expectedGroups) {
+            const group = fixture.nativeElement.querySelector(`[aria-labelledby="${headingId}"]`) as HTMLElement;
+            expect(group.querySelector(`#${headingId}`)?.classList.contains('sidenav-section-header')).toBe(true);
+            const rows = Array.from(group.children).filter(row => row.matches('mat-list-item, button[mat-list-item]'));
+            expect(rows.map(row => row.querySelector('span')?.textContent?.trim())).toEqual(expectedLabels);
+        }
+        expect(fixture.nativeElement.querySelector('.sidenav-subitem-guide, .sidenav-subitem')).toBeNull();
         const sendItem = navigationItems.find(item => item.nativeElement.getAttribute('routerlink') === '/send-activities');
         expect(sendItem?.nativeElement.textContent).toContain('Send activities');
         expect(sendItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
@@ -337,9 +350,10 @@ describe('SideNavComponent', () => {
         expect(fixture.nativeElement.querySelector('.sidenav-notes-item')).toBeNull();
     });
 
-    it('nests a native Timeline notes action beneath Health for every signed-in account, but not guests', () => {
+    it('keeps Timeline notes as a full-level native action after Health, hidden from guests', () => {
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('.sidenav-notes-item')).toBeNull();
+        expect(fixture.nativeElement.querySelector('#sidenav-overview-heading, #sidenav-training-health-heading, #sidenav-explore-heading')).toBeNull();
         mockUserService.user.mockReturnValue(new User('notes-owner'));
         fixture.detectChanges();
         const button = fixture.nativeElement.querySelector('.sidenav-notes-item') as HTMLButtonElement;
@@ -347,8 +361,8 @@ describe('SideNavComponent', () => {
         expect(button.getAttribute('aria-haspopup')).toBe('dialog');
         expect(button.getAttribute('aria-expanded')).toBe('false');
         expect(button.querySelector('mat-icon')?.textContent).toBe('event_note');
-        expect(button.closest('[role="group"][aria-label="Health"]')).toBeTruthy();
-        expect(button.parentElement?.previousElementSibling?.getAttribute('routerlink')).toBe('/health');
+        expect(button.parentElement?.getAttribute('aria-labelledby')).toBe('sidenav-training-health-heading');
+        expect(button.previousElementSibling?.getAttribute('routerlink')).toBe('/health');
         expect(notesDialogs.open).not.toHaveBeenCalled(); expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
@@ -406,7 +420,7 @@ describe('SideNavComponent', () => {
         await component.openTimelineNotesFromNav(); expect(notesDialogs.open).toHaveBeenCalledOnce();
     });
 
-    it('marks Timeline notes independently of Health while comparing and clears the nested indicator on other routes', async () => {
+    it('marks Timeline notes independently of Health while comparing and clears selection on other routes', async () => {
         mockUserService.user.mockReturnValue(new User('notes-owner')); fixture.detectChanges();
         const router = TestBed.inject(Router);
         const health = fixture.nativeElement.querySelector('[routerlink="/health"]') as HTMLElement;
@@ -414,7 +428,6 @@ describe('SideNavComponent', () => {
         for (const path of ['/health/compare/' + 'a'.repeat(64), '/health/compare/' + 'b'.repeat(64) + '?view=history#chart']) {
             await router.navigateByUrl(path); await fixture.whenStable(); fixture.detectChanges();
             expect(notes.classList.contains('active')).toBe(true); expect(notes.getAttribute('aria-current')).toBe('true');
-            expect(notes.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(true);
             expect(health.classList.contains('active')).toBe(false);
         }
         await router.navigateByUrl('/health?metric=sleep#chart'); await fixture.whenStable(); fixture.detectChanges();
@@ -436,17 +449,15 @@ describe('SideNavComponent', () => {
         fixture.detectChanges();
         expect(plansItem.classList.contains('active')).toBe(true);
         expect(trainingItem.classList.contains('active')).toBe(false);
-        expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(true);
 
         await router.navigateByUrl('/training?tab=load#trends');
         await fixture.whenStable();
         fixture.detectChanges();
         expect(trainingItem.classList.contains('active')).toBe(true);
         expect(plansItem.classList.contains('active')).toBe(false);
-        expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(false);
     });
 
-    it('shows Plans as Beta beneath the direct Training link and closes on selection', () => {
+    it('shows Plans as a full-level Beta row after Training and closes on selection', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
@@ -461,11 +472,8 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
         expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
-        const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
-        const guide = plansItem?.nativeElement.parentElement;
-        expect(guide?.classList.contains('sidenav-subitem-guide')).toBe(true);
-        expect(guide?.parentElement).toBe(trainingGroup);
-        expect(guide?.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
+        expect(plansItem?.nativeElement.parentElement?.getAttribute('aria-labelledby')).toBe('sidenav-training-health-heading');
+        expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         plansItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
@@ -505,7 +513,7 @@ describe('SideNavComponent', () => {
         expect(template).toContain('routerLink="/settings" [queryParams]="{ section: \'profile\' }"');
     });
 
-    it('groups Compare Files and Send activities in Tools after Assistant and before Account', () => {
+    it('keeps Tools after Explore and before Account without changing its actions', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
@@ -544,9 +552,9 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
+            navigationItems.indexOf(assistantItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
-            navigationItems.indexOf(assistantItem!),
             navigationItems.indexOf(compareFilesItem!),
             navigationItems.indexOf(sendItem!),
         ]).toEqual([
@@ -569,7 +577,7 @@ describe('SideNavComponent', () => {
         expect(toolsGroup.querySelector('#sidenav-tools-heading')?.textContent?.trim()).toBe('Tools');
         expect(compareFilesItem?.nativeElement.parentElement).toBe(toolsGroup);
         expect(sendItem?.nativeElement.parentElement).toBe(toolsGroup);
-        expect(toolsGroup.previousElementSibling).toBe(assistantItem?.nativeElement);
+        expect(toolsGroup.previousElementSibling?.getAttribute('aria-labelledby')).toBe('sidenav-explore-heading');
         expect(toolsGroup.nextElementSibling?.textContent?.trim()).toBe('Account');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         sendItem!.triggerEventHandler('click', new MouseEvent('click'));
@@ -771,16 +779,17 @@ describe('SideNavComponent', () => {
     });
 });
 
-describe('nested sidenav style contract without fixtures', () => {
-    it('keeps the guide rail as the only Plans and Timeline notes active indicator', () => {
+describe('flat sidenav style contract without fixtures', () => {
+    it('reuses the regular active state and has no nested guide or icon treatment', () => {
         const styles = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.scss'), 'utf8');
-        const genericDarkActiveRule = styles.indexOf(':host-context(.dark-theme) .active');
-        const nestedActiveRule = styles.indexOf('mat-list-item.sidenav-subitem.active');
-        const genericDarkActiveBlock = styles.slice(genericDarkActiveRule, styles.indexOf('}', genericDarkActiveRule));
-        expect(nestedActiveRule).toBeGreaterThan(genericDarkActiveRule);
-        expect(genericDarkActiveBlock).not.toContain('border-left');
-        const nestedBlock = styles.slice(nestedActiveRule, styles.indexOf('}', nestedActiveRule));
-        expect(nestedBlock).toContain('button[mat-list-item].sidenav-subitem.active');
-        expect(nestedBlock).toContain('border-left: 0 !important');
+        expect(styles).not.toContain('.sidenav-subitem');
+        expect(styles).toContain('border-left: 3px solid var(--mat-sys-primary) !important');
+        expect(styles).toContain('.sidenav-notes-item mat-icon');
+        expect(styles).toContain('margin-inline: 8px 16px');
+        const notesRule = styles.slice(styles.indexOf('button[mat-list-item].sidenav-notes-item {'), styles.indexOf('.sidenav-notes-item mat-icon'));
+        expect(notesRule).toContain('padding-inline-start: 16px');
+        const phoneRules = styles.slice(styles.indexOf('@include bp.xsmall'));
+        expect(phoneRules).toContain('mat-list-item, button[mat-list-item]');
+        expect(phoneRules).toContain('width: calc(100% - 8px)');
     });
 });

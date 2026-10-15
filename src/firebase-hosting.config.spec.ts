@@ -370,6 +370,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers all five existing Dashboard assessments and the separate Health recovery overview.
+    // It also documents the flat Training & health navigation for Plans and Timeline notes.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
