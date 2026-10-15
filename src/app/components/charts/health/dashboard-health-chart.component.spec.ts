@@ -394,7 +394,7 @@ describe('dashboard chart source interactions', () => {
       add: { schemas: [NO_ERRORS_SCHEMA] },
     }).compileComponents();
   });
-  function create(metric: 'sleep_duration' | 'sleep' = 'sleep_duration', sourceKey?: string, multiple = true) {
+  function create(metric: 'sleep_duration' | 'sleep' | 'heart_rate' = 'sleep_duration', sourceKey?: string, multiple = true) {
     const fixture = TestBed.createComponent(DashboardHealthChartComponent);
     fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {}, appSettings: {} } });
     fixture.componentRef.setInput('settings', { metric, range: '30d', ...(sourceKey ? { sourceKey } : {}) });
@@ -403,7 +403,8 @@ describe('dashboard chart source interactions', () => {
     const session = { id: 'night', userID: 'owner', sleepDate: window.endDate,
       source: { provider: 'SuuntoApp' as const, accountKey: 'suunto', providerUserId: 'suunto', sourceSessionKey: 'night' },
       startTimeMs: window.endTimeMs - 12 * 3600000, endTimeMs: window.endTimeMs - 4 * 3600000,
-      durationSeconds: 28800, stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 };
+      durationSeconds: 28800, stages: [], isNap: false,
+      vitals: { averageHeartRateBpm: 63, minimumHeartRateBpm: 57 }, createdAtMs: 0, updatedAtMs: 0 };
     readings.next({ window, health: null, history: null, activities: null, errors: [], sessions: [session,
       ...(multiple ? [{ ...session, id: 'other', source: { ...session.source, accountKey: 'second', providerUserId: 'second' } }] : [])] });
     fixture.detectChanges(); return fixture;
@@ -444,6 +445,14 @@ describe('dashboard chart source interactions', () => {
     fixture.componentRef.setInput('user', { ...user, settings: { ...user.settings, unitSettings: normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }) } }); fixture.detectChanges();
     expect(host.querySelector('.health-value-row strong')?.textContent).toBe('158.7 lb');
     expect(watch).toHaveBeenCalledTimes(1); expect(haptics.selection).not.toHaveBeenCalled();
+    expect(host.querySelector('.health-value-row app-chart-source-picker')?.textContent).toContain('Recorded measurement');
+    expect(host.querySelector('.health-evidence-text')?.textContent).toContain('1 reading recorded · No trend inferred');
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
+    expect(host.querySelector('.health-thumbnail-source')?.textContent).toBe(component.context()!.selected!.model.series.sourceLabel);
+    expect(host.querySelector('.health-thumbnail-value')?.textContent).toBe('158.7 lb');
+    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('No trend inferred');
+    expect(watch).toHaveBeenCalledTimes(1); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges();
     fixture.componentRef.setInput('providerFilter', ['GarminAPI']); fixture.detectChanges();
     expect(component.context()?.hasData).toBe(false); expect(component.context()?.selectedKey).toBe(manual.key);
     expect(component.context()?.sources.map(source => source.provider)).toEqual(['GarminAPI']);
@@ -485,6 +494,36 @@ describe('dashboard chart source interactions', () => {
     expect(missing.componentInstance.context()?.hasData).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled();
     missing.destroy();
+  });
+
+  it('names minimum sleep heart rate and its record date on a full Dashboard tile and thumbnail', () => {
+    const fixture = create('heart_rate'), component = fixture.componentInstance;
+    const minimum = component.context()!.sources.find(source => source.shortLabel.endsWith('Minimum sleep HR'))!;
+    expect(minimum).toBeDefined();
+    fixture.componentRef.setInput('settings', { metric: 'heart_rate', range: '30d', sourceKey: minimum.key });
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.health-value-row app-chart-source-picker')?.textContent).toContain('Minimum sleep HR');
+    expect(host.querySelector('.health-value-row strong')?.textContent).toBe('57 bpm');
+    expect(host.querySelector('.health-recorded-date')?.textContent).toBe('Recorded ' + component.recordedDate());
+    expect(host.querySelector('.health-evidence-text')?.textContent).toContain('No trend inferred');
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
+    expect(host.querySelector('.health-thumbnail-source')?.textContent).toContain('Suunto');
+    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('Minimum heart rate');
+    expect(host.querySelector('.health-thumbnail-value')?.textContent).toBe('57 bpm');
+    expect(watch).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
+  it('attributes the single-source Sleep overview and keeps public examples clearly fictional', () => {
+    const fixture = create('sleep', undefined, false);
+    expect(fixture.nativeElement.querySelector('.health-sleep-attribution')?.textContent).toBe('Suunto · Sleep overview');
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.health-sleep-attribution')?.textContent).toBe('Example data · Sleep overview');
+    expect(watch).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
   });
   it('reuses loaded evidence after source persistence, source changes and unit updates', () => {
     const fixture = create(), component = fixture.componentInstance;

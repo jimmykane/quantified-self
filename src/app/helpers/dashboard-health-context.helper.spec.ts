@@ -251,7 +251,10 @@ describe('dashboard Health semantics',()=>{
         vitals: { averageHeartRateBpm: 57, restingHeartRateBpm: 50, maxSpo2Percent: 98, averageRespirationBrpm: 14 } }];
       const view = buildDashboardHealthContext(data, { metric, range: '30d' });
       expect(view.hasData).toBe(true); expect(view.availability.state).toBe('ready');
-      expect(view.sources).toHaveLength(1); expect(view.sources[0].shortLabel).toContain('Sleep');
+      expect(view.sources).toHaveLength(1);
+      const expectedReading = metric === 'heart_rate' ? 'Average sleep HR'
+        : metric === 'blood_oxygen_saturation' ? 'Maximum sleep SpO₂' : 'Sleep';
+      expect(view.sources[0].shortLabel).toContain(expectedReading);
       expect(view.selected?.model.series.provider).toBe('SuuntoApp');
       expect(view.notices).toContain('Health readings could not be loaded. Try again.');
     });

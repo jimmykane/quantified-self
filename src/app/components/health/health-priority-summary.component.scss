@@ -134,11 +134,13 @@
 
 .health-priority-chart-source > small {
   color: var(--mat-sys-on-surface-variant);
-  font-size: 0.68rem;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font: var(--mat-sys-body-small);
+  overflow-wrap: anywhere;
+}
+
+.health-priority-chart-source > .health-priority-reading-kind {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-medium);
 }
 
 .health-priority-range-status {
