@@ -41,7 +41,7 @@ interface StressStateColorOption {
         value: (dimension: number) => unknown;
         coord: (value: [number, number]) => [number, number];
         size: (value: [number, number]) => [number, number];
-        style: () => Record<string, unknown>;
+        visual: (visualType: 'color' | 'opacity') => unknown;
       },
     ) => Record<string, unknown> | null;
   }>;
@@ -814,13 +814,13 @@ describe('Health metric chart helpers', () => {
         value: dimension => [DAY_MS, DAY_MS * 2, 3, 'stressful'][dimension],
         coord: ([timestampMs, categoryIndex]) => [10 + timestampMs / DAY_MS * 20, 30 + categoryIndex * 20],
         size: () => [0, 40],
-        style: () => ({ fill: AppDataColors['Heart Rate_0'] }),
+        visual: visualType => ({ color: AppDataColors['Heart Rate_0'], opacity: 0.65 })[visualType],
       },
     );
     expect(rendered).toMatchObject({
       type: 'rect',
       shape: { x: 30, y: 84, width: 20, height: 12, r: 2 },
-      style: { fill: AppDataColors['Heart Rate_0'] },
+      style: { fill: AppDataColors['Heart Rate_0'], opacity: 0.65 },
     });
   });
 
