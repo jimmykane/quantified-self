@@ -19,7 +19,7 @@ export function recordDerivedMetricCommit(event: CommitEvent, outcome: CommitOut
     for (const metricKind of normalized.length ? normalized : ['unknown']) emit({ event, outcome, metricKind });
 }
 
-export function recordDerivedIngress(outcome: 'queued' | 'coalesced' | 'excluded' | 'invalid'): void {
+export function recordDerivedIngress(outcome: 'queued' | 'coalesced' | 'not_admitted' | 'invalid'): void {
     emit({ event: 'ingress', outcome });
 }
 

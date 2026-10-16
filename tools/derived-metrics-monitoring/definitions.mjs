@@ -32,8 +32,8 @@ export function buildDerivedMetricsMonitoring(project, channel) {
       } } } : {}),
     });
   }
-  metric('ingress', 'resource.labels.service_name="processderivedmetricsingresstask" jsonPayload.event="ingress" jsonPayload.outcome=("queued" OR "coalesced" OR "excluded" OR "invalid")',
-    'Ingress dirty-work admission; queued/coalesced is not snapshot publication.', ['outcome']);
+  metric('ingress', 'resource.labels.service_name="processderivedmetricsingresstask" jsonPayload.event="ingress" jsonPayload.outcome=("queued" OR "coalesced" OR "not_admitted" OR "invalid")',
+    'Ingress dirty-work admission; not_admitted includes lifecycle skips and rejected enqueue attempts, distinguished by guarded enqueue-failure commits. Queued/coalesced is not snapshot publication.', ['outcome']);
   metric('worker_attempts', `${worker} jsonPayload.event="worker_attempt" jsonPayload.stage=("ingress" OR "calculation") jsonPayload.outcome=("acknowledged" OR "failed")`,
     'Invocation ACK includes stale, unchanged, superseded and deletion-fenced no-ops; not publication.', ['stage', 'outcome']);
   metric('worker_latency', `${worker} jsonPayload.event="worker_attempt" jsonPayload.stage=("ingress" OR "calculation") jsonPayload.durationMs>=0`,
@@ -98,7 +98,7 @@ export function buildDerivedMetricsMonitoring(project, channel) {
       chart(`${queue}: native HTTP attempts — not publication`, native(queue, 'task_attempt_count'), sum('900s', ['metric.label.response_code'])),
       chart(`${queue}: native dispatch delay p95`, native(queue, 'task_attempt_delays'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: [] }, 'ms'),
     ]),
-    chart('Ingress queued / coalesced / excluded', filter('ingress'), sum('900s', ['metric.label.outcome'])),
+    chart('Ingress queued / coalesced / not admitted / invalid', filter('ingress'), sum('900s', ['metric.label.outcome'])),
     chart('Whole-task ACKs / exceptions — not publication', filter('worker_attempts'), sum('900s', ['metric.label.stage', 'metric.label.outcome'])),
     chart('Whole-task latency p95', filter('worker_latency'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: ['metric.label.stage'] }, 'ms'),
     ...[['snapshot_commits', 'Guarded ready / failed snapshots'], ['coordinator_commits', 'Settled / follow-up / failed coordinator commits']].map(([key, title]) => chart(title, filter(key), sum('900s', ['metric.label.metricKind', 'metric.label.outcome']))),

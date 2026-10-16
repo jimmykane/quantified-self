@@ -51,7 +51,9 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         background: payload.immediate !== true,
         ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
-    recordDerivedIngress(!queueResult.accepted ? 'excluded' : queueResult.queued ? 'queued' : 'coalesced');
+    // accepted:false also covers enqueue errors, not just expected lifecycle skips.
+    // Only the separate guarded enqueue-failure commit establishes that failure.
+    recordDerivedIngress(!queueResult.accepted ? 'not_admitted' : queueResult.queued ? 'queued' : 'coalesced');
     // A generation means the dirty write committed but task creation failed.
     // Deletion/rollout skips have no generation and must still be acknowledged.
     if (!queueResult.accepted && queueResult.generation !== null) {

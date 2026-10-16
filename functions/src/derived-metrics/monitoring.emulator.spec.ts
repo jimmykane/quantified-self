@@ -84,6 +84,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived metrics monitorin
         await observeDerivedMetricsQueue(db, now);
         expect(sample()).toMatchObject({ unknownSample: 1 }); expect(sample()).not.toHaveProperty('pendingSample');
     });
+    it.each(['queued', 'processing'])('isolates malformed %s kind entries without suppressing other owners or leaking data', async status => {
+        const field = status === 'queued' ? 'dirtyMetricKinds' : 'processingMetricKinds';
+        await seed({ status, [field]: [{ toString: 'PRIVATE_INVALID_KIND' }] });
+        const otherStatus = status === 'queued' ? 'processing' : 'queued';
+        await db.doc('users/PRIVATE_OTHER').set({ private: 'PRIVATE_PROFILE' });
+        await seed({ status: otherStatus }, 'PRIVATE_OTHER');
+        await observeDerivedMetricsQueue(db, now);
+        expect(sample(status)).toMatchObject({ unknownSample: 1 });
+        expect(sample(status)).not.toHaveProperty('pendingSample');
+        expect(sample(otherStatus)).toMatchObject({ pendingSample: 1, unknownSample: 0,
+            ageLowerBoundMs: otherStatus === 'processing' ? hour / 2 : hour });
+        expect(observations('queue_sample_unavailable')).toHaveLength(0);
+        expect(JSON.stringify(observations())).not.toContain('PRIVATE');
+    });
     it('revalidates a coordinator changed after sampling without claiming a stale backlog', async () => {
         const ref = await seed(); const original = db.runTransaction.bind(db);
         vi.spyOn(db, 'runTransaction').mockImplementationOnce(async (callback, options) => {
