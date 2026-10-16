@@ -1,3 +1,4 @@
+import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
@@ -339,9 +340,9 @@ function generateUploadEventID(userID: string, payload: Buffer, resolvedExtensio
     .digest('hex');
 }
 
-function getFirestoreAdapter(userID: string): FirestoreAdapter {
+function getFirestoreAdapter(userID: string, sourceWrite: TrainingLoadSourceWrite): FirestoreAdapter {
   return {
-    prepareTrainingLoad: event => prepareTrainingLoadMetadata(userID, event),
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: unknown) => {
       const documentPath = path.join('/');
       const documentRef = admin.firestore().doc(documentPath);
@@ -353,6 +354,7 @@ function getFirestoreAdapter(userID: string): FirestoreAdapter {
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        sourceWrite.assertCurrent,
       );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
@@ -373,7 +375,7 @@ function getStorageAdapter(userID: string): StorageAdapter {
   };
 }
 
-async function persistProcessingMetadata(userID: string, eventID: string): Promise<void> {
+async function persistProcessingMetadata(userID: string, eventID: string, sourceWrite: TrainingLoadSourceWrite): Promise<void> {
   const processingPayload: ProcessingMetaData = {
     processingEntity: EVENT_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
@@ -389,16 +391,20 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processingRef,
     processingPayload,
     { merge: true },
+    undefined,
+    sourceWrite.assertCurrent,
   );
 }
 
-async function persistManualUploadOrigin(userID: string, eventID: string): Promise<void> {
+async function persistManualUploadOrigin(userID: string, eventID: string, sourceWrite: TrainingLoadSourceWrite): Promise<void> {
   await setEventDocumentIfUserActive(
     userID,
     'activity_upload_origin_metadata',
     admin.firestore().doc(`users/${userID}/events/${eventID}/metaData/manualUploadOrigin`),
     { kind: 'manualUpload', version: 1 },
     { merge: true },
+    undefined,
+    sourceWrite.assertCurrent,
   );
 }
 
@@ -507,10 +513,11 @@ export const uploadActivity = onRequest({
       originalFilename,
     };
 
-    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
+    const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareTrainingLoadMetadata(userID, event));
+    const writer = new EventWriter(getFirestoreAdapter(userID, sourceWrite), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, event, originalFile);
-    await persistProcessingMetadata(userID, eventID);
-    await persistManualUploadOrigin(userID, eventID);
+    await persistProcessingMetadata(userID, eventID, sourceWrite);
+    await persistManualUploadOrigin(userID, eventID, sourceWrite);
 
     response.status(200).json({
       eventId: eventID,

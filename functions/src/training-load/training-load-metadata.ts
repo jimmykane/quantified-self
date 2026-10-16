@@ -9,6 +9,7 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../../../shared/training-load-source';
 import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint, trainingLoadWriteTime } from './training-load-cache';
 import { derivedMetricSourceProjection } from '../derived-metrics/derived-metrics-source-change';
+import type { PreparedTrainingLoadWrite } from './training-load-source-write';
 export { trainingLoadSourceFingerprint } from './training-load-cache';
 export { trainingLoadTimeMs } from '../../../shared/training-load-source';
 
@@ -90,7 +91,7 @@ async function policyAt(
 export async function prepareTrainingLoadMetadata(
   uid: string, event: EventInterface,
   authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
-): Promise<() => Promise<void>> {
+): Promise<PreparedTrainingLoadWrite> {
   const db = admin.firestore();
   const eventId = event.getID();
   if (!eventId) throw new Error('Training load requires a persisted event identity.');
@@ -137,7 +138,7 @@ export async function prepareTrainingLoadMetadata(
     await prepare(frozen);
     return false;
   });
-  return () => persistTrainingLoadMetadata(uid, event, authorize, firstImport, sourceWriteId);
+  return Object.assign(() => persistTrainingLoadMetadata(uid, event, authorize, firstImport, sourceWriteId), { sourceWriteId });
 }
 
 /** Called by all backend writers while parse-time candidates remain available. */

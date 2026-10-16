@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
+// training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
+const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../training-load/training-load-source-write', () => ({
+    TrainingLoadSourceWrite: class {
+        assertCurrent = sourceWriteGuard.assertCurrent;
+        constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
+    },
+}));
 import { gzipSync } from 'node:zlib';
 import {
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
@@ -32,7 +41,7 @@ const hoisted = vi.hoisted(() => {
     const mockRunTransaction = vi.fn(async (callback: any) => callback({
         set: mockTransactionSet,
         delete: mockTransactionDelete,
-        get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        get: vi.fn(async (ref: any) => ref.get()),
     }));
     const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
         userExists: true,
@@ -149,6 +158,7 @@ vi.mock('firebase-admin', () => {
 });
 
 vi.mock('firebase-admin/firestore', () => ({
+    FieldPath: { documentId: () => '__name__' },
     FieldValue: {
         serverTimestamp: hoisted.serverTimestamp,
         delete: hoisted.deleteField,
@@ -260,6 +270,7 @@ function makeCollectionQuery(docs: any[] = []) {
         where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),
+        startAfter: vi.fn().mockReturnThis(),
         get: vi.fn().mockResolvedValue({
             empty: docs.length === 0,
             docs,
@@ -297,7 +308,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
-            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+            get: vi.fn(async (ref: any) => ref.get()),
         }));
         hoisted.mockTransactionSet.mockImplementation(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
             if (typeof ref?.set === 'function') {
@@ -1334,6 +1345,10 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
+        hoisted.mockCollection.mockReturnValue(makeCollectionQuery([
+            { id: 'a1', ref: { path: 'users/u1/activities/a1' } },
+            { id: 'a2', ref: { path: 'users/u1/activities/a2' } },
+        ]));
         const setCalls: Array<{ path: string; payload?: Record<string, unknown>; options?: Record<string, unknown> }> = [];
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1382,7 +1397,45 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
     });
 
+    it('refreshes cleanup membership in bounded pages even when the initial snapshot had no children', async () => {
+        const firstPage = Array.from({ length: 400 }, (_, index) => {
+            const id = `leg-${index.toString().padStart(3, '0')}`;
+            return { id, ref: { path: `users/u1/activities/${id}` } };
+        });
+        const query = makeCollectionQuery([]);
+        query.get.mockResolvedValueOnce({ empty: false, docs: firstPage }).mockResolvedValueOnce({ empty: false, docs: [
+            { id: 'late-partial', ref: { path: 'users/u1/activities/late-partial' } },
+            { id: 'last-current', ref: { path: 'users/u1/activities/last-current' } },
+        ] });
+        hoisted.mockCollection.mockReturnValue(query);
+        const result = await persistReparsedEvent('u1', 'e1', {
+            setID: vi.fn(), getActivities: () => [{ getID: () => 'leg-000' }, { getID: () => 'last-current' }],
+        } as any, {}, [], TARGET_SPORTS_LIB_VERSION);
+        expect(result.staleActivitiesDeleted).toBe(400);
+        expect(query.where).toHaveBeenCalledWith('eventID', '==', 'e1');
+        expect(query.limit).toHaveBeenCalledWith(400);
+        expect(query.startAfter).toHaveBeenCalledWith('leg-399');
+        expect(hoisted.mockTransactionDelete).toHaveBeenCalledTimes(400);
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalledWith(firstPage[0].ref);
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalledWith({ path: 'users/u1/activities/last-current' });
+        expect(sourceWriteGuard.assertCurrent).toHaveBeenCalledTimes(3); // Both cleanup pages and processing metadata.
+    });
+
+    it('does not delete a former child that no longer belongs to this event', async () => {
+        const query = makeCollectionQuery([]); hoisted.mockCollection.mockReturnValue(query);
+        const result = await persistReparsedEvent('u1', 'e1', {
+            setID: vi.fn(), getActivities: () => [{ getID: () => 'current' }],
+        } as any, {}, [{ id: 'moved', data: () => ({ eventID: 'e1' }) }], TARGET_SPORTS_LIB_VERSION);
+        expect(result.staleActivitiesDeleted).toBe(0);
+        expect(query.where).toHaveBeenCalledWith('eventID', '==', 'e1');
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
     it('persistReparsedEvent should log persistence phase checkpoints', async () => {
+        hoisted.mockCollection.mockReturnValue(makeCollectionQuery([
+            { id: 'a1', ref: { path: 'users/u1/activities/a1' } },
+            { id: 'a2', ref: { path: 'users/u1/activities/a2' } },
+        ]));
         const parsedEvent = {
             setID: vi.fn(),
             getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
@@ -1423,6 +1476,10 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('persistReparsedEvent should retry retryable stale activity delete transaction failures', async () => {
+        hoisted.mockCollection.mockReturnValue(makeCollectionQuery([
+            { id: 'a1', ref: { path: 'users/u1/activities/a1' } },
+            { id: 'a2', ref: { path: 'users/u1/activities/a2' } },
+        ]));
         const invalidTransactionError = Object.assign(new Error('3 INVALID_ARGUMENT: Invalid transaction.'), {
             code: 3,
             details: 'Invalid transaction.',
@@ -1434,7 +1491,7 @@ describe('sports-lib-reparse.service', () => {
             .mockImplementation(async (callback: any) => callback({
                 set: hoisted.mockTransactionSet,
                 delete: hoisted.mockTransactionDelete,
-                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+                get: vi.fn(async (ref: any) => ref.get()),
             }));
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1597,7 +1654,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
-            get: vi.fn().mockResolvedValue({
+            get: vi.fn(async (ref: any) => ref.path ? {
                 exists: true,
                 data: () => ({
                     name: 'Latest name',
@@ -1608,7 +1665,7 @@ describe('sports-lib-reparse.service', () => {
                     feeling: 3,
                     tags: ['Latest'],
                 }),
-            }),
+            } : ref.get()),
         }));
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1844,7 +1901,7 @@ describe('sports-lib-reparse.service', () => {
             .mockImplementationOnce(async (callback: any) => callback({
                 set: hoisted.mockTransactionSet,
                 delete: hoisted.mockTransactionDelete,
-                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+                get: vi.fn(async (ref: any) => ref.get()),
             }));
 
         await writeReparseStatus('u1', 'e1', {
@@ -3151,16 +3208,10 @@ describe('sports-lib-reparse.service', () => {
         }));
         hoisted.mockCollection.mockImplementation((path: string) => {
             if (path === 'users/u1/activities') {
-                return {
-                    where: vi.fn().mockReturnValue({
-                        get: vi.fn().mockResolvedValue({
-                            docs: [
-                                { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' }, startDate: new Date('2020-01-02T00:00:00Z') }) },
-                                { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' }, startDate: new Date('2020-01-01T00:00:00Z') }) },
-                            ],
-                        }),
-                    }),
-                };
+                return makeCollectionQuery([
+                    { id: 'a-old-2', ref: { path: 'users/u1/activities/a-old-2' }, data: () => ({ creator: { name: 'creator-2' }, startDate: new Date('2020-01-02T00:00:00Z') }) },
+                    { id: 'a-old-1', ref: { path: 'users/u1/activities/a-old-1' }, data: () => ({ creator: { name: 'creator-1' }, startDate: new Date('2020-01-01T00:00:00Z') }) },
+                ]);
             }
             return makeCollectionQuery([]);
         });

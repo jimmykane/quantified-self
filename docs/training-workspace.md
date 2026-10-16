@@ -5739,17 +5739,26 @@ even if reimported source fields are identical. Cache-dependent ingress selects 
 before enqueueing, after cache maintenance and deletion guards, so late deliveries do not reuse an expired bucket. `sourceFirstImport` preserves dated selection across
 partial first-import retries; it is removed on successful finalization. Owner revision/updatedAt-only changes are ignored.
 Each import, reparse or merge preparation also reserves a private server-owned `sourceWriteId` in the existing
-metadata transaction. Finalization must still own that reservation, including after a newer attempt completes.
+metadata transaction. Source-document writes, finalization, reparse cleanup and completion metadata must still own
+that reservation, including after a newer attempt completes. Each existing Firestore write transaction checks the
+reservation before writing, alongside its deletion and history-authorization checks.
 Source fingerprints alone cannot establish ownership: a newer parser can recognize another zero-load multisport leg
 without changing the parent totals or the older leg. A superseded finalizer fails before changing candidates, controls
 or cache state; the current attempt can finish and repeated finalization of that same attempt remains idempotent.
 Owner edits preserve the reservation and remain independent of it. A retry reserves a new identifier while retaining
-frozen legacy identities, dated policies and latest controls. This adds no reads or writes to normal imports or warm
-rebuilds; a repeated preparation refreshes the reservation in its existing transaction. Reservation-only changes do
+frozen legacy identities, dated policies and latest controls. Each guarded source/completion transaction adds one
+metadata document read (including any Firestore contention retries); no new transaction or normal-path write is
+needed for that check. Warm Training rebuild reads are unchanged. A repeated preparation refreshes the reservation
+in its existing transaction. Source writes start only after original-file uploads succeed, so an upload failure cannot
+return while activity writes are still running. Reparse cleanup refreshes event-scoped child membership in guarded
+transactions of at most 400 documents per page; it cannot rely on the snapshot taken before parsing, which may miss
+children written by an interrupted attempt. Each cleanup page reads its current children (including retained legs)
+and deletion/attempt guards, even when nothing needs deleting. This adds bounded reparse reads and can add a cleanup
+transaction where the old snapshot predicted no stale children. It adds no import or rebuild scan. Reservation-only changes do
 not invalidate derived metrics. MCP impact is none: the marker is never projected, and public schemas, planning reads,
 mutations and provider delivery are unchanged. Existing help remains accurate; the editor already describes incomplete
 imports as unavailable. Queue monitoring coverage is unchanged: existing persistence-phase errors and worker retry
-handling cover a superseded finalizer, with no new queue, scan, provider action or deployment.
+handling cover superseded source writes, finalizers and cleanup, with no new queue, scan, provider action or deployment.
 Browser and backend use the same canonical source projection for SHA-256
 fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks

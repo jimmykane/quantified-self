@@ -630,6 +630,8 @@ describe('uploadActivity', () => {
         processedAt: expect.anything(),
       }),
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
       'user-1',
@@ -1133,6 +1135,8 @@ describe('uploadActivity', () => {
       expect.anything(),
       { kind: 'manualUpload', version: 1 },
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -1480,6 +1484,7 @@ describe('uploadActivity', () => {
       { ok: true },
       undefined,
       expect.any(Function),
+      expect.any(Function),
     );
 
     await firestoreAdapter.setDoc(['users', 'user-1', 'activities', 'activity-test'], { ok: true });
@@ -1490,6 +1495,7 @@ describe('uploadActivity', () => {
       { ok: true },
       undefined,
       undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
 

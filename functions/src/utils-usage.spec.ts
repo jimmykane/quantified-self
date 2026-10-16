@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
+// training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
+const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('./training-load/training-load-source-write', () => ({
+    TrainingLoadSourceWrite: class {
+        assertCurrent = sourceWriteGuard.assertCurrent;
+        constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
+    },
+}));
 import * as logger from 'firebase-functions/logger';
 import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';

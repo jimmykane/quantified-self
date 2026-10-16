@@ -1,3 +1,4 @@
+import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -379,7 +380,7 @@ function clearGeneratedMergeDescription(event: EventInterface): void {
   eventAny.description = '';
 }
 
-function getFirestoreAdapter(userID: string, sources: MergeTrainingLoadSource[],
+function getFirestoreAdapter(userID: string, sourceWrite: TrainingLoadSourceWrite,
   rememberTrainingLoadError: (error: unknown) => void): FirestoreAdapter {
   const retainFailure = async <T>(work: () => Promise<T>): Promise<T> => {
     try { return await work(); }
@@ -387,7 +388,7 @@ function getFirestoreAdapter(userID: string, sources: MergeTrainingLoadSource[],
   };
   return {
     prepareTrainingLoad: async event => {
-      const finish = await retainFailure(() => prepareMergedTrainingLoad(userID, event, sources));
+      const finish = await retainFailure(() => sourceWrite.prepareTrainingLoad(event));
       return () => retainFailure(finish);
     },
     setDoc: async (path: string[], data: unknown) => {
@@ -397,6 +398,9 @@ function getFirestoreAdapter(userID: string, sources: MergeTrainingLoadSource[],
         `merge_event_writer:${documentPath}`,
         admin.firestore().doc(documentPath),
         data,
+        undefined,
+        undefined,
+        sourceWrite.assertCurrent,
       );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
@@ -417,7 +421,7 @@ function getStorageAdapter(userID: string): StorageAdapter {
   };
 }
 
-async function persistProcessingMetadata(userID: string, eventID: string): Promise<void> {
+async function persistProcessingMetadata(userID: string, eventID: string, sourceWrite: TrainingLoadSourceWrite): Promise<void> {
   const processingPayload: ProcessingMetaData = {
     processingEntity: EVENT_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
@@ -431,10 +435,12 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     admin.firestore().doc(`users/${userID}/events/${eventID}/metaData/processing`),
     processingPayload,
     { merge: true },
+    undefined,
+    sourceWrite.assertCurrent,
   );
 }
 
-async function finalizeMergedEventMetadata(userID: string, eventID: string, mergeType: MergeType): Promise<void> {
+async function finalizeMergedEventMetadata(userID: string, eventID: string, mergeType: MergeType, sourceWrite: TrainingLoadSourceWrite): Promise<void> {
   const mergeMetadataPayload = sanitizeEventFirestoreWritePayload({
     isMerge: mergeType === 'benchmark',
     mergeType,
@@ -446,8 +452,10 @@ async function finalizeMergedEventMetadata(userID: string, eventID: string, merg
       admin.firestore().doc(`users/${userID}/events/${eventID}`),
       mergeMetadataPayload,
       { merge: true },
+      undefined,
+      sourceWrite.assertCurrent,
     ),
-    persistProcessingMetadata(userID, eventID),
+    persistProcessingMetadata(userID, eventID, sourceWrite),
   ]);
 
   const failures = results
@@ -685,7 +693,9 @@ export const mergeEvents = onCall({
     clearGeneratedMergeDescription(mergedEvent);
 
     let trainingLoadError: unknown;
-    const writer = new EventWriter(getFirestoreAdapter(userID, sourceLoadResults.map(result => result.trainingLoadSource),
+    const sourceWrite = new TrainingLoadSourceWrite(userID, event =>
+      prepareMergedTrainingLoad(userID, event, sourceLoadResults.map(result => result.trainingLoadSource)));
+    const writer = new EventWriter(getFirestoreAdapter(userID, sourceWrite,
       error => { trainingLoadError = error; }), getStorageAdapter(userID));
     try {
       await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
@@ -694,7 +704,7 @@ export const mergeEvents = onCall({
       // changing other writers or exposing storage/internal errors as callable preconditions.
       throw trainingLoadError instanceof HttpsError ? trainingLoadError : error;
     }
-    await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
+    await finalizeMergedEventMetadata(userID, mergedEventID, mergeType, sourceWrite);
 
     const response: MergeEventResponse = {
       eventId: mergedEventID,

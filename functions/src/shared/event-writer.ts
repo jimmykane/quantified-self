@@ -158,7 +158,7 @@ export class EventWriter {
     public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<OriginalFileMetaData[]> {
         const startTotal = Date.now();
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
-        const writePromises: Promise<void>[] = [];
+        const writes: Array<() => Promise<void>> = [];
         let persistedOriginalFiles: OriginalFileMetaData[] = [];
 
         // Ensure Event ID
@@ -191,7 +191,7 @@ export class EventWriter {
 
 
                 const activityPath = ['users', userID, 'activities', <string>activity.getID()];
-                writePromises.push(this.writeDocWithContext(activityPath, activityJSON));
+                writes.push(() => this.writeDocWithContext(activityPath, activityJSON));
             }
             this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
@@ -279,14 +279,15 @@ export class EventWriter {
             }
 
             const eventPath = ['users', userID, 'events', <string>event.getID()];
-            writePromises.push(this.writeDocWithContext(eventPath, eventJSON));
+            writes.push(() => this.writeDocWithContext(eventPath, eventJSON));
 
-            this.logger.info(`Starting write batch for ${writePromises.length} writes...`);
+            this.logger.info(`Starting write batch for ${writes.length} writes...`);
             const startWrites = Date.now();
             // A deletion-guarded write can reject while sibling writes are
             // still settling. Wait for all writes so no background write can
             // continue after the caller starts deletion handling.
-            const writeResults = await Promise.allSettled(writePromises);
+            // Upload failure must not leave source writes running after this attempt returns.
+            const writeResults = await Promise.allSettled(writes.map(write => write()));
             const rejectedWrite = writeResults.find(
                 (result): result is PromiseRejectedResult => result.status === 'rejected',
             );

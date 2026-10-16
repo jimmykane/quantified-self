@@ -1,5 +1,6 @@
 import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
 import { prepareTrainingLoadMetadata } from './training-load/training-load-metadata';
+import { TrainingLoadSourceWrite } from './training-load/training-load-source-write';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
@@ -357,11 +358,16 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   }
 
 
+  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareTrainingLoadMetadata(userID, event, async (db, transaction) => {
+    await assertHistoryWrite(transaction);
+    await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+  }));
+  const assertSourceWrite: NonNullable<SetEventWriteOptions['assertWriteAuthorizationInTransaction']> = async (db, transaction) => {
+    await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+    await sourceWrite.assertCurrent(db, transaction);
+  };
   const adapter: FirestoreAdapter = {
-    prepareTrainingLoad: event => prepareTrainingLoadMetadata(userID, event, async (db, transaction) => {
-      await assertHistoryWrite(transaction);
-      await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
-    }),
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();
@@ -393,7 +399,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
-        writeOptions.assertWriteAuthorizationInTransaction,
+        assertSourceWrite,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -463,7 +469,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       processingMetaData,
       undefined,
       undefined,
-      writeOptions.assertWriteAuthorizationInTransaction,
+      assertSourceWrite,
     );
 
     // Write Metadata (not handled by EventWriter)
@@ -482,7 +488,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       metaData.toJSON(),
       undefined,
       undefined,
-      writeOptions.assertWriteAuthorizationInTransaction,
+      assertSourceWrite,
     );
 
     // Storage cannot join the Firestore transaction. Recheck immediately

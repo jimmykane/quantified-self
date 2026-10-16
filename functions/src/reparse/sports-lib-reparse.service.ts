@@ -1,6 +1,7 @@
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
+import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -1517,10 +1518,12 @@ async function setReparseDocIfUserActive(
         incomingData: admin.firestore.DocumentData,
         existingData: admin.firestore.DocumentData | null,
     ) => admin.firestore.DocumentData,
+    assertSourceWrite?: TrainingLoadSourceWrite['assertCurrent'],
 ): Promise<void> {
     const db = admin.firestore();
     await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
         await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
+        await assertSourceWrite?.(db, transaction);
         const incomingData = data as admin.firestore.DocumentData;
         let resolvedData = incomingData;
         if (transformExistingData) {
@@ -1534,9 +1537,9 @@ async function setReparseDocIfUserActive(
     }));
 }
 
-function getFirestoreAdapter(uid: string): FirestoreAdapter {
+function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite): FirestoreAdapter {
     return {
-        prepareTrainingLoad: event => prepareTrainingLoadMetadata(uid, event),
+        prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
             const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
@@ -1547,6 +1550,7 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
                 data,
                 undefined,
                 isEventDocument ? preserveReparseEventEditsOnRewrite : undefined,
+                sourceWrite.assertCurrent,
             );
         },
         createBlob: (data: Uint8Array) => Buffer.from(data),
@@ -1556,39 +1560,33 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
 
 async function deleteStaleActivities(
     uid: string,
-    existingActivityDocs: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id'>>,
+    eventId: string,
     newActivityIDs: Set<string>,
+    sourceWrite: TrainingLoadSourceWrite,
 ): Promise<number> {
-    const staleActivityIDs = existingActivityDocs
-        .map(doc => doc.id)
-        .filter(activityID => !newActivityIDs.has(activityID));
-
-    if (staleActivityIDs.length === 0) {
-        return 0;
-    }
-
     const db = admin.firestore();
-    const BATCH_LIMIT = 400;
+    const PAGE_LIMIT = 400;
     let deleted = 0;
-
-    for (let i = 0; i < staleActivityIDs.length; i += BATCH_LIMIT) {
-        const chunk = staleActivityIDs.slice(i, i + BATCH_LIMIT);
+    let afterId: string | undefined;
+    // Refresh membership after writing: the initial parsing snapshot can predate partial writes
+    // from an interrupted attempt. The reservation and query share the deletion transaction.
+    for (;;) {
         const phase = 'sports_lib_reparse_delete_stale_activities';
-        await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
-            await assertReparsePersistenceUserActiveInTransaction(
-                db,
-                transaction,
-                uid,
-                phase,
-            );
-            chunk.forEach(activityID => {
-                transaction.delete(db.doc(`users/${uid}/activities/${activityID}`));
-            });
+        const page = await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
+            await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
+            await sourceWrite.assertCurrent(db, transaction);
+            let query = db.collection(`users/${uid}/activities`).where('eventID', '==', eventId)
+                .orderBy(FieldPath.documentId()).limit(PAGE_LIMIT);
+            if (afterId) query = query.startAfter(afterId);
+            const snapshot = await transaction.get(query);
+            const stale = snapshot.docs.filter(doc => !newActivityIDs.has(doc.id));
+            stale.forEach(doc => transaction.delete(doc.ref));
+            return { deleted: stale.length, count: snapshot.docs.length, afterId: snapshot.docs[snapshot.docs.length - 1]?.id };
         }));
-        deleted += chunk.length;
+        deleted += page.deleted;
+        if (page.count < PAGE_LIMIT) return deleted;
+        afterId = page.afterId;
     }
-
-    return deleted;
 }
 
 async function runReparsePersistencePhase<T>(
@@ -1669,7 +1667,8 @@ export async function persistReparsedEvent(
         parsedEventAny.originalFile = existingEventAny.originalFile;
     }
 
-    const writer = new EventWriter(getFirestoreAdapter(uid), undefined, undefined, getWriterLogAdapter());
+    const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareTrainingLoadMetadata(uid, event));
+    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite), undefined, undefined, getWriterLogAdapter());
     await runReparsePersistencePhase(
         uid,
         eventId,
@@ -1695,6 +1694,8 @@ export async function persistReparsedEvent(
                 admin.firestore().doc(`users/${uid}/events/${eventId}`),
                 mergeMetadata,
                 { merge: true },
+                undefined,
+                sourceWrite.assertCurrent,
             ),
         );
     }
@@ -1718,7 +1719,7 @@ export async function persistReparsedEvent(
             newActivityCount: newActivityIDs.size,
             staleActivityCandidateCount,
         },
-        () => deleteStaleActivities(uid, existingActivityDocs, newActivityIDs),
+        () => deleteStaleActivities(uid, eventId, newActivityIDs, sourceWrite),
         deletedCount => ({ staleActivitiesDeleted: deletedCount }),
     );
 
@@ -1741,6 +1742,8 @@ export async function persistReparsedEvent(
             admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`),
             processingMetaData,
             { merge: true },
+            undefined,
+            sourceWrite.assertCurrent,
         ),
     );
 

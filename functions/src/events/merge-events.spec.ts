@@ -1138,6 +1138,8 @@ describe('mergeEvents', () => {
       expect.anything(),
       { isMerge: false, mergeType: 'multi' },
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
       'u1',
@@ -1145,6 +1147,8 @@ describe('mergeEvents', () => {
       expect.anything(),
       expect.objectContaining({ processingEntity: 'event' }),
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
   });
 
@@ -1347,6 +1351,9 @@ describe('mergeEvents', () => {
       'merge_event_writer:users/u1/events/adapter-probe',
       expect.anything(),
       { probe: true },
+      undefined,
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({ probe: true }, undefined);
     expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(

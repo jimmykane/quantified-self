@@ -67,6 +67,14 @@ describe('EventWriter', () => {
         };
     });
 
+    it('does not launch source writes when the original-file upload fails', async () => {
+        storageAdapter.uploadFile.mockRejectedValue(new Error('upload interrupted'));
+        await expect(writer.writeAllEventData('user', eventMock, {
+            data: new Uint8Array([1]), extension: 'fit', startDate: new Date(),
+        })).rejects.toThrow('upload interrupted');
+        expect(adapter.setDoc).not.toHaveBeenCalled();
+    });
+
     it('freezes load identity before source writes and propagates a final metadata failure', async () => {
         const persist = vi.fn(async () => {
             expect(adapter.setDoc).toHaveBeenCalled();

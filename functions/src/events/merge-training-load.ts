@@ -11,6 +11,7 @@ import { derivedMetricSourceProjection } from '../derived-metrics/derived-metric
 import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint,
   trainingLoadWriteTime } from '../training-load/training-load-cache';
 import { mergedActivityId } from './merge-recorded-events';
+import type { PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 
 export interface MergeTrainingLoadSource {
   eventId: string;
@@ -95,7 +96,7 @@ export function mergedTrainingLoadLegs(resultId: string,
 
 /** Freeze one consistent source snapshot before writing, then certify the result and cache after source writes. */
 export async function prepareMergedTrainingLoad(uid: string, event: EventInterface,
-  sources: MergeTrainingLoadSource[]): Promise<() => Promise<void>> {
+  sources: MergeTrainingLoadSource[]): Promise<PreparedTrainingLoadWrite> {
   const db = admin.firestore();
   const resultId = event.getID()!;
   const resultRef = db.doc(`users/${uid}/events/${resultId}`);
@@ -146,7 +147,7 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
     transaction.set(metaRef, pending);
     cache.write();
   });
-  return async () => db.runTransaction(async transaction => {
+  return Object.assign(async () => db.runTransaction(async transaction => {
     if ((await getUserDeletionGuardStateInTransaction(db, transaction, uid)).shouldSkip)
       throw new HttpsError('failed-precondition', 'Account deletion blocks merging.');
     const ids = [...activityFingerprints.keys()];
@@ -178,5 +179,5 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
       transaction.set(metaRef, next);
     }
     cache.write();
-  });
+  }), { sourceWriteId });
 }
