@@ -172,6 +172,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Route import/delivery monitoring configuration | `npm run test:route-monitoring` | Offline route dashboard, bounded labels, eight policies and safe provisioning; no cloud changes by default |
 | Connection-history monitoring configuration | `npm run test:connection-history-monitoring` | Offline coordinator dashboard/six policies, bounded observations and safe provisioning; activation needs separate approval |
 | Email delivery monitoring configuration | `npm run test:email-monitoring` | Offline Firestore-mail/extension/marketing dashboard and seven policies; no extra queue or monitoring collection; activation needs separate approval |
+| Derived-metrics monitoring configuration | `npm run test:derived-metrics-monitoring` | Offline ingress/calculation dashboard and six policies; bounded pending-generation observation; activation needs separate approval |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -253,6 +254,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [Derived-metrics queue monitoring and activation](docs/training-workspace.md#derived-metrics-cloud-monitoring-831)
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
 - [Activity sending workspace and recovery](docs/activity-sending-workspace.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)

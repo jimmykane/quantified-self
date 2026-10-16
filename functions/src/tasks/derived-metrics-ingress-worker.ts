@@ -4,6 +4,7 @@ import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { DERIVED_METRIC_KINDS, normalizeDerivedMetricKindsStrict } from '../../../shared/derived-metrics';
 import { getDefaultDerivedMetricKindsForDashboard, markDerivedMetricsDirtyAndMaybeQueue } from '../derived-metrics/derived-metrics.service';
+import { observeDerivedMetricAttempt, recordDerivedIngress } from '../derived-metrics/monitoring';
 
 interface DerivedMetricsIngressTaskPayload {
     uid?: string;
@@ -17,10 +18,11 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
     memory: '512MiB',
     timeoutSeconds: 120,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
-}, async (request) => {
+}, async (request) => observeDerivedMetricAttempt('ingress', async () => {
     const payload = (request.data || {}) as DerivedMetricsIngressTaskPayload;
     const uid = `${payload.uid || ''}`.trim();
     if (!uid) {
+        recordDerivedIngress('invalid');
         logger.warn('[derived-metrics-ingress] Missing uid in task payload.', {
             bucketStartEpochSec: payload.bucketStartEpochSec ?? null,
         });
@@ -32,6 +34,7 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         ? normalizeDerivedMetricKindsStrict(Array.isArray(payload.metricKinds) ? payload.metricKinds : [])
         : getDefaultDerivedMetricKindsForDashboard();
     if (!metricKinds.length) {
+        recordDerivedIngress('invalid');
         logger.warn('[derived-metrics-ingress] Invalid targeted metric kinds in task payload.', {
             uid,
             bucketStartEpochSec: payload.bucketStartEpochSec ?? null,
@@ -46,6 +49,7 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         incrementEventMutationVersion,
         ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
+    recordDerivedIngress(!queueResult.accepted ? 'excluded' : queueResult.queued ? 'queued' : 'coalesced');
     logger.info('[derived-metrics-ingress] Processed ingress task.', {
         uid,
         bucketStartEpochSec: payload.bucketStartEpochSec ?? null,
@@ -55,4 +59,4 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         metricKinds: queueResult.metricKinds,
         incrementEventMutationVersion,
     });
-});
+}));

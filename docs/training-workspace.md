@@ -4531,7 +4531,10 @@ presentation, and documentation tests; it must not require another set of family
 
 ### Metric registry
 
-All metric kinds and their payload contracts live in `shared/derived-metrics.ts`. The backend build registry in
+Canonical kinds, collection identities and strict kind normalization live in lightweight
+`shared/derived-metric-kinds.ts`. `shared/derived-metrics.ts` re-exports that unchanged public API and owns the payload
+contracts; the isolated operational observer imports only the lightweight module, not sport registries or builders.
+The backend build registry in
 `derived-metrics.service.ts` declares source dependencies per kind. The worker uses those declarations to avoid fetching
 settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
@@ -6957,7 +6960,8 @@ different fatigue models rather than this steady aerobic protocol.
 
 ### Adding a derived metric
 
-1. Add the kind and payload to `shared/derived-metrics.ts`.
+1. Add the kind to `shared/derived-metric-kinds.ts` and its payload to `shared/derived-metrics.ts`. Update the fixed
+   operational kind allowlist in `tools/derived-metrics-monitoring/definitions.mjs`; its drift test must pass.
 2. Decide whether it is default, projection-sensitive, calendar-sensitive, Dashboard-visible, or Training-only.
 3. Add a backend build-registry entry with the narrowest source dependencies.
 4. Add a pure builder and focused Functions tests.
@@ -7189,6 +7193,143 @@ failure from blocking a loopback Training refresh; it does not weaken deployed e
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
+
+### Derived-metrics Cloud Monitoring (#831)
+
+Source definitions live in `tools/derived-metrics-monitoring/`. They prepare **14 versioned log metrics**, the
+**QS Derived Metrics** dashboard (20 charts plus interpretation guidance), and **six policies with eight conditions**.
+They do not calculate a new athlete metric, change Training formulas or optimize recomputation (#760).
+Implementation and offline/emulator verification are separate from the deployment, activation and live evidence
+still tracked by [#831](https://github.com/jimmykane/quantified-self/issues/831).
+
+The existing workers retain their resource/retry settings: ingress is Gen 2, 512 MiB/120 seconds; calculation is
+Gen 2, 2 GiB/540 seconds with concurrency one. Both remain in `europe-west2`. Structured observations distinguish:
+
+- Ingress `queued`, `coalesced`, `excluded` and invalid admission, not completed calculations.
+- Whole-task duration and acknowledged/exception outcomes. Acknowledgement includes stale, unchanged, superseded
+  and deletion-fenced no-ops; HTTP success is not snapshot publication.
+- Ready/failed snapshot writes, emitted only after the existing claim/deletion-guarded transaction commits.
+- Coordinator `settled`, intentional `requeued`, guarded calculation failure and guarded enqueue failure commits.
+  A ready snapshot can precede a follow-up generation. Settled means no pending kinds **at that commit**, not a
+  promise that later work cannot arrive or every retained snapshot is current.
+
+Logging is best effort, after transactions rather than inside retriable callbacks. These are observations, not an
+exactly-once audit ledger or unique-task/account counts. A multi-kind failure produces one observation per canonical
+kind; failure policies group by kind instead of summing a single failed generation into a global surge. Exceptions
+before a guarded failure write remain visible in attempts/native HTTP charts, but cannot establish committed failure.
+Existing claims, revisions, publication fences, retry policy, source reads and calculation results remain authoritative.
+
+#### Bounded pending-generation observation
+
+There is no periodic derived-metrics dispatcher from which to observe a stranded coordinator. The new isolated
+**`observeDerivedMetricsHealth`** runs every 15 minutes (`*/15 * * * *`, UTC), Gen 2 in `europe-west2`, **512 MiB**,
+60-second runtime limit, maximum one instance, no secrets or minimum warm instances. It does not enqueue, rebuild,
+recover, write or delete anything. Its observation deadline is five seconds; this bounds waiting, not cancellation
+of an already-started Firestore RPC. No further work or late healthy samples follow a deadline.
+
+One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`,
+and fetches at most 21 projected records (20 candidates plus lookahead). Each candidate has one read-only transaction
+over its current coordinator, owner existence and deletion tombstone, with a field mask limited to entry/status,
+generation, dirty/processing kind lists, pending timestamps and tombstone expiry. Owner contents, payloads, raw errors,
+recorded activities and athlete settings are not fetched. Exact owner paths, rollout eligibility, active deletion,
+unchanged document version and valid metadata are checked before contributing a sample.
+
+Pending age uses `requestedAtMs` for queued/failed work and `startedAtMs` for processing. It never uses the date of
+the last activity or ready snapshot; an inactive athlete with no pending generation produces a real idle zero.
+Coalescing does not redefine the pending-age anchor. Failed work is excluded for the existing maximum **four-hour**
+Cloud Tasks retry backoff after its last failed coordinator update, not treated as stalled during that wait.
+Superseded samples and lifecycle exclusions do not count as failures. Unknown/invalid metadata is not a healthy zero.
+
+Three fixed state groups emit every run, including idle/unavailable runs. Positive pending counts/maximum observed
+ages are **lower bounds**, not a global backlog or exact oldest generation. A saturated or unknown prefix without
+a proven positive result withholds zero/age fields. A positive result remains visible even with partial coverage.
+The dashboard exposes saturation independently. The bounded oldest-update prefix can hide later accounts, and
+coalesced updates can reorder candidates. Legacy documents missing indexed predicates/order fields are not included;
+native queue charts, failure logs and privately authorized diagnosis remain necessary. Do not interpret a zero as
+a full historical audit or remove the cap by scanning all users.
+
+The new collection-group composite index is `derivedMetrics: entryType ASC, status ASC, updatedAtMs ASC`.
+Deploy it and wait for READY before enabling the observer; a missing index reports unavailable rather than zero.
+No Rules, TTL, personal monitoring document or new task queue is required. At the cap, a run requests at most 21
+query documents plus 60 transaction documents, before SDK retries and index-query billing. There are 96 scheduled
+runs/day; idle queries still have minimum read charges. Logs include three state samples/run plus task/per-kind commit
+observations. Scheduler, Functions, reads, log ingestion, metric series and alerting can incur charges; volume and
+pricing determine cost, so the bounded design is not a free-service or fixed-price promise.
+
+#### Dashboard, policies and response
+
+Six native charts cover the exact `processDerivedMetricsIngressTask` and `processDerivedMetricsTask` queues in
+`europe-west2`: depth, HTTP attempts and dispatch delay. Remaining charts show admission, attempts, whole-task p95,
+guarded commits, failures, state heartbeats, overdue/unknown/saturated observations and hourly mean sampled lower bounds.
+DELTA distributions retain genuine idle zeroes; sampled means are not instantaneous counts. Cross-resource p95 is a
+maximum of series percentiles, not a pooled global percentile. Empty native queues alone never prove fresh snapshots.
+
+| Initial policy | Observation window / threshold | Severity |
+| --- | --- | --- |
+| Sustained pending generation | Three eligible samples aged at least 30 minutes in one hour, grouped by state | Error |
+| Repeated committed calculation failures | Five guarded failures for one canonical kind in 30 minutes | Error |
+| Repeated enqueue failures | Three guarded enqueue failures for one kind in 15 minutes | Error |
+| Repeated ingress failures | Three actual ingress exceptions in 15 minutes | Error |
+| Coordinator observations unavailable | Two unknown/unavailable or capped-without-positive samples per state in one hour | Warning |
+| Required coordinator heartbeat missing | One hour without observations, with an independent condition for each state | Warning |
+
+Threshold conditions require 60 seconds of violation; missing threshold data evaluates inactive, not healthy.
+Absence needs an initialized time series: verify all three positive heartbeat series after activation. Tune initial
+thresholds against real traffic rather than treating one delayed sample or ordinary retries as incidents.
+The allowlisted dimensions are canonical metric kind (plus fixed `unknown`), stage, outcome and state. New log metrics
+and incident text contain no UIDs, job/generation IDs, names, titles, source fingerprints, values, credentials or raw
+errors. Existing private diagnostic logs are not imported into these metric labels.
+
+An incident links to Queue Monitor, Logs Explorer and this runbook. First check telemetry/index/scheduler availability,
+then both native queues and guarded commit signals. A privately authorized coordinator inspection can distinguish
+retry wait, a changing generation, an abandoned claim and invalid metadata; inspect source/build errors only with that
+authority. Never blindly rebuild all metrics, replay queues, clear claims, purge documents or alter retries to clear an
+alert. The observer cannot repair work and a cleared alert is not a freshness guarantee.
+
+#### Preview, release boundary and verification
+
+Preview is offline by default, without credentials, network or cloud writes:
+
+```sh
+node tools/derived-metrics-monitoring/cli.mjs --project=quantified-self-io
+```
+
+After **separate approval**, deploy the new index and the observer plus the two instrumented workers. The shared
+enqueue-failure telemetry is also used by `ensureDerivedMetrics`, `setTrainingBuildBenchmark`, `mcpApi` and
+`assistantChat`; include those existing entrypoints in the approved release for complete admission-path observations.
+No other runtime configuration, resources, provider support, scheduler or task retry settings change.
+The observer has a direct owner-module loader; entrypoint checks reject builders, Sports Lib, Cloud Tasks and the full
+application graph in its runtime, and preserve existing handler descriptors.
+
+Reuse the existing enabled **Alerts** email channel and shared ownership-safe provisioner. Once explicitly approved,
+substitute that channel's actual resource name (never a fabricated value):
+
+```sh
+node tools/derived-metrics-monitoring/cli.mjs --project=quantified-self-io \
+  --notification-channel=projects/quantified-self-io/notificationChannels/SELECTED_ID \
+  --apply --confirm-project=quantified-self-io
+```
+
+The CLI verifies channel, schemas and ownership before writes and serially upserts only its versioned resources.
+Reapplication preserves dashboard etags, policy/condition identities and every unrelated bundle/channel; it never
+creates/deletes a notification channel or deletes cloud resources. Existing #655 same-channel opened/closed email
+proof can be reused, without sending new test emails. Ordinary CI never deploys or applies this bundle.
+After approved activation, record index READY, active runtime configurations, 14 metrics, one dashboard, six enabled
+policies/eight conditions, all 28 chart/condition query readbacks and the three first real heartbeat/sample series.
+Confirm genuine idle observations and natural admission/publication/settlement where traffic exists; missing/unknown
+data is not success. Preserve ownership/condition IDs on a serial reapply and keep #831 open until its live criteria
+are satisfied. No synthetic failures, customer rebuilds, provider calls or test emails are required by this code change.
+
+Verification uses `npm run test:derived-metrics-monitoring`, focused Functions derived-metric/worker tests,
+`npm run test:functions-emulators -- mcp-data`, workflow/emulator guards, Functions build/entrypoint/secret checks,
+the cold-import benchmark, frontend TypeScript and existing derived/MCP output-contract regressions. Real demo
+Firestore cases cover idle, cap, malformed metadata, retry grace, changing generations, owner/deletion fences,
+ready versus requeued/settled, stale claims and transaction retries. Offline provisioning fixtures preserve all
+seven other bundles and reject ownership/schema/channel/inventory conflicts before writes.
+Help's Training update/Retry and MCP preparing-state guidance was reviewed; user behavior is unchanged, so no Help
+edit is required. **MCP impact: no wire impact**—no tool, exposed metric, schema, scope, consent, projection,
+proposal, mutation, Assistant permission, provider action or plugin change. Operational kind extraction preserves
+the complete existing public re-export API and values; no snapshot migration or derived schema bump is needed.
 
 ### Training delivery queue monitoring
 
