@@ -26,7 +26,7 @@ describe('Timeline comparison return navigation', () => {
     const destination = `/health/compare/${'a'.repeat(64)}`;
     events$.next(new NavigationEnd(1, destination, destination));
     events$.next(new NavigationEnd(2, `${destination}?view=history#chart`, `${destination}?view=history#chart`));
-    expect(await service.returnToNotes('owner')).toBe(list);
+    expect(await service.returnToNotes('owner')).toEqual({ restoreList: list });
     expect(router.navigateByUrl).toHaveBeenCalledWith('/dashboard?range=90d');
   });
   it('rejects another owner and drops return context across account changes', async () => {
@@ -35,8 +35,8 @@ describe('Timeline comparison return navigation', () => {
     expect(router.navigate).not.toHaveBeenCalled();
     await service.compare('owner', 'a'.repeat(64), { page: 2, cursors: [null, null, null] });
     uid.set(null); TestBed.flushEffects(); uid.set('owner'); TestBed.flushEffects();
-    expect(await service.returnToNotes('owner')).toEqual({ page: 0, cursors: [null] });
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/health');
+    expect(await service.returnToNotes('owner')).toEqual({ restoreList: null });
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/health/compare');
   });
   it('retains the original manager context when return navigation is cancelled', async () => {
     const service = TestBed.inject(TimelineNoteComparisonNavigationService), list = { page: 1, cursors: [null, null] };
@@ -45,7 +45,7 @@ describe('Timeline comparison return navigation', () => {
     router.navigateByUrl.mockResolvedValueOnce(false);
     events$.next(new NavigationCancel(2, '/dashboard?range=90d', 'guard cancelled'));
     expect(await service.returnToNotes('owner')).toBeNull();
-    expect(await service.returnToNotes('owner')).toBe(list);
+    expect(await service.returnToNotes('owner')).toEqual({ restoreList: list });
     expect(router.navigateByUrl).toHaveBeenLastCalledWith('/dashboard?range=90d');
   });
   it.each(['same note', 'different note'])('drops stale context after browser Back and a later direct visit to the %s', async target => {
@@ -58,7 +58,13 @@ describe('Timeline comparison return navigation', () => {
     const direct = `/health/compare/${(target === 'same note' ? 'a' : 'b').repeat(64)}`;
     router.url = direct;
     events$.next(new NavigationEnd(3, direct, direct));
-    expect(await service.returnToNotes('owner')).toEqual({ page: 0, cursors: [null] });
-    expect(router.navigateByUrl).toHaveBeenLastCalledWith('/health');
+    expect(await service.returnToNotes('owner')).toEqual({ restoreList: null });
+    expect(router.navigateByUrl).toHaveBeenLastCalledWith('/health/compare');
+  });
+  it('returns direct and sidenav comparisons to their landing page without requesting a manager', async () => {
+    const service = TestBed.inject(TimelineNoteComparisonNavigationService); TestBed.flushEffects();
+    router.url = `/health/compare/${'a'.repeat(64)}`;
+    expect(await service.returnToNotes('owner')).toEqual({ restoreList: null });
+    expect(router.navigateByUrl).toHaveBeenCalledExactlyOnceWith('/health/compare');
   });
 });

@@ -93,6 +93,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'send-activities/:provider',
   'dashboard',
   'health',
+  'health/compare',
   'health/compare/:noteId',
   'tags',
   'calendar',

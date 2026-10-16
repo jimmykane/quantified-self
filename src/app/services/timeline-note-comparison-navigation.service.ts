@@ -4,6 +4,8 @@ import { NavigationEnd, Router } from '@angular/router';
 import type { TimelineNotesListState } from '../components/timeline-notes/timeline-notes-dialog.component';
 import { AppTimelineNotesService } from './app.timeline-notes.service';
 
+export interface TimelineNoteComparisonReturn { restoreList: TimelineNotesListState | null }
+
 /** Transient owner-scoped return context. Private note content/cursors never enter URLs or storage. */
 @Injectable({ providedIn: 'root' })
 export class TimelineNoteComparisonNavigationService {
@@ -30,12 +32,12 @@ export class TimelineNoteComparisonNavigationService {
       return false;
     }
   }
-  async returnToNotes(uid: string): Promise<TimelineNotesListState | null> {
+  async returnToNotes(uid: string): Promise<TimelineNoteComparisonReturn | null> {
     if (!this.notes.isOwner(uid)) return null;
     const context = this.context?.uid === uid ? this.context : null;
-    const url = context?.url || '/health';
+    const url = context?.url || '/health/compare';
     if (!await this.router.navigateByUrl(url) || !this.notes.isOwner(uid) || this.router.url !== url) return null;
     if (this.context === context) this.context = null;
-    return context?.list || { page: 0, cursors: [null] };
+    return { restoreList: context?.list ?? null };
   }
 }

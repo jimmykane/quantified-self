@@ -1,0 +1,8 @@
+.comparison-notes { margin-block-start: 24px; }
+.comparison-notes h2 { font: var(--mat-sys-title-medium); margin-block: 0 8px; }
+.notes-meta, .comparison-note-meta { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.notes-meta { overflow-wrap: anywhere; }
+.notes-error { color: var(--mat-sys-error); }
+.comparison-notes .comparison-note { height: auto; min-height: 72px; padding-block: 12px; }
+.comparison-note .comparison-note-title, .comparison-note .comparison-note-meta { white-space: normal; overflow-wrap: anywhere; }
+.notes-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-block-start: 16px; }

@@ -58,7 +58,7 @@ const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
 
 const TIMELINE_NOTES_HELP_CONTENT = `## Timeline notes
 
-Use **Timeline notes** in the app navigation's **Training & health** section, or **Timeline notes** in the Dashboard, Health, or Calendar header, to add private context such as sickness, injury, vacation, travel, or stress. The navigation shortcut opens the same notes manager without leaving your current workspace. Choose **Compare** beside a saved note to open its before/after view; Timeline notes stays highlighted in navigation while comparing. Notes also appear on supported Training charts. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
+Use **Timeline notes** in the app navigation's **Training & health** section to open **Note comparisons**. Choose a saved note to go straight to its before/after charts; the navigation does not open an add-note form. **Manage notes** is a separate action for adding or editing private context such as sickness, injury, vacation, travel, or stress. **Timeline notes** in the Dashboard, Health, or Calendar header still opens the existing notes manager without leaving your workspace. Choose **Compare** beside a saved note there to open its before/after view; Timeline notes stays highlighted in navigation while comparing. Notes also appear on supported Training charts. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
 
 Choose a single day, an inclusive date range, or an ongoing period. You can plan future days and ranges; ongoing notes must already have started. **End today** closes an ongoing note using its original time zone. Dates stay fixed when you travel.
 
@@ -70,7 +70,7 @@ In Health, notes appear on the Highlights trend charts as well as the detailed m
 
 ### Compare before and after a note
 
-Choose **Compare** beside a saved note in the manager, or from its editor before making draft changes. Compare main-night **Sleep duration**, **Nightly HRV** and **Daily resting heart rate** around the note's **start date**. A date-range note does not compare against its end. The default is **14 days on each side**; choose **7**, **14** or **28 days**. Back returns to the notes manager and its previous page. Comparing a hidden note does not turn its chart visibility on.
+Choose a saved note on **Note comparisons**, or choose **Compare** beside a saved note in the manager or from its editor before making draft changes. Compare main-night **Sleep duration**, **Nightly HRV** and **Daily resting heart rate** around the note's **start date**. A date-range note does not compare against its end. The default is **14 days on each side**; choose **7**, **14** or **28 days**. Back returns to **Note comparisons** when opened from navigation or a direct link; comparisons opened from the manager return to that manager and its previous page. Comparing a hidden note does not turn its chart visibility on.
 
 **Before & after this note** starts with each metric’s observed difference, source and recorded-day coverage. Choose **Show details** for the full before/after median table; the history chart stays visible either way. The summary uses the same compact presentation as Dashboard’s At a glance, but its neutral rail does not classify a numerical change as good/bad or as current recovery.
 

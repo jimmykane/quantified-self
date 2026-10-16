@@ -138,10 +138,10 @@ export class TimelineNoteComparisonPageComponent {
     this.returnError.set(null);
     this.returning.set(true);
     try {
-      const restoreList = await this.navigation.returnToNotes(uid);
-      if (restoreList && this.notes.isOwner(uid)) this.dialogs.open(TimelineNotesDialogComponent,
-        { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid, restoreList } });
-      else if (!this.destroyed && this.notes.isOwner(uid)) {
+      const result = await this.navigation.returnToNotes(uid);
+      if (result?.restoreList && this.notes.isOwner(uid)) this.dialogs.open(TimelineNotesDialogComponent,
+        { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid, restoreList: result.restoreList } });
+      else if (!result && !this.destroyed && this.notes.isOwner(uid)) {
         this.returnError.set('Could not return to Timeline notes. Please try again.'); this.haptics.error();
       }
     } catch { if (!this.destroyed && this.notes.isOwner(uid)) {

@@ -99,6 +99,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('health')).toBe(false);
+    expect(prerenderedPaths.has('health/compare')).toBe(false);
     expect(prerenderedPaths.has('tags')).toBe(false);
     expect(prerenderedPaths.has('calendar/day/:date')).toBe(false);
     expect(prerenderedPaths.has('training/plans')).toBe(false);
@@ -161,6 +162,7 @@ describe('serverRoutes', () => {
     });
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'health')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'health/compare')).toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.find(route => route.path === 'training/plans/workout/:workoutId'))
       .toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.find(route => route.path === 'training/plans/plan/:planId'))

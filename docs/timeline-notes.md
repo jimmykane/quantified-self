@@ -5,10 +5,13 @@ Every authenticated account can use the compact **Timeline notes** header action
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
 Training charts retain their shared note annotations, but the Training route has no note-manager header action.
 The signed-in sidenav also includes **Timeline notes** as a full-level row after **Health** in **Training & health**,
-with the existing `event_note` icon. This native Material list action closes the drawer before lazily opening the existing manager,
-preserving the current workspace as the comparison return location; there is no new list route, query parameter or
-copy of the editor. Duplicate taps, existing managers, account changes and shell teardown cannot stack a new manager.
-The row remains selected on `/health/compare/:noteId`, while the direct Health link matches only `/health`.
+with the existing `event_note` icon. This native Material link closes the drawer and opens the lazy `/health/compare`
+landing page. Its primary saved-note rows open the existing comparison charts, not an editor. **Manage notes** explicitly
+opens the existing manager; no second editor or write path is introduced. The landing page uses the existing bounded
+`list()` query/cursors, includes future and hidden notes, formats fixed calendar dates through the comparison formatter,
+and discards stale reads on owner changes, invalidation or teardown. It shows loading, empty and retry states without
+automatically opening a creation dialog. The row remains selected on the landing and `/health/compare/:noteId`, while
+the direct Health link matches only `/health`. Both comparison routes are owner-guarded, CSR-only and noindexed.
 
 ## Contract and lifecycle
 
@@ -93,8 +96,8 @@ existing collection. It is auth/onboarding guarded, client-rendered and noindexe
 navigation registration. Its title metadata is static, never private note text. A transient owner-scoped return context
 retains the originating URL and list-page cursors only in memory, bound to that comparison destination. A completed
 navigation away (including browser Back) clears it, so a later direct visit cannot reuse an unrelated return location.
-The in-app Back action returns there and reopens that page; a direct visit falls back to Health and the first notes
-page. Cancelled returns retain their context for retry. Failed comparison navigation restores the manager without
+The in-app Back action returns there and reopens that manager page. A direct visit or a comparison selected on the landing
+page returns to `/health/compare` without opening a manager. Cancelled returns retain their context for retry. Failed comparison navigation restores the manager without
 writing the note.
 
 The MVP compares the **start** of one note, not its end or the end of an intervention. The change day and today's

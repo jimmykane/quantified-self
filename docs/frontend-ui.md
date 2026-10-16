@@ -67,9 +67,11 @@ Signed-in navigation uses flat, labelled sections: **Overview** (Dashboard, Cale
 **Account**, and **Preferences**. Reuse the existing section heading and full-level row styling; no expansion controls
 or nested guide rails. Guest navigation keeps its existing destinations without empty signed-in section headings.
 **Timeline notes** retains the existing `event_note` icon.
-Its native Material list button lazily opens the existing manager after the drawer closes, preserving focus return and
-the current workspace. It does not add a duplicate list route or load private note UI for anonymous navigation.
-The action keeps the regular row highlight during note comparisons; the Health overview link uses exact-path matching.
+Its native Material list link closes the drawer and navigates to `/health/compare`, where saved-note rows open their
+existing comparison charts. **Manage notes** separately opens the existing editor/manager; navigation never launches a
+creation dialog. The lazy landing page reuses the owner-scoped paginated note service, appearance helpers and shared page
+header, without a second CRUD implementation. It keeps the regular row highlight on both the landing and selected-note
+routes; the Health overview link uses exact-path matching.
 
 Health All and the owner Dashboard Today share the surface-free summary from
 `components/shared/health-change-summary/`. Its presentation delegates to

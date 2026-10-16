@@ -132,6 +132,7 @@
           "source": "/health",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
+        { "source": "/health/compare", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
         { "source": "/health/compare/*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
         {
           "source": "/tags",
@@ -360,6 +361,7 @@
           "source": "/health",
           "destination": "/index.csr.html"
         },
+        { "source": "/health/compare", "destination": "/index.csr.html" },
         { "source": "/health/compare/*", "destination": "/index.csr.html" },
         {
           "source": "/tags",
@@ -703,6 +705,7 @@
           "source": "/health",
           "destination": "/index.csr.html"
         },
+        { "source": "/health/compare", "destination": "/index.csr.html" },
         { "source": "/health/compare/*", "destination": "/index.csr.html" },
         {
           "source": "/tags",

@@ -59,6 +59,10 @@
     "environment": "angular",
     "reason": "Compiles the comparison route with real Material controls and shared header/source picker to verify signal bindings, disclosure accessibility, loading and owner fences, local selection and haptic ownership."
   },
+  "src/app/components/timeline-notes/timeline-note-comparisons-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the comparisons landing route with real Material navigation links and shared header to verify owner-scoped signal rendering, pagination, explicit manager actions, teardown and haptic ownership."
+  },
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."

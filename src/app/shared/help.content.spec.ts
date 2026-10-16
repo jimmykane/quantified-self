@@ -18,7 +18,10 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     expect(copy).toContain("app navigation's **Training & health** section");
     expect(copy).not.toContain('**Health → Timeline notes**');
-    expect(copy).toContain('same notes manager without leaving your current workspace');
+    expect(copy).toContain('to open **Note comparisons**');
+    expect(copy).toContain('navigation does not open an add-note form');
+    expect(copy).toContain('**Manage notes** is a separate action');
+    expect(copy).toContain('comparisons opened from the manager return to that manager');
     expect(copy).toContain('stays highlighted in navigation while comparing');
     const planning = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(planning).toContain('full-level row in **Training & health**, after **Training**');
