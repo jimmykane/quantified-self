@@ -17,6 +17,7 @@ import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-worko
 import { presentSuuntoRestScreens } from './suunto-rest-presentation';
 import { presentSuuntoSwimmingScreens } from './suunto-swimming-presentation';
 import { presentSuuntoSwimmingScreensV15 } from './suunto-swimming-presentation-v15';
+import { addSuuntoRestCountdownAlerts } from './suunto-rest-alerts';
 import type { SuuntoSwimmingField } from '../../../../shared/suunto-swimming-screen';
 import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -50,6 +51,8 @@ export interface SuuntoGuideFieldsStepV1 {
     transitions?: Array<{ condition: SuuntoGuideConditionV1; stepId?: string }>;
     notification?: { title: string; text: string };
     createManualLap?: true;
+    /** Native end-of-Rest countdown; private Guide metadata, not a recipe field. */
+    alerts?: Array<{ type: 'default'; condition: { type: 'stepDuration'; value: number }; countdown: { type: 'standard' } }>;
 }
 
 export type SuuntoGuideRepeatFieldsStepV1 = Omit<SuuntoGuideFieldsStepV1, 'id'> & { id?: never };
@@ -610,6 +613,28 @@ export function serializeSuuntoSwimmingGuideV15(structureValue: unknown, options
     const frozen = serializeSuuntoGuideV11ForRecovery(structureValue, options);
     const steps = presentSuuntoSwimmingScreensV15(structure, frozen.artifact.steps, settings, units,
         value => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps: value }), 'utf8'));
+    return { ...frozen, artifact: { ...frozen.artifact, steps } };
+}
+
+/** V16 adds alerts before presentation so every expanded/compact candidate
+ * budgets their bytes. V15 and earlier serializers stay frozen for recovery. */
+export function serializeSuuntoRestAlertGuideV16(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const structure = parseWorkoutStructureV1(structureValue);
+    const frozen = serializeSuuntoGuideV11ForRecovery(structure, options);
+    const alerted = addSuuntoRestCountdownAlerts(frozen.artifact.steps);
+    const jsonBytes = (steps: SuuntoGuideStepV1[]) => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps }), 'utf8');
+    const steps = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)
+        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes)
+        : presentSuuntoRestScreens(structure, alerted, jsonBytes);
+    const enriched = (values: SuuntoGuideStepV1[]) => values.map(node => node.type === 'repeat'
+        ? { ...node, steps: node.steps.map(screen => ({ ...screen,
+            ...(screen.notification ? { notification: { ...screen.notification, type: 'default' } } : {}) })) }
+        : { ...node, ...(node.notification ? { notification: { ...node.notification, type: 'default' } } : {}) });
+    if (jsonBytes(enriched(steps)) > 256 * 1024) throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{
+        severity: 'unsupported', code: 'guide_readback_too_large', path: '$.nodes',
+        message: 'Suunto Guide with Rest countdown alerts exceeds the supported file size.',
+    }]);
     return { ...frozen, artifact: { ...frozen.artifact, steps } };
 }
 

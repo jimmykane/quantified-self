@@ -212,13 +212,21 @@ describe('help.content', () => {
       'creates no opening lap', 'resets the displayed average early', 'including HR-only strength Guides',
       'do not prove target adherence', 'including rest/recovery and every repeat', '**Guide complete**',
       'without adding workout time or stopping activity recording', '**your watch settings**',
-      'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
+      'No out-of-target alerts are added', 'approximately 20 seconds',
       'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',
       '**Follow distance countdown**', '**Press lap when ready**', "does not follow your watch's unit settings automatically",
       '**Follow time countdown** rather than rounding or omitting seconds',
       'past and completed copies stay unchanged', 'not proof of watch receipt, sensor readings, alerts or workout completion']) {
       expect(content).toContain(phrase);
     }
+  });
+  it('explains default native timed-Rest countdown alerts without promising a custom sound pattern', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Timed Rest countdown alerts**', 'included by default', 'including swimming and strength set rests',
+      'no extra QS toggle', "Suunto's native standard countdown", 'watch controls the beep/vibration pattern',
+      'long beep at zero is not guaranteed', 'Quiet/tones-off behavior still needs a watch check',
+      'Manual or distance-ended Rest, active Recovery, Work, warm-up and cool-down do not gain countdown alerts',
+      'QS does not insert extra steps', 'independently of the countdown alert']) expect(content).toContain(phrase);
   });
   it('distinguishes authored Suunto targets, measured swimming readings and unsupported ZoneSense', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;

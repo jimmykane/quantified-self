@@ -2520,6 +2520,19 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   });
 
+  it('rejects private native countdown metadata in planned-workout outputs on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(connection);
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      for (const field of ['alerts', 'countdown']) {
+        service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-COUNTDOWN-CANARY' });
+        const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
+        expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-COUNTDOWN-CANARY');
+      }
+    }
+  });
+
   it('accepts private field names within opaque Training status references on every transport', async () => {
     const proposalRef = 'opaque-uid-accessGeneration-destinationKey-scheduleRequests-leaseUntilMs';
     const service = createFixtureDataService();

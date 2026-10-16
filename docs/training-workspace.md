@@ -3108,7 +3108,8 @@ was changed by either task; deployment and physical Guide verification still nee
 
 ##### Swimming field allocation and headings (v15)
 
-Pool and open-water swimming delivery now uses private `suunto-guides-v15`; other sports remain exactly v13.
+V15 introduced private `suunto-guides-v15` for pool/open-water swimming; other sports remained exactly v13.
+These remain current for recipes without timed Rest. Recipes with timed Rest now use v16 below.
 V14 is frozen for original-payload recovery and full-loss approval equivalence. The v11 transition/lap graph,
 authored target ranges, durations, notes, current-lap averaging and short-Rest popup policy remain unchanged.
 
@@ -3156,6 +3157,67 @@ planned text/owner units, omitted fields, bounded rendering, early-Lap branches,
 authored notes. Synthetic transport and demo-Firestore lifecycle tests cover original v14 recovery before a single
 same-ID update, pinning, consent, exact archives, protected copies and idempotent repeat reconciliation. Physical
 app/watch layout remains a release check; local tests cannot prove text visibility, sensor data or vibration.
+
+##### Native timed Rest countdown alerts (v16)
+
+Recipes containing a canonical `purpose: rest` step with a time ending now use private `suunto-guides-v16`, across
+supported Suunto sports, including pool/open-water swimming and strength companion set rests. Native standard
+countdown alerts are included by default, without a QS preference or changed sending consent. Manual/distance
+Rest, active Recovery, Work, warm-up and cool-down gain no countdown alert. Recipes without timed Rest keep exact
+v15 swimming / v13 other-sport payloads and digests.
+
+The adapter decorates each timed Rest fields screen with exactly:
+
+```json
+{"alerts":[{"type":"default","condition":{"type":"stepDuration","value":15},"countdown":{"type":"standard"}}]}
+```
+
+`value` is the exact authored Rest duration in seconds, including fractional values, not a fixed 15 seconds or a
+rounded countdown start. Decoration happens before v15/v12 screen allocation and JSON budgeting. Native repeats
+and both incoming early-Lap variants retain the metadata. No synthetic countdown steps, target changes, duration
+changes, lap commands or transition changes are introduced. The alerts do not consume a metric field. Short
+swimming Rest still omits only its generated start popup; authored Rest instructions and existing notifications
+remain intact. A required alert that cannot fit the existing 256-KiB enriched readback limit fails mapping before
+provider I/O; it is not silently discarded and the archive limits are not increased.
+
+Evidence and limits: the public partner Guide reference does not document this extension. Discovery came from the
+unofficial [Guide builder](https://github.com/Marius-Ar/suunto-api-wrapper/blob/main/src/guides/builder/steps-builder.ts)
+and [types](https://github.com/Marius-Ar/suunto-api-wrapper/blob/main/src/guides/types.ts), not a new dependency or an
+internal-app endpoint. A separately authorized owner-only QA upload through the existing partner API was accepted;
+exact ZIP readback retained the alert. On 2026-10-16 the owner confirmed countdown beeps and vibration on Alert Rest,
+but no beeps on its control Rest and **no long beep at zero**. Beeps were noticed around four seconds remaining.
+This proves the standard alert path on that watch, not exact five-second timing, custom patterns, all devices,
+quiet/tones-off behavior or audibility while swimming. The watch owns the pattern; do not add guessed sound/haptic
+flags or promise a long final tone. Quiet/tones-off behavior remains a physical verification follow-up. Previous-effort
+Rest statistics, native pace-format overrides and pool-length detection improvements are still outside this change.
+
+V15 and all older attempts remain frozen: recovery first proves the journal's exact original payload, including
+unit/preferences snapshots, then ordinary reconciliation can update an eligible future copy once under the same
+identity with pinning retained. V16 readback compares alerts strictly; missing/changed alerts are uncertain, never
+normalized away or used to authorize a replacement POST. Existing complete-prescription/loss approval can carry
+forward only with retained evidence. No automatic resurrection, past/completed rewrite, cleanup or new identity
+is introduced. New normal sends and same-ID updates require a separately approved Functions deployment; the prior
+QA upload is not evidence that the application change has been deployed.
+
+MCP impact: **no wire impact**. Alerts/countdown are private provider execution metadata, not authored recipe fields,
+new targets/metrics, read outputs, tools, scopes, proposal inputs or provider actions. Regression coverage preserves
+canonical timed-Rest reads for all three planned-workout read versions and rejects private alert fields in strict
+recipes, proposals and read/status outputs. Existing native/MCP delivery uses the same adapter. No contract promotion,
+catalog refresh, plugin rebuild, expanded consent or new approval UI is required. Monitoring is **covered/unchanged**:
+provider/event filters already cover this send path; only the fixed diagnostic mapping-version allowlist adds v16.
+No new queue, endpoint, credential, Firestore collection, Rules, index, TTL or resource is added.
+
+Verification covers positive/negative phase scope, exact fractional/short/day durations, all supported sports,
+targets/notes/lap/transition equivalence, compact repeats, enriched archive bounds, exact historical recovery,
+strict alert readback, unit-aware full-loss approval, idempotent same-ID updates and current consent/completion fences
+using synthetic HTTP and isolated demo Firestore. No live account identifiers or payload exports are fixtures.
+
+Local verification on 2026-10-16: 2,917 targeted provider/delivery/MCP unit tests, 183 Suunto lifecycle emulator tests,
+114 Help/hosting tests and 13 monitoring-definition tests pass with no skips. The seven other registered delivery
+emulator files also passed (361 tests); the initial Suunto repeat-definition count assertion was corrected and its
+complete file rerun. Functions and beta frontend builds pass. The compiled MCP contract remains compatible with
+the existing developer-refresh advisory; no public schema/catalog changed. No deployment or live send was performed
+while implementing v16. The separate earlier QA evidence and outstanding quiet-mode check are described above.
 
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 
@@ -3303,16 +3365,17 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v14`, `suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v16`, `suunto-guides-v15`, `suunto-guides-v14`, `suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with current swimming `suunto-guides-v14` or other-sport `suunto-guides-v13`, or the exact historical label and
+`jsonPayload.event="failure"` with current timed-Rest `suunto-guides-v16`, otherwise swimming `suunto-guides-v15`
+or other-sport `suunto-guides-v13`, or the exact historical label and
 `jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
-not Guide mapping version, and already cover v14/v13 and historical versions without additional policies or queue changes.
+not Guide mapping version, and already cover v16/v15/v13 and historical versions without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.

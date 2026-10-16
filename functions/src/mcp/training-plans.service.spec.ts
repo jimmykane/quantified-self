@@ -277,6 +277,24 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(f.structures.w1)).toBe(before);
   });
 
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'keeps %s timed Rest reads canonical, without private native alert metadata', async sport => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const read = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(read.workout.structure).toEqual(recipe);
+      expect(read.workout.displaySteps.map(step => step.nodeId)).toEqual(['sets', 'work', 'rest']);
+      expect(JSON.stringify(read)).not.toMatch(/alerts|countdown|guideMappingVersion|suunto-guides|externalId/);
+    }
+    expect(f.structures.w1).toEqual(recipe);
+  });
+
   it('projects saved ordering and duplicated repeat children in canonical and display order', async () => {
     const f = fixture();
     const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,

@@ -220,7 +220,9 @@ describe('Strict public Training recipe v1', () => {
           const input = { ...recipe(ending, targets), sport };
           expectPublicReadWriteRoundTrip(input);
           for (const fields of [{ createManualLap: true }, { window: 'manualLap', aggregate: 'average' },
-            { fields: [{ type: 'strokeRate', title: 'Avg strk' }] }, { mappingVersion: 'suunto-guides-v5' }]) {
+            { fields: [{ type: 'strokeRate', title: 'Avg strk' }] }, { mappingVersion: 'suunto-guides-v5' },
+            { alerts: [{ type: 'default', condition: { type: 'stepDuration', value: 15 }, countdown: { type: 'standard' } }] },
+            { countdown: { type: 'standard' } }]) {
             const bad = { ...input, nodes: [{ ...input.nodes[0], ...fields }] };
             expect(TRAINING_RECIPE_SCHEMA.safeParse(bad).success).toBe(false);
             expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({

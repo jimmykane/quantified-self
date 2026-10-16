@@ -387,6 +387,10 @@ also private presentation only. Canonical recipes, planned/saved-workout reads, 
 scopes, consent and provider actions stay unchanged; Guide fields, allocation results and mapping/recovery metadata
 remain excluded. No catalog refresh, contract promotion or plugin rebuild is needed. See
 [swimming allocation and recovery](training-workspace.md#swimming-field-allocation-and-headings-v15).
+Timed-Rest v16 native Suunto countdown alerts likewise have **no wire impact**: they are private provider metadata,
+not a new recipe setting, target, read metric, provider action, tool, scope or consent. Canonical planned-workout reads
+remain unchanged; strict recipes/proposals/outputs reject injected `alerts` and `countdown` fields. No contract promotion,
+catalog refresh or plugin rebuild is needed. See [countdown evidence and recovery](training-workspace.md#native-timed-rest-countdown-alerts-v16).
 The native-app **Duplicate to…** shortcut in completed-workout sync details reuses the existing scheduled-workout copy contract; existing
 read projections expose the new planned copy without copying completion/delivery state. Native **Send a fresh Guide**
 is a new app-only explicit action, not an addition to the registered MCP/Assistant provider-action union. Strict

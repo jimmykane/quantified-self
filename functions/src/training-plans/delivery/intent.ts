@@ -85,8 +85,8 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
-  const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14', 'suunto-guides-v15'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
-  const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15'].includes(assessment.mappingVersion) ? context.suuntoSwimmingSettings : undefined;
+  const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
+  const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16'].includes(assessment.mappingVersion) ? context.suuntoSwimmingSettings : undefined;
   const recordSuuntoPresentation = !!(suuntoMappingUnits || suuntoMappingSwimmingSettings)
     && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
   const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval

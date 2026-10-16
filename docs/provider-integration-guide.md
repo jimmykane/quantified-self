@@ -523,14 +523,14 @@ metadata. Monitoring is **covered/unchanged** by provider/event filters; no dash
 See [app preview and verification](training-workspace.md#suunto-app-workout-preview-v13) for the impact review and
 separately approved release/app verification still required.
 
-Pool/open-water swimming now selects private v15 for bounded, configurable Work/Rest fields. Selected planned
+Pool/open-water swimming without timed Rest selects private v15 for bounded, configurable Work/Rest fields. Selected planned
 interval numbers use the heading (13-character limit), not a text metric slot. Previous/next prescription distances
 share one compact, explicitly planned text field without an ending instruction; Suunto may crop this text beside
 native numbers. A shared allocator drives delivery and the app's per-step Included/Heading/Omitted report, with
 Rest listed first and no watch-visibility promise. Native stroke count remains separate from stroke rate.
 Short generated timed-Rest popups (at most 20 seconds, no authored note)
 are omitted to avoid overlapping the next Work alert, without changing timing/laps or promising forced haptics.
-All other sports retain exactly v13. Canonical owner config preferences become immutable private operation/proof
+Other sports without timed Rest retain exactly v13. Canonical owner config preferences become immutable private operation/proof
 snapshots; frozen v14 and earlier recovery precedes an eligible same-ID update under unchanged consent/authority/Pro gates.
 The existing scheduler handles saved display preferences; no new queue, Rules or index is needed. Monitoring is
 **covered/unchanged**; MCP Training schemas/read coverage stay unchanged and reject these private fields.
@@ -539,6 +539,19 @@ updates remain undocumented capabilities, not guessed upload fields. See the sin
 [swimming screen contract](training-workspace.md#configurable-swimming-guide-screens-v14) and
 [v15 allocation/recovery verification](training-workspace.md#swimming-field-allocation-and-headings-v15).
 This change still needs separately approved Functions/frontend deployment and physical watch verification.
+
+Recipes with timed Rest now select private **v16**, adding a native `default` alert with a `stepDuration` condition
+and `countdown: { type: "standard" }` at the exact Rest duration. This applies across supported sports, including
+swimming and Gym set rests, by default without a QS toggle. Manual/distance Rest and active Recovery are excluded.
+Timing, targets, lap/transition graphs and screens remain unchanged apart from bounded presentation fallback needed
+to fit alert bytes. Frozen v15/v13 recovery still proves original acceptance before an eligible same-ID update;
+alert readback is strict, pinning/consent/completed-copy fences remain intact, and there is no automatic recreation.
+An authorized partner-API QA upload/readback and owner watch test confirmed countdown sound/vibration, **not** a
+long final tone or exact five-second sequence. Quiet/tones-off behavior remains unverified. This extension was
+discovered in public unofficial client code, not the published partner schema; no dependency or internal endpoint
+is added. Monitoring is covered/unchanged and MCP has no wire impact. See
+[v16 evidence, bounds and verification](training-workspace.md#native-timed-rest-countdown-alerts-v16).
+The application change still requires a separately approved Functions deployment; no frontend settings change is needed.
 
 An explicit **Send a fresh Guide** review can reserve a new Suunto external identity for the same eligible QS workout,
 without changing or deleting the earlier Guide. This is not absence detection or automatic repair: hidden Guides may

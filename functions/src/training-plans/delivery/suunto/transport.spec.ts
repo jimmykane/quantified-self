@@ -14,7 +14,8 @@ import { packageGuide, readGuideArchive } from './archive';
 import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery,
   assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, assessSuuntoGuideV10ForRecovery,
-  assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV14ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
+  assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV13ForRecovery, assessSuuntoGuideV14ForRecovery,
+  assessSuuntoGuideV15ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -174,7 +175,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
   });
-  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('recovers the exact v14 %s upload before one same-ID v15 update', async sport => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('recovers the exact v14 %s upload before one same-ID v16 update', async sport => {
     op.suuntoUnitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     op.suuntoSwimmingSettings = { version: 1, workFields: ['pace', 'interval', 'workoutDistance'],
       restFields: ['interval', 'nextPlannedDistance', 'heartRate'] };
@@ -200,6 +201,61 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.guides.size).toBe(1);
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
     expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'recovers frozen %s content before one same-ID native-alert update', async sport => {
+    op.suuntoUnitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    op.suuntoSwimmingSettings = { ...defaultSuuntoSwimmingGuideSettings(), restFields: ['workoutDistance', 'heartRate'] };
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 2, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    const swim = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport);
+    op.digest = (swim ? assessSuuntoGuideV15ForRecovery : assessSuuntoGuideV13ForRecovery)(op.workout!,
+      op.destinationKey, op.timeZone, owner, op.suuntoUnitSettings, op.suuntoSwimmingSettings).digest;
+    const frozen = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(frozen)).not.toContain('"alerts"');
+    server.guides.set('existing-guide', { guide: structuredClone(frozen), pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw Error('Historical acceptance not proved');
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    op.artifact = recovered.artifact; next(); await execute();
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v16');
+    const updated = server.guides.get('existing-guide')!;
+    expect(updated.pinned).toBe(true);
+    expect(updated.guide.externalId).toBe(frozen.externalId);
+    expect(JSON.stringify(updated.guide)).toContain('"countdown":{"type":"standard"}');
+    const withoutAlerts = structuredClone(updated.guide);
+    withoutAlerts.steps.flatMap(step => step.type === 'repeat' ? step.steps : [step]).forEach(step => delete step.alerts);
+    expect(withoutAlerts).toEqual(frozen);
+    expect(await readGuideArchive(await packageGuide(updated.guide))).toEqual(updated.guide);
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it.each(['missing', 'condition', 'countdown', 'extra'])(
+    'requires exact native alerts after a lost response (%s), without another create', async change => {
+    next({ structure: { ...op.workout!.structure, nodes: [{ kind: 'step', id: 'rest', purpose: 'rest',
+      ending: { kind: 'time', seconds: 15 }, targets: [] }] } });
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const rest = server.guides.get('guide-1')!.guide.steps[0] as SuuntoGuideFieldsStepV1;
+    const alerts = structuredClone(rest.alerts!);
+    expect(alerts).toHaveLength(1);
+    if (change === 'missing') delete rest.alerts;
+    else if (change === 'condition') rest.alerts![0].condition.value = 14;
+    else if (change === 'countdown') Object.assign(rest.alerts![0].countdown, { type: 'other' });
+    else Object.assign(rest.alerts![0], { sound: 'long' });
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    rest.alerts = alerts;
+    expect(await recover()).toMatchObject({ kind: 'accepted' });
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(0);
   });
   it('uses the snapshotted strength units and updates the same Guide after a unit-only change', async () => {
     strengthOperation();
@@ -312,8 +368,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     if (recovered.kind !== 'accepted') throw new Error('Historical Rest copy not recovered');
     expect(server.calls.every(request => request.method === 'GET')).toBe(true);
     op.artifact = recovered.artifact;
-    next(); expect(transport.diagnosticMappingVersion(op)).toBe([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)
-      ? 'suunto-guides-v15' : 'suunto-guides-v13');
+    next(); expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v16');
     await execute();
     const current = server.guides.get('legacy-rest')!;
     expect(current.pinned).toBe(true);
@@ -341,7 +396,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
         { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
       ] },
     ] } });
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v15');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v16');
     const currentDigest = op.digest;
     op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(op.digest).not.toBe(currentDigest);
