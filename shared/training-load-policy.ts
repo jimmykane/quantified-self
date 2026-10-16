@@ -144,8 +144,13 @@ export function resolveEffectiveTrainingLoad(
       estimated: false, reasons: ['legacy-recorded-score'] };
   };
   if (activityId) return resolveLeg(activityId, activities.find(activity => activity.id === activityId));
-  // Legacy workouts retain the original parent value until controlled or reparsed.
-  if (!metadata || (!metadata.legs && Object.keys(metadata.controls).length === 0)) {
+  // Saving unchanged Automatic/included preferences (including a future-default
+  // copy) is not a load adjustment. Keep legacy parent-only scores until an
+  // effective override, exclusion or method change, or until source reparse.
+  const hasLegacyLoadAdjustment = Object.values(metadata?.controls ?? {}).some(control =>
+    validTrainingLoadOverride(control.override) || control.included === false
+    || (control.method !== undefined && control.method !== 'AUTOMATIC'));
+  if (!metadata || (!metadata.legs && !hasLegacyLoadAdjustment)) {
     const score = recordedTrainingStressScore(source);
     return score === null ? unavailable('missing-tss') : { score, status: 'available', method: 'RECORDED',
       estimated: false, reasons: ['legacy-recorded-score'] };

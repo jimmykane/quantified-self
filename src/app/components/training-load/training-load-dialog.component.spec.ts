@@ -9,7 +9,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, EventImporterJSON, TrainingStressScoreMethod } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod } from '@sports-alliance/sports-lib';
 
 describe('Training load editor', () => {
   const save = vi.fn(); const selection = vi.fn(); const success = vi.fn(); const error = vi.fn();
@@ -50,6 +50,22 @@ describe('Training load editor', () => {
     await component.save();
     expect(save).toHaveBeenCalledWith('u', 'e', 0, { key: 'walk', control: { override: 0, method: 'AUTOMATIC', included: true } },
       { family: 'walking-hiking', expectedRevision: 0, policy: { method: 'AUTOMATIC', included: true } });
+    expect(success).toHaveBeenCalledOnce(); expect(error).not.toHaveBeenCalled();
+  });
+  it('keeps a distinct legacy parent score when copying neutral preferences to future workouts', async () => {
+    vi.spyOn(component.data.event, 'getStat').mockReturnValue(new DataTrainingStressScore(120));
+    save.mockImplementation(async (_uid, _eventId, _revision, edit) => {
+      watch.mockReturnValue(of({ version: 1, revision: 1, excluded: false, controls: { [edit.key]: edit.control } }));
+    });
+    expect(component.recorded).toBe(87.3);
+    expect(component.model.score).toBe(120);
+    component.form.controls.future.setValue(true); component.form.markAsDirty();
+    await component.save();
+    expect(save).toHaveBeenCalledWith('u', 'e', 0,
+      { key: 'walk', control: { method: 'AUTOMATIC', included: true } },
+      { family: 'walking-hiking', expectedRevision: 0, policy: { method: 'AUTOMATIC', included: true } });
+    expect(component.model).toMatchObject({ score: 120, method: 'RECORDED' });
+    expect(component.legModel.score).toBe(87.3);
     expect(success).toHaveBeenCalledOnce(); expect(error).not.toHaveBeenCalled();
   });
   it('rejects invalid scores and preserves the draft after a conflict', async () => {

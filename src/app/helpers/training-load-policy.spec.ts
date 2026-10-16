@@ -70,6 +70,22 @@ describe('modeled Training load', () => {
     expect(resolveEffectiveTrainingLoad(source, { version: 1, revision: 1, excluded: false,
       controls: { walk: { override: 0 } } }, activities).score).toBe(50);
   });
+  it.each([
+    {}, { method: 'AUTOMATIC' as const }, { included: true },
+    { method: 'AUTOMATIC' as const, included: true },
+  ])('retains a legacy parent score for neutral saved preferences: %j', control => {
+    // The editor also saves these preferences when only copying defaults to future workouts.
+    const data: TrainingLoadMetadata = { version: 1, revision: 1, excluded: false, controls: { walk: control } };
+    expect(resolveEffectiveTrainingLoad(source, data, activities)).toMatchObject({ score: 200, method: 'RECORDED' });
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(87.3);
+    expect(resolveEffectiveTrainingLoad({}, data, activities)).toMatchObject({ score: null, status: 'unavailable' });
+    data.controls.walk = { ...control, override: 0 };
+    expect(resolveEffectiveTrainingLoad(source, data, activities).score).toBe(50);
+    data.controls.walk = { ...control, included: false };
+    expect(resolveEffectiveTrainingLoad(source, data, activities).score).toBe(50);
+    data.controls.walk = { ...control, method: 'HR' };
+    expect(resolveEffectiveTrainingLoad(source, data, activities)).toMatchObject({ score: 50, status: 'partial' });
+  });
   it('accepts valid zero, distinguishes exclusion and unavailable, and retains volume inputs', () => {
     const data = metadata();
     data.controls.walk = { override: 0 };

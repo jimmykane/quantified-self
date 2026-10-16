@@ -5568,6 +5568,13 @@ saves its dated policy revision independently. This uses the existing transactio
 owner Rules, load calculations, queue behavior and MCP contracts are unchanged. Existing help remains applicable:
 future defaults do not change the current workout's saved policy or copy its numeric override.
 
+For legacy workouts without saved evaluations, neutral Automatic/included leg preferences retain the recorded parent
+TSS, even if the parent differs from the sum of recorded leg scores. This also applies when the editor copies those
+preferences to future workouts. A numeric override (including zero), exclusion or effective method change activates
+leg-based resolution; reparse uses its saved candidates normally. The shared resolver applies this rule to the editor,
+backend cache and Training reads without additional database operations. Per-leg recorded scores stay independent;
+parent-only scores are never distributed. MCP schemas, grants and private-metadata boundaries are unchanged.
+
 Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
 leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
 transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
@@ -5783,12 +5790,19 @@ registered schemas/history. The pending digest describes the combined candidate;
 refresh is performed. Calendar's Recorded TSS label changes presentation only: plan/workout read payloads, completion
 evidence, consent, mutations and provider delivery are unchanged.
 
-Verification against develop `8c48e325a`: 9,814 frontend tests pass; the 10,010-test Functions run had only the
-merged pending-digest mismatch, then all 21 contract tests passed after correcting that digest. All 209 Rules tests,
+Verification against develop `8c48e325a`: CI passed all frontend and Functions suites after correcting the
+merged pending digest; local coverage included 9,814 frontend tests and all 21 contract tests. All 209 Rules tests,
 49 lifecycle emulator tests and 73 test-runner/policy guards pass. Functions and production frontend builds,
 service-worker/public startup output, endpoint loading, secret bindings and isolated plugin validation pass. A further
 186 Calendar/help tests cover the recorded-versus-modeled label. Offline corpus replay found no new regression in
 regeneration, native round trips or routes; source files and detailed evidence remain outside the repositories.
+
+The follow-up review against develop `95cd0b7de` preserves Garmin overnight-HR source invalidation alongside Training
+load cache coordination, plus the newer activity-send limits and retry handling. The combined MCP candidate retains
+scope-gated calculated sleep-HR guidance and additive endurance reads without changing the registered contract.
+Regression coverage now also verifies that neutral legacy preferences preserve the recorded parent total through
+the editor and compact cache; zero overrides and exclusions still take effect immediately. This changes no parser
+output, storage schema, provider behavior or deployment authority.
 
 
 Root and Functions pin published Sports Lib 22.0.0 with FIT Parser 6.2.2 and matching package integrity.

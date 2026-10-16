@@ -28,6 +28,17 @@ describe('compact private Training load summaries', () => {
     expect(summary).not.toHaveProperty('controls'); expect(summary).not.toHaveProperty('policy');
     expect(JSON.stringify(summary)).not.toContain('evaluations');
   });
+  it('keeps the legacy parent total when the editor saves neutral preferences', () => {
+    const saved: TrainingLoadMetadata = { version: 1, revision: 1, excluded: false,
+      controls: { walk: { method: 'AUTOMATIC', included: true } } };
+    const activities = [{ id: 'walk', stats: { 'Training Stress Score': 20 } },
+      { id: 'ride', stats: { 'Training Stress Score': 30 } }];
+    const summary = summarizeTrainingLoad('event', parent, saved, activities)!;
+    expect(summary.load).toMatchObject({ score: 87, method: 'RECORDED' });
+    expect(summary.legs.walk.load.score).toBe(20);
+    expect(summary.legs.ride.load.score).toBe(30);
+    expect(summarizeTrainingLoad('event', parent, { ...saved, controls: { walk: { override: 0 } } }, activities)?.load.score).toBe(30);
+  });
   it('covers exclusion, missing legs and unmatched identities without losing zero/unavailable distinctions', () => {
     expect(summarizeTrainingLoad('e', parent, { ...metadata, excluded: true })?.missingLeg.status).toBe('excluded');
     expect(summarizeTrainingLoad('e', parent, metadata)?.missingLeg.status).toBe('unavailable');
