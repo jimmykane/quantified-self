@@ -5,8 +5,9 @@ Every authenticated account can use the compact **Timeline notes** header action
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
 Training charts retain their shared note annotations, but the Training route has no note-manager header action.
 The signed-in sidenav also includes **Timeline notes** as a full-level row after **Health** in **Training & health**,
-with the existing `event_note` icon. This native Material link closes the drawer and opens the lazy `/health/compare`
-landing page. Its primary saved-note rows open the existing comparison charts, not an editor. **Manage notes** explicitly
+with the `edit_note` (lines and pencil) icon, distinct from Plans’ `event_note` calendar icon. This native Material link
+closes the drawer and opens the lazy `/health/compare` landing page. Its primary saved-note rows open the existing
+comparison charts, not an editor. **Manage notes** explicitly
 opens the existing manager; no second editor or write path is introduced. The landing page uses the existing bounded
 `list()` query/cursors, includes future and hidden notes, formats fixed calendar dates through the comparison formatter,
 and discards stale reads on owner changes, invalidation or teardown. It shows loading, empty and retry states without

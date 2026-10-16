@@ -353,7 +353,7 @@ describe('SideNavComponent', () => {
         const link = fixture.nativeElement.querySelector('.sidenav-notes-item') as HTMLAnchorElement;
         expect(link.tagName).toBe('A'); expect(link.getAttribute('href')).toBe('/health/compare');
         expect(link.hasAttribute('aria-haspopup')).toBe(false);
-        expect(link.querySelector('mat-icon')?.textContent).toBe('event_note');
+        expect(link.querySelector('mat-icon')?.textContent).toBe('edit_note');
         expect(link.parentElement?.getAttribute('aria-labelledby')).toBe('sidenav-training-health-heading');
         expect(link.previousElementSibling?.getAttribute('routerlink')).toBe('/health');
         expect(notesDialogs.open).not.toHaveBeenCalled(); expect(mockHapticsService.selection).not.toHaveBeenCalled();
@@ -425,6 +425,7 @@ describe('SideNavComponent', () => {
 
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
+        expect(plansItem?.nativeElement.querySelector('mat-icon')?.textContent).toBe('event_note');
         expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
         expect(plansItem?.nativeElement.parentElement?.getAttribute('aria-labelledby')).toBe('sidenav-training-health-heading');
         expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
