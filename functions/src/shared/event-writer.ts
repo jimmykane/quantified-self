@@ -30,6 +30,8 @@ export interface FirestoreAdapter {
 }
 
 export interface UploadedStorageFileMetadata {
+    /** Actual retained location when the backend isolates source revisions. */
+    path?: string;
     generation?: string | number;
 }
 
@@ -243,7 +245,7 @@ export class EventWriter {
                     const generation = normalizeStorageGeneration(uploadResult?.generation);
 
                     uploadedFilesMetadata.push({
-                        path: filePath,
+                        path: uploadResult?.path || filePath,
                         bucket: this.storageAdapter.getBucketName?.() || this.bucketName,
                         ...(generation ? { generation } : {}),
                         startDate: file.startDate,

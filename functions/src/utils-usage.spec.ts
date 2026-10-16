@@ -13,6 +13,7 @@ import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAc
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
+import { getContentAddressedOriginalPath } from './shared/storage-file-save';
 import { withHistoryExecution } from './connection-history/context';
 import * as trainingLoadMetadata from './training-load/training-load-metadata';
 import type { HistoryExecution } from './connection-history/execution';
@@ -566,20 +567,66 @@ describe('utils higher-level helpers', () => {
                 startDate: new Date(),
             };
             const path = 'users/user-1/events/event-1/original.fit';
+            const retainedPath = getContentAddressedOriginalPath(path, originalFile.data);
             writeAllEventDataMock.mockImplementationOnce(async () => {
                 const [, storageAdapter] = eventWriterConstructorMock.mock.calls.at(-1);
                 await expect(storageAdapter.uploadFile(path, originalFile.data))
-                    .resolves.toEqual({ generation: '1' });
+                    .resolves.toEqual({ path: retainedPath, generation: '1' });
                 return mockSavedOriginalFiles;
             });
 
             await setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], metaData, originalFile);
 
-            expect(hoisted.bucketSave).toHaveBeenCalledWith(path, originalFile.data, {
+            expect(hoisted.bucketSave).toHaveBeenCalledWith(retainedPath, originalFile.data, {
                 validation: 'crc32c',
                 metadata: { crc32c: '4waSgw==' },
             });
             expect(hoisted.bucketCopy).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('keeps the newer original readable when an older upload finishes last (staged: %s)', async staged => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };
+            const metaData = { serviceName: 'WAHOOAPI', toJSON: () => ({ meta: true }) };
+            const objects = new Map<string, Buffer>();
+            let releaseOlder!: () => void;
+            let olderStarted!: () => void;
+            const started = new Promise<void>(resolve => { olderStarted = resolve; });
+            const blocked = new Promise<void>(resolve => { releaseOlder = resolve; });
+            const finishUpload = async (path: string, bytes: Buffer) => {
+                if (bytes.toString() === 'older source') { olderStarted(); await blocked; }
+                objects.set(path, bytes);
+            };
+            hoisted.bucketSave.mockImplementation(async (path: string, bytes: Buffer) => {
+                if (staged) objects.set(path, bytes);
+                else await finishUpload(path, bytes);
+            });
+            hoisted.bucketCopy.mockImplementation(async (source: string, target: { path: string }) => {
+                await finishUpload(target.path, objects.get(source)!);
+            });
+            const path = 'users/user-1/events/event-1/original.fit';
+            writeAllEventDataMock.mockImplementation(async (_user, _event, original) => {
+                const [, storage] = eventWriterConstructorMock.mock.calls.at(-1)!;
+                const result = await storage.uploadFile(path, original.data);
+                return [{ path: result.path ?? path }];
+            });
+            const upload = (source: string) => setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], metaData,
+                { data: Buffer.from(source), extension: 'fit', startDate: new Date() }, undefined, undefined, undefined,
+                { stageOriginalFilesUntilEventWrite: staged });
+            const older = upload('older source');
+            await started;
+            try {
+                const newer = await upload('newer source');
+                releaseOlder();
+                await older;
+                expect(objects.get(newer.savedOriginalFiles[0].path)?.toString()).toBe('newer source');
+            } finally {
+                releaseOlder();
+                await older;
+                hoisted.bucketSave.mockReset();
+                hoisted.bucketCopy.mockReset();
+                writeAllEventDataMock.mockResolvedValue(mockSavedOriginalFiles);
+            }
         });
 
         it('promotes a staged original file only after all guarded writes succeed', async () => {
@@ -629,7 +676,7 @@ describe('utils higher-level helpers', () => {
             });
             expect(hoisted.bucketCopy).toHaveBeenCalledWith(
                 stagingPath,
-                expect.objectContaining({ path: 'users/user-1/events/event-1/original.fit' }),
+                expect.objectContaining({ path: getContentAddressedOriginalPath('users/user-1/events/event-1/original.fit', originalFile.data) }),
             );
             expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
         });

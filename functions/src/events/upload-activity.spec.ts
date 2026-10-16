@@ -1502,7 +1502,11 @@ describe('uploadActivity', () => {
     expect(firestoreAdapter.createBlob(Uint8Array.from([7, 8, 9]))).toEqual(Buffer.from([7, 8, 9]));
     expect(firestoreAdapter.generateID()).toBe('tmp-generated-id');
 
-    await storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa]));
+    await expect(storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa])))
+      .resolves.toEqual({
+        path: expect.stringMatching(/^users\/user-1\/events\/adapter-test\/sources\/[a-f0-9]{64}\/original\.fit$/),
+        generation: 'storage-generation-1',
+      });
     expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(
       'user-1',
       'activity_upload_original_file:users/user-1/events/adapter-test/original.fit',

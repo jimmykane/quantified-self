@@ -343,7 +343,7 @@ describe('cleanupEventFile', () => {
         };
         mocks.getFiles.mockResolvedValueOnce([[
             {
-                name: 'users/testUser/events/testEvent/original.fit',
+                name: `users/testUser/events/testEvent/sources/${'a'.repeat(64)}/original.fit`,
                 metadata: {
                     generation: 'stale-generation',
                     timeCreated: '2025-01-01T00:00:00.000Z',
@@ -365,7 +365,7 @@ describe('cleanupEventFile', () => {
             prefix: 'users/testUser/events/testEvent/',
         });
         expect(mocks.file).toHaveBeenCalledWith('users/testUser/events/testEvent/original.fit.gz');
-        expect(mocks.file).toHaveBeenCalledWith('users/testUser/events/testEvent/original.fit');
+        expect(mocks.file).toHaveBeenCalledWith(`users/testUser/events/testEvent/sources/${'a'.repeat(64)}/original.fit`);
         expect(mocks.fileDelete).toHaveBeenCalledWith({
             ignoreNotFound: true,
             ifGenerationMatch: 'current-generation',

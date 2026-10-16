@@ -514,12 +514,12 @@ describe('sports-lib-reparse.service', () => {
         await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(false);
     });
 
-    it('parseFromOriginalFilesStrict should parse gzip FIT files', async () => {
+    it.each(['original.fit.gz', `sources/${'a'.repeat(64)}/original.fit.gz`])('parseFromOriginalFilesStrict parses gzip FIT at %s', async filename => {
         const gz = gzipSync(Buffer.from('fit-file-content'));
         hoisted.mockDownload.mockResolvedValue([gz]);
 
         const result = await parseFromOriginalFilesStrict([
-            { path: 'users/u1/events/e1/original.fit.gz' }
+            { path: `users/u1/events/e1/${filename}` }
         ]);
 
         expect(result.sourceFilesCount).toBe(1);

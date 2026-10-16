@@ -1,4 +1,12 @@
 import type { File } from '@google-cloud/storage';
+import { createHash } from 'node:crypto';
+import { posix } from 'node:path';
+
+/** Different source bytes must never overwrite another import's retained original. */
+export function getContentAddressedOriginalPath(path: string, data: Buffer | Uint8Array | string): string {
+    const digest = createHash('sha256').update(data).digest('hex');
+    return `${posix.dirname(path)}/sources/${digest}/${posix.basename(path)}`;
+}
 
 /**
  * Validate the exact retained bytes on the server before committing an object,

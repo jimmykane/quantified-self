@@ -14,6 +14,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 import { inspectHistoricalManualOriginal, isOwnerOriginalPath, matchesLegacyManualUploadID, readHistoricalManualFit } from './historical-manual-original';
+import { getContentAddressedOriginalPath } from '../shared/storage-file-save';
 
 function fitPayload(): Buffer {
   const fit = Buffer.alloc(14);
@@ -55,6 +56,23 @@ describe('historical manual original', () => {
       path: 'users/user-1/events/event-1/original.fit', generation: '42',
     })).resolves.toEqual({ generation: '42', size: 14 });
     expect(download).not.toHaveBeenCalled();
+  });
+
+  it.each(['fit', 'fit.gz'])('reads a content-addressed %s original under the same ownership and generation checks', async extension => {
+    const fit = fitPayload();
+    const bytes = extension === 'fit.gz' ? gzipSync(fit) : fit;
+    const path = getContentAddressedOriginalPath(`users/user-1/events/event-1/original.${extension}`, bytes);
+    getMetadata.mockResolvedValue([{ generation: '42', size: `${bytes.length}` }]);
+    download.mockResolvedValue([bytes]);
+    await expect(readHistoricalManualFit('user-1', 'event-1', { path, generation: '42' }))
+      .resolves.toEqual({ fit, generation: '42' });
+    expect(isOwnerOriginalPath('user-2', 'event-1', path)).toBe(false);
+    expect(isOwnerOriginalPath('user-1', 'event-2', path)).toBe(false);
+    expect(isOwnerOriginalPath('user-1', 'event-1', path.replace('original.', 'original_0.'))).toBe(false);
+    expect(isOwnerOriginalPath('user-1', 'event-1', path.replace('/sources/', '/sources/../'))).toBe(false);
+    expect(isOwnerOriginalPath('user-1', 'event-1', path.replace(/[a-f0-9]{64}/, 'invalid-digest'))).toBe(false);
+    await expect(readHistoricalManualFit('user-1', 'event-1', { path, generation: '41' }))
+      .rejects.toThrow('changed');
   });
 
   it('rejects a changed generation and oversized original before delivery', async () => {

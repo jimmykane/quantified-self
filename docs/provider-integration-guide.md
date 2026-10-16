@@ -1272,8 +1272,24 @@ Activity imports, manual activity uploads, comparisons, merges, and manual/provi
 Cloud Storage and supplies the base64 checksum in `metadata.crc32c` with `validation: 'crc32c'`.
 Cloud Storage checks the supplied checksum before committing the object; the SDK also validates the
 returned checksum. This explicit metadata avoids depending on an SDK's default checksum-header behavior.
-Already compressed files are hashed and retained as compressed bytes. Object paths, generation
-tracking, original-file provenance, and deletion/connection guards remain unchanged.
+Already compressed files are hashed and retained as compressed bytes. Generation tracking,
+original-file provenance, and deletion/connection guards remain in force.
+
+Provider activity imports, manual activity uploads and merges additionally isolate distinct original bytes under
+`users/{uid}/events/{eventId}/sources/{sha256}/original[_index].{extension}`. The shared EventWriter saves the adapter's
+actual path in both original-file metadata fields. An older upload or staged promotion finishing late cannot overwrite
+a newer revision's bytes after its Firestore writes were rejected. Identical bytes reuse the same path, with no extra
+Storage or Firestore requests; different revisions occupy separate objects until normal event/account cleanup.
+Existing objects keep their paths and remain readable without migration. Downloads and reparse follow metadata;
+historical manual sends accept only the legacy or exact digest path inside the same owner/event and retain all
+provenance, format, size and generation checks. Existing event-prefix cleanup and Storage Rules cover nested paths;
+public-event sharing continues to expose source objects within that event folder, including retained revisions.
+Comparisons and saved routes retain their existing writers. See [Training persistence](training-workspace.md) for
+the complementary Firestore source reservation and control-preservation contract.
+
+Monitoring impact is **unchanged**: reviewed `tools/import-monitoring/definitions.mjs` and the recorded-import runbook;
+the same workers, persistence failures, committed outcomes, retries and cleanup paths apply. No queue, lease,
+scheduler, monitoring label or provider request changes. Existing Help remains accurate and MCP schemas are unchanged.
 
 Provider activity originals staged under `event-write-staging/` receive the same validation before
 promotion. Promotion remains a server-side copy, which Cloud Storage validates against the source

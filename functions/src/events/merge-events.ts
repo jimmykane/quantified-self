@@ -21,7 +21,7 @@ import {
   setEventDocumentIfUserActive,
 } from '../utils';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
-import { saveChecksummedStorageFile } from '../shared/storage-file-save';
+import { getContentAddressedOriginalPath, saveChecksummedStorageFile } from '../shared/storage-file-save';
 import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
@@ -412,10 +412,11 @@ function getStorageAdapter(userID: string): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
       await assertEventWriteUserActive(userID, `merge_event_original_file_upload:${path}`);
-      const file = admin.storage().bucket().file(path);
+      const targetPath = getContentAddressedOriginalPath(path, data as Buffer);
+      const file = admin.storage().bucket().file(targetPath);
       await saveChecksummedStorageFile(file, data as Buffer);
       const [metadata] = await file.getMetadata();
-      return { generation: metadata.generation };
+      return { path: targetPath, generation: metadata.generation };
     },
     getBucketName: () => admin.storage().bucket().name,
   };

@@ -12,7 +12,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
-import { saveChecksummedStorageFile } from './shared/storage-file-save';
+import { getContentAddressedOriginalPath, saveChecksummedStorageFile } from './shared/storage-file-save';
 import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
@@ -417,19 +417,20 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         `event_original_file_upload:${path}`,
         writeOptions.assertWriteAuthorizationInTransaction,
       );
+      const targetPath = getContentAddressedOriginalPath(path, data);
       if (stagingBucket) {
         // These objects are backend-only: no user ID appears in the path, so
         // they cannot match the Storage rules' user-readable `/users/**` paths.
         const stagingPath = `event-write-staging/${crypto.randomUUID()}`;
-        stagedOriginalFiles.push({ stagingPath, targetPath: path });
+        stagedOriginalFiles.push({ stagingPath, targetPath });
         await saveChecksummedStorageFile(stagingBucket.file(stagingPath), data);
-        return {};
+        return { path: targetPath };
       }
       const bucket = admin.storage().bucket();
-      const file = bucket.file(path);
+      const file = bucket.file(targetPath);
       await saveChecksummedStorageFile(file, data);
       const [metadata] = await file.getMetadata();
-      return { generation: metadata.generation };
+      return { path: targetPath, generation: metadata.generation };
     },
     getBucketName: () => {
       return admin.storage().bucket().name;

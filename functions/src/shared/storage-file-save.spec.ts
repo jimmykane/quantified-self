@@ -3,7 +3,23 @@ import { CRC32C, Storage } from '@google-cloud/storage';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { gzipSync } from 'node:zlib';
-import { saveChecksummedStorageFile } from './storage-file-save';
+import { getContentAddressedOriginalPath, saveChecksummedStorageFile } from './storage-file-save';
+
+describe('getContentAddressedOriginalPath', () => {
+    const path = 'users/owner/events/event/original.fit.gz';
+    it.each(['abc', Buffer.from('abc'), Uint8Array.from([0xff, 97, 98, 99, 0xee]).subarray(1, 4)])(
+        'keys the exact stored bytes and retains the event prefix and complete extension', data => {
+            expect(getContentAddressedOriginalPath(path, data)).toBe(
+                'users/owner/events/event/sources/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad/original.fit.gz');
+        });
+    it('isolates changed bytes and preserves indexed filenames for merged sources', () => {
+        expect(getContentAddressedOriginalPath(path, 'abc')).not.toBe(getContentAddressedOriginalPath(path, 'abcd'));
+        expect(getContentAddressedOriginalPath(path, 'Δ')).toBe(getContentAddressedOriginalPath(path, Buffer.from('Δ')));
+        expect(getContentAddressedOriginalPath(path, gzipSync('abc'))).not.toBe(getContentAddressedOriginalPath(path, 'abc'));
+        expect(getContentAddressedOriginalPath('users/owner/events/event/original_1.fit', 'abc'))
+            .toBe('users/owner/events/event/sources/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad/original_1.fit');
+    });
+});
 
 describe('saveChecksummedStorageFile', () => {
     it.each([

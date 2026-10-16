@@ -5823,6 +5823,16 @@ not invalidate derived metrics. MCP impact is none: the marker is never projecte
 mutations and provider delivery are unchanged. Existing help remains accurate; the editor already describes incomplete
 imports as unavailable. Queue monitoring coverage is unchanged: existing persistence-phase errors and worker retry
 handling cover superseded source writes, finalizers and cleanup, with no new queue, scan, provider action or deployment.
+Original bytes need separate protection because Storage cannot join the reservation transaction. Provider imports,
+manual uploads and merges retain each distinct byte revision at
+`users/{uid}/events/{eventId}/sources/{sha256}/original[_index].{extension}` and save that actual path in the existing
+original-file metadata. SHA-256 covers the exact retained bytes, including gzip. A delayed older upload or staged
+promotion cannot replace the current revision's bytes. Identical retries reuse a path; different revisions remain
+under the same event prefix for existing guarded cleanup. This adds hashing and storage for distinct revisions,
+without extra Firestore or Storage requests. Existing paths remain readable and are not migrated or deleted.
+Downloads, reparse and historical sends resolve the stored path; manual sends retain their exact owner/event,
+format, provenance, size and generation checks. Storage sharing remains the existing event-folder policy, including
+retained revisions of a public event. MCP schemas, user-facing controls and Help are unchanged.
 Browser and backend use the same canonical source projection for SHA-256
 fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks

@@ -274,7 +274,11 @@ vi.mock('../shared/event-writer', () => ({
       if (hoisted.state.exerciseWriterAdaptersOnce) {
         hoisted.state.exerciseWriterAdaptersOnce = false;
         await firestoreAdapter.setDoc(['users', `${args[0]}`, 'events', 'adapter-probe'], { probe: true });
-        await storageAdapter.uploadFile('users/probe/events/adapter-probe/original.fit', Buffer.from([0x09]));
+        await expect(storageAdapter.uploadFile('users/probe/events/adapter-probe/original.fit', Buffer.from([0x09])))
+          .resolves.toEqual({
+            path: expect.stringMatching(/^users\/probe\/events\/adapter-probe\/sources\/[a-f0-9]{64}\/original\.fit$/),
+            generation: 'storage-generation-1',
+          });
       }
       try {
         const finish = await firestoreAdapter.prepareTrainingLoad(args[1]);

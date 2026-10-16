@@ -165,15 +165,16 @@ describe('EventWriter', () => {
         expect(eventWrite?.[1]).not.toHaveProperty('benchmarkReviewTags');
     });
 
-    it('should upload original file if provided', async () => {
+    it.each([undefined, 'users/user-1/events/event-1/sources/digest/original.fit'])('retains the uploaded original location (%s)', async retainedPath => {
         const originalFile = {
             data: Buffer.from('test'),
             extension: 'fit',
             startDate: new Date(),
             originalFilename: 'test.fit',
         };
-        storageAdapter.uploadFile.mockResolvedValueOnce({ generation: '101' });
-        await writer.writeAllEventData('user-1', eventMock, originalFile);
+        storageAdapter.uploadFile.mockResolvedValueOnce({ path: retainedPath, generation: '101' });
+        const saved = await writer.writeAllEventData('user-1', eventMock, originalFile);
+        expect(saved[0].path).toBe(retainedPath ?? 'users/user-1/events/event-1/original.fit');
 
         expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
             'users/user-1/events/event-1/original.fit',
@@ -185,7 +186,7 @@ describe('EventWriter', () => {
             ['users', 'user-1', 'events', 'event-1'],
             expect.objectContaining({
                 originalFile: expect.objectContaining({
-                    path: 'users/user-1/events/event-1/original.fit',
+                    path: retainedPath ?? 'users/user-1/events/event-1/original.fit',
                     bucket: 'quantified-self-io',
                     generation: '101',
                     startDate: originalFile.startDate,
@@ -193,7 +194,7 @@ describe('EventWriter', () => {
                 }),
                 originalFiles: expect.arrayContaining([
                     expect.objectContaining({
-                        path: 'users/user-1/events/event-1/original.fit',
+                        path: retainedPath ?? 'users/user-1/events/event-1/original.fit',
                         bucket: 'quantified-self-io',
                         generation: '101',
                         startDate: originalFile.startDate,
