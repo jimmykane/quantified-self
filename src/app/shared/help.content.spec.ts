@@ -227,6 +227,7 @@ describe('help.content', () => {
       'long beep at zero is not guaranteed', 'Quiet/tones-off behavior still needs a watch check',
       'Manual or distance-ended Rest, active Recovery, Work, warm-up and cool-down do not gain countdown alerts',
       'QS does not insert extra steps', 'independently of the countdown alert']) expect(content).toContain(phrase);
+    expect(content).not.toContain('or extra alarm sequence');
   });
   it('distinguishes authored Suunto targets, measured swimming readings and unsupported ZoneSense', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -268,7 +269,7 @@ describe('help.content', () => {
       'Each repeat set has its own count', 'very large Guides keep their existing step structure without counters or Next hints',
       'retain the previous layout when the new labels cannot fit safely', 'Your targets and instructions are never removed',
       'not freshly reset averages or previous-effort statistics', 'not a previous-interval summary',
-      'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
+      'Rowing and strength screen layouts are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
   });
   it('explains the app-only Suunto Guide preview without promising new watch behavior', () => {

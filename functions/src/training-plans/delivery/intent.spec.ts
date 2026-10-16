@@ -145,6 +145,39 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, strength: edited,
       workout: { ...workout, structure: projectStrengthWorkoutToV1(edited) } }, ledger).status).toBe('approval_required');
   });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining])(
+    'does not retain unrelated swimming preferences in %s timed-Rest approval evidence', sport => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const strength: StrengthWorkoutDetailsV1 | undefined = sport === ActivityTypes.StrengthTraining
+      ? { version: 1, workoutId: base.workout!.id, revision: 1, exercises: [{ id: 'exercise', name: 'A'.repeat(60), sets: [
+        { id: 'set', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 15 },
+      ] }] } : undefined;
+    const workout = { ...base.workout!, structure: strength ? projectStrengthWorkoutToV1(strength) : {
+      version: 1 as const, sport, nodes: [
+        { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 },
+          targets: [], note: 'A'.repeat(45) },
+        { kind: 'step' as const, id: 'rest', purpose: 'rest' as const, ending: { kind: 'time' as const, seconds: 15 }, targets: [] },
+      ],
+    } };
+    const units = normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds });
+    const preferences = defaultSuuntoSwimmingGuideSettings();
+    const assessment = transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, units.weightUnits, units,
+      undefined, preferences);
+    expect(assessment).toMatchObject({ level: 'degraded', mappingVersion: 'suunto-guides-v16' });
+    expect(assessment.requiresApproval).not.toBe(false);
+    const context: DeliveryContext = { ...base, workout, strength, transport, suuntoUnitSettings: units,
+      suuntoWeightUnits: units.weightUnits, suuntoSwimmingSettings: preferences,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: assessment.digest } };
+    const original = resolveDeliveryIntent(context);
+    expect(original).toMatchObject({ desired: 'present', status: 'pending', mappingApprovalProof: {
+      approvedDigest: assessment.digest, suuntoMappingUnitSettings: units,
+    } });
+    expect(original.mappingApprovalProof).not.toHaveProperty('suuntoApprovedSwimmingSettings');
+    expect(original.mappingApprovalProof).not.toHaveProperty('suuntoMappingSwimmingSettings');
+    const changed = resolveDeliveryIntent({ ...context, suuntoSwimmingSettings: { ...preferences, restFields: ['heartRate'] } });
+    expect(changed).toEqual(original);
+  });
+
   it('retains proved app-preview approval across repeated distance-unit changes, never across prescription or authority changes', () => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ kind: 'step' as const,

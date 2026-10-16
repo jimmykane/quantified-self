@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
@@ -86,7 +87,9 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
   const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
-  const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16'].includes(assessment.mappingVersion) ? context.suuntoSwimmingSettings : undefined;
+  const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16'].includes(assessment.mappingVersion)
+    && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(workout!.structure.sport)
+    ? context.suuntoSwimmingSettings : undefined;
   const recordSuuntoPresentation = !!(suuntoMappingUnits || suuntoMappingSwimmingSettings)
     && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
   const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval

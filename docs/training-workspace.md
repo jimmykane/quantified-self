@@ -3199,6 +3199,11 @@ forward only with retained evidence. No automatic resurrection, past/completed r
 is introduced. New normal sends and same-ID updates require a separately approved Functions deployment; the prior
 QA upload is not evidence that the application change has been deployed.
 
+Approval presentation evidence retains swimming-screen preferences only for pool/open-water swimming. Other
+v16 sports keep their relevant unit evidence but do not copy unrelated swimming preferences into approval proofs;
+changing swimming screens must not change a running, cycling or strength approval record. This correction does not
+alter Guide bytes/digests, authored prescriptions, sending authority or any MCP input/output contract.
+
 MCP impact: **no wire impact**. Alerts/countdown are private provider execution metadata, not authored recipe fields,
 new targets/metrics, read outputs, tools, scopes, proposal inputs or provider actions. Regression coverage preserves
 canonical timed-Rest reads for all three planned-workout read versions and rejects private alert fields in strict
@@ -3218,6 +3223,14 @@ emulator files also passed (361 tests); the initial Suunto repeat-definition cou
 complete file rerun. Functions and beta frontend builds pass. The compiled MCP contract remains compatible with
 the existing developer-refresh advisory; no public schema/catalog changed. No deployment or live send was performed
 while implementing v16. The separate earlier QA evidence and outstanding quiet-mode check are described above.
+
+Review follow-up: non-swim approval proofs no longer retain unrelated swimming preferences; changing swim screens
+leaves running/cycling/strength proof records unchanged. Help distinguishes unchanged screen layouts from the new
+native countdown alerts. MCP privacy assertions inspect recursive property names, not arbitrary authored text;
+fixtures deliberately mention private-field names in allowed notes. Verification: 2,920 provider/delivery/MCP unit
+tests, all 183 isolated Suunto lifecycle tests and 114 Help/hosting tests pass. The final privacy-test adjustment also
+passes its focused service/schema suites. Functions/beta frontend builds, frontend environment policy and the unchanged
+compatible MCP contract pass. No deployment, provider call, public contract or monitoring-policy change is included.
 
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 
