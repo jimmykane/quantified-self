@@ -73,6 +73,11 @@ test('bounded canonical dimensions, exact native queue scopes and independent ow
 });
 test('admission and ACKs never imply ready publication; intentional lifecycle transitions are not failure pages', () => {
   assert.equal(selected('ingress', entry('ingress', { outcome: 'coalesced' }, SERVICES[0])), true);
+  assert.equal(selected('ingress', entry('ingress', { outcome: 'not_admitted' }, SERVICES[0])), true);
+  assert.equal(selected('ingress', entry('ingress', { outcome: 'excluded' }, SERVICES[0])), false);
+  // Not admitted covers both lifecycle skips and enqueue errors. Only a guarded
+  // failure commit establishes the latter; admission alone cannot classify it.
+  assert.equal(selected('enqueue_failures', entry('ingress', { outcome: 'not_admitted' }, SERVICES[0])), false);
   assert.equal(selected('snapshot_commits', entry('worker_attempt', { stage: 'calculation', outcome: 'acknowledged' })), false);
   assert.equal(selected('snapshot_commits', entry('snapshot_commit', { outcome: 'ready' })), true);
   assert.equal(selected('calculation_failures', entry('snapshot_commit', { outcome: 'failed' })), false);

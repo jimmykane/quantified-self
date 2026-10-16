@@ -25,7 +25,11 @@ export function derivedMetricsPendingAge(data: FirebaseFirestore.DocumentData, n
         || !timestamp(data.updatedAtMs) || data.updatedAtMs > now + DERIVED_METRICS_PROBE_TIMEOUT_MS) return 'unknown';
     const field = data.status === 'processing' ? 'processingMetricKinds' : 'dirtyMetricKinds';
     const kinds = data[field];
-    if (!Array.isArray(kinds) || !kinds.length || normalizeDerivedMetricKindsStrict(kinds).length !== kinds.length) return 'unknown';
+    // The canonical normalizer retains historical coercion semantics. Persisted
+    // probe metadata must be literal strings: one malformed row must not throw
+    // while coercing an object and suppress every other owner's observation.
+    if (!Array.isArray(kinds) || !kinds.length || kinds.some(kind => typeof kind !== 'string')
+        || normalizeDerivedMetricKindsStrict(kinds).length !== kinds.length) return 'unknown';
     const since = data.status === 'processing' ? data.startedAtMs : data.requestedAtMs;
     if (!timestamp(since) || since > now + DERIVED_METRICS_PROBE_TIMEOUT_MS) return 'unknown';
     // Native task retries can intentionally wait up to four hours. A retained failure

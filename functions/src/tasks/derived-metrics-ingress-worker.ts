@@ -49,7 +49,9 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         incrementEventMutationVersion,
         ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
-    recordDerivedIngress(!queueResult.accepted ? 'excluded' : queueResult.queued ? 'queued' : 'coalesced');
+    // accepted:false also covers enqueue errors, not just expected lifecycle skips.
+    // Only the separate guarded enqueue-failure commit establishes that failure.
+    recordDerivedIngress(!queueResult.accepted ? 'not_admitted' : queueResult.queued ? 'queued' : 'coalesced');
     logger.info('[derived-metrics-ingress] Processed ingress task.', {
         uid,
         bucketStartEpochSec: payload.bucketStartEpochSec ?? null,

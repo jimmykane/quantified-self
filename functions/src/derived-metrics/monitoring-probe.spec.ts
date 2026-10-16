@@ -34,6 +34,15 @@ describe('derived generation-only observation timing', () => {
     it('allows only the short observation race window, never negative ages', () => {
         expect(derivedMetricsPendingAge({ ...row(), requestedAtMs: now + 1 }, now)).toBe(0);
     });
+    it.each(['dirtyMetricKinds', 'processingMetricKinds'])('rejects non-string %s without coercing persisted objects', field => {
+        const status = field === 'dirtyMetricKinds' ? 'queued' : 'processing';
+        for (const value of [null, 1, { toString: null }, { toString: 'PRIVATE_KIND' }]) {
+            expect(derivedMetricsPendingAge({ ...row(), status, [field]: [value] }, now)).toBe('unknown');
+        }
+        const toString = vi.fn(() => DERIVED_METRIC_KINDS.Form);
+        expect(derivedMetricsPendingAge({ ...row(), status, [field]: [{ toString }] }, now)).toBe('unknown');
+        expect(toString).not.toHaveBeenCalled();
+    });
     it('bounds a stalled query and suppresses a late healthy result', async () => {
         vi.useFakeTimers();
         let resolve: (value: unknown) => void = () => undefined;

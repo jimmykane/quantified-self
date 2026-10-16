@@ -7205,7 +7205,9 @@ still tracked by [#831](https://github.com/jimmykane/quantified-self/issues/831)
 The existing workers retain their resource/retry settings: ingress is Gen 2, 512 MiB/120 seconds; calculation is
 Gen 2, 2 GiB/540 seconds with concurrency one. Both remain in `europe-west2`. Structured observations distinguish:
 
-- Ingress `queued`, `coalesced`, `excluded` and invalid admission, not completed calculations.
+- Ingress `queued`, `coalesced`, `not_admitted` and invalid admission, not completed calculations. Not admitted
+  includes both lifecycle skips and rejected enqueue attempts; only the separate guarded enqueue-failure commit
+  establishes a persisted enqueue failure. Do not label all rejected admissions as expected exclusions.
 - Whole-task duration and acknowledged/exception outcomes. Acknowledgement includes stale, unchanged, superseded
   and deletion-fenced no-ops; HTTP success is not snapshot publication.
 - Ready/failed snapshot writes, emitted only after the existing claim/deletion-guarded transaction commits.
@@ -7239,6 +7241,8 @@ the last activity or ready snapshot; an inactive athlete with no pending generat
 Coalescing does not redefine the pending-age anchor. Failed work is excluded for the existing maximum **four-hour**
 Cloud Tasks retry backoff after its last failed coordinator update, not treated as stalled during that wait.
 Superseded samples and lifecycle exclusions do not count as failures. Unknown/invalid metadata is not a healthy zero.
+Kind entries must be literal canonical strings, never coerced persisted objects. A malformed row contributes unknown
+coverage only to its state group; it cannot abort observations of valid coordinators belonging to other owners.
 
 Three fixed state groups emit every run, including idle/unavailable runs. Positive pending counts/maximum observed
 ages are **lower bounds**, not a global backlog or exact oldest generation. A saturated or unknown prefix without
