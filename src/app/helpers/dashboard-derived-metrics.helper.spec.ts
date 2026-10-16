@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION } from '@shared/derived-metrics';
 import { TRAINING_DISCIPLINES } from '@shared/training-disciplines';
 import {
+  dashboardAcwrComparison,
   resolveDashboardEasyPercentContext,
   resolveDashboardEfficiencyDelta4wContext,
   resolveDashboardAcwrContext,
@@ -23,6 +24,11 @@ import {
   resolveDashboardTrainingCapacityContext,
   resolveDashboardTrainingSwimPerformanceContext,
 } from './dashboard-derived-metrics.helper';
+
+it('shares the existing ACWR presentation bands without reclassifying boundaries or missing values', () => {
+  expect([null, undefined, NaN, Infinity, 0.8, 1.3, 1].map(dashboardAcwrComparison)).toEqual(Array(7).fill(null));
+  expect(dashboardAcwrComparison(0.79)).toBe('lower'); expect(dashboardAcwrComparison(1.31)).toBe('higher');
+});
 import { buildDashboardFormPointsFromDailyLoads } from './dashboard-form.helper';
 
 describe('dashboard-derived-metrics.helper', () => {

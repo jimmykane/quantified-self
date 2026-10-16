@@ -65,8 +65,10 @@
   }
   @if (showTodaySummary) {
   @if (isOwnerDashboard) {
-    <app-health-change-summary summaryId="dashboard-today-changes" [scopeKey]="user.uid"
-      [compact]="true" [signals]="dashboardGlanceSignals" />
+    <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals"
+      [notesContext]="timelineNotes()" [notesStatus]="timelineNotesStatus()"
+      [recoveryText]="dashboardTodayReadiness.recoveryFinishText ? dashboardTodayReadiness.recoveryText : ''"
+      [sleepText]="dashboardBriefingSleepText" [loadComparison]="dashboardBriefingLoadComparison" />
   }
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">

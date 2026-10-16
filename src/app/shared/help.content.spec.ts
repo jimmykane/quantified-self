@@ -487,6 +487,11 @@ describe('help.content', () => {
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
     expect(health).toContain('Dashboard **At a glance** is always sentence-only');
+    expect(health).toContain('**Daily context in At a glance:**');
+    expect(health).toContain('Weekly plan progress uses exact stored activity links');
+    expect(health).toContain('looks ahead seven calendar days');
+    expect(health).toContain('Partial reads never become a claim that no workouts or notes exist');
+    expect(health).toContain('respect **Show on charts and calendar**');
     expect(health).toContain('no expand button or repeated metric breakdown');
     expect(health).toContain('including **Mixed** and **Recover** days');
     expect(health).toContain('existing **Today** card keeps the scores, charts and supporting context');

@@ -81,6 +81,11 @@ export interface DashboardAcwrContext {
   trend8Weeks: DashboardDerivedTrendPoint[];
 }
 
+/** Existing Dashboard ACWR presentation bands, shared with the verbal briefing. */
+export function dashboardAcwrComparison(ratio: number | null | undefined): 'higher' | 'lower' | null {
+  return typeof ratio !== 'number' || !Number.isFinite(ratio) ? null : ratio > 1.3 ? 'higher' : ratio < 0.8 ? 'lower' : null;
+}
+
 export interface DashboardRampRateContext {
   latestDayMs: number | null;
   ctlToday: number | null;

@@ -4486,6 +4486,49 @@ profile Weight as fallback context.
 
 ### Shared Dashboard and Training insight reuse
 
+#### Dashboard daily briefing
+
+The owner-only **At a glance** above Today uses the shared accent-rail summary shell with one sentence and no disclosure,
+extra score, metric rows or new controls. Today and saved chart configuration remain unchanged; hiding Today unmounts the
+briefing and its readers. It prioritizes local-today recordings and planned workouts, visible active Timeline notes and
+existing attention assessments, then fills up to four short clauses with relevant load comparison, weekly link progress,
+the next scheduled workout, imported recovery remaining or current source-labelled sleep duration. It does not promise to
+show every candidate simultaneously, prescribe a key workout, infer repeated short nights or attribute changes to a note.
+
+`dashboard-daily-briefing.component.ts` owns the bounded read lifecycle, actual authenticated-owner fence and local-date
+clock. It reuses `ActivityCalendarService.watchSummaryEvents` for today only (1,000 parents plus lookahead),
+`TrainingPlansService.watchCalendarSchedule` from the configured week's start through seven local days ahead (400 workouts
+plus lookahead), and exact-ID `watchWorkoutCompletionsForWorkouts`. Existing server confirmation, first-read timeouts,
+restore fences and partial-read flags stay intact. It never subscribes to account-wide schedule/completion history,
+provider transport or raw activity streams. Schedule revisions cancel old completion readers; owner/day changes cancel
+all readers, and read-key/generation checks discard late results. The one-minute date clock pauses when hidden; focus
+catches up after midnight/timezone changes and retries failed reads without polling. Local calendar arithmetic preserves
+DST and the account's week-start setting, independently of Training's UTC snapshot cutoff.
+
+`dashboard-daily-briefing.helper.ts` keeps actual local-today recorded parent events distinct from planned sessions.
+Future recordings are excluded and duplicate parents count once. It uses canonical duration formatting only when every
+loaded parent has a finite duration, and partial reads say “at least” without presenting a complete total. Weekly progress
+and next-session selection require complete schedule/link coverage. Active-plan and standalone selection plus completion
+validity reuse Calendar rules, including revision-changed links, ambiguous links and skipped/deleted/inactive workouts.
+A stored activity link is described as a link, not same-day completion or current-prescription adherence. The next session
+must be unlinked, non-skipped and later than today within the seven-day lookahead; it has no inferred priority.
+
+Notes come from the existing owner-fenced Timeline workspace, registering today's range even without a nearby chart;
+no second note store/query is added. Per-note/global visibility, overlap dates, ongoing-note timezone, edits, deletion and
+workspace error/loading states remain authoritative. Only a bounded literal title and additional-visible-note count enter
+the sentence. The briefing does not claim a complete absence when note coverage is partial. Recovery and sleep reuse
+Today's already-loaded current evidence; no new sleep threshold/baseline or readiness formula is introduced. Load copy
+reuses `dashboardAcwrComparison`, extracted without changing the existing 0.8/1.3 Dashboard presentation bands, and is
+withheld unless the ready ACWR context is current for the UTC day. The rail retains existing assessment tones; failures
+and missing evidence never become “all normal.”
+
+MCP impact review: **no public contract/authority impact**. Existing `query_planned_workouts_by_date`,
+`get_planned_workout_completions`, Training metric reads and independently consented Timeline-note reads already expose
+the underlying bounded inputs. This is local Dashboard composition, not a new metric, planned-workout field, public
+daily-report schema or mutation. No tool, scope, consent, Assistant/plugin instructions or provider action is widened.
+The existing MCP chronological-query/exact-completion regression coverage remains applicable; frontend fixtures cover
+the new composition and owner/read-boundary behavior. No cloud rules, functions or deployment are required.
+
 The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while the current
 Training state and Readiness are fixed inside the optional Today summary:
 
