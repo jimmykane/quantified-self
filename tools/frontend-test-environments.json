@@ -1,5 +1,6 @@
 {
   "node": [
+    "src/app/components/shared/compact-row/compact-row.styles.spec.ts",
     "src/app/helpers/activity-calendar-volume.helper.spec.ts",
     "src/app/helpers/activity-calendar.helper.spec.ts",
     "src/app/helpers/activity-type-group.metadata.helper.spec.ts",

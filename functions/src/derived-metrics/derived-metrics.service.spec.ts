@@ -996,7 +996,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
 
         expect(result.payload).toMatchObject({
             formulaVersion: 4,
-            evidenceVersion: 3,
+            evidenceVersion: 4,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,

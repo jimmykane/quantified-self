@@ -77,14 +77,11 @@
       <mat-icon>cardiology</mat-icon>
       <span>Health</span>
     </mat-list-item>
-    <button mat-list-item type="button" class="sidenav-notes-item"
-      [class.active]="timelineNotesActive()" [disabled]="timelineNotesOpening()"
-      aria-haspopup="dialog" [attr.aria-expanded]="timelineNotesOpen()"
-      [attr.aria-current]="timelineNotesActive() ? 'true' : null" [attr.aria-busy]="timelineNotesOpening()"
-      (click)="openTimelineNotesFromNav()">
+    <a mat-list-item class="sidenav-notes-item" routerLink="/health/compare"
+      routerLinkActive="active" ariaCurrentWhenActive="page" (click)="sideNav.close()">
       <mat-icon matListItemIcon aria-hidden="true">event_note</mat-icon>
       <span matListItemTitle>Timeline notes</span>
-    </button>
+    </a>
 
     <mat-list-item [routerLinkActive]="hasAssistantAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="assistantRoute"
       (click)="closeSideNav()">

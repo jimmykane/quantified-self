@@ -67,9 +67,11 @@ Signed-in navigation uses flat, labelled sections: **Overview** (Dashboard, Cale
 **Account**, and **Preferences**. Reuse the existing section heading and full-level row styling; no expansion controls
 or nested guide rails. Guest navigation keeps its existing destinations without empty signed-in section headings.
 **Timeline notes** retains the existing `event_note` icon.
-Its native Material list button lazily opens the existing manager after the drawer closes, preserving focus return and
-the current workspace. It does not add a duplicate list route or load private note UI for anonymous navigation.
-The action keeps the regular row highlight during note comparisons; the Health overview link uses exact-path matching.
+Its native Material list link closes the drawer and navigates to `/health/compare`, where saved-note rows open their
+existing comparison charts. **Manage notes** separately opens the existing editor/manager; navigation never launches a
+creation dialog. The lazy landing page reuses the owner-scoped paginated note service, appearance helpers and shared page
+header, without a second CRUD implementation. It keeps the regular row highlight on both the landing and selected-note
+routes; the Health overview link uses exact-path matching.
 
 Health All and the owner Dashboard Today share the surface-free summary from
 `components/shared/health-change-summary/`. Its presentation delegates to
@@ -469,6 +471,9 @@ Optional `[compactRowTitlePrefix]` content appears beside the title inside its s
 the body and action slot. Training sync uses this for the shared provider logo with its visible provider name;
 decorative logos are hidden from assistive technology and do not become controls. The title can wrap while the
 prefix retains its compact size. Existing rows without a prefix retain their layout and heading levels.
+Headings center prefixes by default. Provider sync rows opt into
+`--compact-row-title-align-items: baseline` so wordmarks and provider names share a text baseline, including logos
+with raised brand symbols. Keep this local to provider rows; do not add per-logo offsets or change other row titles.
 
 Compact **column** lists (currently Garmin permission grants) center icon, heading, description, and trailing status,
 with 24px icons and tighter row padding. At narrow widths, the status stays beside the heading and the description

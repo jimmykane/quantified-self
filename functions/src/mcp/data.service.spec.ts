@@ -6296,6 +6296,39 @@ describe('MCP data service', () => {
     expect(JSON.stringify(current)).not.toContain('private-provider-user');
   });
 
+  it('keeps QS-calculated HR behind Health and Sleep grants, out of legacy and ordinary Sleep tools', async () => {
+    const end = Date.parse('2026-07-27T06:00:00Z');
+    vi.mocked(dependencies.now).mockReturnValue(end + 3600000);
+    const docs = Array.from({ length: 4 }, (_, i) => ({ ...sleepDocument({
+      sleepDate: new Date(end - i * 86400000).toISOString().slice(0, 10), startTimeMs: end - i * 86400000 - 28800000,
+      endTimeMs: end - i * 86400000, vitals: null,
+    }), id: `night-${i}` }));
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(docs);
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(docs);
+    dependencies.supplementReadinessDocuments = vi.fn(async (_uid, input) => input.map((d, i) => ({ ...d, data: { ...d.data,
+      qsCalculatedHeartRate: { average: true, minimum: true },
+      vitals: { averageHeartRateBpm: i ? 60 : 54, minimumHeartRateBpm: i ? 50 : 45 },
+    } })));
+    const service = createMcpDataService(dependencies);
+    const input = { uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read'] };
+    const without = await service.getCurrentReadiness(input);
+    expect(without.drivers.overnightHeartRate.combinedRatio).toBeNull();
+    expect(dependencies.supplementReadinessDocuments).not.toHaveBeenCalled();
+    const granted = { ...input, scopes: [...input.scopes, 'health:read'] };
+    const current = await service.getCurrentReadiness(granted);
+    expect(current.drivers.overnightHeartRate.combinedRatio).toBeCloseTo(0.9);
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_current_readiness.safeParse(current).success).toBe(true);
+    const report = await service.getDailyReport(granted);
+    expect(report.sleep.latestSession?.vitals.averageHeartRateBpm).toBe(54);
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_daily_report.safeParse(report).success).toBe(true);
+    expect(JSON.stringify(report)).not.toMatch(/qsCalculatedHeartRate|SourceKey|private-provider-user|offsetMs|canonicalValues/);
+    const legacy = await service.getTodayReadiness(granted);
+    expect(legacy.drivers.overnightHeartRate.combinedRatio).toBeNull();
+    const vitals = await service.listSleepVitals({ uid: 'user-1', startTimeMs: end - 4 * 86400000, endTimeMs: end, scopes: granted.scopes });
+    expect(vitals.vitals.some(v => v.type === 'averageHeartRateBpm')).toBe(false);
+    expect(dependencies.supplementReadinessDocuments).toHaveBeenCalledTimes(2);
+  });
+
   it('supplements daily-report HRV only with explicit Health and Sleep grants', async () => {
     const endTimeMs = Date.parse('2026-07-27T06:00:00Z');
     const original = sleepDocument({sleepDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs, vitals: null});

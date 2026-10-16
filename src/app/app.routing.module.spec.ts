@@ -181,6 +181,14 @@ describe('AppRoutingModule routes', () => {
     expect(route?.data).toMatchObject({ title: 'Note comparison', robots: 'noindex, nofollow' });
     expect(publicLayoutRoute?.children?.some(route => route.path === 'health/compare/:noteId')).toBe(false);
   });
+  it('routes the comparisons landing page privately without matching a selected-note path', () => {
+    const route = routes.find(route => route.path === 'health/compare');
+    expect(route?.pathMatch).toBe('full');
+    expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data).toMatchObject({ title: 'Note comparisons', robots: 'noindex, nofollow' });
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'health/compare')).toBe(false);
+  });
 
   it('should keep the activity calendar authenticated and noindexed', () => {
     const calendarRoute = routes.find(route => route.path === 'calendar');

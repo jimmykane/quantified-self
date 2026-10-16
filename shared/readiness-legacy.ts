@@ -8,6 +8,9 @@ export interface ReadinessSleepEvidencePoint {
   id: string;
   sourceKey?: string;
   hrvSourceKey?: string;
+  /** Internal evidence semantics; the frozen legacy evaluator does not consume these. */
+  averageHeartRateSourceKey?: string;
+  minimumHeartRateSourceKey?: string;
   /** Samples represented by averageHrvMs, used for canonical fragment weighting. */
   hrvSampleCount?: number | null;
   /** Internal canonical nightly HRV observations used by formula 4. */
@@ -307,7 +310,7 @@ function resolveSleepScore(point: ReadinessSleepEvidencePoint | null): number | 
   return clamp(100 - (Math.abs(hours - 8) * 20), 0, 100);
 }
 
-function resolveRatioEvidence(
+export function resolveRatioEvidence(
   value: unknown,
   baselineValues: readonly unknown[],
 ): ReadinessRatioEvidence {

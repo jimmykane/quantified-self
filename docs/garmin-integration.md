@@ -30,8 +30,20 @@ Garmin's `hrv.lastNightAvg` is stored as canonical overnight RMSSD in Health; th
 Dashboard, Training readiness/recovery, and MCP Sleep/report reads now resolve that separate summary through
 `shared/nightly-hrv.ts`, matching the same owner/account, calendar night, and overlapping sleep interval. Existing
 Health and Sleep history needs no reimport or persistent copy. Native Sleep HRV from other providers remains preferred.
-The five-minute high, samples, and Health Snapshot values cannot supply this nightly average. Overnight heart rate
-stays unavailable unless an actual normalized sleep heart-rate aggregate was recorded. MCP requires Health permission
+The five-minute high, samples, and Health Snapshot values cannot supply this nightly HRV average.
+
+For missing Garmin sleep HR, `shared/nightly-heart-rate.ts` calculates a time-weighted average and the lowest recorded
+representative HR value from existing Daily 15-second samples within the recorded main-sleep window. These are
+**Calculated by QS**, not Garmin-reported Sleep aggregates or a reproduction of Garmin Connect. Exact owner and opaque
+account matching, current parent/chunk revisions, at least 90% temporal coverage and no gap over five minutes are
+required. Native Sleep HR wins independently for each field. The calculation does not fill gaps, use a reading after
+sleep ends, substitute daily/resting/7-day HR, merge accounts or rewrite Sleep. Existing history needs no reimport.
+Read-time windows are at most 93 provider dates, one date per existing bounded Health query, with a cumulative
+512-chunk, 550,000-point and 16-MiB result budget. Only dates adjoining eligible missing nights are queried; empty
+dates between isolated nights are skipped. App HRV and HR sample listeners run independently, so updates do not restart
+the other source's read. Backend reads have at most four windows in flight. Failed or
+incomplete optional app reads retain native Sleep evidence. See [Readiness today](training-workspace.md#readiness-today)
+for current/history refresh and the deliberate MCP exposure boundary. MCP requires Health permission
 in addition to the existing Sleep grant for this supplement. See the shared
 [provider integration contract](provider-integration-guide.md#nightly-hrv-across-sleep-and-health).
 ## Delivery and trust boundary

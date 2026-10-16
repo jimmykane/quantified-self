@@ -590,6 +590,14 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'health/compare',
+    pathMatch: 'full',
+    loadComponent: () => import('./components/timeline-notes/timeline-note-comparisons-page.component')
+      .then(module => module.TimelineNoteComparisonsPageComponent),
+    data: { title: 'Note comparisons', animation: 'Health', robots: 'noindex, nofollow' },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'health/compare/:noteId',
     loadComponent: () => import('./components/timeline-notes/timeline-note-comparison-page.component')
       .then(module => module.TimelineNoteComparisonPageComponent),

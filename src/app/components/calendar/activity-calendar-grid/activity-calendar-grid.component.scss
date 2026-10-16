@@ -743,8 +743,8 @@
 
 @container (max-width: 540px) {
   .activity-calendar--calm-month {
-    // Give the centered date more room while keeping the pulse inside the cell.
-    .activity-calendar-today-corner { top: 8px; right: 3px; }
+    // Keep the pulse clear of the selected cell's inset border on narrow grids.
+    .activity-calendar-today-corner { top: 8px; right: 6px; }
     .activity-calendar-today-dot { --activity-calendar-today-pulse-scale: 1.4; }
     .activity-calendar-day,
     &.activity-calendar--compact .activity-calendar-day {

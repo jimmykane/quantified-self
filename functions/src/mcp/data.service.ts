@@ -9,8 +9,9 @@ import { normalizeDerivedTrainingReadinessMetricPayload as normalizeLegacyReadin
 import { ActivitySampleCache } from './activity-sample-cache';
 import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
-import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { supplementNightlyHrvSleepDocuments, supplementNightlyHealthSleepDocuments } from '../sleep/nightly-hrv';
 import { aggregateNightlyHrvEvidence, sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
+import { calculatedHeartRateSourceKeys } from '../../../shared/nightly-heart-rate';
 import * as admin from 'firebase-admin';
 import { runMcpManualMeasurement, defaultManualMeasurementDependencies } from './manual-measurements.service';
 import type { McpManualMeasurementTool } from './manual-measurements.schemas';
@@ -581,6 +582,7 @@ export interface McpDataServiceDependencies {
     cursor?: SleepCursor,
   ) => Promise<RawDocument[]>;
   supplementSleepDocuments?: typeof supplementNightlyHrvSleepDocuments;
+  supplementReadinessDocuments?: typeof supplementNightlyHealthSleepDocuments;
   fetchReadinessSleepDocuments: (
     uid: string,
     startTimeMs: number,
@@ -884,6 +886,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     }));
   },
   supplementSleepDocuments: supplementNightlyHrvSleepDocuments,
+  supplementReadinessDocuments: supplementNightlyHealthSleepDocuments,
   fetchReadinessSleepDocuments: async (
     uid,
     startTimeMs,
@@ -3845,6 +3848,8 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
 interface SafeSleepDocument {
   id: string;
   sourceKey: string;
+  averageHeartRateSourceKey?: string;
+  minimumHeartRateSourceKey?: string;
   session: SafeSleepSession;
 }
 
@@ -3952,6 +3957,7 @@ function canonicalizeSafeSleepDocuments(
     const safeDocument = {
       id: document.id,
       sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
+      ...calculatedHeartRateSourceKeys(document.data as unknown as SleepSession),
       session: session.provider === SLEEP_PROVIDERS.SuuntoApp && !providerUserId
         ? withoutCanonicalNightHrv(session)
         : session,
@@ -4562,6 +4568,8 @@ function buildTodayReadinessSleepNights(
         ?? null,
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
+      averageHeartRateSourceKey: candidate.averageHeartRateSourceKey,
+      minimumHeartRateSourceKey: candidate.minimumHeartRateSourceKey,
     };
     evidence.hrvObservations = readinessHrvObservations(evidence);
     const key = JSON.stringify([
@@ -4592,10 +4600,12 @@ function buildTodayReadinessSleepNights(
       entries.map(entry => entry.session.vitals?.overnightHrvMs ?? null),
     );
     const averageHeartRateValues = positiveValues(
-      entries.map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
+      entries.filter(entry => entry.evidence.averageHeartRateSourceKey === latest.evidence.averageHeartRateSourceKey)
+        .map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
     );
     const minimumHeartRateValues = positiveValues(
-      entries.map(entry => entry.session.vitals?.minimumHeartRateBpm ?? null),
+      entries.filter(entry => entry.evidence.minimumHeartRateSourceKey === latest.evidence.minimumHeartRateSourceKey)
+        .map(entry => entry.session.vitals?.minimumHeartRateBpm ?? null),
     );
     const inBedDurationValues = entries
       .map(entry => entry.session.inBedDurationSeconds)
@@ -4786,7 +4796,8 @@ function projectTodayReadiness(
 }
 
 function projectCurrentReadiness(input: Parameters<typeof projectTodayReadiness>[0] & { current: CurrentReadinessEvaluation | null }) {
-  const previous = projectTodayReadiness(input);
+  const previous = projectTodayReadiness({ ...input, evaluation: input.current
+    ? { ...input.current, hrv: input.evaluation?.hrv ?? emptyReadinessRatioEvidence() } : null });
   const signals = input.current?.signals ?? null;
   return {
     ...previous,
@@ -4870,11 +4881,13 @@ async function loadTodayReadiness(
     rampRateSnapshot,
     nowTimeMs,
   );
-  const sleepNights = buildTodayReadinessSleepNights(await supplementAuthorizedSleep(dependencies, input, sleepDocuments));
+  const sleepNights = buildTodayReadinessSleepNights(await supplementAuthorizedSleep(dependencies, input, sleepDocuments, options.currentFormula === true));
   const evaluation = buildReadinessEvaluation({
     form: load.form,
     rampRate: load.rampRate,
-    sleepPoints: sleepNights.map(night => night.evidence),
+    sleepPoints: sleepNights.map(({ evidence }) => ({ ...evidence,
+      averageHeartRateBpm: evidence.averageHeartRateSourceKey ? null : evidence.averageHeartRateBpm,
+      minimumHeartRateBpm: evidence.minimumHeartRateSourceKey ? null : evidence.minimumHeartRateBpm })),
     nowMs: nowTimeMs,
   });
   return {
@@ -6241,15 +6254,19 @@ async function getActivityChartData(
 
 async function supplementAuthorizedSleep(
   dependencies: McpDataServiceDependencies, input: { uid: string; scopes?: readonly string[] }, docs: RawDocument[],
+  includeCalculatedHeartRate = false,
 ): Promise<RawDocument[]> {
   if (!input.scopes?.includes('health:read') || !input.scopes.includes('sleep:read')) return docs;
-  if (!dependencies.supplementSleepDocuments) return docs;
-  try { return await dependencies.supplementSleepDocuments(input.uid, docs); }
+  const supplement = includeCalculatedHeartRate
+    ? dependencies.supplementReadinessDocuments ?? dependencies.supplementSleepDocuments
+    : dependencies.supplementSleepDocuments;
+  if (!supplement) return docs;
+  try { return await supplement(input.uid, docs); }
   catch (error) {
     if (error instanceof Error && /limit|bounded|page|cursor/i.test(error.message)) {
-      throw new McpDataError('query_too_large', 'Nightly Health HRV exceeds the complete-read limit.');
+      throw new McpDataError('query_too_large', 'Nightly Health evidence exceeds the complete-read limit.');
     }
-    throw new McpDataError('temporarily_unavailable', 'Nightly Health HRV is temporarily unavailable.');
+    throw new McpDataError('temporarily_unavailable', 'Nightly Health evidence is temporarily unavailable.');
   }
 }
 

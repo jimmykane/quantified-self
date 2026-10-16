@@ -194,7 +194,7 @@ mat-nav-list {
   width: 100%;
 }
 
-mat-list-item, button[mat-list-item] {
+mat-list-item, button[mat-list-item], a[mat-list-item] {
   margin: 2px 0;
   border-radius: 0 !important;
   transition: all 0.2s ease;
@@ -202,7 +202,7 @@ mat-list-item, button[mat-list-item] {
   width: 100%;
 }
 
-button[mat-list-item].sidenav-notes-item {
+[mat-list-item].sidenav-notes-item {
   padding-inline-start: 16px;
   background: none;
   border: 0;
@@ -211,7 +211,7 @@ button[mat-list-item].sidenav-notes-item {
   text-align: start;
 }
 
-// Match the icon spacing of route rows while keeping the native Material action.
+// Match the icon spacing of the other route rows.
 .sidenav-notes-item mat-icon {
   margin-inline: 8px 16px;
 }
@@ -531,7 +531,7 @@ mat-divider {
     height: 42px;
   }
 
-  mat-list-item, button[mat-list-item] {
+  mat-list-item, button[mat-list-item], a[mat-list-item] {
     margin: 2px 4px;
     width: calc(100% - 8px);
   }

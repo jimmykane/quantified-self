@@ -2121,6 +2121,9 @@ Consent/lifecycle rules:
   the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+Provider logos and names use the same text-baseline alignment in overview and detail headings, including asymmetric
+wordmarks; other compact-row titles retain centered prefixes. This layout and the swimming-settings visibility gate
+are presentation-only, with no MCP read/write, recipe, consent, provider, monitoring, Rules or index changes.
 The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
 summaries**, using destination branding. The plan-level presentation answers the current question first: its compact
 count includes today and future workouts currently due for delivery. Providers retain their own truthful vocabulary: the
@@ -3036,8 +3039,10 @@ after release, sync an eligible future Guide and confirm the full Description in
 ##### Configurable swimming Guide screens (v14)
 
 The private `suunto-guides-v14` mapping applies only to pool/open-water swimming. Other sport payloads remain
-exactly v13. In the Suunto sync dialog, **Show swimming Guide screens** offers separate ordered Work/Rest
-preferences, Restore defaults and an explicit Save. This uses the existing owner settings writer and
+exactly v13. In a pool or open-water swimming workout's Suunto sync details, **Show swimming Guide screens** offers
+separate ordered Work/Rest preferences, Restore defaults and an explicit Save. It is absent from other sports,
+plan-level settings, sync history and missing/unavailable workout contexts; it follows the current canonical recipe,
+not the workout title or a previous provider copy. This uses the existing owner settings writer and
 `users/{uid}/config/settings.suuntoSwimmingGuide`, not workout mutation or sending consent. The delivery reader
 uses this canonical config document; the historical root owner-unit source is deliberately unchanged for exact
 v13 reconstruction. Preferences have a strict versioned enum allowlist, no duplicate fields and at most five
@@ -3154,8 +3159,9 @@ app/watch layout remains a release check; local tests cannot prove text visibili
 
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 
-Workout sync details expose **Repeat on another date** when completion is known, for every provider. It reuses the
-existing date-reviewed `copy-workout` workflow (also available as **Duplicate to…**), not a new library requirement.
+Workout sync details expose **Duplicate to…** when completion is known, for every provider, matching workout actions
+and the date-picker title. The pending label is **Duplicating workout…**; the final confirmation is **Duplicate workout**.
+It reuses the existing date-reviewed `copy-workout` workflow, not a separate repeat operation or a new library requirement.
 The copy has a new QS identity, no completion link and no standalone consent. Plan copies inherit only the existing
 plan's sending policy; range extension still needs its existing confirmation. The original prescription, recordings,
 completion and protected provider copies are unchanged. Editing an old date still never unlocks those copies.
@@ -3187,6 +3193,8 @@ excluded by strict projection tests. Existing copy-workout proposals already cov
 native-app **fresh-guide** action is deliberately not added to MCP/Assistant provider-action unions or permissions.
 It needs a separately scoped approval contract before external clients can request it; the shared native enum never
 authorizes that implicitly. No registered schema, scope, catalog or bundled-plugin change is made.
+The unified Duplicate wording is presentation-only: it changes no recipes, completion links, reads, mutation contracts,
+permissions or provider behavior, and requires no MCP catalog refresh or plugin rebuild.
 Monitoring is **covered/unchanged**: existing Suunto delivery acceptance/recovery/failure and queue-health filters apply
 to the same worker, attempt journal, backlog, leases and retry limits. No new high-cardinality log or queue is introduced.
 Verification uses synthetic provider HTTP and isolated demo Firestore only. Deployment and live watch/app checks remain
@@ -4936,10 +4944,31 @@ are never relabelled as formula 4, and new scores are never relabelled as formul
 the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds. A nonempty current window
 must contain a latest reading within seven days, and current-day counts cannot exceed baseline-day counts.
 
-Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
-mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
-summary mapper currently persists neither normalized sleep-HR measure. The score therefore uses only the measures that
-are actually present; provider-specific omissions remain missing and do not become neutral or zero-valued evidence.
+Provider coverage follows native Sleep aggregates or explicitly labelled QS calculations. Suunto persists average
+and minimum sleep HR; COROS persists average sleep HR. Garmin Sleep summaries have neither, so the live reader and
+readiness builder share `shared/nightly-heart-rate.ts`: owner/account-matched canonical Daily 15-second samples inside
+the main-sleep window can supply missing fields. Their time-weighted mean and lowest representative value are
+**Calculated by QS**. Native fields take precedence, and native/calculated HR baselines stay separate. Require at
+least 90% temporal coverage and no gap over five minutes, including the window edges; never fill gaps, use later
+readings, substitute daily/resting/7-day HR or merge accounts. Incomplete or conflicting evidence remains unavailable.
+
+The supplement is read-only and uses the existing parent/revision-checked Health query and owner/deletion fences.
+It spans at most 93 provider dates in single-day queries, 512 chunks, 550,000 points and 16 MiB cumulatively; backend
+reads have at most four windows in flight. Only dates adjoining missing nights are read, and browser HRV/sample
+listeners update independently without resubscribing to the other source. Native Sleep and HRV remain usable on optional app-read failure. Existing
+history needs no migration or reimport. Internal readiness evidence version 4 invalidates only readiness history for
+the normal ensure/build lifecycle; formula 4 and weights are unchanged. Frozen legacy history omits the new
+Health-derived HR values. Creates/deletes and changed content digests for sampled Garmin Daily HR invalidate only
+`training_readiness` through the existing Health ingress; watermark-only updates do not.
+
+MCP impact: current live readiness and daily reports may use the calculation only with both Health and Sleep grants
+(in addition to Training metrics). Ordinary Sleep tools and legacy readiness retain their native HR contract. Internal
+calculation/source keys and samples never enter outputs; strict schemas, tool names, scopes and provider permissions
+are unchanged. Server instructions disclose QS-calculated aggregates. Planning reads/mutations and provider delivery
+are unaffected; no planning deferral or plugin rebuild is required. Monitoring remains **unchanged**: existing Health/Sleep ingestion metrics and alerts keep their queue meanings.
+The existing derived ingress/worker error handling remains in use; no additional derived-alert coverage is claimed.
+This adds a targeted input invalidation, not a queue, scheduler, retry policy or telemetry label. Release
+Functions before the frontend so current and historical evidence advance together; no deployment is authorized by implementation.
 
 The sleep listener is lower-bounded to 60 days, excludes naps and ignores future-dated records. Sleep and Overnight HR
 accept a latest night only through 48 hours after its end. The card also refreshes when a future record becomes eligible

@@ -176,6 +176,25 @@ are different states. Do not blindly replay an upload, clear a claim, purge a qu
 change retries/concurrency or grant credentials to make an alert disappear. Any such
 mutation needs its own authorization and the existing lifecycle-safe workflow.
 
+## Workspace contention and initialization retries
+
+Coverage decision: **covered/unchanged**. The existing bundle's fixed route/mode filters include workspace sends.
+Suunto initialization-only failures now emit committed `retry` observations while the existing budget permits,
+instead of immediately becoming manual-review cases. Exhausted workspace attempts retain terminal review; accepted
+uploads and ambiguous blob outcomes remain protected. Native queue depth/delay show the effect of the conservative
+ten-task global concurrency cap; the 250-starts/second ceiling, 15-minute-to-four-hour task backoff, dispatcher cadence
+and alert thresholds are unchanged. This cap covers all destinations/accounts, not ten per account or a partner quota.
+
+Admission ignores operation writes changing only delivery progress. Projection suppresses unchanged row/aggregate
+writes without suppressing source-cleanup retries. Diagnose admission/projection failures through their native
+Function errors/latency, not delivery ACK metrics. Compare their invocation/error volume against actual worker
+attempts and committed outcomes after deployment; fewer retries must not be interpreted as additional deliveries.
+Existing monitoring definitions, low-cardinality labels and policies need no reapply. Local tests do not prove live
+recovery. Separately approve deployment of `admitActivitySend`, `projectActivitySendDelivery` and
+`processActivitySyncTask`, then read back task concurrency and natural outcomes. No Rules/index/Hosting change or
+provider replay is required for the backend fix. Previously terminal review items remain unchanged and require
+separate reconciliation/replay authorization.
+
 ## Cost bounds and verification
 
 No new recurring invocation is added. Idle observation costs one query and three

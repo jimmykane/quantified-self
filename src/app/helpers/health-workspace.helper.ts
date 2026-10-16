@@ -1152,10 +1152,13 @@ export function buildSleepPriorityRows(
   return [...latestBySource.entries()].map(([key, { point, provider }], index) => {
     const id = `sleep-priority-${index + 1}`;
     const { sourceKey: _sourceKey, hrvSourceKey: _hrvSourceKey, hrvObservations: _hrvObservations,
+      averageHeartRateSourceKey: _averageHeartRateSourceKey, minimumHeartRateSourceKey: _minimumHeartRateSourceKey,
       sourceSessionIds: _sourceSessionIds, ...publicPoint } = point;
     void _sourceKey;
     void _hrvSourceKey;
     void _hrvObservations;
+    void _averageHeartRateSourceKey;
+    void _minimumHeartRateSourceKey;
     void _sourceSessionIds;
     const sleepPoint = { ...publicPoint, id };
     const scoreText = formatSleepMetricValue(
@@ -1176,7 +1179,7 @@ export function buildSleepPriorityRows(
     const details = [
       scoreText !== '—' ? { label: 'Score', valueText: scoreText } : null,
       hrvText !== '—' ? { label: 'Sleep HRV', valueText: hrvText } : null,
-      heartRateText !== '—' ? { label: 'Average sleep HR', valueText: heartRateText } : null,
+      heartRateText !== '—' ? { label: point.averageHeartRateSourceKey ? 'Average sleep HR · Calculated by QS' : 'Average sleep HR', valueText: heartRateText } : null,
     ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
       id,
@@ -1674,18 +1677,20 @@ function sleepSummaryDatums(
       if (record.sessions.some(session => session.id
         && represented.has(JSON.stringify([session.id, field])))) return [];
       const period = point.isNap ? 'nap' : 'session';
+      const calculated = field === 'vitals.averageHeartRateBpm' ? !!point.averageHeartRateSourceKey
+        : field === 'vitals.minimumHeartRateBpm' && !!point.minimumHeartRateSourceKey;
       return [{
         metricId,
         provider,
         accountKey: record.accountKey,
         aggregation,
-        semanticVariant: `${!point.isNap && label ? 'sleep_' : ''}${period}_${variant}`,
-        origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
-        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        semanticVariant: `${calculated ? 'qs_' : ''}${!point.isNap && label ? 'sleep_' : ''}${period}_${variant}`,
+        origin: calculated ? HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived : HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: calculated ? HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated : HEALTH_RECORDING_METHODS.ProviderCalculated,
         unit: getHealthMetricDefinition(metricId).canonicalUnit,
         normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
         nativeOnly: false,
-        semanticLabel: `${label ? `${label} · ` : ''}${point.isNap ? 'Nap' : 'Sleep session'} · Provider summary · Provider calculated`,
+        semanticLabel: `${label ? `${label} · ` : ''}${point.isNap ? 'Nap' : 'Sleep session'} · ${calculated ? 'Calculated by QS · Recorded 15-second samples' : 'Provider summary · Provider calculated'}`,
         valueType: HEALTH_VALUE_TYPES.Number,
         timestampMs: point.endTimeMs,
         calendarDate,

@@ -22,8 +22,8 @@
     }
   </div>
   @if (canRepeatWorkout() && !draft()) {
-    <p class="delivery-caption">This workout has been completed. Changing its date does not resend its protected provider copy. Repeat it as a new scheduled workout; the original recording and completion stay unchanged.</p>
-    <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="repeatWorkout()">{{ phase() === 'copying' ? 'Repeating workout…' : 'Repeat on another date' }}</button>
+    <p class="delivery-caption">This workout has been completed. Changing its date does not resend its protected provider copy. Duplicate it as a new scheduled workout; the original recording and completion stay unchanged.</p>
+    <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="repeatWorkout()">{{ phase() === 'copying' ? 'Duplicating workout…' : 'Duplicate to…' }}</button>
   }
   @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
   @if (notice()) { <p role="status">{{ notice() }}</p> }
@@ -109,7 +109,7 @@
       <section class="delivery-provider-overview" [attr.aria-label]="dialogTitle() + ' services'">
         <p class="delivery-caption">Select a service to manage its sync settings and see individual workout status.</p>
         @for (row of rows(); track row.provider) {
-          <app-compact-row [title]="row.displayLabel" layout="columns" density="compact" [mobileActionFullWidth]="true">
+          <app-compact-row class="delivery-provider-row" [title]="row.displayLabel" layout="columns" density="compact" [mobileActionFullWidth]="true">
             <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
               [showTooltip]="false" [iconWidth]="48" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
             <div class="delivery-provider-overview-copy">
@@ -133,7 +133,7 @@
           <mat-icon aria-hidden="true">arrow_back</mat-icon>All services
         </button>
       }
-      <app-compact-row [title]="row.displayLabel" layout="stacked" density="compact" [showDivider]="false">
+      <app-compact-row class="delivery-provider-row" [title]="row.displayLabel" layout="stacked" density="compact" [showDivider]="false">
         <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
           [showTooltip]="false" [iconWidth]="64" [iconHeight]="20" aria-hidden="true"></app-service-source-icon>
         <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>
@@ -143,8 +143,8 @@
     }
     <ng-template #providerDetails let-row>
         <div class="delivery-provider-settings">
-          @if (row.provider === 'suunto' && row.setupAvailable && data.scope !== 'history') {
-            <app-suunto-swimming-guide-settings [structure]="swimmingGuideStructure()"></app-suunto-swimming-guide-settings>
+          @if (row.provider === 'suunto' && row.setupAvailable && swimmingGuideStructure(); as structure) {
+            <app-suunto-swimming-guide-settings [structure]="structure"></app-suunto-swimming-guide-settings>
           }
           @if (data.scope !== 'history') {
             <p class="delivery-setting-label">{{ row.settingLabel }}</p>

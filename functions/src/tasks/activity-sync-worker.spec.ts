@@ -123,12 +123,13 @@ describe('processActivitySyncTask', () => {
     expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'expected_contention' }));
   });
 
-  it('registers half-size Cloud Tasks rate limits for activity sync', () => {
+  it('caps concurrent activity uploads without changing the dispatch rate or retry backoff', () => {
     expect(capturedTaskOptions[0]).toMatchObject({
       rateLimits: {
-        maxConcurrentDispatches: 500,
+        maxConcurrentDispatches: 10,
         maxDispatchesPerSecond: 250,
       },
+      retryConfig: { maxAttempts: 10, minBackoffSeconds: 900, maxBackoffSeconds: 14400, maxDoublings: 4 },
     });
   });
 

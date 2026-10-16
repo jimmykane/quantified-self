@@ -166,11 +166,18 @@ describe('Timeline note comparison page', () => {
     expect(summary.state()).toBe('failed'); expect(summary.disabled()).toBe(false);
   });
   it('restores the notes manager after returning without changing visibility or note data', async () => {
-    const restoreList = { page: 1, cursors: [null, null] }; navigation.returnToNotes.mockResolvedValue(restoreList);
+    const restoreList = { page: 1, cursors: [null, null] }; navigation.returnToNotes.mockResolvedValue({ restoreList });
     const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);
     await fixture.componentInstance.back();
     expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', restoreList } }));
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('returns to the comparisons landing page without opening a manager', async () => {
+    navigation.returnToNotes.mockResolvedValue({ restoreList: null });
+    const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);
+    await fixture.componentInstance.back();
+    expect(dialogs.open).not.toHaveBeenCalled(); expect(fixture.componentInstance.returnError()).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
   });
   it('does not mislabel a navigation failure as a failed metric refresh', async () => {
     navigation.returnToNotes.mockRejectedValueOnce(new Error('navigation failed'));

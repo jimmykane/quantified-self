@@ -58,6 +58,7 @@ export interface DashboardReadinessSignalsContext {
   averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
   overnightHeartRateRatio: number | null;
+  overnightHeartRateCalculatedByQs?: boolean;
   loadAtMs?: number | null;
   trend: DashboardInsightTrendPoint[];
 }
@@ -238,6 +239,8 @@ export function buildDashboardReadinessSignalsContext(input: {
       averageHrvMs: toFiniteNumber(point.averageHrvMs),
       averageHeartRateBpm: toFiniteNumber(point.averageHeartRateBpm),
       minimumHeartRateBpm: toFiniteNumber(point.minimumHeartRateBpm),
+      averageHeartRateSourceKey: point.averageHeartRateSourceKey,
+      minimumHeartRateSourceKey: point.minimumHeartRateSourceKey,
     }));
   const context = buildReadinessSignals({
     form: input.formNow?.value,
@@ -247,6 +250,8 @@ export function buildDashboardReadinessSignalsContext(input: {
   });
   return context ? {
     ...context,
+    overnightHeartRateCalculatedByQs: (input.sleepTrend?.points || []).some(point => point.heartRateCalculatedByQs
+      && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs),
     loadAtMs: [input.formNow?.latestDayMs, input.rampRate?.latestDayMs]
       .map(toFiniteNumber)
       .filter((value): value is number => value !== null)

@@ -1,7 +1,8 @@
 import { groupRecordedIntensityZones, INTENSITY_POLICY_VERSION } from '../../../shared/intensity-zones';
 import { readinessHrvObservations } from '../../../shared/readiness';
 import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
-import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { supplementNightlyHrvSleepDocuments, supplementNightlyHealthSleepDocuments } from '../sleep/nightly-hrv';
+import { calculatedHeartRateSourceKeys } from '../../../shared/nightly-heart-rate';
 import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey, isSleepAverageHrvSourceKey,
     sleepEvidenceSourceKey, sleepHrvSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
@@ -3822,6 +3823,7 @@ function resolveTrainingReadinessSleepEvidence(
                 : null,
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
+            ...calculatedHeartRateSourceKeys(data as unknown as SleepSession),
         };
         point.hrvObservations = readinessHrvObservations(point);
         const providerUserId = typeof source.providerUserId === 'string'
@@ -3858,9 +3860,11 @@ function resolveTrainingReadinessSleepEvidence(
             ));
             const latest = sortedPoints[sortedPoints.length - 1];
             const averageHeartRateValues = fragmentPoints
+                .filter(point => point.averageHeartRateSourceKey === latest.averageHeartRateSourceKey)
                 .map(point => point.averageHeartRateBpm)
                 .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
             const minimumHeartRateValues = fragmentPoints
+                .filter(point => point.minimumHeartRateSourceKey === latest.minimumHeartRateSourceKey)
                 .map(point => point.minimumHeartRateBpm)
                 .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
             const result: ReadinessSleepEvidencePoint = {
@@ -3955,7 +3959,11 @@ export function buildTrainingReadinessMetricPayload(
 
     for (const point of points) {
         const evaluatedAtMs = point.dayMs === asOfDayMs ? nowMs : point.dayMs + DAY_MS - 1;
-        const legacy = buildLegacyReadinessSignals({ form: point.form, rampRate: point.rampRate, sleepPoints, nowMs: evaluatedAtMs });
+        // Frozen Sleep-only clients must not inherit a new Health-sample-derived value.
+        const legacySleepPoints = sleepPoints.map(sleep => ({ ...sleep,
+            averageHeartRateBpm: sleep.averageHeartRateSourceKey ? null : sleep.averageHeartRateBpm,
+            minimumHeartRateBpm: sleep.minimumHeartRateSourceKey ? null : sleep.minimumHeartRateBpm }));
+        const legacy = buildLegacyReadinessSignals({ form: point.form, rampRate: point.rampRate, sleepPoints: legacySleepPoints, nowMs: evaluatedAtMs });
         legacyPoints.push(legacy ? { dayMs: point.dayMs, ...legacy } : {
             dayMs: point.dayMs, form: point.form, rampRate: point.rampRate, totalSignalCount: 4,
             score: null, label: null, confidence: null, availableSignalCount: 0, baselineEvidenceCount: 0,
@@ -5762,7 +5770,7 @@ export async function fetchTrainingReadinessSleepDocs(
         .where('endTimeMs', '<=', nowMs)
         .select(...DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS)
         .get();
-    const enriched = await supplementNightlyHrvSleepDocuments(uid, snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })));
+    const enriched = await supplementNightlyHealthSleepDocuments(uid, snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })));
     return enriched.map(doc => ({ id: doc.id, data: () => doc.data }));
 }
 

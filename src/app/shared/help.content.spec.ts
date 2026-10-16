@@ -18,7 +18,10 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     expect(copy).toContain("app navigation's **Training & health** section");
     expect(copy).not.toContain('**Health → Timeline notes**');
-    expect(copy).toContain('same notes manager without leaving your current workspace');
+    expect(copy).toContain('to open **Note comparisons**');
+    expect(copy).toContain('navigation does not open an add-note form');
+    expect(copy).toContain('**Manage notes** is a separate action');
+    expect(copy).toContain('comparisons opened from the manager return to that manager');
     expect(copy).toContain('stays highlighted in navigation while comparing');
     const planning = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(planning).toContain('full-level row in **Training & health**, after **Training**');
@@ -231,6 +234,7 @@ describe('help.content', () => {
     for (const phrase of ['**Manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
       'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
       '**Show swimming Guide screens**', 'cannot guarantee fixed positions', 'do not fix delayed pool-length detection',
+      'only in an individual pool or open-water swimming workout', 'not shown for other sports, plan settings or sync history',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
   });
   it('explains swim manual-step timing and native cumulative Rest distance without promising finished-interval statistics', () => {
@@ -279,8 +283,9 @@ describe('help.content', () => {
       '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
       'not guaranteed visible or measured', 'new scheduled copy from your workout library',
       'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides']) expect(content).toContain(phrase);
-    for (const phrase of ['**Repeat on another date**', '**Send a fresh Guide**', '**same QS workout**',
+    for (const phrase of ['**Duplicate to…** in its sync details or workout actions', '**Send a fresh Guide**', '**same QS workout**',
       'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
+    expect(content).not.toContain('Repeat on another date');
   });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -675,6 +680,8 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
+    expect(HELP_SECTIONS.some(section => section.content.includes('at least 90% coverage with no gap over five minutes'))).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.content.includes('QS-calculated Garmin sleep-window heart rate'))).toBe(true);
     expect(healthSection?.content).toContain('**Retrying** means a temporary sync error is being retried automatically');
     expect(healthSection?.content).toContain('automatic retries are exhausted or the job cannot be retried');
     expect(healthSection?.content).toContain('not the failed attempt time');
@@ -1257,7 +1264,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%');
     expect(trainingSection?.content).toContain('Lower Overnight HR versus personal baseline supports readiness');
     expect(trainingSection?.content).toContain('can provide both HR measures');
-    expect(trainingSection?.content).toContain('Garmin Health sleep summaries currently provide neither');
+    expect(trainingSection?.content).toContain('QS can calculate missing sleep-window HR');
+    expect(trainingSection?.content).toContain('at least 90% coverage with no gap over five minutes');
+    expect(trainingSection?.content).toContain('keep a separate baseline from provider-reported readings');
     expect(trainingSection?.content).toContain('rolling **60-day personal range**');
     expect(trainingSection?.content).toContain('Changing a chart to one year does not change these windows');
     expect(trainingSection?.content).toContain(
@@ -2258,4 +2267,6 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('If an accepted upload fails after you stop the batch, its temporary copy is removed when that failure is confirmed');
   expect(content).toContain('**Delivery details** retain recorded send attempts and processing retries across explicit retries');
   expect(content).toContain('cleanup resumes automatically after partial failures');
+  expect(content).toContain('Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent');
+  expect(content).toContain('unknown acceptance never triggers an automatic replacement upload');
 });

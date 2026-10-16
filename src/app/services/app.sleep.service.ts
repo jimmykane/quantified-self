@@ -14,7 +14,7 @@ import {
   startAfter,
 } from 'app/firebase/firestore';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
-import { Observable, of, from } from 'rxjs';
+import { Observable, of, from, combineLatest } from 'rxjs';
 import { map, switchMap, catchError } from 'rxjs/operators';
 import { enrichSleepWithNightlyHrv, nightlyHrvDateRange } from '@shared/nightly-hrv';
 import { HrvHistoryService } from './hrv-history.service';
@@ -27,6 +27,8 @@ import {
 } from '@shared/sleep';
 import { decodeSleepSessionSportsLibData } from '@shared/sports-lib-health-data';
 import { withHealthSleepAccountKeys, type HealthWorkspaceSleepSession } from '../helpers/health-sleep-account.helper';
+import { enrichSleepWithNightlyHeartRate, nightlyHeartRateQueries } from '@shared/nightly-heart-rate';
+import { AppHealthService } from './app.health.service';
 
 export interface SleepSummaryRangeLoad {
   sessions: HealthWorkspaceSleepSession[];
@@ -46,6 +48,7 @@ export class AppSleepService {
   private firestore = inject(Firestore);
   private browserCompatibility = inject(BrowserCompatibilityService);
   private hrvHistory = inject(HrvHistoryService);
+  private health = inject(AppHealthService);
 
   watchHasAnySleepSession(userID: string | null | undefined): Observable<boolean> {
     const uid = `${userID || ''}`.trim();
@@ -68,12 +71,22 @@ export class AppSleepService {
     const uid = `${userID || ''}`.trim();
     return this.watchSessions(userID, startDate, endDate).pipe(
       switchMap(sessions => {
+        const secureMatching = this.browserCompatibility.checkWebCryptoSupport();
         const range = nightlyHrvDateRange(sessions);
-        if (!range || !this.browserCompatibility.checkWebCryptoSupport()) return of(sessions);
-        return this.hrvHistory.watch(uid, range.startDate, range.endDate).pipe(
+        const hrvSessions$ = range && secureMatching ? this.hrvHistory.watch(uid, range.startDate, range.endDate).pipe(
           switchMap(records => from(enrichSleepWithNightlyHrv(uid, sessions, records))),
           // A failed or incomplete optional Health read must not erase native Sleep evidence.
           catchError(() => of(sessions)),
+        ) : of(sessions);
+        const queries = nightlyHeartRateQueries(uid, sessions);
+        const heartRateRanges$ = queries.length && secureMatching
+          ? combineLatest(queries.map(query => this.health.watchRange(uid, query))).pipe(catchError(() => of([])))
+          : of([]);
+        // Source updates must reuse these listeners, rather than restarting the other Health read.
+        return combineLatest([hrvSessions$, heartRateRanges$]).pipe(
+          switchMap(([hrvSessions, ranges]) => from(enrichSleepWithNightlyHeartRate(uid, hrvSessions, ranges)).pipe(
+            catchError(() => of(hrvSessions)),
+          )),
         );
       }),
       switchMap(sessions => from(withHealthSleepAccountKeys(uid, sessions))),

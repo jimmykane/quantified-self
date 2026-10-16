@@ -3,6 +3,7 @@ import {
   buildReadinessEvaluation as buildLegacyReadinessEvaluation,
   calculateReadinessScore as calculateLegacyReadinessScore,
   READINESS_SLEEP_MAX_AGE_MS, resolveReadinessConfidence, resolveReadinessSleepPointTime,
+  resolveRatioEvidence, combineReadinessOvernightHeartRateRatios,
   type ReadinessSignalsContext as LegacyReadinessSignalsContext,
   type ReadinessEvaluation as LegacyReadinessEvaluation,
   type ReadinessSleepEvidencePoint, type ReadinessScoreContext,
@@ -20,7 +21,7 @@ export {
 } from './readiness-legacy';
 
 export const READINESS_FORMULA_VERSION = 4 as const;
-export const READINESS_EVIDENCE_VERSION = 3 as const;
+export const READINESS_EVIDENCE_VERSION = 4 as const;
 export const READINESS_SLEEP_LOOKBACK_MS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays * 86400000;
 const READINESS_HRV_TREND_MINIMUM_DAYS = 4;
 const READINESS_HRV_TREND_MINIMUM_CHANGE_MS = 1;
@@ -58,6 +59,13 @@ export function buildReadinessSignals(input: ReadinessInput): ReadinessSignalsCo
 export function buildReadinessEvaluation(input: ReadinessInput): ReadinessEvaluation | null {
   const nowMs = Number.isFinite(input.nowMs) ? input.nowMs! : Date.now();
   const legacy = buildLegacyReadinessEvaluation({ ...input, nowMs });
+  const latest = legacy?.latestSleep;
+  const averageHeartRate = resolveRatioEvidence(latest?.averageHeartRateBpm,
+    (legacy?.baselineSleep ?? []).filter(point => point.averageHeartRateSourceKey === latest?.averageHeartRateSourceKey)
+      .map(point => point.averageHeartRateBpm));
+  const minimumHeartRate = resolveRatioEvidence(latest?.minimumHeartRateBpm,
+    (legacy?.baselineSleep ?? []).filter(point => point.minimumHeartRateSourceKey === latest?.minimumHeartRateSourceKey)
+      .map(point => point.minimumHeartRateBpm));
   const hrvPersonalRange = buildReadinessHrvPersonalRange(input.sleepPoints ?? [], nowMs);
   const hrvRatio = hrvPersonalRange?.currentAverage !== null && hrvPersonalRange?.baselineAverage
     ? hrvPersonalRange.currentAverage / hrvPersonalRange.baselineAverage : null;
@@ -65,18 +73,17 @@ export function buildReadinessEvaluation(input: ReadinessInput): ReadinessEvalua
     form: legacy?.signals.form ?? null,
     rampRate: legacy?.signals.rampRate ?? null,
     sleepScore: legacy?.signals.sleepScore ?? null,
-    overnightHeartRateRatio: legacy?.signals.overnightHeartRateRatio ?? null,
+    overnightHeartRateRatio: combineReadinessOvernightHeartRateRatios(averageHeartRate.ratio, minimumHeartRate.ratio),
     hrvPersonalRange,
   };
   const score = calculateReadinessScore(drivers);
   if (!score) return null;
   const baselineEvidenceCount = legacy?.signals.baselineEvidenceCount ?? 0;
-  const emptyRatio = { latestValue: null, baselineMedian: null, baselineValueCount: 0, ratio: null };
   return {
     latestSleep: legacy?.latestSleep ?? null,
     baselineSleep: legacy?.baselineSleep ?? [],
-    averageHeartRate: legacy?.averageHeartRate ?? emptyRatio,
-    minimumHeartRate: legacy?.minimumHeartRate ?? emptyRatio,
+    averageHeartRate,
+    minimumHeartRate,
     signals: {
       ...drivers,
       score: score.score,
@@ -87,8 +94,8 @@ export function buildReadinessEvaluation(input: ReadinessInput): ReadinessEvalua
       totalSignalCount: 4,
       latestSleepAtMs: legacy?.signals.latestSleepAtMs ?? null,
       hrvRatio,
-      averageHeartRateRatio: legacy?.signals.averageHeartRateRatio ?? null,
-      minimumHeartRateRatio: legacy?.signals.minimumHeartRateRatio ?? null,
+      averageHeartRateRatio: averageHeartRate.ratio,
+      minimumHeartRateRatio: minimumHeartRate.ratio,
     },
   };
 }

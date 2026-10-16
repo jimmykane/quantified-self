@@ -62,7 +62,7 @@ interface StressStateRenderApi {
   value(dimension: number): unknown;
   coord(value: [number, number]): [number, number];
   size(value: [number, number]): [number, number];
-  style(): Record<string, unknown>;
+  visual(visualType: 'color' | 'opacity'): unknown;
 }
 
 export interface HealthChartSeriesModel {
@@ -698,7 +698,10 @@ function renderStressStateBlock(
       height,
       r: Math.min(2, height / 2),
     },
-    style: api.style(),
+    style: {
+      fill: api.visual('color'),
+      opacity: api.visual('opacity'),
+    },
     transition: ['shape'],
   };
 }

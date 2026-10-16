@@ -1,5 +1,6 @@
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ACTIVITY_SEND_LIMITS, ActivitySendRecovery, ActivitySendStatus } from '../../../shared/activity-send';
 import { inspectFitPayload } from '../shared/fit-payload';
@@ -21,6 +22,12 @@ export function decodeSendFile(input: Buffer, filename: string): Buffer {
 export function sendFileHash(fit: Buffer): string { return createHash('sha256').update(fit).digest('hex'); }
 export function isSendWindowOpen(operation: Record<string, unknown> | undefined, now = Date.now()): boolean {
   return operation?.state === 'confirmed' && operation.stopped !== true && Number.isFinite(operation.expiresAt) && Number(operation.expiresAt) > now;
+}
+
+/** Delivery progress is not new admission intent; retain every other control/continuation change. */
+export function sendOperationNeedsAdmission(before: Record<string, unknown> | undefined, after: Record<string, unknown>): boolean {
+  return !before || Object.keys({ ...before, ...after }).some(key => key !== 'finished' && key !== 'updatedAt'
+    && !isDeepStrictEqual(before[key], after[key]));
 }
 
 /** Project only fixed, user-actionable categories; never copy provider errors/IDs. */

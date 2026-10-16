@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, a
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
@@ -114,8 +114,12 @@ export class TrainingDeliveryDialogComponent {
   readonly canRepeatWorkout = computed(() => this.canSend() && !!this.workout()
     && (this.completions().some(item => item.workoutId === this.data.id && item.planId === this.workout()?.planId)
       || this.statuses().some(item => item.status === 'completed')));
-  readonly swimmingGuideStructure = computed(() => this.sameAccount() && this.syncReadState() === 'ready'
-    ? this.workout()?.structure ?? null : null);
+  readonly swimmingGuideStructure = computed(() => {
+    if (!this.sameAccount() || this.syncReadState() !== 'ready') return null;
+    const structure = this.workout()?.structure;
+    return structure && (structure.sport === ActivityTypes.Swimming || structure.sport === ActivityTypes.OpenWaterSwimming)
+      ? structure : null;
+  });
   readonly parentPlan = computed(() => this.schedule()?.plans.find(plan => plan.id === this.workout()?.planId));
   readonly scopeTitle = computed(() => this.data.scope === 'plan'
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)?.name ?? this.data.title

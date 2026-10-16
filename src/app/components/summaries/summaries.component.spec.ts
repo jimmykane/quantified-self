@@ -1670,7 +1670,9 @@ describe('SummariesComponent', () => {
         vitals: { averageHrvMs: 55, averageHeartRateBpm: 48, minimumHeartRateBpm: 40 },
         source: { provider: 'GarminAPI', sourceSessionKey: 'latest' },
       },
-    ];
+    ].map(session => ({
+      ...session, qsCalculatedHeartRate: { average: true, minimum: true },
+    }));
     component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
 
     fixture.detectChanges();
@@ -1704,6 +1706,7 @@ describe('SummariesComponent', () => {
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    expect(overnightHeartRate?.textContent).toContain('Calculated by QS from Garmin samples');
     expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
       .toBe('Overnight heart rate for the latest 7 eligible nights');
     expect(overnightHeartRate?.querySelectorAll('.dashboard-today-history-bars > span')).toHaveLength(7);

@@ -544,7 +544,7 @@ An explicit **Send a fresh Guide** review can reserve a new Suunto external iden
 without changing or deleting the earlier Guide. This is not absence detection or automatic repair: hidden Guides may
 still exist, duplicates are disclosed, and current consent/Pro/date/completion/unfinished-attempt gates still apply.
 Receipt-bound generation snapshots retain exact lost-ACK recovery; bounded aliases retain old/new FIT correlation.
-**Repeat on another date** reuses the existing scheduled-workout duplicate path for completed sessions, across providers.
+**Duplicate to…** in completed-workout sync details reuses the existing scheduled-workout duplicate path, across providers.
 Monitoring remains covered by the existing Suunto worker/outcome/queue filters. No new endpoint, Rules, index or resource
 is introduced. Native-app fresh-Guide consent does not expand MCP/Assistant provider actions. See
 [fresh identity and completion protections](training-workspace.md#explicit-fresh-suunto-guide-and-completed-workout-reuse).
@@ -843,6 +843,17 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 7. Add or update Firestore indexes, Rules, Storage Rules, TTL policies, and Firebase configuration only when the provider data model needs them.
 8. For health/wellness support, add provider metric mappings to the unified health writer rather than expanding the stable catalog with provider field names. Record native semantics, coverage, quality, and revision behavior explicitly.
 9. Validate field semantics against the provider's published examples, including signed event values and inclusive sample endpoints. Cap or compact provider arrays against the shared metric and sample write budgets before handing a normalized record to the writer; do not let a provider-valid payload fail only at the generic persistence boundary.
+
+### QS-calculated Garmin sleep heart rate
+
+Missing Garmin sleep HR can be resolved read-only from same-owner/account Daily 15-second HR samples, with complete
+revision-checked reads, at least 90% coverage and no gap over five minutes. Native values take precedence; QS-calculated
+averages and lowest representative values keep distinct semantics/baselines. No provider request, Sleep rewrite,
+reimport, OAuth scope or ingestion-queue change is involved. Current readiness/daily-report MCP use additionally
+requires Health and Sleep grants; ordinary Sleep and legacy readiness remain native. Sampled Daily content changes
+target the existing readiness invalidation. Health/Sleep ingestion monitoring is **unchanged**; no additional derived-alert coverage is claimed.
+See [Garmin Health](garmin-integration.md#nightly-hrv-in-sleep-and-reports) and
+[Readiness today](training-workspace.md#readiness-today) for bounds, attribution, compatibility and release order.
 
 ### Nightly HRV across Sleep and Health
 
@@ -1769,6 +1780,15 @@ Thirty-day workspace history pruning retains its private expiry marker while rec
 The authenticated, noindex `/send-activities` workspace consolidates local recorded FIT/FIT.gz and retained saved FIT delivery to Suunto, COROS and Wahoo. Pro is enforced by the backend for preparation/admission, while owner reads, stopping unclaimed work and checking accepted operations remain available after lapse. It uses existing account scopes and activity workers; automatic sync and legacy endpoint contracts remain compatible. Direct local sources are private temporary files, never archived events. Destination accounts are pinned at review, and explicit revision confirmation precedes durable queue admission. Retained originals preserve their existing provenance and generation checks.
 
 See [Activity sending workspace](activity-sending-workspace.md) for the single detailed lifecycle, quotas, recovery and retention contract. Provider-confirmed processing failure requires an explicit workspace retry; acceptance uncertainty never permits replay. Stop preserves claimed/accepted operations. No Training or MCP provider mutation is added. Release checks include real Rules/demo-emulator isolation, entrypoint contracts/cold imports, private source cleanup, mobile/light/dark layout, Help/Privacy and monitoring activation.
+
+Workspace admission ignores delivery-only progress writes, and delivery projection avoids unchanged row/aggregate
+writes while retaining cleanup retries. The shared activity task queue caps active tasks at ten globally; dispatch
+rate and exponential retry timing remain unchanged. Typed, unaccepted Suunto initialization failures may use that
+bounded retry policy before any FIT bytes are sent; other workspace restarts, accepted/uncertain operations and
+terminal review remain protected. See the workspace contract above. Monitoring is **covered/unchanged** by the
+existing native queue charts, committed retry/manual-review observations and trigger error/latency diagnostics;
+the [delivery runbook](activity-delivery-monitoring.md#workspace-contention-and-initialization-retries) records the
+verification/release boundary. No new queue, lease, scheduler, metric, scope, MCP or Training change is introduced.
 
 Queue ownership commits before dispatch so concurrent Stop/admission cannot lose or erase a claim. Local and saved sends recheck the sending window inside provider-claim transactions; reconnect release preserves this authority and the original queue retention. Duplicate temporary sources release quota immediately. Account deletion winning a background transaction is a silent no-op.
 

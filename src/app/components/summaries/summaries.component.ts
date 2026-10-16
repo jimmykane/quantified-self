@@ -2173,7 +2173,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         : (context.overnightHeartRateRatio - 1) * 100,
       overnightHeartRateTone,
       overnightHeartRateContextText: context.overnightHeartRateRatio !== null
-        ? sleepStatus.contextText : '',
+        ? [context.overnightHeartRateCalculatedByQs ? 'Calculated by QS from Garmin samples' : '', sleepStatus.contextText].filter(Boolean).join(' · ') : '',
       recoveryText,
       recoveryRemainingPercent,
       recoveryFinishTimeMs,

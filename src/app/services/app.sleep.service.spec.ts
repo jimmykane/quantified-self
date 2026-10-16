@@ -18,6 +18,8 @@ import {
 } from 'app/firebase/firestore';
 import { AppSleepService } from './app.sleep.service';
 import { HrvHistoryService } from './hrv-history.service';
+import { AppHealthService } from './app.health.service';
+import { projectHealthRange } from '@shared/health-query';
 
 vi.mock('app/firebase/firestore', () => {
   class MockFirestore { }
@@ -49,13 +51,38 @@ describe('AppSleepService', () => {
         AppSleepService,
         { provide: Firestore, useValue: {} },
         { provide: BrowserCompatibilityService, useValue: { checkWebCryptoSupport: () => true } },
+        { provide: AppHealthService, useValue: { watchRange: vi.fn((_uid, q) => of(projectHealthRange([], [], q))) } },
       ],
     });
     service = TestBed.inject(AppSleepService);
   });
 
-  it('updates an existing sleep when matching nightly Health HRV arrives later', async () => {
+  it('updates calculated overnight HR when stored Garmin samples arrive, and clears it if coverage disappears', async () => {
+    const start = Date.parse('2026-10-14T22:00:00Z'), end = start + 28_800_000;
+    const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', 'provider-account');
+    vi.mocked(collectionData).mockReturnValue(of([{ userID: 'user-1', source: { provider: 'GarminAPI', providerUserId: 'provider-account' },
+      sleepDate: '2026-10-15', startTimeMs: start, endTimeMs: end, durationSeconds: 28800, isNap: false, vitals: { averageHrvMs: 44 } }]));
+    const empty = projectHealthRange([], [], { startDate: '2026-10-14', endDate: '2026-10-15', includeSamples: true });
+    const health$ = new BehaviorSubject(empty);
+    vi.mocked(TestBed.inject(AppHealthService).watchRange).mockReturnValue(health$);
+    const values: Array<{ hr: number | undefined; hrv: number | null | undefined; calculated: boolean }> = [];
+    const sub = service.watchForDashboard('user-1', start, end).subscribe(sessions => values.push({
+      hr: sessions[0].vitals?.averageHeartRateBpm, hrv: sessions[0].vitals?.averageHrvMs, calculated: !!sessions[0].qsCalculatedHeartRate,
+    }));
+    await vi.waitFor(() => expect(values.at(-1)).toEqual({ hr: undefined, hrv: 44, calculated: false }));
+    health$.next({ ...empty, sampleChunks: [{ userID: 'user-1', schemaVersion: 1, provider: 'GarminAPI', accountKey, metricId: 'heart_rate',
+      valueType: 'number', aggregation: 'representative_sample', semanticVariant: 'daily_15_second', seriesKey: 'heart_rate_15_second_representative',
+      origin: 'recorded', recordingMethod: 'device', normalizationStatus: 'canonical', canonicalUnit: 'bpm', startTimeMs: start + 15_000, endTimeMs: end,
+      offsetMs: Array.from({ length: 1920 }, (_, i) => i * 15_000), canonicalValues: Array(1920).fill(60) } as never] });
+    await vi.waitFor(() => expect(values.at(-1)).toEqual({ hr: 60, hrv: 44, calculated: true }));
+    health$.next(empty);
+    await vi.waitFor(() => expect(values.at(-1)).toEqual({ hr: undefined, hrv: 44, calculated: false }));
+    sub.unsubscribe(); expect(health$.observed).toBe(false);
+  });
+
+  it.each([false, true])('updates HRV without restarting HR listeners (HR read fails: %s)', async hrReadFails => {
     const start = Date.parse('2026-09-10T22:00:00Z'), end = start + 28800000;
+    if (hrReadFails) vi.mocked(TestBed.inject(AppHealthService).watchRange).mockImplementation(() => throwError(() => new Error('offline')));
     const health$ = new BehaviorSubject<unknown[]>([]);
     const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', 'provider-account');
     vi.mocked(collectionData).mockImplementation(q => {
@@ -66,12 +93,15 @@ describe('AppSleepService', () => {
     const values: unknown[] = [];
     const sub = service.watchForDashboard('user-1', start, end).subscribe(sessions => values.push(sessions[0].vitals?.overnightHrvMs));
     await vi.waitFor(() => expect(values).toEqual([undefined]));
+    expect(TestBed.inject(AppHealthService).watchRange).toHaveBeenCalledTimes(4);
     health$.next([{id: 'hrv', userID: 'user-1', schemaVersion: 1, kind: 'interval_summary', source: {provider: 'GarminAPI', accountKey},
       calendarDate: '2026-09-11', startTimeMs: start, endTimeMs: end, metrics: [{kind: 'value', metricId: 'heart_rate_variability', valueType: 'number',
         aggregation: 'average', semanticVariant: 'overnight_rmssd', origin: 'provider_summary', recordingMethod: 'provider_calculated', normalizationStatus: 'canonical', canonical: {value: 44, unit: 'ms'}}]}]);
     await vi.waitFor(() => expect(values).toEqual([undefined, 44]));
+    expect(TestBed.inject(AppHealthService).watchRange).toHaveBeenCalledTimes(4);
     health$.next([]);
     await vi.waitFor(() => expect(values).toEqual([undefined, 44, undefined]));
+    expect(TestBed.inject(AppHealthService).watchRange).toHaveBeenCalledTimes(4);
     sub.unsubscribe();
   });
 

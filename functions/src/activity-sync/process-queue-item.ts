@@ -2305,7 +2305,18 @@ export async function processActivitySyncQueueItem(
                         : pollResult;
                 }
             } else if (actionableError.retryMode === 'restart') {
-                if (queueItem.sendBatchID) {
+                // Suunto initialization sends metadata only; no FIT bytes have been sent.
+                // Retry only that typed, unaccepted phase within the existing budget.
+                // Keep workspace review for other restarts and exhausted attempts.
+                const retryUnsentSuuntoInitialization = actionableError.serviceName === ServiceNames.SuuntoApp
+                    && queueItem.destinationServiceName === ServiceNames.SuuntoApp
+                    && actionableError.operation === 'activity_upload_init'
+                    && !actionableError.providerOperationId
+                    && !queueItem.destinationUploadID
+                    && !queueItem.destinationWorkoutKey
+                    && !queueItem.destinationUploadContinuation
+                    && (queueItem.retryCount || 0) + 1 < MAX_RETRY_COUNT;
+                if (queueItem.sendBatchID && !retryUnsentSuuntoInitialization) {
                     const confirmedFailure = actionableError.operation === 'activity_upload_status';
                     return finalizeActivitySyncQueueItemIfCurrent(queueItem, { resultStatus: confirmedFailure ? 'skipped' : 'manual_reconciliation_required', sendConfirmedFailure: confirmedFailure });
                 }

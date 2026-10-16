@@ -24,6 +24,8 @@ describe('Suunto swimming screen preferences', () => {
     expect(element.querySelector('section')?.hidden).toBe(true);
     expect(element.textContent).toContain('planned, not measured');
     expect(element.textContent).toContain('cannot select the completed interval');
+    expect(element.textContent).toContain('choose Duplicate to… in its sync details or workout actions');
+    expect(element.textContent).not.toContain('Repeat on another date');
     expect(fixture.componentInstance.canSave()).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
     fixture.componentInstance.toggle(); fixture.detectChanges();

@@ -10,6 +10,8 @@ p, li, span, a { overflow-wrap: anywhere; }
 .delivery-subtitle { margin: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
 .delivery-context .delivery-caption { margin-block: 0.25rem 0; }
 .delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
+// Align wordmarks (including their raised brand symbols) with the label's text baseline.
+.delivery-provider-row { --compact-row-title-align-items: baseline; }
 .delivery-provider-logo { display: flex; flex: 0 0 auto; }
 .delivery-provider-overview { min-width: 0; }
 .delivery-provider-overview > .delivery-caption { margin-block: 0 0.5rem; }

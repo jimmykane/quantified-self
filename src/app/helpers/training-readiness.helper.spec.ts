@@ -19,6 +19,7 @@ describe('training-readiness.helper', () => {
       averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
       overnightHeartRateRatio: 0.953,
+      overnightHeartRateCalculatedByQs: true,
       trend: [],
     }, { locale: 'en-US' });
 
@@ -38,6 +39,7 @@ describe('training-readiness.helper', () => {
     ]);
     expect(view.metricRows.find(row => row.label === 'HRV · 7-day average')?.detailText)
       .toBe('No current HRV · 60-day personal range');
+    expect(view.metricRows.find(row => row.label === 'Overnight HR vs baseline')?.detailText).toContain('Calculated by QS');
     expect(view.implicationTitle).toBe('Signals are broadly supportive');
     expect(view.implicationText).toContain('does not choose a workout');
     expect(view.sourceText).toContain('bounded sleep envelope');
@@ -196,7 +198,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'ready',
       history: {
         formulaVersion: 4,
-        evidenceVersion: 3,
+        evidenceVersion: 4,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),

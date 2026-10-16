@@ -140,6 +140,19 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         });
     });
 
+    it.each(['create', 'update', 'delete'])('refreshes only readiness for a Garmin HR sample %s', async kind => {
+        const data = { metricIds: ['heart_rate'], sampleChunkIds: ['chunk'], source: { provider: 'GarminAPI', sourceRecordType: 'garmin_daily', revision: { digest: 'old' } } };
+        await (onDashboardDerivedMetricsHealthWrite as unknown as (event: unknown) => Promise<void>)({
+            params: { uid: 'user-1', sourceRecordId: 'garmin-daily' }, data: {
+                before: { exists: kind !== 'create', data: () => kind === 'create' ? undefined : data },
+                after: { exists: kind !== 'delete', data: () => kind === 'delete' ? undefined : { ...data, source: { ...data.source, revision: { digest: 'new' } } } },
+            },
+        });
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, undefined, {
+            taskScope: 'health-training_readiness', metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness], incrementEventMutationVersion: false,
+        });
+    });
+
     it('targets only derived metrics affected by a Health record mutation', async () => {
         await (onDashboardDerivedMetricsHealthWrite as any)({
             params: { uid: 'user-1', sourceRecordId: 'health-1' },

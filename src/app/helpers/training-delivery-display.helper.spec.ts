@@ -51,7 +51,8 @@ describe('Training delivery explanations', () => {
     for (const code of ['failed-precondition', 'functions/failed-precondition']) {
       const message = trainingDeliveryCommandError({ code, message: 'private remote identity' }, true, 'fresh-guide');
       expect(message).toContain('Resolve unfinished sends');
-      expect(message).toContain('Repeat on another date');
+      expect(message).toContain('use Duplicate to… for a completed workout');
+      expect(message).not.toContain('Repeat on another date');
       expect(message).toContain('eight fresh copies');
       expect(message).not.toContain('private');
     }

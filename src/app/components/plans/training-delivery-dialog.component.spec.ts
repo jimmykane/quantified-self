@@ -78,6 +78,7 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row')).toHaveLength(3);
     fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row').forEach((row: HTMLElement) => {
       expect(row.classList).toContain('compact-row-host--mobile-action-full');
+      expect(row.classList).toContain('delivery-provider-row');
     });
     expect(fixture.nativeElement.querySelector('[role="tab"]')).toBeNull();
     const icons = fixture.debugElement.queryAll(By.directive(ServiceSourceIconComponent));
@@ -139,18 +140,29 @@ describe('Training provider delivery controls', () => {
     await fixture.componentInstance.confirm(); expect(service.mutate.mock.calls[1][0]).toEqual(request);
     expect(haptics.success).toHaveBeenCalledOnce(); expect(haptics.error).toHaveBeenCalledOnce();
   });
-  it('offers Repeat on another date for a completed workout without resending its old Guide', async () => {
-    service.isReady.mockImplementation(provider => provider === 'suunto');
-    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', status: 'completed', lastAcceptedAtMs: 1 }] }));
-    const duplicate = vi.fn(async () => ({ kind: 'duplicated-workout', workoutId: 'fresh-workout', localDate: '2026-10-20', planId: null }));
+  it.each(['garmin', 'wahoo', 'suunto'] as const)('offers Duplicate to… for a completed %s workout without resending its old copy', async provider => {
+    service.isReady.mockImplementation(candidate => candidate === provider);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider, status: 'completed', lastAcceptedAtMs: 1 }] }));
+    let finishDuplicate: (() => void) | undefined;
+    const duplicateFinished = new Promise<void>(resolve => { finishDuplicate = resolve; });
+    const duplicate = vi.fn(async () => {
+      await duplicateFinished;
+      return { kind: 'duplicated-workout', workoutId: 'fresh-workout', localDate: '2026-10-20', planId: null };
+    });
     TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Send a fresh Guide')).toBe(false);
     expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Send to Suunto')).toBe(false);
-    await fixture.componentInstance.begin('suunto', 'send'); expect(service.preview).not.toHaveBeenCalled();
-    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.trim() === 'Repeat on another date') as HTMLButtonElement;
-    expect(button).toBeDefined(); button.click(); await fixture.whenStable();
+    await fixture.componentInstance.begin(provider, 'send'); expect(service.preview).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).not.toContain('Repeat on another date');
+    expect(fixture.nativeElement.textContent).toContain('the original recording and completion stay unchanged');
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.trim() === 'Duplicate to…') as HTMLButtonElement;
+    const action = vi.spyOn(fixture.componentInstance, 'repeatWorkout');
+    expect(button).toBeDefined(); button.click(); fixture.detectChanges();
+    expect(button.textContent?.trim()).toBe('Duplicating workout…'); expect(button.disabled).toBe(true);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    finishDuplicate!(); await action.mock.results[0].value; await fixture.whenStable();
     expect(duplicate).toHaveBeenCalledWith('owner', expect.objectContaining({ id: 'w' }), expect.any(Function));
     expect(navigate).toHaveBeenCalledWith(['/training/plans/workout', 'fresh-workout']);
     expect(close).toHaveBeenCalledOnce(); expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
@@ -232,6 +244,7 @@ describe('Training provider delivery controls', () => {
     let fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).toBeNull();
     expect(fixture.nativeElement.querySelector('.delivery-provider-logo')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.delivery-provider-logo')?.closest('app-compact-row')?.classList).toContain('delivery-provider-row');
     expect(fixture.nativeElement.querySelector('h2').textContent).toContain('Garmin');
 
     fixture.destroy();
@@ -251,6 +264,61 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).not.toBeNull();
     expect(document.activeElement).toBe(fixture.nativeElement.querySelector('[data-delivery-provider="suunto"]'));
     expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking, ActivityTypes.StrengthTraining,
+    ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, null])('only exposes swimming Guide settings for an exact swimming workout (%s)', sport => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto' }] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => of({ state: { revision: 3 }, plans: [], workouts: [{ id: 'w', planId: null, revision: 2,
+        lifecycle: 'planned', title: 'Swimming in the title is not a sport', localDate: '2026-10-16',
+        ...(sport ? { structure: { version: 1, sport, nodes: [
+          { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] },
+        ] } } : {}) }] }), watchWorkoutCompletions: () => of([]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const swimming = sport === ActivityTypes.Swimming || sport === ActivityTypes.OpenWaterSwimming;
+    expect(!!fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBe(swimming);
+    expect(!!fixture.componentInstance.swimmingGuideStructure()).toBe(swimming);
+    expect(fixture.nativeElement.textContent.includes('Show swimming Guide screens')).toBe(swimming);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it.each(['plan', 'history'] as const)('does not offer workout-specific swimming controls in %s scope', scope => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p' }] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'p', title: 'Swimming plan' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => of({ state: { revision: 3 }, plans: [{ id: 'p', lifecycle: 'active', name: 'Swimming plan' }],
+        workouts: [{ id: 'w', planId: 'p', revision: 2, lifecycle: 'planned', structure: {
+          version: 1, sport: ActivityTypes.Swimming, nodes: [],
+        } }] }), watchWorkoutCompletions: () => of([]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Show swimming Guide screens');
+  });
+  it('removes swimming settings when the current recipe stops being a swim and never adds them to another provider', () => {
+    service.isReady.mockImplementation(provider => provider === 'suunto' || provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [status, { ...status, id: 'suunto', provider: 'suunto' }] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'workout', id: 'w', title: 'Workout', selectedProvider: 'suunto' } });
+    const recipe = (sport: ActivityTypes) => ({ state: { revision: 3 }, plans: [], workouts: [{ id: 'w', planId: null,
+      revision: 2, lifecycle: 'planned', structure: { version: 1, sport, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] },
+      ] } }] });
+    const schedule$ = new BehaviorSubject(recipe(ActivityTypes.Swimming));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => schedule$, watchWorkoutCompletions: () => of([]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).not.toBeNull();
+    schedule$.next(recipe(ActivityTypes.Running)); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBeNull();
+    schedule$.next(recipe(ActivityTypes.OpenWaterSwimming)); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).not.toBeNull();
+    fixture.componentInstance.showProvider('garmin'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBeNull();
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('returns to the provider overview if the selected provider disappears from the live view', async () => {
@@ -1560,8 +1628,8 @@ describe('Training provider delivery controls', () => {
     ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
       data: { scope: 'workout', id: 'w', title: 'Swimming · 10 × 100 m' }, width: '640px', maxWidth: '95vw',
     });
-    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-completed-repeat'); render('suunto-completed-repeat-dark');
-    expect(document.body.textContent).toContain('Repeat on another date');
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-completed-duplicate'); render('suunto-completed-duplicate-dark');
+    expect(document.body.textContent).toContain('Duplicate to…');
     expect(Array.from(document.querySelectorAll('button')).some(item => item.textContent.trim() === 'Send a fresh Guide')).toBe(false); ref.close();
     vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).mockImplementation(previousSchedule);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
