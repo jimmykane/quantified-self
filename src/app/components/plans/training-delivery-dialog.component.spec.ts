@@ -78,6 +78,7 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row')).toHaveLength(3);
     fixture.nativeElement.querySelectorAll('.delivery-provider-overview app-compact-row').forEach((row: HTMLElement) => {
       expect(row.classList).toContain('compact-row-host--mobile-action-full');
+      expect(row.classList).toContain('delivery-provider-row');
     });
     expect(fixture.nativeElement.querySelector('[role="tab"]')).toBeNull();
     const icons = fixture.debugElement.queryAll(By.directive(ServiceSourceIconComponent));
@@ -243,6 +244,7 @@ describe('Training provider delivery controls', () => {
     let fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).toBeNull();
     expect(fixture.nativeElement.querySelector('.delivery-provider-logo')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.delivery-provider-logo')?.closest('app-compact-row')?.classList).toContain('delivery-provider-row');
     expect(fixture.nativeElement.querySelector('h2').textContent).toContain('Garmin');
 
     fixture.destroy();
@@ -262,6 +264,61 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelector('.delivery-provider-overview')).not.toBeNull();
     expect(document.activeElement).toBe(fixture.nativeElement.querySelector('[data-delivery-provider="suunto"]'));
     expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking, ActivityTypes.StrengthTraining,
+    ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, null])('only exposes swimming Guide settings for an exact swimming workout (%s)', sport => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto' }] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => of({ state: { revision: 3 }, plans: [], workouts: [{ id: 'w', planId: null, revision: 2,
+        lifecycle: 'planned', title: 'Swimming in the title is not a sport', localDate: '2026-10-16',
+        ...(sport ? { structure: { version: 1, sport, nodes: [
+          { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] },
+        ] } } : {}) }] }), watchWorkoutCompletions: () => of([]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const swimming = sport === ActivityTypes.Swimming || sport === ActivityTypes.OpenWaterSwimming;
+    expect(!!fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBe(swimming);
+    expect(!!fixture.componentInstance.swimmingGuideStructure()).toBe(swimming);
+    expect(fixture.nativeElement.textContent.includes('Show swimming Guide screens')).toBe(swimming);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it.each(['plan', 'history'] as const)('does not offer workout-specific swimming controls in %s scope', scope => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p' }] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'p', title: 'Swimming plan' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => of({ state: { revision: 3 }, plans: [{ id: 'p', lifecycle: 'active', name: 'Swimming plan' }],
+        workouts: [{ id: 'w', planId: 'p', revision: 2, lifecycle: 'planned', structure: {
+          version: 1, sport: ActivityTypes.Swimming, nodes: [],
+        } }] }), watchWorkoutCompletions: () => of([]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Show swimming Guide screens');
+  });
+  it('removes swimming settings when the current recipe stops being a swim and never adds them to another provider', () => {
+    service.isReady.mockImplementation(provider => provider === 'suunto' || provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [status, { ...status, id: 'suunto', provider: 'suunto' }] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'workout', id: 'w', title: 'Workout', selectedProvider: 'suunto' } });
+    const recipe = (sport: ActivityTypes) => ({ state: { revision: 3 }, plans: [], workouts: [{ id: 'w', planId: null,
+      revision: 2, lifecycle: 'planned', structure: { version: 1, sport, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] },
+      ] } }] });
+    const schedule$ = new BehaviorSubject(recipe(ActivityTypes.Swimming));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: {
+      watchSchedule: () => schedule$, watchWorkoutCompletions: () => of([]),
+    } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).not.toBeNull();
+    schedule$.next(recipe(ActivityTypes.Running)); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBeNull();
+    schedule$.next(recipe(ActivityTypes.OpenWaterSwimming)); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).not.toBeNull();
+    fixture.componentInstance.showProvider('garmin'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-suunto-swimming-guide-settings')).toBeNull();
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('returns to the provider overview if the selected provider disappears from the live view', async () => {

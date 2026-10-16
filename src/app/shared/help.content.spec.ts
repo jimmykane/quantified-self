@@ -234,6 +234,7 @@ describe('help.content', () => {
     for (const phrase of ['**Manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
       'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
       '**Show swimming Guide screens**', 'cannot guarantee fixed positions', 'do not fix delayed pool-length detection',
+      'only in an individual pool or open-water swimming workout', 'not shown for other sports, plan settings or sync history',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
   });
   it('explains swim manual-step timing and native cumulative Rest distance without promising finished-interval statistics', () => {

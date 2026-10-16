@@ -471,6 +471,9 @@ Optional `[compactRowTitlePrefix]` content appears beside the title inside its s
 the body and action slot. Training sync uses this for the shared provider logo with its visible provider name;
 decorative logos are hidden from assistive technology and do not become controls. The title can wrap while the
 prefix retains its compact size. Existing rows without a prefix retain their layout and heading levels.
+Headings center prefixes by default. Provider sync rows opt into
+`--compact-row-title-align-items: baseline` so wordmarks and provider names share a text baseline, including logos
+with raised brand symbols. Keep this local to provider rows; do not add per-logo offsets or change other row titles.
 
 Compact **column** lists (currently Garmin permission grants) center icon, heading, description, and trailing status,
 with 24px icons and tighter row padding. At narrow widths, the status stays beside the heading and the description

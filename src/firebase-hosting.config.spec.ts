@@ -377,6 +377,7 @@ describe('Firebase Hosting configuration', () => {
     // Help now distinguishes the comparisons landing page from the explicit note manager.
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
     // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
+    // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-16');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

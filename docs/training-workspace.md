@@ -2121,6 +2121,9 @@ Consent/lifecycle rules:
   the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+Provider logos and names use the same text-baseline alignment in overview and detail headings, including asymmetric
+wordmarks; other compact-row titles retain centered prefixes. This layout and the swimming-settings visibility gate
+are presentation-only, with no MCP read/write, recipe, consent, provider, monitoring, Rules or index changes.
 The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
 summaries**, using destination branding. The plan-level presentation answers the current question first: its compact
 count includes today and future workouts currently due for delivery. Providers retain their own truthful vocabulary: the
@@ -3036,8 +3039,10 @@ after release, sync an eligible future Guide and confirm the full Description in
 ##### Configurable swimming Guide screens (v14)
 
 The private `suunto-guides-v14` mapping applies only to pool/open-water swimming. Other sport payloads remain
-exactly v13. In the Suunto sync dialog, **Show swimming Guide screens** offers separate ordered Work/Rest
-preferences, Restore defaults and an explicit Save. This uses the existing owner settings writer and
+exactly v13. In a pool or open-water swimming workout's Suunto sync details, **Show swimming Guide screens** offers
+separate ordered Work/Rest preferences, Restore defaults and an explicit Save. It is absent from other sports,
+plan-level settings, sync history and missing/unavailable workout contexts; it follows the current canonical recipe,
+not the workout title or a previous provider copy. This uses the existing owner settings writer and
 `users/{uid}/config/settings.suuntoSwimmingGuide`, not workout mutation or sending consent. The delivery reader
 uses this canonical config document; the historical root owner-unit source is deliberately unchanged for exact
 v13 reconstruction. Preferences have a strict versioned enum allowlist, no duplicate fields and at most five
