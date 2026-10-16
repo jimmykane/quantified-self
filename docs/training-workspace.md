@@ -4946,7 +4946,8 @@ readings, substitute daily/resting/7-day HR or merge accounts. Incomplete or con
 
 The supplement is read-only and uses the existing parent/revision-checked Health query and owner/deletion fences.
 It spans at most 93 provider dates in single-day queries, 512 chunks, 550,000 points and 16 MiB cumulatively; backend
-reads have at most four windows in flight. Native Sleep and HRV remain usable on optional app-read failure. Existing
+reads have at most four windows in flight. Only dates adjoining missing nights are read, and browser HRV/sample
+listeners update independently without resubscribing to the other source. Native Sleep and HRV remain usable on optional app-read failure. Existing
 history needs no migration or reimport. Internal readiness evidence version 4 invalidates only readiness history for
 the normal ensure/build lifecycle; formula 4 and weights are unchanged. Frozen legacy history omits the new
 Health-derived HR values. Creates/deletes and changed content digests for sampled Garmin Daily HR invalidate only

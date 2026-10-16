@@ -39,7 +39,9 @@ account matching, current parent/chunk revisions, at least 90% temporal coverage
 required. Native Sleep HR wins independently for each field. The calculation does not fill gaps, use a reading after
 sleep ends, substitute daily/resting/7-day HR, merge accounts or rewrite Sleep. Existing history needs no reimport.
 Read-time windows are at most 93 provider dates, one date per existing bounded Health query, with a cumulative
-512-chunk, 550,000-point and 16-MiB result budget. Backend reads have at most four windows in flight. Failed or
+512-chunk, 550,000-point and 16-MiB result budget. Only dates adjoining eligible missing nights are queried; empty
+dates between isolated nights are skipped. App HRV and HR sample listeners run independently, so updates do not restart
+the other source's read. Backend reads have at most four windows in flight. Failed or
 incomplete optional app reads retain native Sleep evidence. See [Readiness today](training-workspace.md#readiness-today)
 for current/history refresh and the deliberate MCP exposure boundary. MCP requires Health permission
 in addition to the existing Sleep grant for this supplement. See the shared

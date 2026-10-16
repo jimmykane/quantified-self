@@ -179,6 +179,15 @@ describe('QS-calculated Garmin sleep heart rate', () => {
     expect(nightlyHeartRateQueries(uid, [sleep(), future, { ...sleep(), sleepDate: 'invalid' }], now))
       .toEqual(nightlyHeartRateQueries(uid, [sleep()], now));
   });
+  it('does not read the dates between isolated missing nights', () => {
+    const previous = { ...sleep(), startTimeMs: start - 30 * 86400000, endTimeMs: end - 30 * 86400000 };
+    const queries = nightlyHeartRateQueries(uid, [sleep(), previous]);
+    expect(queries).toHaveLength(8);
+    expect(queries.map(query => query.startDate)).toEqual([
+      '2026-09-13', '2026-09-14', '2026-09-15', '2026-09-16',
+      '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16',
+    ]);
+  });
   it('uses the injected existing Health reader and propagates optional read failures', async () => {
     const { range } = await fixture();
     const read = vi.fn().mockResolvedValue(range);

@@ -49,14 +49,16 @@ export function nightlyHeartRateQueries(uid: string, sessions: readonly SleepSes
   const end = Math.floor(Math.max(...missing.map(s => s.endTimeMs)) / DAY_MS) * DAY_MS + DAY_MS;
   if (start < 0 || !Number.isFinite(new Date(end).getTime())
     || (end - start) / DAY_MS + 1 > NIGHTLY_HEART_RATE_LIMITS.days) return [];
-  const result: HealthRangeQuery[] = [];
-  for (let from = start; from <= end; from += NIGHTLY_HEART_RATE_LIMITS.windowDays * DAY_MS) {
-    result.push({ startDate: date(from), endDate: date(from),
+  const days = new Set<number>();
+  for (const session of missing) {
+    const first = Math.floor(session.startTimeMs / DAY_MS) * DAY_MS - DAY_MS;
+    const last = Math.floor(session.endTimeMs / DAY_MS) * DAY_MS + DAY_MS;
+    for (let day = first; day <= last; day += NIGHTLY_HEART_RATE_LIMITS.windowDays * DAY_MS) days.add(day);
+  }
+  return [...days].sort((a, b) => a - b).map(day => ({ startDate: date(day), endDate: date(day),
       // Metric-first avoids spending this bounded sample page on Garmin's other feeds.
       providers: [], metricIds: ['heart_rate'], includeSamples: true,
-      sourceRecordLimit: 32, chunkLimit: 8, samplePointLimit: 11_520 });
-  }
-  return result;
+      sourceRecordLimit: 32, chunkLimit: 8, samplePointLimit: 11_520 }));
 }
 
 function eligibleChunk(uid: string, chunk: HealthSampleChunk): boolean {
