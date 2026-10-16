@@ -126,12 +126,14 @@ export async function prepareTrainingLoadMetadata(
       else transaction.set(metaRef, pending);
       cacheWrite.write();
     };
-    if (!parent.exists || previous?.sourceFirstImport || previous?.legs || previous?.legacyLegs) {
+    if (!parent.exists || previous?.legs || previous?.legacyLegs) {
       const pending = { sourceWritePending: true, sourceWriteId, ...(!parent.exists ? { sourceFirstImport: true } : {}),
         revision: (previous?.revision ?? 0) + 1 };
       await prepare(pending);
       return previous?.sourceFirstImport === true || !parent.exists;
     }
+    // A partial first import can already have owner controls. Freeze its current
+    // identities before a retry overwrites/reuses their IDs, just like legacy data.
     const children = await transaction.get(db.collection(`users/${uid}/activities`)
       .where('eventID', '==', eventId).limit(101));
     if (children.size > 100) throw new Error('Training load supports at most 100 legs per workout.');
@@ -144,7 +146,7 @@ export async function prepareTrainingLoadMetadata(
     const frozen = { legacyLegs, sourceWritePending: true, sourceWriteId, revision: (previous?.revision ?? 0) + 1 };
     // Pending reads are unavailable; finalization advances freshness and owns invalidation.
     await prepare(frozen);
-    return false;
+    return previous?.sourceFirstImport === true;
   });
   return Object.assign(() => finalizeTrainingLoadMetadata(uid, event, sourceWriteId, firstImport, authorize), { sourceWriteId });
 }
@@ -185,27 +187,29 @@ async function finalizeTrainingLoadMetadata(
     // leg sets. They prove source consistency, not ownership of this finalization.
     if (previous?.sourceWriteId !== expectedSourceWriteId)
       throw new Error('Training load source write was superseded; retry the source import.');
-    const firstImportControlKeys = new Set<string>();
     // Old documents may already have been overwritten using reused IDs. Only
     // pre-write evidence can associate a legacy control with its original leg.
     if (previous && !previous.legs && Object.keys(previous.controls).length) {
       const ids = Object.keys(previous.controls);
       const legs: Record<string, TrainingLoadLeg> = {};
-      ids.forEach(id => {
-        const saved = previous?.legacyLegs?.[id] ?? (firstImport ? candidates.find(leg => leg.activityId === id) : undefined);
+      for (const id of ids) {
+        const saved = previous.legacyLegs ? previous.legacyLegs[id]
+          : firstImport ? candidates.find(leg => leg.activityId === id) : undefined;
         // Missing old source evidence is an unmatched control, never permission
         // to infer its identity from the newly written activity with that ID.
-        if (firstImport && !previous?.legacyLegs?.[id] && saved) firstImportControlKeys.add(id);
-        legs[id] = saved ?? { activityId: null, identity: { startMs: null, endMs: null, type: 'Unknown',
+        // No policy was finalized for an interrupted first import. Select it from
+        // the original leg, even if that leg now requires explicit reassociation.
+        legs[id] = saved ? { ...saved, policy: firstImport ? await policyAt(db, transaction, uid, saved) : saved.policy }
+          : { activityId: null, identity: { startMs: null, endMs: null, type: 'Unknown',
           duration: null, distance: null }, recordedTss: null, evaluations: null,
           policy: defaultAppliedTrainingLoadPolicy(null) };
-      });
+      }
       previous = { ...previous, legs };
     }
     const reconciled = reconcileTrainingLoadLegs(previous, candidates);
     // Matched legs already own an immutable dated policy. Only genuinely new legs query history.
     for (const [key, leg] of Object.entries(reconciled.legs ?? {})) {
-      if (leg.activityId && (!previous?.legs?.[key] || firstImportControlKeys.has(key)))
+      if (leg.activityId && !previous?.legs?.[key])
         leg.policy = await policyAt(db, transaction, uid, leg);
     }
     const { sourceDigest, sourceWriteTimes } = trainingLoadSourceSnapshot(parent, savedActivities);

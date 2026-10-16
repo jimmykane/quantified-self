@@ -569,6 +569,52 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(resolveEffectiveTrainingLoad({}, result).score).toBe(0);
   });
 
+  it.each([false, true])('preserves first-import controls through retries without trusting reused IDs (changed identity: %s)', async changedIdentity => {
+    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/past`).set({
+      revision: 4, method: 'MET', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)) });
+    const original = workout();
+    original.addActivity(workout('second', original.endDate.getTime()).getFirstActivity());
+    await prepareTrainingLoadMetadata(uid, original); await source(uid, original);
+    const ref = db.doc(metadataPath(uid));
+    await ref.update({ controls: { leg: { override: 0 }, second: { included: false } }, revision: 2 });
+    const retry = workout(changedIdentity ? 'leg' : 'renamed');
+    if (changedIdentity) retry.getFirstActivity().type = ActivityTypes.Cycling;
+    retry.addActivity(workout('second-renamed', original.endDate.getTime()).getFirstActivity());
+    // A second interruption must not replace the first attempt's frozen identity.
+    await prepareTrainingLoadMetadata(uid, retry); await source(uid, retry);
+    const finish = await prepareTrainingLoadMetadata(uid, retry); await source(uid, retry); await finish();
+    const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(saved.controls).toEqual({ leg: { override: 0 }, second: { included: false } });
+    expect(saved.legs!.leg).toMatchObject({ activityId: changedIdentity ? null : 'renamed',
+      identity: { type: ActivityTypes.Walking }, policy: { revision: 4, method: 'MET' } });
+    expect(saved.legs!.second).toMatchObject({ activityId: 'second-renamed', policy: { revision: 4, method: 'MET' } });
+    expect(saved.sourceFirstImport).toBeUndefined();
+    expect(saved.legacyLegs).toBeUndefined();
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject(changedIdentity
+      ? { score: null, status: 'unavailable', reasons: ['activity-match-needs-review'] }
+      : { score: 0, status: 'available' });
+    await finish();
+    expect((await ref.get()).data()).toEqual(saved);
+  });
+
+  it('keeps a first-import control unmatched when its original leg is missing from the frozen retry snapshot', async () => {
+    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    const original = workout(); await prepareTrainingLoadMetadata(uid, original); await source(uid, original);
+    const ref = db.doc(metadataPath(uid));
+    await ref.update({ controls: { leg: { override: 0 } }, revision: 2 });
+    await db.recursiveDelete(db.doc(`users/${uid}/activities/leg`));
+    const retry = workout(); retry.getFirstActivity().type = ActivityTypes.Cycling;
+    const finish = await prepareTrainingLoadMetadata(uid, retry);
+    expect((await ref.get()).data()?.legacyLegs).toEqual({});
+    await source(uid, retry); await finish();
+    const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ activityId: null, identity: { type: 'Unknown', startMs: null } });
+    expect(saved.controls).toEqual({ leg: { override: 0 } });
+    expect(Object.values(saved.legs!).filter(leg => leg.activityId === 'leg')).toHaveLength(1);
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ score: null, reasons: ['activity-match-needs-review'] });
+  });
+
   it('keeps a returning unmatched leg pending review through repeated reparses until explicit reassociation', async () => {
     const uid = setup(); const original = workout(); await importWorkout(uid, original);
     const ref = db.doc(metadataPath(uid));

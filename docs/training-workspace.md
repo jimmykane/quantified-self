@@ -5599,6 +5599,18 @@ recorded start time. An ambiguous controlled leg remains unavailable pending exp
 Matching uses the existing `legacyLegs` snapshot without extra identity reads, writes or scans; a leg correctly
 recognized as new uses the usual dated-policy lookup, which an incorrect control match would have skipped.
 
+Interrupted first imports use the same frozen-identity safeguard once their parent exists. Before the first retry
+overwrites source documents, preparation captures the existing legs even though `sourceFirstImport` is still set.
+Further retries reuse that snapshot. Renamed matching legs retain their controls; reused IDs cannot move controls
+to different legs, and missing frozen evidence requires owner review. First-import controls select their initial
+dated policy using the original leg's sport and recorded start, including when that leg becomes unmatched. This
+adds one bounded child query (at most 101 results, rejecting more than 100 legs) to that first interrupted-import
+retry. The identity lookup adds no reads to uninterrupted first imports, completed reparses or warm Training rebuilds.
+An unmatched first-import control now also selects its initial dated policy instead of keeping an assumed default.
+Existing transactional
+authorization, deletion fences, latest-control preservation and attempt reservations remain in force. Existing help
+and retry monitoring apply; there is no MCP schema, planning, mutation, provider-delivery or private-data exposure change.
+
 `prepareTrainingLoadMetadata` is the import/reparse entry point and returns the finalizer for that reserved attempt.
 Finalization is internal and always requires the preparation's `sourceWriteId`; there is no direct persistence path
 without preparation. Tests use the same prepare → source write → finalize sequence, and retries of the same finalizer
