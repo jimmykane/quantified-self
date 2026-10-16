@@ -5591,6 +5591,14 @@ evidence before old leg cleanup. Metadata preparation and persistence failures p
 serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
 Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
+Legacy reconciliation uses every frozen leg as identity-matching evidence, including legs without owner controls.
+Otherwise, removing or correcting one leg could make its override appear to match a similar surviving leg. Legs
+without controls supply matching context only: they do not become retained unmatched records or reuse a default
+policy as though it were a saved dated policy. Their parsed successors still select the policy applicable to their
+recorded start time. An ambiguous controlled leg remains unavailable pending explicit reassociation or reset.
+Matching uses the existing `legacyLegs` snapshot without extra identity reads, writes or scans; a leg correctly
+recognized as new uses the usual dated-policy lookup, which an incorrect control match would have skipped.
+
 `prepareTrainingLoadMetadata` is the import/reparse entry point and returns the finalizer for that reserved attempt.
 Finalization is internal and always requires the preparation's `sourceWriteId`; there is no direct persistence path
 without preparation. Tests use the same prepare → source write → finalize sequence, and retries of the same finalizer

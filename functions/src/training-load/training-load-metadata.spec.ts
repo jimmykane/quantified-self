@@ -12,7 +12,11 @@ const previous = (): TrainingLoadMetadata => ({ version: 1, revision: 5, exclude
 
 describe('training load reconciliation', () => {
   it('retains the latest control and immutable policy across changed IDs, scores and dated defaults', () => {
-    const next = reconcileTrainingLoadLegs(previous(), [{ ...leg('new'), recordedTss: 7.6 }]);
+    const prior = previous();
+    prior.legacyLegs = { old: prior.legs!.old,
+      other: { ...leg('other'), identity: { ...leg('other').identity, distance: 2000 } } };
+    const next = reconcileTrainingLoadLegs(prior, [{ ...leg('new'), recordedTss: 7.6 }]);
+    expect(Object.keys(next.legs!)).toEqual(['old']);
     expect(next.legs?.old).toMatchObject({ activityId: 'new', recordedTss: 7.6,
       policy: { method: 'HR', included: false, revision: 3 } });
     expect(next.controls).toEqual({ old: { override: 0 } });
@@ -35,6 +39,28 @@ describe('training load reconciliation', () => {
     expect(next.controls.old.override).toBe(0);
     const ambiguous = reconcileTrainingLoadLegs(previous(), [leg('a'), leg('b')]);
     expect(ambiguous.legs?.old.activityId).toBeNull();
+  });
+  it.each([4000, 2000])('keeps uncontrolled legacy identities in matching without transferring a controlled %s-distance leg', distance => {
+    const prior = previous(); prior.legs!.old.identity.distance = distance;
+    const other = { ...leg('other'), identity: { ...leg('other').identity, distance: 2000 } };
+    prior.legacyLegs = { old: prior.legs!.old, other };
+    const next = reconcileTrainingLoadLegs(prior, [{ ...other, activityId: 'remaining' }]);
+    expect(next.legs!.old.activityId).toBeNull();
+    expect(next.controls).toEqual(prior.controls);
+    expect(Object.keys(next.legs!).sort()).toEqual(['old', 'remaining']);
+    expect(next.legs!.remaining.policy).toEqual(other.policy);
+    expect(unresolvedTrainingLoadLegs({ ...prior, ...next })).toEqual(['old']);
+  });
+  it('does not retain uncontrolled legacy context or count it against the saved-leg bound', () => {
+    const prior = previous();
+    prior.legacyLegs = Object.fromEntries(Array.from({ length: 100 }, (_, index) => {
+      const id = `legacy-${index}`; return [id, leg(id, 10000 + index)];
+    }));
+    const candidates = Array.from({ length: 100 }, (_, index) => leg(`parsed-${index}`, 20000 + index));
+    const next = reconcileTrainingLoadLegs(prior, candidates);
+    expect(Object.keys(next.legs!)).toHaveLength(101);
+    expect(Object.values(next.legs!).filter(leg => !leg.activityId)).toEqual([{ ...prior.legs!.old, activityId: null }]);
+    expect(next.controls).toEqual(prior.controls);
   });
   it('persists explicit reassociation through later reparses without duplicate identities', () => {
     const prior = previous();

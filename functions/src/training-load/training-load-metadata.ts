@@ -54,7 +54,13 @@ export function reconcileTrainingLoadLegs(
   // may participate in automatic reconciliation.
   const previousEntries = Object.entries(priorLegs).filter(([, leg]) => leg.activityId);
   const retainedEntries = Object.entries(priorLegs).filter(([, leg]) => !leg.activityId);
-  const matches = resolveActivityIdentityAssignments(previousEntries.map(([, leg]) => matchable(leg)), candidates.map(matchable));
+  // Uncontrolled legacy legs still disambiguate identity: omitting them can move
+  // a removed leg's override to a similar surviving leg. They supply matching
+  // context only, not saved policies or unmatched records requiring owner review.
+  const legacyContext = Object.entries(previous?.legacyLegs ?? {})
+    .filter(([key, leg]) => leg.activityId && !Object.prototype.hasOwnProperty.call(priorLegs, key));
+  const matches = resolveActivityIdentityAssignments(
+    [...previousEntries, ...legacyContext].map(([, leg]) => matchable(leg)), candidates.map(matchable));
   const legs: Record<string, TrainingLoadLeg> = {};
   candidates.forEach((candidate, index) => {
     const oldIndex = matches.assignments.get(index);
@@ -64,7 +70,9 @@ export function reconcileTrainingLoadLegs(
     legs[key] = { ...candidate, policy: old?.[1].policy ?? candidate.policy };
   });
   matches.unmatchedExistingIndexes.forEach(index => {
-    const [key, leg] = previousEntries[index];
+    const entry = previousEntries[index];
+    if (!entry) return; // Uncontrolled legacy context has no saved policy/control to retain.
+    const [key, leg] = entry;
     // Keep the entire unmatched policy/control record for an explicit owner decision.
     legs[key] = { ...leg, activityId: null };
   });

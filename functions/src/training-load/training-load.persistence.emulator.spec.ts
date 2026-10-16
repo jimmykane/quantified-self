@@ -534,6 +534,28 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(Object.values(result.legs!).filter(leg => leg.activityId === 'leg')).toHaveLength(1);
     expect(resolveEffectiveTrainingLoad({}, result)).toMatchObject({ status: 'unavailable', reasons: ['activity-match-needs-review'] });
   });
+  it.each([4000, 2000])('uses uncontrolled legacy legs to prevent an override moving to a surviving similar leg (controlled distance %s)', async controlledDistance => {
+    const uid = setup();
+    const original = workout('controlled');
+    original.getFirstActivity().addStat(new DataDistance(controlledDistance));
+    const other = workout('other').getFirstActivity();
+    other.addStat(new DataDistance(2000)); original.addActivity(other);
+    await source(uid, original);
+    const ref = db.doc(metadataPath(uid));
+    await ref.set({ version: 1, revision: 1, excluded: false, controls: { controlled: { override: 0 } } });
+    await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/past`).set({
+      revision: 7, method: 'HR', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)) });
+    const changed = workout('remaining'); changed.getFirstActivity().addStat(new DataDistance(2000));
+    const finish = await prepareTrainingLoadMetadata(uid, changed);
+    await source(uid, changed); await finish();
+    const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.controlled.activityId).toBeNull();
+    expect(saved.controls).toEqual({ controlled: { override: 0 } });
+    expect(Object.values(saved.legs!).filter(leg => !leg.activityId)).toHaveLength(1);
+    expect(Object.values(saved.legs!).find(leg => leg.activityId === 'remaining')?.policy)
+      .toMatchObject({ revision: 7, method: 'HR' });
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ score: null, reasons: ['activity-match-needs-review'] });
+  });
   it('retains first-import dating across a failed source write and a concurrent zero override', async () => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/past`).set({
