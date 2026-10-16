@@ -5,6 +5,7 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import { buildDashboardDailyBriefing, dashboardBriefingWindow, dashboardBriefingSleepDuration, type DashboardBriefingContext } from './dashboard-daily-briefing.helper';
 
 const now = new Date(2026, 9, 16, 12).getTime();
+const utcDayMs = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
 const workout = (id: string, extra: Partial<ScheduledWorkoutV1> = {}): ScheduledWorkoutV1 => ({ schemaVersion: 1, id,
   planId: null, localDate: '2026-10-16', lifecycle: 'planned', title: id, revision: 2, createdAtMs: 1, updatedAtMs: 2,
   structure: { version: 1, sport: ActivityTypes.Running, nodes: [] }, ...extra });
@@ -79,7 +80,7 @@ describe('Dashboard daily briefing', () => {
   it('selects existing assessments and conditional load/recovery/sleep copy without an expansion', () => {
     const value = input(); value.signals = [{ id: 'readiness', label: 'Readiness', sourceLabel: 'Derived', state: 'attention',
       statusText: 'Mixed', summaryText: 'Readiness is Mixed', detailText: '' }];
-    value.loadComparison = 'higher'; value.recoveryText = '2h'; value.sleepText = 'last night’s Suunto sleep was 7h';
+    value.loadComparison = { direction: 'higher', utcDayMs }; value.recoveryText = '2h'; value.sleepText = 'last night’s Suunto sleep was 7h';
     const result = buildDashboardDailyBriefing(value);
     expect(result.tone).toBe('caution'); expect(result.headline).toContain('Readiness is Mixed');
     expect(result.headline).toContain('above your four-week weekly average');
@@ -95,6 +96,46 @@ describe('Dashboard daily briefing', () => {
     value.signals = [{ id: 'readiness', label: 'Readiness', sourceLabel: '', state: 'unavailable',
       statusText: 'Unavailable', summaryText: 'Readiness is unavailable', detailText: '' }];
     expect(buildDashboardDailyBriefing(value)).toMatchObject({ tone: 'error', headline: expect.stringContaining('Readiness is unavailable') });
+  });
+  it.each(['loading', 'unavailable', 'insufficient'] as const)('does not let recovery context hide %s readiness on a quiet day', state => {
+    const value = input(); value.recoveryText = '2h';
+    value.signals = [{ id: 'readiness', label: 'Readiness', sourceLabel: '', state,
+      statusText: state, summaryText: `Readiness is ${state}`, detailText: '' }];
+    const result = buildDashboardDailyBriefing(value);
+    expect(result.headline).toContain(`Readiness is ${state}`);
+    expect(result.headline).toContain('imported recovery remaining is 2h');
+    value.loadComparison = { direction: 'higher', utcDayMs };
+    if (state === 'unavailable') expect(buildDashboardDailyBriefing(value).tone).toBe('error');
+  });
+  it('isolates today and this week from an invalid completion outside this week', () => {
+    const value = input(); value.schedule.data!.workouts = [workout('today'), workout('future', { localDate: '2026-10-19' })];
+    value.completions.data = [link('today'), link('future', { workoutRevisionAtLink: 99 })];
+    const text = buildDashboardDailyBriefing(value).headline;
+    expect(text).toContain('on today’s plan with linked activity evidence');
+    expect(text).toContain('1 of 1 workout scheduled this week has linked activities');
+    expect(text).not.toContain('next on');
+  });
+  it('does not let an invalid earlier completion hide a known future session', () => {
+    const value = input(); value.schedule.data!.workouts = [workout('earlier', { localDate: '2026-10-15' }),
+      workout('Swim', { localDate: '2026-10-17' })];
+    value.completions.data = [link('earlier', { workoutRevisionAtLink: 99 })];
+    const text = buildDashboardDailyBriefing(value).headline;
+    expect(text).toContain('Next on your plan is “Swim”');
+    expect(text).not.toContain('0 of');
+  });
+  it('does not let an invalid skipped future link hide the next non-skipped session', () => {
+    const value = input(); value.schedule.data!.workouts = [workout('skipped', { localDate: '2026-10-17', lifecycle: 'skipped' }),
+      workout('Swim', { localDate: '2026-10-18' })]; value.completions.data = [link('skipped', { workoutRevisionAtLink: 99 })];
+    expect(buildDashboardDailyBriefing(value).headline).toContain('Next on your plan is “Swim”');
+  });
+  it('expires the load clause when the UTC snapshot day changes, without a new source emission', () => {
+    const value = input(); value.nowMs = utcDayMs + 86400000 - 1;
+    value.loadComparison = { direction: 'higher', utcDayMs };
+    expect(buildDashboardDailyBriefing(value).headline).toContain('above your four-week weekly average');
+    value.nowMs++;
+    expect(buildDashboardDailyBriefing(value).headline).not.toContain('above your four-week weekly average');
+    value.loadComparison.utcDayMs = utcDayMs + 86400000;
+    expect(buildDashboardDailyBriefing(value).headline).toContain('above your four-week weekly average');
   });
   it('uses local midnight, configured week start and calendar-day lookahead', () => {
     const sunday = new Date(2026, 9, 25, 23, 59);

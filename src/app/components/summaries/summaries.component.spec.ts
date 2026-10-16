@@ -1598,7 +1598,8 @@ describe('SummariesComponent', () => {
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     mockUserService.user.set(component.user); component.isOwnerDashboard = true;
     component.dashboardGlanceSignals = [];
-    component.dashboardBriefingLoadComparison = 'higher';
+    const now = new Date();
+    component.dashboardBriefingLoadComparison = { direction: 'higher', utcDayMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) };
     component.dashboardBriefingSleepText = 'last night’s Suunto sleep was 7h';
     component.dashboardTodayReadiness = { ...component.dashboardTodayReadiness, recoveryText: '2h', recoveryFinishText: 'Today' };
     fixture.detectChanges();

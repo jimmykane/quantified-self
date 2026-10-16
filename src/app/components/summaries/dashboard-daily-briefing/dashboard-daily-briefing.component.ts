@@ -7,7 +7,7 @@ import type { AppUserInterface } from '../../../models/app-user.interface';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { TrainingPlansService, selectCalendarVisibleScheduledWorkouts } from '../../../services/training-plans.service';
-import { buildDashboardDailyBriefing, dashboardBriefingWindow } from '../../../helpers/dashboard-daily-briefing.helper';
+import { buildDashboardDailyBriefing, dashboardBriefingWindow, type DashboardBriefingLoadComparison } from '../../../helpers/dashboard-daily-briefing.helper';
 import type { CalendarPeriodSchedule, CalendarPeriodSource } from '../../../helpers/calendar-period-summary.helper';
 import type { HealthChangeSignal } from '../../../helpers/health-change-summary.helper';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
@@ -28,7 +28,7 @@ export class DashboardDailyBriefingComponent {
   readonly notesStatus = input<'loading' | 'ready' | 'error'>('loading');
   readonly recoveryText = input('');
   readonly sleepText = input('');
-  readonly loadComparison = input<'higher' | 'lower' | null>(null);
+  readonly loadComparison = input<DashboardBriefingLoadComparison | null>(null);
   private readonly users = inject(AppUserService);
   private readonly calendar = inject(ActivityCalendarService);
   private readonly plans = inject(TrainingPlansService);
@@ -92,14 +92,18 @@ export class DashboardDailyBriefingComponent {
     // Keep the same registration while the shared note context emits edits/loading changes.
     const noteRegistration = computed(() => {
       const context = this.notesContext();
-      return context?.ownerUid === this.owner() && !!this.owner() ? `${this.owner()}:${this.window().today}` : '';
+      const owner = this.owner();
+      return context && owner && context.ownerUid === owner
+        ? { owner, today: this.window().today, reportRange: context.reportRange } : null;
+    }, {
+      equal: (previous, next) => previous?.owner === next?.owner && previous?.today === next?.today
+        && previous?.reportRange === next?.reportRange,
     });
     effect(onCleanup => {
-      if (!noteRegistration()) return;
-      const context = untracked(this.notesContext)!;
-      const today = untracked(this.window).today;
-      context.reportRange(noteRangeKey, { startDate: today, endDate: today });
-      onCleanup(() => context.reportRange(noteRangeKey, null));
+      const registration = noteRegistration();
+      if (!registration) return;
+      registration.reportRange(noteRangeKey, { startDate: registration.today, endDate: registration.today });
+      onCleanup(() => registration.reportRange(noteRangeKey, null));
     });
     effect(onCleanup => {
       if (!this.owner()) return;

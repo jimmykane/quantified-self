@@ -78,6 +78,23 @@ describe('Dashboard daily briefing', () => {
     expect(calendar.watchSummaryEvents).toHaveBeenCalledTimes(2);
     fixture.destroy(); expect(events.observed).toBe(false); expect(plans.observed).toBe(false); expect(links.observed).toBe(false);
   });
+  it('moves the date-range registration when the same owner gets a replacement notes workspace', () => {
+    const fixture = create(); const previous = vi.fn(); const replacement = vi.fn();
+    const context: TimelineNoteChartContext = { ownerUid: 'owner', notes: [], select: vi.fn(), reportRange: previous };
+    fixture.componentRef.setInput('notesContext', context); fixture.detectChanges();
+    fixture.componentRef.setInput('notesContext', { ...context, reportRange: replacement }); fixture.detectChanges();
+    expect(previous.mock.calls.at(-1)?.[1]).toBeNull();
+    expect(replacement).toHaveBeenCalledWith(expect.any(Object), { startDate: '2026-10-16', endDate: '2026-10-16' });
+    fixture.destroy(); expect(replacement.mock.calls.at(-1)?.[1]).toBeNull();
+  });
+  it('drops a previous UTC day’s load clause on the silent clock without new source data', () => {
+    const utcDayMs = Date.UTC(2026, 9, 16);
+    vi.setSystemTime(utcDayMs + 86400000 - 30_000);
+    const fixture = create(); fixture.componentRef.setInput('loadComparison', { direction: 'higher', utcDayMs }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('above your four-week weekly average');
+    vi.advanceTimersByTime(60_000); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('above your four-week weekly average');
+  });
   it('withholds completion progress on restore/error rather than claiming a rest day', () => {
     const fixture = create(); training.watchWorkoutCompletionsForWorkouts.mockReturnValue(of([]));
     plans.next(schedule([workout])); fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('0 of 1');

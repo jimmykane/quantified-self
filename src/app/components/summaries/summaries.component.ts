@@ -8,7 +8,7 @@ import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.he
 import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
 import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
 import { dashboardAcwrComparison } from '../../helpers/dashboard-derived-metrics.helper';
-import { dashboardBriefingSleepDuration } from '../../helpers/dashboard-daily-briefing.helper';
+import { dashboardBriefingSleepDuration, type DashboardBriefingLoadComparison } from '../../helpers/dashboard-daily-briefing.helper';
 import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
@@ -498,7 +498,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public dashboardGlanceSignals = buildDashboardGlanceSignals(
     createEmptyDashboardTodayReadinessViewModel(true), createEmptyDashboardTodayTrainingStateViewModel(), 'loading');
   public dashboardBriefingSleepText = '';
-  public dashboardBriefingLoadComparison: 'higher' | 'lower' | null = null;
+  public dashboardBriefingLoadComparison: DashboardBriefingLoadComparison | null = null;
   public readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];
 
   private readonly onDocumentVisibilityChange = (): void => {
@@ -2232,7 +2232,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const now = new Date();
     const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     if (loadHydrated && this.derivedAcwrStatus === 'ready' && this.derivedAcwrContext?.latestDayMs === todayUtc) {
-      this.dashboardBriefingLoadComparison = dashboardAcwrComparison(this.derivedAcwrContext.ratio);
+      const direction = dashboardAcwrComparison(this.derivedAcwrContext.ratio);
+      this.dashboardBriefingLoadComparison = direction ? { direction, utcDayMs: this.derivedAcwrContext.latestDayMs } : null;
     }
   }
 

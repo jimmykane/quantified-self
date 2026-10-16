@@ -17,6 +17,11 @@ export interface DashboardBriefingWindow {
   scheduleEnd: string;
 }
 
+export interface DashboardBriefingLoadComparison {
+  direction: 'higher' | 'lower';
+  utcDayMs: number;
+}
+
 /** A timestamp alone cannot select between two device/statistic sources. */
 export function dashboardBriefingSleepDuration(
   points: readonly { endTimeMs: number; isNap?: boolean; isPlaceholder?: boolean; totalSeconds: number; providerLabel: string }[],
@@ -54,7 +59,7 @@ export interface DashboardBriefingContext {
   notesReady: boolean;
   recoveryText?: string;
   sleepText?: string;
-  loadComparison?: 'higher' | 'lower' | null;
+  loadComparison?: DashboardBriefingLoadComparison | null;
   unitSettings?: UserUnitSettingsInterface | null;
   locale?: string;
 }
@@ -76,9 +81,10 @@ export function buildDashboardDailyBriefing(input: DashboardBriefingContext): {
   const workouts = schedule.status === 'ready' ? (schedule.data?.workouts || []).filter(workout => workout.lifecycle !== 'deleted'
     && (workout.planId === null || workout.planId === schedule.data?.state.activePlanId)
     && workout.localDate >= window.weekStart && workout.localDate <= window.scheduleEnd) : [];
-  const coverage = resolveCalendarCompletionCoverage(workouts, completions);
-  const linked = new Set(coverage.linkedWorkoutIds);
-  const todayPlans = workouts.filter(workout => workout.localDate === window.today && (workout.lifecycle !== 'skipped' || linked.has(workout.id)));
+  const todayWorkouts = workouts.filter(workout => workout.localDate === window.today);
+  const todayCoverage = resolveCalendarCompletionCoverage(todayWorkouts, completions);
+  const todayLinked = new Set(todayCoverage.linkedWorkoutIds);
+  const todayPlans = todayWorkouts.filter(workout => workout.lifecycle !== 'skipped' || todayLinked.has(workout.id));
   const recorded = new Map<string, EventInterface>();
   if (events.status === 'ready') for (const event of events.data) {
     const time = event.startDate?.getTime();
@@ -99,7 +105,7 @@ export function buildDashboardDailyBriefing(input: DashboardBriefingContext): {
   if (todayPlans.length) {
     const label = todayPlans.length === 1 ? title(todayPlans[0].title) : `${number(todayPlans.length)} workouts`;
     // Even an exact link may have been recorded early/late or against an older prescription.
-    const allLinked = coverage.complete && todayPlans.every(workout => linked.has(workout.id));
+    const allLinked = todayCoverage.complete && todayPlans.every(workout => todayLinked.has(workout.id));
     todayParts.push(`${label} on today’s plan${schedule.complete ? '' : ' (plan list may be incomplete)'}${allLinked ? ' with linked activity evidence' : ''}`);
   }
   if (todayParts.length) clauses.push(todayParts.join(', with '));
@@ -112,18 +118,28 @@ export function buildDashboardDailyBriefing(input: DashboardBriefingContext): {
   const assessment = buildDashboardGlanceSummary(input.signals);
   const issues = input.signals.filter(signal => signal.state === 'attention' || signal.state === 'outside-range');
   if (issues.length) clauses.push(issues.slice(0, 2).map(signal => signal.summaryText || `${signal.label}: ${signal.statusText}`).join(', and '));
-  else if (input.signals.length && ['unavailable', 'insufficient', 'loading'].includes(assessment.state || '') && clauses.length) {
+  else if (input.signals.length && ['unavailable', 'insufficient', 'loading'].includes(assessment.state || '')) {
     clauses.push(assessment.headline.replace(/\.$/, ''));
   }
 
   // Reuse the Dashboard ACWR bands, but describe the comparison, not a risk or instruction.
-  const load = input.loadComparison === 'higher' ? 'seven-day load is above your four-week weekly average'
-    : input.loadComparison === 'lower' ? 'seven-day load is below your four-week weekly average' : '';
-  const weekPlans = workouts.filter(workout => workout.localDate <= window.weekEnd && (workout.lifecycle !== 'skipped' || linked.has(workout.id)));
-  const progress = schedule.complete && coverage.complete && weekPlans.length
-    ? `${number(weekPlans.filter(workout => linked.has(workout.id)).length)} of ${number(weekPlans.length)} ${weekPlans.length === 1 ? 'workout scheduled this week has' : 'workouts scheduled this week have'} linked activities` : '';
-  const next = schedule.complete && coverage.complete ? workouts.filter(workout => workout.localDate > window.today
-    && workout.lifecycle !== 'skipped' && !linked.has(workout.id)).sort((a, b) => a.localDate.localeCompare(b.localDate) || a.id.localeCompare(b.id))[0] : null;
+  const now = new Date(input.nowMs);
+  const utcDayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const comparison = input.loadComparison?.utcDayMs === utcDayMs ? input.loadComparison.direction : null;
+  const load = comparison === 'higher' ? 'seven-day load is above your four-week weekly average'
+    : comparison === 'lower' ? 'seven-day load is below your four-week weekly average' : '';
+  // One malformed link must not suppress valid evidence in an unrelated calendar scope.
+  const weekWorkouts = workouts.filter(workout => workout.localDate <= window.weekEnd);
+  const weekCoverage = resolveCalendarCompletionCoverage(weekWorkouts, completions);
+  const weekLinked = new Set(weekCoverage.linkedWorkoutIds);
+  const weekPlans = weekWorkouts.filter(workout => workout.lifecycle !== 'skipped' || weekLinked.has(workout.id));
+  const progress = schedule.complete && weekCoverage.complete && weekPlans.length
+    ? `${number(weekPlans.filter(workout => weekLinked.has(workout.id)).length)} of ${number(weekPlans.length)} ${weekPlans.length === 1 ? 'workout scheduled this week has' : 'workouts scheduled this week have'} linked activities` : '';
+  const upcoming = workouts.filter(workout => workout.localDate > window.today && workout.lifecycle !== 'skipped');
+  const upcomingCoverage = resolveCalendarCompletionCoverage(upcoming, completions);
+  const upcomingLinked = new Set(upcomingCoverage.linkedWorkoutIds);
+  const next = schedule.complete && upcomingCoverage.complete ? upcoming.filter(workout => !upcomingLinked.has(workout.id))
+    .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.id.localeCompare(b.id))[0] : null;
   const nextDate = next ? getDateTimeFormatter(input.locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
     .format(new Date(`${next.localDate}T12:00:00Z`)) : '';
   const nextClause = next && !todayPlans.length ? `next on your plan is ${title(next.title)} on ${nextDate}` : '';
@@ -134,7 +150,7 @@ export function buildDashboardDailyBriefing(input: DashboardBriefingContext): {
   }
   let headline = clauses.length ? clauses.join('; ') : assessment.headline.replace(/\.$/, '');
   headline = headline.charAt(0).toUpperCase() + headline.slice(1) + '.';
-  const tone = issues.length || load ? 'caution' : assessment.state === 'unavailable' ? 'error'
+  const tone = issues.length ? 'caution' : assessment.state === 'unavailable' ? 'error' : load ? 'caution'
     : assessment.state === 'available' || assessment.state === 'within-range' ? 'positive' : 'neutral';
   return { headline, tone };
 }
