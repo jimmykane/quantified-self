@@ -409,6 +409,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private libraryRefresh = Promise.resolve();
   private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
+  // Temporarily unmount At a glance, including its additional data listeners.
+  public showDailyBriefing = false;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendCanNavigateNewer = false;

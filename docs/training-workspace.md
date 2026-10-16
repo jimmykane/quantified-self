@@ -4573,6 +4573,10 @@ profile Weight as fallback context.
 
 #### Dashboard daily briefing
 
+**Currently hidden:** Dashboard does not mount At a glance or start its additional listeners. Today and saved charts
+remain unchanged. The implementation below is retained behind the local `showDailyBriefing = false` presentation gate;
+this is not a persisted user preference or a change to MCP contracts.
+
 The owner-only **At a glance** above Today uses the shared accent-rail summary shell with one sentence and no disclosure,
 extra score, metric rows or new controls. Today and saved chart configuration remain unchanged; hiding Today unmounts the
 briefing and its readers. It prioritizes local-today recordings and planned workouts, visible active Timeline notes and
