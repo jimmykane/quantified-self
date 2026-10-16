@@ -7,16 +7,17 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
-### Pending EnergySense library candidate
+### EnergySense support in Sports Lib 22.0.0
+
+<a id="pending-energysense-library-candidate"></a>
 
 Canonical Stamina and Potential Stamina keys remain compatible; presentation naming needs no data migration or duplicate
 stat. The new Estimated Sustainable Distance and Minimum Estimated Sustainable Distance keys require a supported
 original JSON/SML reparse to persist historical source observations. Chart hydration can read those observations on
 demand without storing streams. FIT-only originals cannot recreate fields they never recorded.
 
-Root/Functions remain on the same published 21.6.14 until a separately approved library release and aligned dependency
-update. Validate the local packed candidate first. After adoption, use only the existing authorized original-file
-reparse lifecycle. Regeneration seeds freshly parsed Stamina/endurance endings and minima before deriving missing
+Root and Functions now pin published Sports Lib 22.0.0 with FIT Parser 6.2.2. Use only the existing authorized
+original-file reparse lifecycle to update historical observations. Regeneration seeds freshly parsed Stamina/endurance endings and minima before deriving missing
 statistics; it never carries stale persisted observations over the new parse. Preserve source zero, per-leg identity,
 source-minimum precedence, sanitized writes and latest user edits/Training controls. Repeat reparse is idempotent and
 must not add renamed aliases or streams to Firestore. Derived Training formulas and snapshots need no schema bump for
@@ -88,7 +89,7 @@ not cover Sports Lib reprocessing. No monitoring configuration is changed or app
 
 ### Sports Lib 21.6.14 names, creator attribution and fallback diagnostics
 
-Root and Functions pin published 21.6.14 with matching npm integrity. All 1,349 package files match the verified
+The earlier adoption of published 21.6.14 used matching npm integrity. All 1,349 package files matched the verified
 candidate, and 209 focused version, parser, reparse and private-output checks pass against the published installation.
 Native Activity JSON restores saved child names independently
 of the parent event title and creator/device name. Stored names need no source reparse; discarded names require source
@@ -143,7 +144,7 @@ FIT Parser source.
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-The coordinated root and Functions dependency is published Sports Lib 21.6.14, with FIT Parser 6.2.2. It retains the file-calibrated
+The coordinated root and Functions dependency is published Sports Lib 22.0.0, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power
@@ -207,8 +208,7 @@ normal generation. Derived speed/pace and event volume use preserved leg totals 
 through original-file regeneration and the existing derived refresh; old stored statistics never supply the value.
 This in-memory change adds no database operations, provider requests or public MCP capability.
 
-The accompanying Sports Lib multi-day chronology correction remains unreleased and unadopted; root and Functions
-still pin 21.6.14. It requires a single session, monotonic session-owned endpoint records and complete consistent
+The multi-day chronology correction is included in the aligned 22.0.0 dependencies. It requires a single session, monotonic session-owned endpoint records and complete consistent
 timer events from one timer group whose active duration agrees with the recorded summary within FIT timestamp
 quantization. It preserves the full elapsed span and later records while retaining active timer duration and existing
 maximum-duration protection. Conflicting chronology keeps the existing corrupt-date handling. After coordinated
@@ -219,12 +219,12 @@ scanner activation or production reparse is authorized by preparing this correct
 Pool swims follow the same parsed-total rule; the former QS-only lap/length gate has been removed. FIT evidence
 selection and corroborated corrections remain in Sports Lib. No saved-route reparse is needed.
 
-The additional unreleased Suunto JSON/SML correction separates window active time from elapsed time and rejects
+The Suunto JSON/SML correction included in 22.0.0 separates window active time from elapsed time and rejects
 negative pauses. Independent timer/header evidence may recover contradictory duration; otherwise active/timer/pause
 and duration-dependent load/durability remain unavailable. Ambiguous leg windows cannot borrow whole-workout timing. Native JSON
 preserves missing values but not private source evidence. After coordinated package adoption, historical correction
 requires original-file reparse, the same parsed instances through candidate preparation, strict identity/control
-reconciliation and ordinary derived refresh. Root and Functions remain on 21.6.14 until separate release/adoption.
+reconciliation and ordinary derived refresh. Root and Functions use the same published 22.0.0 package.
 Source evidence remains private; this introduces no metric/schema/MCP change or production campaign.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
@@ -597,7 +597,7 @@ Notes:
 - this doc is user-writable by product decision
 - users can influence only their own eligibility by modifying it
 
-## Pending source-summary and round-trip corrections
+## Source-summary and round-trip corrections
 
 Both `reimport` and `regenerate` preserve finite nonnegative fresh parent distance/energy observations that differ from
 the available child totals. Capture occurs before edit carryover, only for one unmerged parsed source. Restoration
@@ -606,10 +606,10 @@ free to regenerate, and parent-only observations are never distributed to legs. 
 continue to rebuild summaries from their children. This changes no child TSS, Training policy or load metadata, and
 adds no stored fields or reads. Existing readers of recorded parent totals see the preserved source observations.
 
-The pending Sports Lib candidate also preserves valid native JSON lap IDs and independently sums complete multisport
-`Timer time`/`Elapsed time` values. Once adopted, existing child timing can be aggregated locally; recovering previously
+Sports Lib 22.0.0 also preserves valid native JSON lap IDs and independently sums complete multisport
+`Timer time`/`Elapsed time` values. Existing child timing can be aggregated locally; recovering previously
 lost source-only parent observations or already-renumbered lap IDs requires retained originals through the normal
-reparse lifecycle. The candidate is unreleased; root and Functions remain on the same published package. No production
+reparse lifecycle. Root and Functions now use that same published release. No production
 reparse or scanner enablement is authorized by these fixes.
 
 ## Parse + Write Rules
@@ -790,14 +790,14 @@ Local npm commands in `functions/package.json`:
 - `backfill-sports-lib-processing-code`
 - `backfill-event-processing-entity`
 
-## Pending Suunto multisport lap matching
+## Suunto multisport lap matching in Sports Lib 22.0.0
 
-The unreleased patch replaces ordinal native Suunto multisport lap-summary matching with timestamp/sport evidence,
+The 22.0.0 correction replaces ordinal native Suunto multisport lap-summary matching with timestamp/sport evidence,
 retains partial summaries at sport changes and stops recovering lap active duration from an unverified global span.
 Source-global laps remain intact and appear once on their ending leg. One leg's streams must not generate full-lap
 averages or reinterpret sport-specific metrics for a cross-leg lap. Public model shape and canonical tokens stay
 compatible. Historical incorrect lap statistics require retained-original parsing after coordinated root/Functions
 package adoption; native JSON alone cannot recover the correct summary association. Existing controls, applied
 policies, leg identities, recorded event totals and normal sanitization/version/deletion guards remain authoritative.
-This patch does not enable a campaign, change the target version or require saved-route reparsing. Publication,
-deployment and production reparse remain separate approvals.
+The runtime target follows the adopted package version. This integration does not enable a campaign or require
+saved-route reparsing. QS deployment and production reparse remain separate approvals.

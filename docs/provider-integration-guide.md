@@ -1810,7 +1810,7 @@ Stopping closes retry authority for provider-confirmed processing failures and r
 
 ### Suunto EnergySense parser support
 
-The pending Sports Lib candidate maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
+The adopted Sports Lib 22.0.0 maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
 to Estimated Sustainable Distance plus its source/sampled minimum. Its raw distance unit is assumed to be metres pending
 provider confirmation. Cur and Min remain source observations, EnduranceValid is not an eligibility rule, and absent FIT
 fields are not synthesized. Canonical metric labels and reparse compatibility are described in the

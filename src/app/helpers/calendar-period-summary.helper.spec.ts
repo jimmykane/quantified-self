@@ -46,6 +46,7 @@ describe('Calendar period summaries', () => {
     const summary = buildCalendarPeriodSummary(value);
     expect(summary.recordedCount).toBe(3);
     expect(summary.recordedMetrics[0].coverage).toContain('1 of 3');
+    expect(summary.recordedMetrics[2].label).toBe('Recorded TSS');
     expect(summary.recordedMetrics[2].text).toContain('30');
     expect(summary.recordedMetrics[2].coverage).toContain('2 of 3');
     expect(buildCalendarPeriodSummary({ ...value, unitSettings: normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }) }).recordedMetrics[1].text).toContain('mi');

@@ -2148,15 +2148,15 @@ catalog rescan or bundled-plugin sync is required for these parser corrections.
 
 Distance regeneration retains every finite positive canonical total from the fresh source parse. Monotonic or
 moving streams cannot prove complete coverage; stalled and truncated counters must not replace that total. Missing
-or zero totals still use existing generation. Sports Lib owns source interpretation, including pool evidence. The separately prepared single-session FIT chronology
-correction remains pending a coordinated Sports Lib release/adoption; it preserves corroborated elapsed chronology
+or zero totals still use existing generation. Sports Lib owns source interpretation, including pool evidence. The single-session FIT chronology
+correction is included in the aligned Sports Lib 22.0.0 dependencies; it preserves corroborated elapsed chronology
 without replacing recorded active duration. Existing persisted metric reads change only after authorized source-backed
 persistence and normal derived refresh. Source chart/sample reads remain transient, and their 250,000 materialized-sample
 limit still rejects oversized recordings rather than silently clipping them. These corrections add no metric token,
 unit, public field/reason, schema, scope, consent, mutation or Training planning/delivery capability. Source evidence,
 calibration, policies and controls remain private; no contract promotion, registered-app refresh or plugin sync is needed.
-The unreleased Suunto JSON/SML timing correction likewise uses existing canonical active/elapsed/pause fields.
-Unrecoverable contradictory active duration is absent, not zero. It needs coordinated package adoption and source-backed
+The Suunto JSON/SML timing correction in 22.0.0 likewise uses existing canonical active/elapsed/pause fields.
+Unrecoverable contradictory active duration is absent, not zero. It needs source-backed
 persistence before saved MCP metrics change; source timing evidence stays private. No Training planning or delivery
 read/write contract is affected.
 
@@ -2750,9 +2750,9 @@ load keep their existing meanings. There is no schema/digest, tool, scope, conse
 or provider-delivery change; no contract promotion or MCP deferral is needed. Verify strict outputs and negative
 identity-leakage coverage when adopting the same published package in root and Functions.
 
-### Pending native Suunto multisport lap correction
+### Native Suunto multisport lap correction in Sports Lib 22.0.0
 
-The unreleased Sports Lib correction matches timestamped lap summaries to their sport and source boundary, including
+The adopted Sports Lib 22.0.0 correction matches timestamped lap summaries to their sport and source boundary, including
 partial laps emitted at sport changes. It does not promote lap metrics to activity totals, add canonical tokens, or
 change the fixed activity-lap schema, grants, pagination or field masks. Genuine cross-sport laps retain their full
 interval; per-leg stream coverage cannot supply whole-lap averages. Existing saved lap reads change only after a
@@ -2792,9 +2792,7 @@ chats. Detailed samples remain excluded from its tool allowlist. Activity and cr
 the two EnergySense dimensions and discovers runtime capabilities. No scopes, mutations, consent defaults, Firestore
 rules, Training planning/derived formulas, indexes, provider queue lifecycle or monitoring resources change.
 
-Root and Functions remain aligned on published 21.6.14 while the unreleased library candidate is validated from a local
-pack. The app gates its new distance chart choice on class availability; names and canonical-string handling remain
-compatible with 21.6.14. Publish the reviewed library and adopt the same new version in both package manifests/locks
-before enabling this feature in a release. Do not ship the local tarball path. Separately approved backend/frontend
+Root and Functions now pin published 22.0.0 in both manifests and lockfiles. The app still gates its new distance
+chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
 release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
 promotion, real-profile plugin install or historical reparse is performed by this implementation.

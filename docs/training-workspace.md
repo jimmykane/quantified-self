@@ -1160,7 +1160,10 @@ The calendar card has no bottom padding.
 The caption button provides the full totals and coverage
 explanation on tap, hover or keyboard focus; its accessible name retains the visible skipped count. The monthly
 calculations, bounded readers and completion markers remain intact. Workout-read failures retain a retry action.
-Calendar **Week** keeps recorded parent-event volume above its day grid. A flat,
+Calendar **Week** keeps recorded parent-event volume above its day grid. The period summary labels its saved
+TSS statistic **Recorded TSS**; it does not claim to apply private load controls. Selected-day Training impact and
+Training metrics use modeled load. This distinction preserves recorded-statistic queries and avoids adding a
+per-event metadata join to the period summary. Excluded workouts retain their recorded statistics and volume. A flat,
 initially collapsed **Planned workouts** panel appears only for a period with eligible workouts; its heading shows
 scheduled and remaining counts. Opening it exposes planned and remaining non-skipped totals plus nonzero or unknown
 status counts. **With an activity** describes exact stored completion evidence without implying adherence. Zero planning
@@ -5605,8 +5608,7 @@ independently corroborated correction. Missing or zero parsed distance still fol
 path. This does not copy old stored values, validate a source total independently, or guess reset boundaries.
 Recorded streams remain intact; derived speed/pace and event volume use each preserved leg total once.
 
-The separately prepared, unreleased Sports Lib chronology correction is not yet adopted by the root or Functions
-21.6.14 dependencies. It can retain the complete explicit time span of a single-session FIT recording only when
+The aligned root and Functions 22.0.0 dependencies include the Sports Lib chronology correction. It can retain the complete explicit time span of a single-session FIT recording only when
 monotonic session-owned records anchor its endpoints and complete, non-conflicting timer events from one timer group
 corroborate the recorded active duration within FIT timestamp quantization. Elapsed time and pause duration then
 describe the full chronology; recorded active duration stays unchanged. Unsupported chronology retains the existing
@@ -5615,7 +5617,7 @@ both consumers. Historical lost records require original-file reparse and normal
 or saved Activity JSON alone cannot restore them. Release, deployment and production reparse remain on hold pending
 separate approval; neither correction enables a scanner or changes a public schema, write path or queue lifecycle.
 
-Two additional FIT bounds safeguards are prepared locally and remain pending library release and adoption. A lap's
+Sports Lib 22.0.0 also includes two FIT bounds safeguards. A lap's
 positive source start/end and elapsed duration must agree at FIT whole-second timestamp precision, have a unique raw
 start and a unique containing explicit source session, and remain within the resolved activity. When supplied, timer
 time must be finite and nonnegative. A timer greater than elapsed time must also quantize to that same whole-second
@@ -5635,7 +5637,7 @@ Sports Lib already owns FIT pool counter/length/session precedence. QS does not 
 regeneration. Historical distance corrections require original-file **Regenerate statistics** and normal derived
 refresh. This in-memory change adds no database operations, public fields, scopes or planning/delivery capabilities.
 
-The separately prepared Suunto JSON/SML timing correction also remains unreleased and unadopted. Windows without
+The Suunto JSON/SML timing correction is included in Sports Lib 22.0.0. Windows without
 `PauseDuration` contain active time; elapsed time comes from their owning interval. Explicit elapsed/pause pairs keep
 their semantics. Contradictory active duration requires independent non-conflicting pause-state evidence, or a single-leg
 header whose start, float32 active precision and recorded sample envelope agree. Window-count/sport conflicts cannot
@@ -5762,8 +5764,39 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-Root and Functions pin the published Sports Lib 21.6.14 with FIT Parser 6.2.2. Both lockfiles match npm's published
-integrity, and all 1,349 installed package files match the verified release candidate. The earlier published Sports Lib 21.6.9 release incorporated
+### Sports Lib 22.0.0 adoption and develop integration
+
+The frontend and Functions handle optional active duration, timer, moving time and pause getters without substituting
+elapsed time or zero for missing/rejected active timing. Existing Stamina keys remain stable; source-only parent
+observations, strict leg identity and private Training controls retain their existing regeneration contracts.
+The rebase preserves Calendar planned-workout summaries separately from recorded modeled load, current owner tags,
+nominal yard-pool display and lap-column ordering. Nominal display values never enter timing, pace or load calculations;
+cross-leg laps remain generic and are omitted from sport-specific averages.
+
+Package adoption changes the runtime reparse target but does not enable either scanner. Check scanner settings before
+any separately approved deployment. Historical source corrections require an explicitly authorized original-file
+reparse; no automatic campaign, production write or source download is part of this integration. The detailed release
+history below records earlier checks and is not a claim that those old packages remain installed.
+
+MCP review preserves develop's current planning reads and proposals, the additive endurance v2 tools, and the frozen
+registered schemas/history. The pending digest describes the combined candidate; no contract promotion or client
+refresh is performed. Calendar's Recorded TSS label changes presentation only: plan/workout read payloads, completion
+evidence, consent, mutations and provider delivery are unchanged.
+
+Verification against develop `8c48e325a`: 9,814 frontend tests pass; the 10,010-test Functions run had only the
+merged pending-digest mismatch, then all 21 contract tests passed after correcting that digest. All 209 Rules tests,
+49 lifecycle emulator tests and 73 test-runner/policy guards pass. Functions and production frontend builds,
+service-worker/public startup output, endpoint loading, secret bindings and isolated plugin validation pass. A further
+186 Calendar/help tests cover the recorded-versus-modeled label. Offline corpus replay found no new regression in
+regeneration, native round trips or routes; source files and detailed evidence remain outside the repositories.
+
+
+Root and Functions pin published Sports Lib 22.0.0 with FIT Parser 6.2.2 and matching package integrity.
+The separate activity-catalog expansion remains unadopted; both consumers retain 131 canonical sports.
+
+#### Earlier published dependency verification
+
+The earlier published Sports Lib 21.6.9 release incorporated
 the earlier file-calibrated load corrections plus FIT session-boundary/zone ownership, source-backed timer recovery,
 Suunto pause/resume events and complete recorded-power coverage. A read-only replay of 1,100 unique original files
 (1,176 legs) had no parse failures. All 3,528 Automatic/HR/MET evaluations retained their scores and methods relative
@@ -6332,8 +6365,8 @@ in Sports Lib. MCP retains frozen schemas and existing nullable timing fields, w
 values, new scopes or mutations exposed. This is a recorded-data/durability correction, not a Training planning change.
 Existing write sanitization preserves the marker and null values. Historical classification requires an original-file
 reparse after coordinated package adoption; refreshing Training or restoring old JSON alone cannot supply that evidence.
-No queue lifecycle, policy, Rules, index or automatic reparse campaign is added. The implementation is prepared against a
-local candidate while root/Functions dependencies remain aligned on the published version until release approval.
+No queue lifecycle, policy, Rules, index or automatic reparse campaign is added. Root and Functions adopt these corrections together through published Sports Lib 22.0.0.
+QS deployment and any historical reparse remain separately approved operations.
 
 ### Eligibility and missing evidence
 
