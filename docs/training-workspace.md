@@ -3154,8 +3154,9 @@ app/watch layout remains a release check; local tests cannot prove text visibili
 
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 
-Workout sync details expose **Repeat on another date** when completion is known, for every provider. It reuses the
-existing date-reviewed `copy-workout` workflow (also available as **Duplicate to…**), not a new library requirement.
+Workout sync details expose **Duplicate to…** when completion is known, for every provider, matching workout actions
+and the date-picker title. The pending label is **Duplicating workout…**; the final confirmation is **Duplicate workout**.
+It reuses the existing date-reviewed `copy-workout` workflow, not a separate repeat operation or a new library requirement.
 The copy has a new QS identity, no completion link and no standalone consent. Plan copies inherit only the existing
 plan's sending policy; range extension still needs its existing confirmation. The original prescription, recordings,
 completion and protected provider copies are unchanged. Editing an old date still never unlocks those copies.
@@ -3187,6 +3188,8 @@ excluded by strict projection tests. Existing copy-workout proposals already cov
 native-app **fresh-guide** action is deliberately not added to MCP/Assistant provider-action unions or permissions.
 It needs a separately scoped approval contract before external clients can request it; the shared native enum never
 authorizes that implicitly. No registered schema, scope, catalog or bundled-plugin change is made.
+The unified Duplicate wording is presentation-only: it changes no recipes, completion links, reads, mutation contracts,
+permissions or provider behavior, and requires no MCP catalog refresh or plugin rebuild.
 Monitoring is **covered/unchanged**: existing Suunto delivery acceptance/recovery/failure and queue-health filters apply
 to the same worker, attempt journal, backlog, leases and retry limits. No new high-cardinality log or queue is introduced.
 Verification uses synthetic provider HTTP and isolated demo Firestore only. Deployment and live watch/app checks remain

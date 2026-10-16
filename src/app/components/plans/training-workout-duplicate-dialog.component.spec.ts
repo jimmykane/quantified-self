@@ -28,6 +28,8 @@ describe('TrainingWorkoutDuplicateDialogComponent', () => {
     expect(fixture.componentInstance.localDate()).toBe('2026-12-31');
     expect(fixture.debugElement.injector.get(DateAdapter).getFirstDayOfWeek()).toBe(6);
     expect(fixture.nativeElement.textContent).toContain('Long ride');
+    expect(fixture.nativeElement.querySelector('h2')?.textContent?.trim()).toBe('Duplicate to…');
+    expect(fixture.nativeElement.querySelector('button[mat-flat-button]')?.textContent?.trim()).toBe('Duplicate workout');
     fixture.componentInstance.setDate(dayjs('2027-01-02'));
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('asked to extend its dates');

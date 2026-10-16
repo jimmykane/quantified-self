@@ -376,6 +376,7 @@ describe('Firebase Hosting configuration', () => {
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
+    // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-16');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

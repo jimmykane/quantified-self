@@ -282,8 +282,9 @@ describe('help.content', () => {
       '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
       'not guaranteed visible or measured', 'new scheduled copy from your workout library',
       'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides']) expect(content).toContain(phrase);
-    for (const phrase of ['**Repeat on another date**', '**Send a fresh Guide**', '**same QS workout**',
+    for (const phrase of ['**Duplicate to…** in its sync details or workout actions', '**Send a fresh Guide**', '**same QS workout**',
       'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
+    expect(content).not.toContain('Repeat on another date');
   });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
