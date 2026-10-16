@@ -8,6 +8,9 @@ vi.mock('../training-load/training-load-source-write', () => ({
         constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
     },
 }));
+import { createHash } from 'node:crypto';
+import { FitEncoder, FitBaseType } from 'fit-file-parser/encoder';
+import { sourceReferenceFingerprint } from './non-activity-sources';
 import { gzipSync } from 'node:zlib';
 import {
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
@@ -50,7 +53,8 @@ const hoisted = vi.hoisted(() => {
     });
 
     const mockDownload = vi.fn();
-    const mockFile = vi.fn(() => ({ download: mockDownload }));
+    const mockGetMetadata = vi.fn();
+    const mockFile = vi.fn(() => ({ download: mockDownload, getMetadata: mockGetMetadata }));
     const mockBucket = vi.fn((bucketName?: string) => ({
         name: bucketName || 'quantified-self-io',
         file: mockFile,
@@ -92,6 +96,7 @@ const hoisted = vi.hoisted(() => {
         mockRunTransaction,
         mockGetUserDeletionGuardStateInTransaction,
         mockDownload,
+        mockGetMetadata,
         mockFile,
         mockBucket,
         mockWriteAllEventData,
@@ -2032,6 +2037,85 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.reGenerateStatsForEvent).not.toHaveBeenCalled();
         expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
         expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('skips validated monitoring sources without persistence or error logs (gzip=%s)', async compressed => {
+        const bytes = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        const raw = compressed ? gzipSync(bytes) : bytes;
+        hoisted.mockDownload.mockResolvedValue([raw]);
+        hoisted.mockGetMetadata.mockResolvedValue([{ generation: '1', md5Hash: createHash('md5').update(raw).digest('base64') }]);
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: { originalFile: { path: compressed ? 'original.fit.gz' : 'original.fit' } }, activityDocs: [],
+        });
+        expect(result).toMatchObject({ status: 'skipped', reason: 'MONITORING_SOURCE', staleActivitiesDeleted: 0,
+            nonActivitySources: { sources: [{ kind: 'monitoring', generation: '1', sha256: createHash('sha256').update(raw).digest('hex') }] } });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockLoggerError).not.toHaveBeenCalled();
+    });
+
+    it('retains the entire mixed event and reports review without partially writing activities', async () => {
+        const raw = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        hoisted.mockDownload.mockResolvedValue([raw]);
+        hoisted.mockGetMetadata.mockResolvedValue([{ generation: '1', md5Hash: createHash('md5').update(raw).digest('base64') }]);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValueOnce(makeEvent())
+            .mockRejectedValueOnce(new Error('FIT file is not an activity file'));
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', { eventData: {
+            originalFiles: [{ path: 'activity.fit' }, { path: 'monitoring.fit' }],
+        }, activityDocs: [] });
+        expect(result).toMatchObject({ status: 'skipped', reason: 'MIXED_SOURCES_REQUIRING_REVIEW', sourceFilesCount: 2 });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockLoggerError).not.toHaveBeenCalled();
+    });
+
+    it('does not turn a mixed-source download failure into a permanent skip', async () => {
+        const raw = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        hoisted.mockDownload.mockResolvedValueOnce([raw]).mockRejectedValueOnce(new Error('download interrupted'));
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', { eventData: {
+            originalFiles: [{ path: 'monitoring.fit' }, { path: 'unavailable.fit' }],
+        }, activityDocs: [] })).rejects.toThrow('download interrupted');
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockGetMetadata).not.toHaveBeenCalled();
+    });
+
+    it('retries classification if source bytes change during the metadata check', async () => {
+        const raw = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        hoisted.mockDownload.mockResolvedValue([raw]);
+        hoisted.mockGetMetadata.mockResolvedValue([{ generation: '2', md5Hash: 'different' }]);
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', { eventData: {
+            originalFiles: [{ path: 'monitoring.fit' }],
+        }, activityDocs: [] })).rejects.toThrow('Original source changed');
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    });
+
+    it.each(['changed', 'deleted', 'user-deleted', 'unchanged'])('guards classification status against %s source lifecycle', async lifecycle => {
+        const set = vi.fn();
+        const sources = [{ path: 'original.fit' }];
+        hoisted.mockDoc.mockImplementation(() => ({ set, get: vi.fn().mockResolvedValue({
+            exists: lifecycle !== 'deleted', data: () => ({ originalFiles: lifecycle === 'changed' ? [{ path: 'new.fit' }] : sources }),
+        }) }));
+        if (lifecycle === 'user-deleted') hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: false, deletionInProgress: true, shouldSkip: true,
+        });
+        const write = writeReparseStatus('u1', 'e1', { status: 'skipped', reason: 'MONITORING_SOURCE',
+            checkedAt: 'ts', targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            nonActivitySources: { schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources), sources: [] },
+        });
+        if (lifecycle === 'unchanged') {
+            await write;
+            expect(set).toHaveBeenCalledTimes(1);
+        } else {
+            await expect(write).rejects.toThrow();
+            expect(set).not.toHaveBeenCalled();
+        }
     });
 
     it('applyAutoHealedSourceBucketMetadata should skip invalid resolved entries and only rewrite mapped paths', () => {

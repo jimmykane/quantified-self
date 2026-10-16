@@ -1,3 +1,4 @@
+import { hasUnchangedNonActivitySources } from '../reparse/non-activity-sources';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -10,8 +11,8 @@ import {
     SPORTS_LIB_REPARSE_JOBS_COLLECTION,
     SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
-    SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     ReparseStatusWrite,
+    extractSourceFiles,
     SportsLibReparseJob,
     classifySportsLibReparseVersionDisposition,
     getSportsLibReparseFailureReason,
@@ -135,7 +136,7 @@ async function writeWorkerReparseStatus(
         return true;
     } catch (error) {
         if (isReparsePersistenceSkippedForUserDeletionError(error)) {
-            logger.info('[sports-lib-reparse-worker] Skipping status write because user is missing or deletion is in progress.', {
+            logger.info('[sports-lib-reparse-worker] Skipping status write because the event or user is missing or account deletion is in progress.', {
                 jobId,
                 uid: job.uid,
                 eventId: job.eventId,
@@ -431,6 +432,28 @@ async function processSportsLibReparseTaskRequest(
         throw new Error(errorMessage);
     }
 
+    // A crash after the guarded status commit must not turn a verified skip into
+    // a heavy timeout failure. This recovery read applies only to interrupted attempts.
+    if (job.status === 'processing' && (job.attemptCount || 0) > 0) {
+        const [event, status] = await Promise.all([
+            admin.firestore().doc(`users/${job.uid}/events/${job.eventId}`).get(),
+            admin.firestore().doc(`users/${job.uid}/events/${job.eventId}/metaData/reparseStatus`).get(),
+        ]);
+        if (event.exists && await hasUnchangedNonActivitySources(status.data(), extractSourceFiles(event.data() || {}))) {
+            if (await shouldSkipForUserDeletion(job, jobId, 'before_recovered_skip')) {
+                await deleteForUserDeletion('before_recovered_skip');
+                return;
+            }
+            await jobRef.set({ status: 'completed', skipReason: status.data()?.reason,
+                processedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+                lastError: FieldValue.delete(), failureReason: FieldValue.delete(),
+                terminalFailure: FieldValue.delete(), terminalFailureAt: FieldValue.delete(),
+            }, { merge: true });
+            logger.info('[sports-lib-reparse-worker] Recovered committed non-activity skip.', { jobId, reason: status.data()?.reason });
+            return;
+        }
+    }
+
     if (workerTier === 'normal') {
         if (job.processingTier === SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy) {
             logger.info('[sports-lib-reparse-worker] Normal worker skipping job already marked for heavy processing.', {
@@ -523,10 +546,12 @@ async function processSportsLibReparseTaskRequest(
             return;
         }
 
-        if (reparseResult.status === 'skipped' && reparseResult.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
+        if (reparseResult.status === 'skipped') {
             const statusWritten = await writeWorkerReparseStatus(job, jobId, {
                 status: 'skipped',
-                reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+                reason: reparseResult.reason,
+                nonActivitySources: reparseResult.nonActivitySources || FieldValue.delete(),
+                lastError: FieldValue.delete(),
                 targetSportsLibVersion,
                 checkedAt: FieldValue.serverTimestamp(),
                 terminalFailure: FieldValue.delete(),
@@ -539,6 +564,8 @@ async function processSportsLibReparseTaskRequest(
         } else {
             const statusWritten = await writeWorkerReparseStatus(job, jobId, {
                 status: 'completed',
+                reason: FieldValue.delete(),
+                nonActivitySources: FieldValue.delete(),
                 targetSportsLibVersion,
                 checkedAt: FieldValue.serverTimestamp(),
                 processedAt: FieldValue.serverTimestamp(),
@@ -554,6 +581,7 @@ async function processSportsLibReparseTaskRequest(
 
         await jobRef.set({
             status: 'completed',
+            skipReason: reparseResult.status === 'skipped' ? reparseResult.reason : FieldValue.delete(),
             processedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
             lastError: FieldValue.delete(),

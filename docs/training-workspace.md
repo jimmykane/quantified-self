@@ -5393,9 +5393,14 @@ Sports Lib 21.6.13 adds four source-parser corrections. FIT daily monitoring, se
 non-workout file types are rejected before they can become synthetic Unknown Sport workouts. Completed workout
 `activity_summary` files, including Wahoo exports without sensor records, remain accepted when they contain an explicit
 session; timestamped events alone cannot create a session for that type. Ordinary `activity` files and missing file
-types retain legacy activity compatibility. Rejected new imports fail normally; a retained historical monitoring file
-reaches the existing terminal reparse-failure path without deleting or replacing its saved event, activities, load controls or source.
-This does not route monitoring files into Health or clean up historical workout volume automatically.
+types retain legacy activity compatibility. Rejected new imports fail normally. Reparse classifies confirmed historical
+monitoring, route and other non-activity sources as explicit skips, with mixed sources requiring review. It preserves
+saved events, activities, load controls, originals and existing volume; unclassified parser failures remain failures.
+The private source assessment is reused only while original references and verified Storage generations/checksums
+match, including across library releases. Changed originals become eligible again. See the
+[non-activity reparse contract](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#non-activity-originals-retained-as-events)
+for validation, retry, transaction and monitoring safeguards. This does not migrate sources into Health or Routes,
+exclude their historical modeled load, or clean up workout volume automatically; cleanup needs separate review and approval.
 
 COROS GPX direct `hr` readings in the ClueTrust GPXDATA 1/0 namespace now populate the existing Heart Rate stream.
 Namespace prefixes are irrelevant; unrelated direct `hr` tags, blank/non-finite values and ambiguous repeated tags

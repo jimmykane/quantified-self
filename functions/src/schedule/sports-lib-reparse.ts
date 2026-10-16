@@ -1,3 +1,4 @@
+import { hasUnchangedNonActivitySources, isNonActivitySkipReason } from '../reparse/non-activity-sources';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
@@ -97,7 +98,7 @@ async function writeReparseStatusUnlessUserDeleted(
         return true;
     } catch (error) {
         if (isReparsePersistenceSkippedForUserDeletionError(error)) {
-            logger.info('[sports-lib-reparse] Skipping status write because user is missing or deletion is in progress.', {
+            logger.info('[sports-lib-reparse] Skipping status write because the event or user is missing or account deletion is in progress.', {
                 uid,
                 eventId,
                 phase,
@@ -334,6 +335,11 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
             const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
             const reparseStatusData = statusSnapshot.data() as Record<string, unknown> | undefined;
+            const sourceFiles = extractSourceFiles(eventData);
+            if (await hasUnchangedNonActivitySources(reparseStatusData, sourceFiles)) {
+                logger.info('[sports-lib-reparse] Skipping unchanged non-activity sources.', { uid, eventId, reason: reparseStatusData?.reason });
+                return;
+            }
             if (shouldSkipBecauseNoOriginalFilesForTarget(reparseStatusData, targetSportsLibVersion)) {
                 return;
             }
@@ -346,7 +352,6 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 return;
             }
 
-            const sourceFiles = extractSourceFiles(eventData);
             if (sourceFiles.length === 0) {
                 if (await shouldSkipForUserDeletion(db, uid, eventId, 'before_no_source_status_write')) {
                     return;
@@ -372,7 +377,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
             if (existingJob.exists && (
                 existingStatus === 'pending'
                 || existingStatus === 'processing'
-                || existingStatus === 'completed'
+                || (existingStatus === 'completed' && !isNonActivitySkipReason(existingJobData?.skipReason))
                 || existingStatus === 'superseded'
             )) {
                 return;
@@ -413,6 +418,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 ...basePayload,
                 ...(routingDecision.heavyReason ? {} : { heavyReason: FieldValue.delete() }),
                 ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: FieldValue.delete() }),
+                skipReason: FieldValue.delete(),
                 lastError: FieldValue.delete(),
                 failureReason: FieldValue.delete(),
                 terminalFailure: FieldValue.delete(),

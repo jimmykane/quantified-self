@@ -13,7 +13,8 @@ import { attachedEffectiveTrainingLoad, resolveEffectiveTrainingLoad, type Train
 
 import { mergeRecordedEvents } from '../events/merge-recorded-events';
 import { prepareMergedTrainingLoad, type MergeTrainingLoadSource } from '../events/merge-training-load';
-import { persistReparsedEvent } from '../reparse/sports-lib-reparse.service';
+import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
+import { persistReparsedEvent, writeReparseStatus } from '../reparse/sports-lib-reparse.service';
 import { EventWriter, type FirestoreAdapter } from '../shared/event-writer';
 
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
@@ -59,6 +60,43 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const promise = new Promise<void>(resolve => { release = resolve; });
     return { promise, release };
   }
+  it.each(['unchanged', 'replaced', 'event-deleted', 'user-deleted'])(
+    'guards non-activity reparse classification in a real transaction: %s', async lifecycle => {
+      const uid = setup(); await source(uid, workout());
+      const eventRef = db.doc(`users/${uid}/events/workout`);
+      const statusRef = eventRef.collection('metaData').doc('reparseStatus');
+      const originalFiles = [{ path: `users/${uid}/events/workout/original.fit`, bucket: 'test-bucket' }];
+      await eventRef.update(sanitizeEventFirestoreWritePayload({ originalFiles }));
+      if (lifecycle === 'replaced') await eventRef.update(sanitizeEventFirestoreWritePayload({ originalFiles: [{ path: 'replacement.fit' }] }));
+      if (lifecycle === 'event-deleted') await db.recursiveDelete(eventRef);
+      if (lifecycle === 'user-deleted') await db.doc(`userDeletionTombstones/${uid}`).set({ deleting: true });
+      const operation = writeReparseStatus(uid, 'workout', { status: 'skipped', reason: 'MONITORING_SOURCE',
+        targetSportsLibVersion: '22.0.0', checkedAt: Timestamp.now(), nonActivitySources: {
+          schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(originalFiles), sources: [{
+            path: originalFiles[0].path, bucket: 'test-bucket', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'monitoring',
+          }],
+        },
+      });
+      if (lifecycle === 'unchanged') {
+        await operation;
+        expect((await statusRef.get()).data()).toMatchObject({ status: 'skipped', reason: 'MONITORING_SOURCE' });
+      } else {
+        await expect(operation).rejects.toThrow();
+        expect((await statusRef.get()).exists).toBe(false);
+      }
+      expect((await db.doc(`users/${uid}/activities/leg`).get()).exists).toBe(true);
+    });
+
+  it('does not recreate event metadata through a subsequent failure status write', async () => {
+    const uid = setup(); await source(uid, workout());
+    const ref = db.doc(`users/${uid}/events/workout`);
+    await db.recursiveDelete(ref);
+    await expect(writeReparseStatus(uid, 'workout', { status: 'failed', reason: 'REPARSE_FAILED',
+      targetSportsLibVersion: '22.0.0', checkedAt: Timestamp.now(),
+    })).rejects.toMatchObject({ name: 'EventWriteSkippedForDeletedEventError' });
+    expect((await ref.collection('metaData').get()).empty).toBe(true);
+  });
+
   it.each(['events', 'activities'])('blocks a superseded reparse from overwriting newer %s documents', async collection => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     const paused = gate(); const resume = gate();

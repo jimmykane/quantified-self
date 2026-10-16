@@ -341,6 +341,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   private getReprocessErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof ReprocessError) {
+      if (error.code === 'NON_ACTIVITY_SOURCE') return error.message;
       if (error.code === 'NO_ORIGINAL_FILES') {
         return 'No original source files found for this activity.';
       }

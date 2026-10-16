@@ -1,11 +1,13 @@
+import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
     const capturedTaskOptions: unknown[] = [];
+    const sourceMetadata = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
-        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+        error instanceof Error && ['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'].includes(error.name));
     const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
         || /^Event .* was not found for user .*$/.test(errorMessage)
@@ -59,6 +61,7 @@ const hoisted = vi.hoisted(() => {
 
     return {
         capturedTaskOptions,
+        sourceMetadata,
         reparseEventFromOriginalFiles,
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
@@ -109,6 +112,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     isSportsLibReparseDurationHeavy: hoisted.isSportsLibReparseDurationHeavy,
     isSportsLibReparseTooHeavyForAutomaticReparse: hoisted.isSportsLibReparseTooHeavyForAutomaticReparse,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
+    extractSourceFiles: (data: { originalFiles?: unknown[] }) => data.originalFiles || [],
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
     writeReparseStatus: hoisted.writeReparseStatus,
@@ -138,7 +142,7 @@ vi.mock('firebase-admin', () => {
         doc: hoisted.doc,
         recursiveDelete: hoisted.recursiveDelete,
     }));
-    return { firestore: firestoreFn };
+    return { firestore: firestoreFn, storage: () => ({ bucket: () => ({ file: () => ({ getMetadata: hoisted.sourceMetadata }) }) }) };
 });
 
 vi.mock('firebase-admin/firestore', () => ({
@@ -862,6 +866,53 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'completed',
         }), { merge: true });
+    });
+
+    it.each(['MONITORING_SOURCE', 'ROUTE_SOURCE', 'NON_ACTIVITY_SOURCE', 'MIXED_SOURCES_REQUIRING_REVIEW'])(
+        'acknowledges %s without a failed job and persists the private classification', async reason => {
+            hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({
+                uid: 'u1', eventId: 'e1', status: 'pending', attemptCount: 0, targetSportsLibVersion: '9.0.99',
+            }) });
+            const nonActivitySources = { schemaVersion: 1, sourceFingerprint: 'fingerprint', sources: [] };
+            hoisted.reparseEventFromOriginalFiles.mockResolvedValue({ status: 'skipped', reason, nonActivitySources,
+                sourceFilesCount: 1, parsedActivitiesCount: 0, staleActivitiesDeleted: 0 });
+            await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+            expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+                status: 'skipped', reason, nonActivitySources, lastError: 'DELETE_FIELD', terminalFailure: 'DELETE_FIELD',
+            }));
+            expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', skipReason: reason }), { merge: true });
+            expect(hoisted.jobSet.mock.calls.some(([payload]) => payload.status === 'failed')).toBe(false);
+        });
+
+    it.each(['normal', 'heavy'])('recovers a committed skip after interruption on the %s worker', async tier => {
+        const sources = [{ path: 'original.fit' }];
+        const status = { status: 'skipped', reason: 'MONITORING_SOURCE', nonActivitySources: {
+            schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources),
+            sources: [{ path: 'original.fit', bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'monitoring' }],
+        } };
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'processing', processingTier: tier, attemptCount: 1, targetSportsLibVersion: '9.0.99' }) });
+        hoisted.eventDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ originalFiles: sources }) })
+            .mockResolvedValueOnce({ exists: true, data: () => status });
+        hoisted.sourceMetadata.mockResolvedValue([{ generation: '1', md5Hash: 'checksum' }]);
+        await ((tier === 'heavy' ? processSportsLibReparseHeavyTask : processSportsLibReparseTask) as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', skipReason: 'MONITORING_SOURCE' }), { merge: true });
+        expect(hoisted.jobSet.mock.calls.some(([payload]) => payload.status === 'failed')).toBe(false);
+    });
+
+    it('does not write failure metadata after the event disappears during skip persistence', async () => {
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'pending', attemptCount: 0, targetSportsLibVersion: '9.0.99' }) });
+        hoisted.reparseEventFromOriginalFiles.mockResolvedValue({ status: 'skipped', reason: 'MONITORING_SOURCE',
+            sourceFilesCount: 1, parsedActivitiesCount: 0, staleActivitiesDeleted: 0 });
+        const missingEvent = new Error('Event deleted'); missingEvent.name = 'EventWriteSkippedForDeletedEventError';
+        hoisted.writeReparseStatus.mockRejectedValueOnce(missingEvent);
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledTimes(1);
+        expect(hoisted.recursiveDelete).toHaveBeenCalled();
+        expect(hoisted.jobSet.mock.calls.some(([payload]) => payload.status === 'failed')).toBe(false);
     });
 
     it('should mark failed and rethrow on errors', async () => {

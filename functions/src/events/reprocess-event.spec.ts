@@ -117,6 +117,16 @@ describe('reprocessEvent', () => {
         expect(hoisted.mockReparseEventFromOriginalFiles).not.toHaveBeenCalled();
     });
 
+    it('returns a skip reason without exposing private source classification metadata', async () => {
+        hoisted.mockReparseEventFromOriginalFiles.mockResolvedValue({ status: 'skipped', reason: 'ROUTE_SOURCE',
+            sourceFilesCount: 1, parsedActivitiesCount: 0, staleActivitiesDeleted: 0,
+            nonActivitySources: { sources: [{ path: 'private-path', md5: 'private-checksum' }] } });
+        const result = await reprocessEvent({ auth: { uid: 'u1' }, app: { appId: 'app-id' },
+            data: { eventId: 'e1', mode: 'reimport' } } as any);
+        expect(result).toMatchObject({ status: 'skipped', reason: 'ROUTE_SOURCE' });
+        expect(result).not.toHaveProperty('nonActivitySources');
+    });
+
     it('should process reimport mode', async () => {
         const result = await reprocessEvent({
             auth: { uid: 'u1' },

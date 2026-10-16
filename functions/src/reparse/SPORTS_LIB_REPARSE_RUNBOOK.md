@@ -60,10 +60,10 @@ Keep root and Functions on the same released version. This parser update rejects
 including daily monitoring, settings and course files, instead of generating Unknown Sport workouts. Completed Wahoo
 and other `activity_summary` files remain supported when they contain an explicit session, including summaries with no
 sensor records or with imported TSS zero. Sessionless summary files cannot synthesize workouts from timestamped events.
-Ordinary activity files and legacy files without a file type retain compatibility. A historical monitoring original
-now fails source reparse terminally: the job/status record reports failure and retries are suppressed, while the existing
-event, activities, controls and original remain intact.
-Do not delete those historical records or count this rejection as an automatic volume repair. No Health import is added.
+Ordinary activity files and legacy files without a file type retain compatibility. Reparse now classifies confirmed
+non-activity originals as explicit skips, as described below, while retaining existing events, activities, controls and
+originals. Unclassified parser failures retain the existing error handling.
+Do not delete those historical records or count a skip as an automatic volume repair. No Health import is added.
 
 COROS GPX direct `hr` in the ClueTrust GPXDATA 1/0 namespace restores the existing Heart Rate stream, preserving zero,
 namespace independence and legacy heartrate/Garmin precedence. Unrelated, blank/non-finite or ambiguous readings are
@@ -83,9 +83,10 @@ single-lap behavior remain unchanged. See the Training guide for the precise sou
 Use authorized original-file reparse/regeneration and normal derived refresh for historical corrections. A Training
 rebuild cannot recover lost source samples or threshold ownership. Package publication/dependency adoption starts no
 campaign, deploys nothing, and adds no storage queries, provider calls, public schemas or MCP capabilities.
-Monitoring review: provider parse rejections retain existing import failure/DLQ telemetry. Reparse uses its existing
-terminal job/per-event status, failure log and retry-suppression path; the recorded-import alert bundle explicitly does
-not cover Sports Lib reprocessing. No monitoring configuration is changed or applied by this update.
+Monitoring review: provider parse rejections retain existing import failure/DLQ telemetry. Confirmed historical
+non-activity sources use the INFO skip path below; genuine reparse failures retain failure logs and retry handling.
+The recorded-import alert bundle explicitly does not cover Sports Lib reprocessing. No monitoring configuration is
+changed or applied by this update.
 
 ### Sports Lib 21.6.14 names, creator attribution and fallback diagnostics
 
@@ -594,7 +595,57 @@ TTL:
 Common outcomes:
 - `status=completed`
 - `status=skipped, reason=NO_ORIGINAL_FILES`
+- `status=skipped, reason=MONITORING_SOURCE | ROUTE_SOURCE | NON_ACTIVITY_SOURCE | MIXED_SOURCES_REQUIRING_REVIEW`
 - `status=failed, reason=REPARSE_FAILED`
+
+### Non-activity originals retained as events
+
+The source parser first attempts the ordinary activity import. Only its exact non-activity rejection is considered
+for classification. FIT classification requires a complete strict raw decode (including CRC), consistent explicit
+file types and no activity/session messages. Monitoring and other non-activity types also require no laps. FIT courses
+may contain legitimate lap summaries; both FIT courses and GPX route-only sources must pass the route importer with
+usable geometry. Missing types, activity/activity-summary types, conflicting declarations, broken geometry, corrupted
+files and unrelated failures do not become skips. No classification is inferred from Unknown Sport, a title or zero TSS.
+
+Per-event outcomes distinguish `MONITORING_SOURCE`, `ROUTE_SOURCE`, `NON_ACTIVITY_SOURCE` and
+`MIXED_SOURCES_REQUIRING_REVIEW`, all with `status=skipped`. Mixed sets include parsed activities plus classified
+non-activity sources or different non-activity kinds. No subset is persisted. Any unclassified/download failure keeps
+the overall attempt failed/retryable according to existing rules; it cannot be hidden behind a classified sibling.
+
+The existing owner-only, server-written `metaData/reparseStatus` holds `nonActivitySources`: assessment schema version,
+original-reference fingerprint, and per-source kind, preferred/resolved bucket/path, raw-byte SHA-256/MD5 and verified Storage
+generation. A post-download metadata check must match the raw-byte MD5 before recording its generation. Every status
+transaction rechecks the account deletion guard and event existence; a classified skip also verifies current original
+references before committing. Missing events use the lifecycle-skip path so failure handling cannot recreate metadata.
+It never updates event/activity content, processing version, volume or Training load. No new metadata collection exists.
+
+Scheduler and executing CLI reuse a saved assessment across library versions only while original references and live
+Storage generations/checksums match. The scheduler reuses its existing status read; only previously classified source
+sets incur Storage metadata lookups. Ordinary reparses incur no extra Storage metadata reads. Changed references or
+replaced objects make the source eligible again, including completed skip jobs for the same target. A newly available
+preferred-bucket object also invalidates an assessment made from a fallback bucket. A failed lookup
+falls through to normal reparse/download handling. Bump the assessment schema if a future importer changes which file
+types count as activities. Old terminal failures without an assessment retain their established version-specific
+suppression until a new target or explicit reprocessing; no speculative classification is created from an old error.
+
+A handled task remains `completed` with `skipReason`; this means task handling completed, not that an activity was
+rewritten. Its event status remains `skipped`, stale error/terminal markers are cleared, and it emits INFO logs.
+An interrupted worker checks an already committed assessment before applying the existing heavy-timeout guard; other
+interrupted/heavy failures retain that guard. CLI `skippedNonActivitySources` is separate from completed/failed counts;
+dry-run remains metadata-only and does not discover new classifications by downloading originals. Interactive event
+reprocessing reports a clear skip, keeps the saved activity and suggests downloading/uploading a course from Routes.
+The callable response excludes the private assessment. Saved-route reprocessing itself is unchanged.
+
+Cleanup is separate: first produce a private, live-verified inventory, distinguish monitoring from courses and mixed
+sources, and obtain explicit approval for exact deletions. Courses can contain useful navigation data and must not be
+included in a monitoring cleanup. No deletion, migration to Routes/Health, campaign, or deployment is authorized here.
+
+Monitoring coverage decision: **unchanged**. Reviewed `tools/import-monitoring/definitions.mjs` filters only
+`[ActivityImport]` events and `processWorkoutTask`, not these workers. Existing reparse task acknowledgements,
+per-event statuses and Admin Queue Monitor remain the operational surface; skips no longer inflate failed jobs/error
+logs, and real failure signals remain. No new alerts or low-cardinality metric labels are needed for this outcome
+classification, and no production monitoring configuration was applied. MCP impact: no tool, metric, schema, scope,
+consent, planning/delivery action or private output changes. Help explains the interactive skip and route recovery.
 
 ### Processing metadata doc
 - Path: `users/{uid}/events/{eventId}/metaData/processing`

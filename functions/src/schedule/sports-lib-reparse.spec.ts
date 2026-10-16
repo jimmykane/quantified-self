@@ -1,3 +1,4 @@
+import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
@@ -9,13 +10,14 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 }));
 
 const hoisted = vi.hoisted(() => {
+    const sourceMetadata = vi.fn();
     const shouldEventBeReparsed = vi.fn();
     const extractSourceFiles = vi.fn();
     const resolveSportsLibReparseRoutingDecision = vi.fn();
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
-        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+        error instanceof Error && ['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'].includes(error.name));
     const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
         || /^Event .* was not found for user .*$/.test(errorMessage));
@@ -252,6 +254,7 @@ const hoisted = vi.hoisted(() => {
     const deleteField = vi.fn(() => 'DELETE_FIELD');
 
     return {
+        sourceMetadata,
         shouldEventBeReparsed,
         extractSourceFiles,
         resolveSportsLibReparseRoutingDecision,
@@ -344,7 +347,7 @@ vi.mock('firebase-admin', () => {
         recursiveDelete: hoisted.recursiveDelete,
     }));
 
-    return { firestore: firestoreFn };
+    return { firestore: firestoreFn, storage: () => ({ bucket: () => ({ file: () => ({ getMetadata: hoisted.sourceMetadata }) }) }) };
 });
 
 vi.mock('firebase-admin/firestore', () => ({
@@ -821,6 +824,26 @@ describe('scheduleSportsLibReparseScan', () => {
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('checks non-activity sources across releases and retries replaced files (changed=%s)', async changed => {
+        const sources = [{ path: 'users/u1/events/e1/original.fit' }];
+        const assessment = { schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources), sources: [
+            { path: sources[0].path, bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'route' },
+        ] };
+        hoisted.sourceMetadata.mockResolvedValue([{ generation: changed ? '2' : '1', md5Hash: 'checksum' }]);
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.existingJobsById.set('job-1', { status: 'completed', skipReason: 'ROUTE_SOURCE', attemptCount: 1 });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFiles: sources }, {
+            status: 'skipped', reason: 'ROUTE_SOURCE', targetSportsLibVersion: '0.0.1', nonActivitySources: assessment,
+        })]);
+        await (scheduleSportsLibReparseScan as any)({});
+        expect(hoisted.sourceMetadata).toHaveBeenCalledTimes(1);
+        if (changed) expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+        else {
+            expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+            expect(hoisted.jobSet).not.toHaveBeenCalled();
+        }
     });
 
     it('should skip override candidate when reparseStatus has a terminal failure for current target', async () => {

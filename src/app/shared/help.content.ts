@@ -1144,7 +1144,9 @@ From **Route actions → Send to** on Route Details, Pro members can send the cu
 From an activity action menu you can also:
 
 - **Regenerate activity statistics**
-- **Reimport activity from file** when original source files are available`,
+- **Reimport activity from file** when original source files are available
+
+If an older activity was created from a daily monitoring file or a route/course, reprocessing skips it and keeps the saved activity and original. For a route/course, download the original and upload it from **Routes**. Mixed source files need review; reprocessing does not silently discard any part of the activity. These skips do not automatically delete activities or move monitoring data into Health.`,
     links: [
       { label: 'Workout Data Comparison', icon: 'compare_arrows', kind: 'route', target: '/features/workout-data-comparison' },
       { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
