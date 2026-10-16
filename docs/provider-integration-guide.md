@@ -1770,6 +1770,15 @@ The authenticated, noindex `/send-activities` workspace consolidates local recor
 
 See [Activity sending workspace](activity-sending-workspace.md) for the single detailed lifecycle, quotas, recovery and retention contract. Provider-confirmed processing failure requires an explicit workspace retry; acceptance uncertainty never permits replay. Stop preserves claimed/accepted operations. No Training or MCP provider mutation is added. Release checks include real Rules/demo-emulator isolation, entrypoint contracts/cold imports, private source cleanup, mobile/light/dark layout, Help/Privacy and monitoring activation.
 
+Workspace admission ignores delivery-only progress writes, and delivery projection avoids unchanged row/aggregate
+writes while retaining cleanup retries. The shared activity task queue caps active tasks at ten globally; dispatch
+rate and exponential retry timing remain unchanged. Typed, unaccepted Suunto initialization failures may use that
+bounded retry policy before any FIT bytes are sent; other workspace restarts, accepted/uncertain operations and
+terminal review remain protected. See the workspace contract above. Monitoring is **covered/unchanged** by the
+existing native queue charts, committed retry/manual-review observations and trigger error/latency diagnostics;
+the [delivery runbook](activity-delivery-monitoring.md#workspace-contention-and-initialization-retries) records the
+verification/release boundary. No new queue, lease, scheduler, metric, scope, MCP or Training change is introduced.
+
 Queue ownership commits before dispatch so concurrent Stop/admission cannot lose or erase a claim. Local and saved sends recheck the sending window inside provider-claim transactions; reconnect release preserves this authority and the original queue retention. Duplicate temporary sources release quota immediately. Account deletion winning a background transaction is a silent no-op.
 
 Saved-preview criteria are canonical and server-private, allowing the workspace to continue the original paged preview after reload. Deleted selections receive exclusions and empty ranges finish without delivery. Loading/unavailable display reads block replacement drafts and confirmation; aborted transfers have a recoverable result. Stop reconciliation uses the existing retry-enabled operation trigger and a private 50-row cursor, including already admitted unclaimed work. It advances only after source cleanup succeeds and preserves claimed/accepted identifiers. No new worker, scheduler, task queue or external provider action is introduced.

@@ -2966,6 +2966,99 @@ describe('activity-sync/process-queue-item', () => {
     }
   });
 
+  it.each([500, 504, undefined])('retries an unaccepted workspace Suunto initialization using the guarded retry budget (%s)', async statusCode => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row',
+      destinationPinnedProviderUserID: 'reviewed-account', retryCount: 2,
+    };
+    const error = new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init',
+      disposition: 'retryable', retryMode: 'restart', code: 'unavailable', statusCode,
+      message: 'Synthetic initialization failure.',
+      dlqContext: statusCode ? 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED' : 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+    });
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(error);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({ queueItem, error, incrementBy: 1 }));
+    expect(queueItem).toMatchObject({ processed: false, dispatchedToCloudTask: null, providerOperationStartedAt: null, destinationPinnedProviderUserID: 'reviewed-account' });
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ processed: true }) }));
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'retry' }));
+  });
+
+  it('retains terminal workspace review when Suunto initialization exhausts its existing attempt budget', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: MAX_RETRY_COUNT - 1 };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic initialization failure.',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ processed: true, resultStatus: 'manual_reconciliation_required', sendConfirmedFailure: false }) }));
+  });
+
+  it.each([
+    { state: 'confirmed', expiresAt: Number.MAX_SAFE_INTEGER, stopped: true },
+    { state: 'confirmed', expiresAt: 1 },
+  ])('rechecks sending authority before retrying an unaccepted Suunto initialization: %j', async operation => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row' };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic initialization failure.',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    mockActivitySendGet.mockResolvedValueOnce({ exists: true, data: () => operation });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'skipped', skippedReason: operation.stopped ? 'send_stopped' : 'send_source_expired' }) }));
+  });
+
+  it.each([
+    [ServiceNames.SuuntoApp, 'activity_upload_blob'],
+    [ServiceNames.WahooAPI, 'activity_upload_init'],
+  ] as const)('does not extend initialization retry safety to %s %s', async (serviceName, operation) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row', destinationServiceName: serviceName,
+      routeId: serviceName === ServiceNames.SuuntoApp ? ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp : ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+    };
+    const upload = serviceName === ServiceNames.SuuntoApp ? mockUploadActivityFileToSuunto : mockUploadActivityFileToWahoo;
+    upload.mockRejectedValueOnce(new ProviderOperationError({ serviceName, operation, disposition: 'retryable', retryMode: 'restart', code: 'unavailable', message: 'Synthetic uncertain failure.' }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'manual_reconciliation_required' }) }));
+  });
+
+  it('never restarts an accepted workspace Suunto upload on an initialization-shaped error', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row',
+      destinationUploadID: 'accepted-canary', destinationProviderUserID: 'reviewed-account',
+    };
+    mockGetSuuntoActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic conflicting phase.', providerOperationId: 'accepted-canary',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(queueItem.destinationUploadID).toBe('accepted-canary');
+  });
+
+  it.each(['providerOperationId', 'destinationWorkoutKey'] as const)('keeps workspace reconciliation when initialization errors carry %s evidence', async evidence => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row',
+      ...(evidence === 'destinationWorkoutKey' ? { destinationWorkoutKey: 'accepted-workout' } : {}),
+    };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic conflicting acceptance evidence.',
+      ...(evidence === 'providerOperationId' ? { providerOperationId: 'accepted-operation' } : {}),
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'manual_reconciliation_required' }) }));
+  });
+
   it('clears stale job metadata before restart even when upload identifiers are absent', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,

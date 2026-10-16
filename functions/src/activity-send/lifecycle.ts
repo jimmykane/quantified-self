@@ -8,7 +8,7 @@ import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-rout
 import { ACTIVITY_SEND_PROVIDERS, activitySendTerminal } from '../../../shared/activity-send';
 import { enqueueActivitySyncQueueItem } from '../activity-sync/queue';
 import { batchRef, guardedBackgroundSendTransaction, operationRef, SendOperation, SendSource } from './store';
-import { projectSendQueue } from './policy';
+import { projectSendQueue, sendOperationNeedsAdmission } from './policy';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { recordActivitySendCleanup } from '../activity-sync/monitoring';
 
@@ -108,7 +108,8 @@ export async function admitSendRows(uid: string, id: string): Promise<void> {
         : { status: 'duplicate' as const, recovery: 'none' as const, message: 'Already sent or queued; no additional copy was scheduled.' };
       const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(visible.data()!.status));
       tx.update(visible.ref, projection);
-      tx.update(parent.ref, { finished, updatedAt: Date.now(), state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed' });
+      const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
+      if (parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(parent.ref, { finished, updatedAt: Date.now(), state });
       return !ownsQueue;
     });
     if (duplicateSource) await cleanupSendSourceRow(row.ref);
@@ -121,6 +122,7 @@ export async function admitSendRows(uid: string, id: string): Promise<void> {
 }
 export const admitActivitySend = onDocumentWritten({ document: 'users/{uid}/activitySendOperations/{batchId}', region: 'europe-west2', memory: '512MiB', timeoutSeconds: 300, retry: true }, async event => {
   if (!event.data?.after.exists) return;
+  if (!sendOperationNeedsAdmission(event.data.before.data(), event.data.after.data()!)) return;
   await admitSendRows(event.params.uid, event.params.batchId);
 });
 
@@ -137,10 +139,11 @@ export async function projectSendDelivery(queueRef: admin.firestore.DocumentRefe
     if (!parent.exists || !row.exists) return;
     const projection = projectSendQueue(data);
     const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(row.data()!.status));
-    tx.update(rowRef, { ...projection, attempts: Number(data.totalRetryCount || data.retryCount || 0) + Number(source.data()?.priorAttempts || 0) + Number(!!data.providerOperationStartedAt) });
+    const projectedRow = { ...projection, attempts: Number(data.totalRetryCount || data.retryCount || 0) + Number(source.data()?.priorAttempts || 0) + Number(!!data.providerOperationStartedAt) };
+    if (Object.entries(projectedRow).some(([key, value]) => row.data()![key] !== value)) tx.update(rowRef, projectedRow);
     const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
-    tx.update(batch, { finished, updatedAt: Date.now(), state });
-    if (privateParent.exists) tx.update(operation, { finished, updatedAt: Date.now() });
+    if (parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(batch, { finished, updatedAt: Date.now(), state });
+    if (privateParent.exists && privateParent.data()?.finished !== finished) tx.update(operation, { finished, updatedAt: Date.now() });
   });
   const current = (await queueRef.get()).data();
   if (!current || current.userID !== initial.userID || current.sendBatchID !== initial.sendBatchID || current.sendRowID !== initial.sendRowID) return;

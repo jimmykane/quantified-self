@@ -14,6 +14,18 @@ Temporary Storage/read failures during recording review pause the preview with a
 
 The prepared revision must be explicitly confirmed. The private operation write admits bounded pages through retry-enabled Firestore triggers, reusing `activitySyncQueue` and its existing task dispatcher, leases, rate limits, fingerprints and provider workers. Local sources use `deliveryMode: direct`; saved sources use `historical`. No new queue or provider credentials are introduced. Queue linkage is private and commits atomically with admission before task dispatch, so Stop can always inspect unstarted work. Stale admission pages cannot overwrite a claimed operation. A background projection rereads current queue state and publishes a strict allowlist of display fields. Duplicate trigger delivery cannot inflate finished counts. Duplicate local sources that schedule no new work immediately release their extra storage reservation.
 
+Delivery-only operation changes (`finished` / `updatedAt`) do not wake admission. Confirmation, Stop, revision changes,
+admission-page progress and source-cleanup continuations still do. Projection writes only changed row fields and
+changed aggregate counts/state; unchanged delivery events do not rewrite the shared batch or operation. Projection
+retries still perform pending source cleanup even when the display is already current. The shared activity task queue
+has a conservative global cap of ten active tasks across all accounts/providers, not a documented partner quota.
+
+Typed retryable Suunto initialization failures without an accepted ID or blob continuation use the existing bounded
+task retry/backoff because initialization sends no FIT bytes. Stop/expiry, account pinning and deletion guards still
+apply on the next attempt. Exhaustion retains the existing terminal workspace review; confirmed processing failures
+still require explicit Retry sending. Accepted or uncertain blob deliveries never gain permission to initialize a
+replacement. Existing terminal manual-review items are not reopened by deploying this change.
+
 The finished count includes delivered, duplicate/excluded, stopped and needs-action rows. It is not a success percentage. Transfer progress measures bytes; waiting for provider processing has no invented percentage. Global processing jobs survive page navigation and are reconciled from confirmed operations separately from recent-history reads.
 
 Delivery details combine recorded provider-claim starts with worker retry history. Explicit restart atomically retires the previous claim and any reset legacy retry fallback into server-private source-row `priorAttempts`, alongside the queue reset. Projection adds that retained history to the current claim and worker retry count, so restarting does not erase completed attempts. Rejected duplicate retries and repeated projections cannot inflate it; an unclaimed resume adds no claim. Missing history defaults to zero, with no reconstruction of previously lost attempts. Worker retry budgets, task generations and cumulative worker retry counters keep their existing semantics.

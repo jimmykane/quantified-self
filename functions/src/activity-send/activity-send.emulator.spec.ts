@@ -4,7 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { runSendCommand } from './commands';
 import { stageSendFile } from './upload';
-import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
+import { admitActivitySend, admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
 import { Timestamp } from 'firebase-admin/firestore';
 import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
@@ -53,6 +53,68 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await admitSendRows(uid, id);
     return (await db.collection('activitySyncQueue').get()).docs[0];
   }
+  it('ignores delivery progress events but still admits the original confirmation', async () => {
+    const reviewed = await prepare();
+    const before = await operationRef(uid, id).get();
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    const confirmed = await operationRef(uid, id).get();
+    await confirmed.ref.update({ finished: 1, updatedAt: Number(confirmed.data()!.updatedAt) + 1 });
+    const progress = await confirmed.ref.get();
+    const invoke = (prior: typeof before, after: typeof before) => admitActivitySend.run({
+      data: { before: prior, after }, params: { uid, batchId: id },
+    } as Parameters<typeof admitActivitySend.run>[0]);
+    await invoke(confirmed, progress);
+    expect(state.enqueue).not.toHaveBeenCalled();
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+    await confirmed.ref.update({ finished: 0 });
+    await invoke(before, confirmed);
+    expect(state.enqueue).toHaveBeenCalledOnce();
+  });
+  it('projects row progress without rewriting batch aggregates and makes duplicate projection a no-op', async () => {
+    const queue = await confirm();
+    const batch = batchRef(uid, id);
+    const operation = operationRef(uid, id);
+    const row = batch.collection('rows').doc('row-one');
+    const prior = await db.getAll(batch, operation);
+    await queue.ref.update({ providerOperationStartedAt: 1 });
+    await projectSendDelivery(queue.ref);
+    expect((await row.get()).data()).toMatchObject({ status: 'sending', attempts: 1 });
+    const sending = await db.getAll(batch, operation);
+    sending.forEach((snapshot, index) => expect(snapshot.updateTime!.isEqual(prior[index].updateTime!)).toBe(true));
+    await queue.ref.update({ destinationUploadID: 'accepted-canary' });
+    await projectSendDelivery(queue.ref);
+    expect((await row.get()).data()?.status).toBe('processing');
+    const projected = await db.getAll(row, batch, operation);
+    await queue.ref.update({ dispatchedToCloudTask: 123 });
+    await projectSendDelivery(queue.ref);
+    const repeated = await db.getAll(row, batch, operation);
+    repeated.forEach((snapshot, index) => expect(snapshot.updateTime!.isEqual(projected[index].updateTime!)).toBe(true));
+    await queue.ref.update({ processed: true, resultStatus: 'success' });
+    await projectSendDelivery(queue.ref);
+    expect((await batch.get()).data()).toMatchObject({ finished: 1, state: 'complete' });
+    expect((await operation.get()).data()?.finished).toBe(1);
+    const completed = await db.getAll(row, batch, operation);
+    await projectSendDelivery(queue.ref);
+    (await db.getAll(row, batch, operation)).forEach((snapshot, index) => expect(snapshot.updateTime!.isEqual(completed[index].updateTime!)).toBe(true));
+  });
+  it('projects ten concurrent nonterminal deliveries without writing their shared batch', async () => {
+    const original = await confirm();
+    const batch = batchRef(uid, id);
+    const operation = operationRef(uid, id);
+    const writes = db.batch();
+    writes.update(batch, { total: 11 }); writes.update(operation, { total: 11 });
+    const queues = Array.from({ length: 10 }, (_, index) => db.collection('activitySyncQueue').doc(`parallel-${index}`));
+    for (const queue of queues) {
+      writes.set(queue, { ...original.data(), sendRowID: queue.id, providerOperationStartedAt: 1 });
+      writes.set(batch.collection('rows').doc(queue.id), { id: queue.id, status: 'queued', recovery: 'none', message: 'Queued for background delivery.', attempts: 0 });
+      writes.set(operation.collection('rows').doc(queue.id), { admitted: true, queueId: queue.id });
+    }
+    await writes.commit();
+    const before = await db.getAll(batch, operation);
+    await Promise.all(queues.map(queue => projectSendDelivery(queue)));
+    (await db.getAll(batch, operation)).forEach((snapshot, index) => expect(snapshot.updateTime!.isEqual(before[index].updateTime!)).toBe(true));
+    for (const queue of queues) expect((await batch.collection('rows').doc(queue.id).get()).data()).toMatchObject({ status: 'sending', attempts: 1 });
+  });
   async function savedOriginal(eventId: string, bytes = createCOROSActivityFITFixture()) {
     const path = `users/${uid}/events/${eventId}/original.fit`;
     state.files.set(path, { bytes, metadata: {} });

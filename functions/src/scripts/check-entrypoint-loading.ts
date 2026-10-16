@@ -140,7 +140,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   ] },
   processActivitySyncTask: {
     memoryMb: 1024, timeoutSeconds: 540, trigger: 'task',
-    maxConcurrentDispatches: 500, maxDispatchesPerSecond: 250,
+    maxConcurrentDispatches: 10, maxDispatchesPerSecond: 250,
     secrets: [
       'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET',
       'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',

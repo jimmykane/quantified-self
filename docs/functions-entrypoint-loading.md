@@ -207,7 +207,7 @@ Three more existing Gen 2 functions load directly from their owner modules:
 | `cleanupEventFile` | `events/cleanup` | 1 GiB, 300 seconds, Firestore document deleted, concurrency 5, max instances 10 |
 
 All three retain `europe-west2` and their original Firebase handler objects. Both workers retain 10 attempts,
-4 doublings and 900–14,400-second backoff. Activity sync keeps its explicit limits of 500 concurrent dispatches and
+4 doublings and 900–14,400-second backoff. Activity sync uses an explicit global cap of 10 concurrent dispatches and
 250 dispatches per second; route sync keeps unspecified task rate limits. Activity sync binds only its existing COROS,
 Suunto API and Wahoo secrets; route sync binds only its existing Suunto API secrets. CPU and minimum-instance settings
 remain unspecified, as do the workers' runtime concurrency and maximum-instance settings.

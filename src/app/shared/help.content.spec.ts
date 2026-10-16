@@ -2261,4 +2261,6 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('If an accepted upload fails after you stop the batch, its temporary copy is removed when that failure is confirmed');
   expect(content).toContain('**Delivery details** retain recorded send attempts and processing retries across explicit retries');
   expect(content).toContain('cleanup resumes automatically after partial failures');
+  expect(content).toContain('Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent');
+  expect(content).toContain('unknown acceptance never triggers an automatic replacement upload');
 });
