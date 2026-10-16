@@ -1,15 +1,14 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, unresolvedTrainingLoadLegs,
   type TrainingLoadControl, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../../../shared/training-load-source';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
-import { derivedMetricSourceProjection } from '../derived-metrics/derived-metrics-source-change';
-import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint,
-  trainingLoadWriteTime } from '../training-load/training-load-cache';
+import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint } from '../training-load/training-load-cache';
+import { trainingLoadSourceSnapshot } from '../training-load/training-load-source-snapshot';
 import { mergedActivityId } from './merge-recorded-events';
 import type { PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 
@@ -159,15 +158,10 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
       activities.some((activity, index) => !activity.exists || activity.data()?.eventID !== resultId ||
         trainingLoadSourceFingerprint(activity.data()!) !== activityFingerprints.get(ids[index]) ||
         previous.legs?.[ids[index]]?.sourceFingerprint !== activityFingerprints.get(ids[index]))) throw changedSource();
-    const sourceDigest = createHash('sha256').update(JSON.stringify(canonical({
-      event: derivedMetricSourceProjection('event', parent.data()),
-      activities: activities.map(doc => ({ id: doc.id, data: derivedMetricSourceProjection('activity', doc.data()) }))
-        .sort((left, right) => left.id.localeCompare(right.id)),
-    }))).digest('hex');
+    const { sourceDigest, sourceWriteTimes } = trainingLoadSourceSnapshot(parent, activities);
     const { sourceFirstImport: _first, ...retained } = previous;
     const next: TrainingLoadMetadata = { ...retained, sourceWritePending: false,
-      sourceWriteTimes: Object.fromEntries([['event', trainingLoadWriteTime(parent.updateTime)],
-        ...activities.map(activity => [`activity:${activity.id}`, trainingLoadWriteTime(activity.updateTime)])]),
+      sourceWriteTimes,
       sourceDigest, sourceRevision: (previous.sourceRevision ?? 0) + (sourceDigest === previous.sourceDigest ? 0 : 1) };
     const cache = await prepareTrainingLoadCacheWrite(db, transaction, uid, resultId,
       summarizeTrainingLoad(resultId, parent.data()!, next));

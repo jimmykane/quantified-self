@@ -5591,6 +5591,14 @@ evidence before old leg cleanup. Metadata preparation and persistence failures p
 serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
 Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
+`prepareTrainingLoadMetadata` is the import/reparse entry point and returns the finalizer for that reserved attempt.
+Finalization is internal and always requires the preparation's `sourceWriteId`; there is no direct persistence path
+without preparation. Tests use the same prepare → source write → finalize sequence, and retries of the same finalizer
+remain idempotent. Normal imports and merges share `trainingLoadSourceSnapshot` for the derived-source digest and
+exact source write timestamps, after their respective ownership/source checks. This helper preserves the existing
+digest format, source projection, leg ordering and timestamp precision. It performs no reads or writes; cache,
+policy, control, deletion and retry safeguards remain at their existing transaction boundaries.
+
 When an import runs inside the connection-history execution context, both metadata preparation and finalization
 recheck that context's connection/credential/lease authority in their own transaction, alongside the caller's existing
 write authorization. Revocation or a superseded history run cannot commit load metadata or its cache after authority

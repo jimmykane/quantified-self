@@ -6,7 +6,7 @@ vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ActivityParsingOptions, ActivityTypes, ActivityUtilities, DataDistance, DataEnergy, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
-import { persistTrainingLoadMetadata, prepareTrainingLoadMetadata } from './training-load-metadata';
+import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
 import { attachedEffectiveTrainingLoad, resolveEffectiveTrainingLoad, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -45,6 +45,13 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       const data = JSON.parse(JSON.stringify(sanitizeActivityFirestoreWritePayload(activity.toJSON()))); delete data.streams;
       await db.doc(`users/${uid}/activities/${activity.getID()}`).set({ ...data, eventID: 'workout' });
     }
+  }
+  async function importWorkout(uid: string, event: EventInterface) {
+    await db.doc(`users/${uid}`).set({ test: true });
+    const finish = await prepareTrainingLoadMetadata(uid, event);
+    await source(uid, event);
+    await finish();
+    return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
   function gate() {
@@ -228,7 +235,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(first).toMatchObject({ sourceWritePending: false, sourceRevision: 1 });
     const bucket = db.doc(`users/${uid}/trainingLoadCache/b_${trainingLoadCacheKey('workout')[0]}`);
     const cachedTime = (await bucket.get()).updateTime;
-    await persistTrainingLoadMetadata(uid, event);
+    await finish();
     expect((await bucket.get()).updateTime?.isEqual(cachedTime!)).toBe(true);
     const originalTransaction = db.runTransaction.bind(db);
     let policyQueries = 0;
@@ -256,7 +263,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('does not reserve a pending import when candidate evaluation fails', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     const before = (await db.doc(metadataPath(uid)).get()).data();
     const evaluate = vi.spyOn(ActivityUtilities, 'getTrainingStressScoreEvaluations').mockImplementationOnce(() => { throw new Error('invalid input'); });
     try { await expect(prepareTrainingLoadMetadata(uid, event)).rejects.toThrow('invalid input'); }
@@ -292,8 +299,23 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect((await ref.get()).data()).toEqual(saved);
   });
 
+  it.each(['reservation', 'metadata'])('rejects finalization when the prepared %s is missing', async missing => {
+    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    const event = workout(); const finish = await prepareTrainingLoadMetadata(uid, event);
+    await source(uid, event);
+    const ref = db.doc(metadataPath(uid));
+    const bucket = db.doc(`users/${uid}/trainingLoadCache/b_${trainingLoadCacheKey('workout')[0]}`);
+    const cachedTime = (await bucket.get()).updateTime!;
+    if (missing === 'reservation') await ref.update({ sourceWriteId: admin.firestore.FieldValue.delete() });
+    else await ref.delete();
+    const before = (await ref.get()).data();
+    await expect(finish()).rejects.toThrow('superseded');
+    expect((await ref.get()).data()).toEqual(before);
+    expect((await bucket.get()).updateTime?.isEqual(cachedTime)).toBe(true);
+  });
+
   it('preserves calculated load and cache writes when workout feedback is added, edited or removed', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     await completeTrainingLoadCacheWarmup(uid);
     const parent = db.doc(`users/${uid}/events/workout`);
     const metadata = db.doc(metadataPath(uid)); const originalMetadata = (await metadata.get()).data();
@@ -315,7 +337,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('invalidates and caches a control edit made during an otherwise unchanged reimport', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data()!;
     const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event);
     await ref.update({ controls: { leg: { override: 0 } }, revision: before.revision + 2 });
@@ -329,7 +351,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('applies exclusion and reset while an interrupted source import remains pending', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     await completeTrainingLoadCacheWarmup(uid);
     const finish = await prepareTrainingLoadMetadata(uid, event);
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: null, reasons: ['source-updating'] });
@@ -343,21 +365,22 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('refreshes current owner edits, reset and deletion without trusting delayed trigger contents', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     const parent = db.doc(`users/${uid}/events/workout`); const metadata = db.doc(metadataPath(uid));
+    const revision = (await metadata.get()).data()!.revision;
     await attachEventTrainingLoads(uid, [await parent.get()]);
-    await metadata.update({ controls: { leg: { override: 0 } }, revision: 2 });
+    await metadata.update({ controls: { leg: { override: 0 } }, revision: revision + 1 });
     await refreshTrainingLoadSummary(uid, 'workout');
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 0, status: 'available' });
-    await metadata.update({ excluded: true, revision: 3 });
+    await metadata.update({ excluded: true, revision: revision + 2 });
     await Promise.all([refreshTrainingLoadSummary(uid, 'workout'), refreshTrainingLoadSummary(uid, 'workout')]);
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.status).toBe('excluded');
-    await metadata.update({ excluded: false, controls: {}, revision: 4 }); await refreshTrainingLoadSummary(uid, 'workout');
+    await metadata.update({ excluded: false, controls: {}, revision: revision + 3 }); await refreshTrainingLoadSummary(uid, 'workout');
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBe(9);
     await parent.delete(); await refreshTrainingLoadSummary(uid, 'workout');
     expect((await readTrainingLoadSummaries(uid))?.has('workout')).toBe(false);
     expect((await db.collection(`users/${uid}/trainingLoadCache`).where('leaf', '==', true).get()).empty).toBe(true);
-    await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    await importWorkout(uid, event);
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBe(9);
     await db.recursiveDelete(db.doc(`users/${uid}`));
     await Promise.all([refreshTrainingLoadSummary(uid, 'workout'), completeTrainingLoadCacheWarmup(uid)]);
@@ -380,7 +403,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it.each(['changed', 'deleted', 'moved'])('rejects a cached parent total when a parsed leg is %s', async mutation => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     await completeTrainingLoadCacheWarmup(uid);
     const leg = db.doc(`users/${uid}/activities/leg`);
     if (mutation === 'changed') await leg.update({ 'stats.Energy': 999 });
@@ -402,7 +425,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('splits full buckets atomically under concurrent writes and reads 1,001 summaries in 17 billed document reads', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
     const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
     const parent = (await db.doc(`users/${uid}/events/workout`).get()).data()!;
     const roots: Record<string, Record<string, any>> = {};
@@ -434,21 +457,20 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('selects dated defaults for a delayed import, caches MET, and preserves policy and current controls on duplicate/reparse', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event);
+    const uid = setup(); const event = workout(); await db.doc(`users/${uid}`).set({ test: true });
     const revisions = db.collection(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions`);
     await revisions.doc('past').set({ revision: 1, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), method: 'HR', included: true });
     await revisions.doc('future').set({ revision: 2, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), method: 'MET', included: false });
-    await persistTrainingLoadMetadata(uid, event);
+    const finish = await importWorkout(uid, event);
     const ref = db.doc(metadataPath(uid));
     const first = (await ref.get()).data() as TrainingLoadMetadata;
     expect(first.legs!.leg).toMatchObject({ policy: { revision: 1, method: 'HR', included: true },
       evaluations: { automatic: { score: 9, method: 'MET' }, hr: { score: 9, reasons: ['missing-hr-calibration'] } } });
-    await persistTrainingLoadMetadata(uid, event);
-    expect((await ref.get()).data()?.revision).toBe(1);
-    expect((await ref.get()).data()?.updatedAt.toMillis()).toBe((first.updatedAt as Timestamp).toMillis());
-    await ref.update({ controls: { leg: { override: 0 } }, revision: 2 });
-    const changed = workout('new'); await source(uid, changed); await persistTrainingLoadMetadata(uid, changed);
-    expect((await ref.get()).data()).toMatchObject({ revision: 3, controls: { leg: { override: 0 } },
+    await finish();
+    expect((await ref.get()).data()).toEqual(first);
+    await ref.update({ controls: { leg: { override: 0 } }, revision: first.revision + 1 });
+    const changed = workout('new'); await importWorkout(uid, changed);
+    expect((await ref.get()).data()).toMatchObject({ revision: first.revision + 3, controls: { leg: { override: 0 } },
       legs: { leg: { activityId: 'new', policy: { revision: 1 } } } });
     // An obsolete source leg still awaits cleanup; it is not part of the new modeled leg set.
     await db.doc(`users/${uid}/activities/leg`).update({ 'stats.Energy': 999 });
@@ -457,30 +479,35 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(attachedEffectiveTrainingLoad(docs[0].data()!)).toMatchObject({ score: 0, status: 'available' });
   });
   it('preserves edits committed after the parser starts and blocks deleted owners and mismatched source data', async () => {
-    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
-    await db.doc(metadataPath(uid)).update({ excluded: true, revision: 2 });
-    await persistTrainingLoadMetadata(uid, event);
-    expect((await db.doc(metadataPath(uid)).get()).data()?.excluded).toBe(true);
+    const uid = setup(); const event = workout(); await importWorkout(uid, event);
+    const finish = await prepareTrainingLoadMetadata(uid, event);
+    await source(uid, event);
+    const ref = db.doc(metadataPath(uid));
+    const before = (await ref.get()).data()!;
+    await ref.update({ excluded: true, revision: before.revision + 1 });
+    await finish();
+    expect((await ref.get()).data()?.excluded).toBe(true);
     await db.doc(`users/${uid}/activities/leg`).update({ 'stats.Energy': 999 });
-    await expect(persistTrainingLoadMetadata(uid, event)).rejects.toThrow('source changed');
+    await expect(finish()).rejects.toThrow('source changed');
     await source(uid, event);
     await db.doc(`userDeletionTombstones/${uid}`).set({ deleting: true });
-    await expect(persistTrainingLoadMetadata(uid, event)).rejects.toThrow('account deletion');
+    await expect(finish()).rejects.toThrow('account deletion');
   });
   it('serializes concurrent owner edits and source reparses without losing the override', async () => {
-    const uid = setup(); const original = workout(); await source(uid, original);
-    await persistTrainingLoadMetadata(uid, original);
-    const changed = workout('new-leg'); await source(uid, changed);
+    const uid = setup(); const original = workout(); await importWorkout(uid, original);
     const ref = db.doc(metadataPath(uid));
+    const before = (await ref.get()).data()!;
+    const changed = workout('new-leg');
+    const finish = await prepareTrainingLoadMetadata(uid, changed); await source(uid, changed);
     await Promise.all([
-      persistTrainingLoadMetadata(uid, changed),
+      finish(),
       db.runTransaction(async transaction => {
         const current = (await transaction.get(ref)).data()!;
         transaction.update(ref, { controls: { leg: { override: 12.3 } }, revision: current.revision + 1,
           updatedAt: admin.firestore.FieldValue.serverTimestamp() });
       }),
     ]);
-    expect((await ref.get()).data()).toMatchObject({ revision: 3, controls: { leg: { override: 12.3 } },
+    expect((await ref.get()).data()).toMatchObject({ revision: before.revision + 3, controls: { leg: { override: 12.3 } },
       legs: { leg: { activityId: 'new-leg', policy: { revision: 0 } } } });
   });
   it('freezes legacy identity before reused IDs are overwritten and retains it through partial-write retries', async () => {
@@ -497,7 +524,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(resolveEffectiveTrainingLoad({}, prepared)).toMatchObject({ score: null, reasons: ['source-updating'] });
     await source(uid, changed); // A prior attempt wrote sources, but failed before final metadata.
     const retry = await prepareTrainingLoadMetadata(uid, changed);
-    await ref.update({ 'controls.leg.override': 15, revision: 3 }); // Edit after preparation must also survive.
+    const pending = (await ref.get()).data()!;
+    await ref.update({ 'controls.leg.override': 15, revision: pending.revision + 1 }); // Edit after preparation must also survive.
     await retry();
     const result = (await ref.get()).data() as TrainingLoadMetadata;
     expect(result.legacyLegs).toBeUndefined();
@@ -520,10 +548,9 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it('keeps a returning unmatched leg pending review through repeated reparses until explicit reassociation', async () => {
-    const uid = setup(); const original = workout(); await source(uid, original);
-    await persistTrainingLoadMetadata(uid, original);
+    const uid = setup(); const original = workout(); await importWorkout(uid, original);
     const ref = db.doc(metadataPath(uid));
-    await ref.update({ controls: { leg: { override: 0 } }, revision: 2 });
+    await ref.update({ controls: { leg: { override: 0 } }, revision: (await ref.get()).data()!.revision + 1 });
     const current = workout('current', original.endDate.getTime());
     const finishChanged = await prepareTrainingLoadMetadata(uid, current);
     await source(uid, current); await finishChanged();

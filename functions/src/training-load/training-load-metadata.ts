@@ -1,14 +1,14 @@
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { ActivityUtilities, type EventInterface } from '@sports-alliance/sports-lib';
 import { defaultAppliedTrainingLoadPolicy, isTrainingLoadMethod, recordedTrainingStressScore,
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../../../shared/training-load-source';
-import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint, trainingLoadWriteTime } from './training-load-cache';
-import { derivedMetricSourceProjection } from '../derived-metrics/derived-metrics-source-change';
+import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint } from './training-load-cache';
+import { trainingLoadSourceSnapshot } from './training-load-source-snapshot';
 import type { PreparedTrainingLoadWrite } from './training-load-source-write';
 export { trainingLoadSourceFingerprint } from './training-load-cache';
 export { trainingLoadTimeMs } from '../../../shared/training-load-source';
@@ -138,15 +138,13 @@ export async function prepareTrainingLoadMetadata(
     await prepare(frozen);
     return false;
   });
-  return Object.assign(() => persistTrainingLoadMetadata(uid, event, authorize, firstImport, sourceWriteId), { sourceWriteId });
+  return Object.assign(() => finalizeTrainingLoadMetadata(uid, event, sourceWriteId, firstImport, authorize), { sourceWriteId });
 }
 
-/** Called by all backend writers while parse-time candidates remain available. */
-export async function persistTrainingLoadMetadata(
-  uid: string, event: EventInterface,
+/** Only the prepared attempt can finalize its persisted source and cached candidates. */
+async function finalizeTrainingLoadMetadata(
+  uid: string, event: EventInterface, expectedSourceWriteId: string, firstImport: boolean,
   authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
-  firstImport = false,
-  expectedSourceWriteId?: string,
 ): Promise<void> {
   const db = admin.firestore();
   const eventId = event.getID();
@@ -177,7 +175,7 @@ export async function persistTrainingLoadMetadata(
     let previous = snapshot.exists ? snapshot.data() as TrainingLoadMetadata : null;
     // Parent totals and individual child values can be identical across different
     // leg sets. They prove source consistency, not ownership of this finalization.
-    if (expectedSourceWriteId !== undefined ? previous?.sourceWriteId !== expectedSourceWriteId : previous?.sourceWritePending)
+    if (previous?.sourceWriteId !== expectedSourceWriteId)
       throw new Error('Training load source write was superseded; retry the source import.');
     const firstImportControlKeys = new Set<string>();
     // Old documents may already have been overwritten using reused IDs. Only
@@ -202,13 +200,7 @@ export async function persistTrainingLoadMetadata(
       if (leg.activityId && (!previous?.legs?.[key] || firstImportControlKeys.has(key)))
         leg.policy = await policyAt(db, transaction, uid, leg);
     }
-    const sourceDigest = createHash('sha256').update(JSON.stringify(canonical({
-      event: derivedMetricSourceProjection('event', parent.data()),
-      activities: savedActivities.map(doc => ({ id: doc.id, data: derivedMetricSourceProjection('activity', doc.data()) }))
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    }))).digest('hex');
-    const sourceWriteTimes = Object.fromEntries([['event', trainingLoadWriteTime(parent.updateTime)],
-      ...savedActivities.map(doc => [`activity:${doc.id}`, trainingLoadWriteTime(doc.updateTime)])]);
+    const { sourceDigest, sourceWriteTimes } = trainingLoadSourceSnapshot(parent, savedActivities);
     const next: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,
       excluded: previous?.excluded ?? false, ...reconciled, parentFingerprint,
       ...(previous?.sourceWriteId ? { sourceWriteId: previous.sourceWriteId } : {}),
