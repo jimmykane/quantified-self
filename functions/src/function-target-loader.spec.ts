@@ -101,6 +101,7 @@ describe('function target loader', () => {
       'onDashboardDerivedMetricsHealthWrite',
       'processDerivedMetricsTask',
       'processDerivedMetricsIngressTask',
+      'observeDerivedMetricsHealth',
     ]);
   });
 
