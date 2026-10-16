@@ -844,6 +844,17 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 8. For health/wellness support, add provider metric mappings to the unified health writer rather than expanding the stable catalog with provider field names. Record native semantics, coverage, quality, and revision behavior explicitly.
 9. Validate field semantics against the provider's published examples, including signed event values and inclusive sample endpoints. Cap or compact provider arrays against the shared metric and sample write budgets before handing a normalized record to the writer; do not let a provider-valid payload fail only at the generic persistence boundary.
 
+### QS-calculated Garmin sleep heart rate
+
+Missing Garmin sleep HR can be resolved read-only from same-owner/account Daily 15-second HR samples, with complete
+revision-checked reads, at least 90% coverage and no gap over five minutes. Native values take precedence; QS-calculated
+averages and lowest representative values keep distinct semantics/baselines. No provider request, Sleep rewrite,
+reimport, OAuth scope or ingestion-queue change is involved. Current readiness/daily-report MCP use additionally
+requires Health and Sleep grants; ordinary Sleep and legacy readiness remain native. Sampled Daily content changes
+target the existing readiness invalidation. Health/Sleep ingestion monitoring is **unchanged**; no additional derived-alert coverage is claimed.
+See [Garmin Health](garmin-integration.md#nightly-hrv-in-sleep-and-reports) and
+[Readiness today](training-workspace.md#readiness-today) for bounds, attribution, compatibility and release order.
+
 ### Nightly HRV across Sleep and Health
 
 A provider may deliver nightly HRV inside Sleep (Suunto/COROS) or as a separate Health summary (Garmin).

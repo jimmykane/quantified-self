@@ -1,5 +1,11 @@
 # Sleep Sync Operations
 
+Garmin sleep-window HR is a read-only QS calculation over stored Daily samples; see
+[Garmin Health](garmin-integration.md#nightly-hrv-in-sleep-and-reports). It adds no provider calls, writes, queue or
+scheduler. Monitoring is **unchanged**: ingestion retry/DLQ signals retain their meanings; sampled Daily content
+changes use the existing targeted readiness ingress and generic derived-worker diagnostics. No monitoring apply or
+data migration is needed. Functions/frontend release remains a separate approval.
+
 Health Sources uses `retryPending` to distinguish **Retrying** from **Sync failed** for Garmin, Suunto and COROS. Exhaustion status joins the existing queue transaction; successful/lifecycle status updates clear the flag. Monitoring coverage is **unchanged**: committed retry/DLQ signals, workload labels, lifecycle exclusions, retry limits, schedules and alert definitions retain their existing meanings. This status metadata requires no Cloud Monitoring apply or production migration.
 
 Sleep sync is controlled independently from activity sync. The shared Sleep & Health queue supports

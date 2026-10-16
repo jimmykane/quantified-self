@@ -2176,6 +2176,19 @@ deliberately.
 
 ### Current live readiness and history
 
+With both Health and Sleep grants, current live readiness and the daily report can fill missing Garmin sleep HR
+from existing canonical Daily 15-second samples within each main-sleep window. These are QS-calculated time-weighted
+averages and lowest representative readings, never Garmin-reported sleep aggregates. Native values win. The shared
+resolver requires exact owner/account identity, current parent revisions, at least 90% temporal coverage and no gap
+over five minutes. It reads at most 93 provider dates with a cumulative 512-chunk/550,000-point/16-MiB bound.
+No new provider calls, writes, scopes or public fields are added. Existing strict projections omit calculation flags,
+source keys and samples. Incomplete/read failures cannot produce a partial value. Ordinary Sleep tools and frozen
+legacy readiness do not add this HR calculation. Readiness history evidence version 4 rebuilds through the normal
+app ensure lifecycle and retains its existing Health requirement; legacy points omit calculated HR. Server guidance
+discloses the derivation. Tool schemas and bundled capability routing remain unchanged, so no plugin rebuild is needed. The runtime
+instruction update has a digest-bound pending developer refresh/rescan; the frozen baseline/history are unchanged.
+Separately approved Functions/frontend release is still required.
+
 `get_current_readiness` is the preferred live readiness tool. It requires `metrics:read` plus `sleep:read` and an explicit
 IANA timezone. Like Dashboard Today and Training, it uses current UTC-day Form/ramp and the shared formula-4 evaluator
 in `shared/readiness.ts`. A bounded 60-day projection reads at most 257 Sleep documents to enforce a 256-session limit.

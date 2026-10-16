@@ -16,6 +16,7 @@ import {
 import type { AppDashboardSleepTrendRange } from '../models/app-user.interface';
 import { dashboardSleepTrendRangeDays } from './dashboard-sleep-range.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { calculatedHeartRateSourceKeys, type CalculatedSleepHeartRateSession } from '@shared/nightly-heart-rate';
 
 export interface DashboardSleepTrendPoint {
   sourceKey?: string;
@@ -39,6 +40,9 @@ export interface DashboardSleepTrendPoint {
   score: number | null;
   averageHeartRateBpm: number | null;
   minimumHeartRateBpm: number | null;
+  heartRateCalculatedByQs?: boolean;
+  averageHeartRateSourceKey?: string;
+  minimumHeartRateSourceKey?: string;
   restingHeartRateBpm: number | null;
   averageHrvMs: number | null;
   maxSpo2Percent: number | null;
@@ -306,6 +310,8 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     score: toMetric(session.score?.value),
     averageHeartRateBpm: toPositiveMetric(session.vitals?.averageHeartRateBpm),
     minimumHeartRateBpm: toPositiveMetric(session.vitals?.minimumHeartRateBpm),
+    heartRateCalculatedByQs: !!(session as CalculatedSleepHeartRateSession).qsCalculatedHeartRate,
+    ...calculatedHeartRateSourceKeys(session),
     restingHeartRateBpm: toPositiveMetric(session.vitals?.restingHeartRateBpm),
     averageHrvMs,
     maxSpo2Percent: resolveMaxSpo2Percent(session),
@@ -400,8 +406,8 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     remSeconds: sumPointSeconds(primaryPoints, 'remSeconds'),
     awakeSeconds: sumPointSeconds(primaryPoints, 'awakeSeconds') + interruptionSeconds,
     unknownSeconds: sumPointSeconds(primaryPoints, 'unknownSeconds'),
-    averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
-    minimumHeartRateBpm: minFiniteMetric(primaryPoints.map(point => point.minimumHeartRateBpm)),
+    averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.filter(point => point.averageHeartRateSourceKey === latestPrimaryPoint.averageHeartRateSourceKey).map(point => point.averageHeartRateBpm)),
+    minimumHeartRateBpm: minFiniteMetric(primaryPoints.filter(point => point.minimumHeartRateSourceKey === latestPrimaryPoint.minimumHeartRateSourceKey).map(point => point.minimumHeartRateBpm)),
     restingHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.restingHeartRateBpm)),
     ...aggregateNightlyHrvEvidence(primaryPoints, {
       requireEveryPoint: latestPrimaryPoint.provider === SLEEP_PROVIDERS.SuuntoApp

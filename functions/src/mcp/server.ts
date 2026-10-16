@@ -895,6 +895,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   ) {
     instructions.push(
       'get_current_readiness calculates the live formula-4 UTC-day readiness used by Dashboard Today, with a 7-day HRV average and shared 60-day personal range. get_today_readiness and the generic training_readiness metric preserve formula 3 for legacy clients. Current readiness history additionally requires Health access because stored HRV may include overnight Health records. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
+      'With both Health and Sleep access, current readiness and the daily report may include QS-calculated sleep-window heart rate from recorded Garmin 15-second samples. The average is weighted by the covered time; the minimum is the lowest representative sample. Never claim these are Garmin-reported sleep aggregates or a reproduction of Garmin Connect. Ordinary Sleep tools and legacy readiness do not add this calculation.',
     );
   }
   instructions.push(

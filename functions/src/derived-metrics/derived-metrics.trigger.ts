@@ -7,7 +7,7 @@ import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
-import { hasDerivedMetricSourceChange } from './derived-metrics-source-change';
+import { hasDerivedMetricSourceChange, hasGarminSleepHeartRateSource } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
 
@@ -85,6 +85,9 @@ async function handleDerivedMetricsSourceWrite(
             ...(healthMetricIds.has(HEALTH_METRIC_IDS.HeartRateVariability) ? [
                 DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingReadiness,
             ] : []),
+            ...(!healthMetricIds.has(HEALTH_METRIC_IDS.HeartRateVariability)
+                && [event.data?.before?.data(), event.data?.after?.data()].some(hasGarminSleepHeartRateSource)
+                ? [DERIVED_METRIC_KINDS.TrainingReadiness] : []),
             ...(healthMetricIds.has(HEALTH_METRIC_IDS.Vo2Max) ? [DERIVED_METRIC_KINDS.TrainingCapacity] : []),
         ]
         : [];

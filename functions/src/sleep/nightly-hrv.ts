@@ -5,6 +5,8 @@ import { enrichSleepWithNightlyHrv, nightlyHrvDateRange, NIGHTLY_HRV_LIMITS,
   assertNightlyHrvRecordBudget, type NightlyHrvRecord } from '../../../shared/nightly-hrv';
 import { decodeSleepSessionSportsLibData, SportsLibDataValidationError } from '../../../shared/sports-lib-health-data';
 import type { SleepSession } from '../../../shared/sleep';
+import { loadNightlyHeartRate, nightlyHeartRateQueries } from '../../../shared/nightly-heart-rate';
+import { readHealthRange } from '../health/query';
 
 export interface NightlyHrvDocument { id: string; data: Record<string, unknown> }
 export interface NightlyHrvPage { records: NightlyHrvRecord[]; cursor?: unknown }
@@ -51,5 +53,29 @@ export async function supplementNightlyHrvSleepDocuments(
   const enriched = await enrichSleepWithNightlyHrv(uid, valid.map(entry => entry.session), records);
   const result = [...documents];
   valid.forEach((entry, index) => { result[entry.index] = { id: documents[entry.index].id, data: enriched[index] as unknown as Record<string, unknown> }; });
+  return result;
+}
+
+/** Both Health supplements share the existing owner-scoped, revision-checked read contracts. */
+export async function supplementNightlyHealthSleepDocuments(
+  uid: string, documents: readonly NightlyHrvDocument[], fetchHrv?: FetchNightlyHrvPage,
+  readHeartRate: typeof readHealthRange = readHealthRange,
+): Promise<NightlyHrvDocument[]> {
+  const hrv = await supplementNightlyHrvSleepDocuments(uid, documents, fetchHrv);
+  const valid: Array<{ index: number; session: SleepSession }> = [];
+  hrv.forEach((document, index) => {
+    try { valid.push({ index, session: decodeSleepSessionSportsLibData({ ...document.data, id: document.id } as unknown as SleepSession) }); }
+    catch (error) { if (!(error instanceof SportsLibDataValidationError)) throw error; }
+  });
+  const sessions = valid.map(entry => entry.session);
+  if (!nightlyHeartRateQueries(uid, sessions).length) return hrv;
+  const assertOwner = async () => {
+    if ((await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip) throw new Error('Nightly Health owner is unavailable.');
+  };
+  await assertOwner();
+  const enriched = await loadNightlyHeartRate(uid, sessions, query => readHeartRate(uid, query));
+  await assertOwner();
+  const result = [...hrv];
+  valid.forEach((entry, index) => { result[entry.index] = { id: hrv[entry.index].id, data: enriched[index] as unknown as Record<string, unknown> }; });
   return result;
 }

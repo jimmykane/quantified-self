@@ -97,7 +97,7 @@ describe('training derived metric normalizers', () => {
     }));
     const payload = {
       formulaVersion: 4,
-      evidenceVersion: 3,
+      evidenceVersion: 4,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),
@@ -106,6 +106,7 @@ describe('training derived metric normalizers', () => {
     };
 
     expect(resolveTrainingReadinessMetricPayload(payload)).toEqual(payload);
+    expect(resolveTrainingReadinessMetricPayload({ ...payload, evidenceVersion: 3 })).toBeNull();
     expect(resolveTrainingReadinessMetricPayload({...payload, evidenceVersion: undefined})).toBeNull();
     expect(resolveTrainingReadinessMetricPayload({
       ...payload,

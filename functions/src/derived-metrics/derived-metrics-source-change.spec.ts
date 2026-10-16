@@ -34,4 +34,11 @@ describe('derived source invalidation', () => {
         expect(hasDerivedMetricSourceChange('event', { stats: { a: 1, b: 2 } }, { stats: { b: 2, a: 1 } })).toBe(false);
         expect(hasDerivedMetricSourceChange('event', { stats: { a: 1 } }, { stats: {} })).toBe(true);
     });
+    it('invalidates changed Garmin HR samples through the parent content digest, while ignoring retry watermarks', () => {
+        const before = { metricIds: ['heart_rate'], sampleChunkIds: ['chunk'], source: {
+            provider: 'GarminAPI', sourceRecordType: 'garmin_daily', revision: { digest: 'before' }, maxObservedRevisionOrder: 1 } };
+        expect(hasDerivedMetricSourceChange('health', before, { ...before, source: { ...before.source, revision: { digest: 'after' } } })).toBe(true);
+        expect(hasDerivedMetricSourceChange('health', before, { ...before, source: { ...before.source, maxObservedRevisionOrder: 2 } })).toBe(false);
+        expect(hasDerivedMetricSourceChange('health', before, { ...before, sampleChunkIds: [] })).toBe(true);
+    });
 });

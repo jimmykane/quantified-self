@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "9ddc233c1b25d35a72c88e164109a8ae26900fc0b11fd4e604fbe5c9121e0468",
+  "candidateSha256": "2d30aba380a502d65932964b9bc8c509be710d03c0116a31131834cbe48898e3",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve Garmin replacement, prescription analysis, note-only reflections, phases, source-fidelity/recipe review, first-batch/changed-value read-back, title-conflict recovery and separate activation/sync guidance. Add a 1–25 complete-workout preview for HR retargeting, preserving pool/Lap under existing grants and approved Apply. Frozen schemas stay unchanged; RPE stays in Edit details, phases grant no recipe/provider authority. Release, exact rescan and bundled sync remain separate.",
+  "summary": "Preserve pending replacement, prescription analysis, note-only reflections, phases, source/recipe and batch/value checks, title-conflict recovery, and separate activation/sync guidance. Add complete 1–25-workout HR-retarget previews preserving pool/Lap under existing grants/Apply. Keep RPE in Edit details; phases grant no recipe/provider authority. Explain scope-gated QS-calculated Garmin sleep HR in readiness/reports. Frozen schemas unchanged; release, rescan and bundled sync remain separate.",
   "rescanRequired": true
 }

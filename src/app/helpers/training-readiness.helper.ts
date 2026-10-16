@@ -191,7 +191,7 @@ export function buildTrainingReadinessViewModel(
       {
         label: 'Overnight HR vs baseline',
         valueText: formatRatio(context.overnightHeartRateRatio, locale),
-        detailText: 'Average sleep HR leads the bounded driver; minimum HR supports it when both are available. Same-provider median; at least 3 prior nights required.',
+        detailText: `${context.overnightHeartRateCalculatedByQs ? 'Calculated by QS from Garmin’s recorded 15-second samples within sleep; the minimum is the lowest recorded sample. ' : ''}Average sleep HR leads the bounded driver; minimum HR supports it when both are available. Same-provider median; at least 3 prior nights required.`,
         indicatorVariant: 'deviation',
         indicatorValue: context.overnightHeartRateRatio === null ? null : (context.overnightHeartRateRatio - 1) * 100,
         indicatorTone: resolveRatioTone(context.overnightHeartRateRatio, true),

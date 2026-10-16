@@ -678,6 +678,8 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
+    expect(HELP_SECTIONS.some(section => section.content.includes('at least 90% coverage with no gap over five minutes'))).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.content.includes('QS-calculated Garmin sleep-window heart rate'))).toBe(true);
     expect(healthSection?.content).toContain('**Retrying** means a temporary sync error is being retried automatically');
     expect(healthSection?.content).toContain('automatic retries are exhausted or the job cannot be retried');
     expect(healthSection?.content).toContain('not the failed attempt time');
@@ -1260,7 +1262,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%');
     expect(trainingSection?.content).toContain('Lower Overnight HR versus personal baseline supports readiness');
     expect(trainingSection?.content).toContain('can provide both HR measures');
-    expect(trainingSection?.content).toContain('Garmin Health sleep summaries currently provide neither');
+    expect(trainingSection?.content).toContain('QS can calculate missing sleep-window HR');
+    expect(trainingSection?.content).toContain('at least 90% coverage with no gap over five minutes');
+    expect(trainingSection?.content).toContain('keep a separate baseline from provider-reported readings');
     expect(trainingSection?.content).toContain('rolling **60-day personal range**');
     expect(trainingSection?.content).toContain('Changing a chart to one year does not change these windows');
     expect(trainingSection?.content).toContain(

@@ -4936,10 +4936,30 @@ are never relabelled as formula 4, and new scores are never relabelled as formul
 the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds. A nonempty current window
 must contain a latest reading within seven days, and current-day counts cannot exceed baseline-day counts.
 
-Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
-mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
-summary mapper currently persists neither normalized sleep-HR measure. The score therefore uses only the measures that
-are actually present; provider-specific omissions remain missing and do not become neutral or zero-valued evidence.
+Provider coverage follows native Sleep aggregates or explicitly labelled QS calculations. Suunto persists average
+and minimum sleep HR; COROS persists average sleep HR. Garmin Sleep summaries have neither, so the live reader and
+readiness builder share `shared/nightly-heart-rate.ts`: owner/account-matched canonical Daily 15-second samples inside
+the main-sleep window can supply missing fields. Their time-weighted mean and lowest representative value are
+**Calculated by QS**. Native fields take precedence, and native/calculated HR baselines stay separate. Require at
+least 90% temporal coverage and no gap over five minutes, including the window edges; never fill gaps, use later
+readings, substitute daily/resting/7-day HR or merge accounts. Incomplete or conflicting evidence remains unavailable.
+
+The supplement is read-only and uses the existing parent/revision-checked Health query and owner/deletion fences.
+It spans at most 93 provider dates in single-day queries, 512 chunks, 550,000 points and 16 MiB cumulatively; backend
+reads have at most four windows in flight. Native Sleep and HRV remain usable on optional app-read failure. Existing
+history needs no migration or reimport. Internal readiness evidence version 4 invalidates only readiness history for
+the normal ensure/build lifecycle; formula 4 and weights are unchanged. Frozen legacy history omits the new
+Health-derived HR values. Creates/deletes and changed content digests for sampled Garmin Daily HR invalidate only
+`training_readiness` through the existing Health ingress; watermark-only updates do not.
+
+MCP impact: current live readiness and daily reports may use the calculation only with both Health and Sleep grants
+(in addition to Training metrics). Ordinary Sleep tools and legacy readiness retain their native HR contract. Internal
+calculation/source keys and samples never enter outputs; strict schemas, tool names, scopes and provider permissions
+are unchanged. Server instructions disclose QS-calculated aggregates. Planning reads/mutations and provider delivery
+are unaffected; no planning deferral or plugin rebuild is required. Monitoring remains **unchanged**: existing Health/Sleep ingestion metrics and alerts keep their queue meanings.
+The existing derived ingress/worker error handling remains in use; no additional derived-alert coverage is claimed.
+This adds a targeted input invalidation, not a queue, scheduler, retry policy or telemetry label. Release
+Functions before the frontend so current and historical evidence advance together; no deployment is authorized by implementation.
 
 The sleep listener is lower-bounded to 60 days, excludes naps and ignores future-dated records. Sleep and Overnight HR
 accept a latest night only through 48 hours after its end. The card also refreshes when a future record becomes eligible

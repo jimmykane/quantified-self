@@ -1,8 +1,8 @@
-import type { SleepSession } from '@shared/sleep';
+import type { CalculatedSleepHeartRateSession } from '@shared/nightly-heart-rate';
 import { nightlyHealthAccountKey, sleepEvidenceSourceKey } from '@shared/nightly-hrv';
 
 /** Read-time identities shared with typed Health references; never persisted. */
-export type HealthWorkspaceSleepSession = SleepSession & {
+export type HealthWorkspaceSleepSession = CalculatedSleepHeartRateSession & {
   healthAccountKey?: string;
   nightlyHrvSourceKey?: string;
 };

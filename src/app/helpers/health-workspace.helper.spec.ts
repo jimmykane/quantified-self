@@ -1435,6 +1435,25 @@ describe('Health workspace helpers', () => {
     }
   });
 
+  it('labels QS-calculated sleep HR as derived and keeps it separate from native sleep HR', () => {
+    const native = sleepSession({ vitals: { averageHeartRateBpm: 60, minimumHeartRateBpm: 45 } });
+    const calculated = { ...native, id: 'calculated', sleepDate: '2026-08-03',
+      startTimeMs: native.startTimeMs + 86400000, endTimeMs: native.endTimeMs + 86400000,
+      qsCalculatedHeartRate: { average: true, minimum: true } };
+    const result = projectLoadedHealthRange([], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [HEALTH_METRIC_IDS.HeartRate] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    for (const settings of [normalizeUserUnitSettings(), normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [native, calculated], [], settings);
+      expect(view.series).toHaveLength(4);
+      const derived = view.series.filter(s => s.semanticVariant.startsWith('qs_'));
+      expect(derived).toHaveLength(2);
+      expect(derived.every(s => s.origin === 'quantified_self_derived' && s.recordingMethod === 'quantified_self_calculated')).toBe(true);
+      expect(derived.every(s => s.semanticLabel.includes('Calculated by QS'))).toBe(true);
+      const display = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRate, 60, settings)!;
+      expect(view.rows.some(row => row.valueText === `${display.value} ${display.unit}`)).toBe(true);
+    }
+  });
+
   it('keeps Sleep vital accounts, naps and standalone readings separate and excludes invalid or out-of-range evidence', () => {
     const session = sleepSession({ vitals: { averageHeartRateBpm: 60, minimumHeartRateBpm: 45, restingHeartRateBpm: null,
       maxSpo2Percent: 101, averageRespirationBrpm: 0 } });
