@@ -1595,17 +1595,19 @@ describe('SummariesComponent', () => {
   });
 
   it('binds current load, recovery and source-labelled sleep into the owner sentence', () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 16, 12));
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     mockUserService.user.set(component.user); component.isOwnerDashboard = true;
     component.dashboardGlanceSignals = [];
     const now = new Date();
     component.dashboardBriefingLoadComparison = { direction: 'higher', utcDayMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) };
     component.dashboardBriefingSleepText = 'last night’s Suunto sleep was 7h';
-    component.dashboardTodayReadiness = { ...component.dashboardTodayReadiness, recoveryText: '2h', recoveryFinishText: 'Today' };
+    component.dashboardTodayReadiness = { ...component.dashboardTodayReadiness, recoveryText: '2h', recoveryFinishText: 'Today',
+      recoveryFinishTimeMs: now.getTime() + 7200000 };
     fixture.detectChanges();
     const summary = (fixture.nativeElement as HTMLElement).querySelector('app-dashboard-daily-briefing')!;
     expect(summary.textContent).toContain('above your four-week weekly average');
-    expect(summary.textContent).toContain('imported recovery remaining is 2h');
+    expect(summary.textContent).toContain('imported recovery remaining is 02h 00m');
     expect(summary.textContent).toContain('last night’s Suunto sleep was 7h');
     expect(summary.querySelector('button, dl')).toBeNull();
   });

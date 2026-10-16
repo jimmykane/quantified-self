@@ -26,7 +26,7 @@ export class DashboardDailyBriefingComponent {
   readonly signals = input.required<readonly HealthChangeSignal[]>();
   readonly notesContext = input<TimelineNoteChartContext | null>(null);
   readonly notesStatus = input<'loading' | 'ready' | 'error'>('loading');
-  readonly recoveryText = input('');
+  readonly recoveryFinishTimeMs = input<number | null>(null);
   readonly sleepText = input('');
   readonly loadComparison = input<DashboardBriefingLoadComparison | null>(null);
   private readonly users = inject(AppUserService);
@@ -43,6 +43,7 @@ export class DashboardDailyBriefingComponent {
   private readonly schedule = signal(pending<CalendarPeriodSchedule | null>(null));
   private readonly completions = signal(pending<readonly TrainingWorkoutCompletionV1[]>([]));
   private readonly loadedKey = signal('');
+  private lastReadOwner: string | null = null;
   readonly briefing = computed(() => {
     const current = this.loadedKey() === this.readKey();
     const notes = this.notesContext();
@@ -50,14 +51,19 @@ export class DashboardDailyBriefingComponent {
       events: current ? this.events() : pending([]), schedule: current ? this.schedule() : pending(null),
       completions: current ? this.completions() : pending([]),
       notes: notes?.ownerUid === this.owner() ? notes.notes : [], notesReady: this.notesStatus() === 'ready',
-      recoveryText: this.recoveryText(), sleepText: this.sleepText(), loadComparison: this.loadComparison(),
+      recoveryFinishTimeMs: this.recoveryFinishTimeMs(), sleepText: this.sleepText(), loadComparison: this.loadComparison(),
       unitSettings: this.user().settings?.unitSettings, locale: this.locale });
   });
 
   constructor() {
     effect(onCleanup => {
-      const key = this.readKey();
       const uid = this.owner();
+      if (uid !== this.lastReadOwner) {
+        this.lastReadOwner = uid;
+        // Authentication can resolve after a hidden/inactive clock has crossed midnight.
+        untracked(() => this.now.set(Date.now()));
+      }
+      const key = this.readKey();
       const window = untracked(this.window);
       this.loadedKey.set(key); this.events.set(pending([])); this.schedule.set(pending(null)); this.completions.set(pending([]));
       if (!uid) return;

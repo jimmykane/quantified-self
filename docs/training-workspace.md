@@ -4504,6 +4504,8 @@ provider transport or raw activity streams. Schedule revisions cancel old comple
 all readers, and read-key/generation checks discard late results. The one-minute date clock pauses when hidden; focus
 catches up after midnight/timezone changes and retries failed reads without polling. Local calendar arithmetic preserves
 DST and the account's week-start setting, independently of Training's UTC snapshot cutoff.
+When ownership becomes available after authentication was pending, the clock catches up before the first bounded read;
+an inactive clock from the previous day must not start yesterday's queries or duplicate the current-day subscriptions.
 
 `dashboard-daily-briefing.helper.ts` keeps actual local-today recorded parent events distinct from planned sessions.
 Future recordings are excluded and duplicate parents count once. It uses canonical duration formatting only when every
@@ -4521,13 +4523,18 @@ range and cleans up the old registration, while ordinary note edits do not resta
 No second note store/query is added. Per-note/global visibility, overlap dates, ongoing-note timezone, edits, deletion and
 workspace error/loading states remain authoritative. Only a bounded literal title and additional-visible-note count enter
 the sentence. The briefing does not claim a complete absence when note coverage is partial. Recovery and sleep reuse
-Today's already-loaded current evidence; no new sleep threshold/baseline or readiness formula is introduced. Load copy
+Today's already-loaded current evidence; no new sleep threshold/baseline or readiness formula is introduced. Recovery
+passes Today's existing finish timestamp rather than a preformatted duration. The briefing clock/focus refresh formats
+the remaining seconds through the same canonical compact-duration formatter and omits missing, invalid or elapsed
+deadlines, so a suspended tab cannot resume with an old recovery duration. No additional source read or recovery model
+is introduced. Load copy
 reuses `dashboardAcwrComparison`, extracted without changing the existing 0.8/1.3 Dashboard presentation bands, and is
 withheld unless the ready ACWR context is current for the UTC day. Its source day is carried only in local presentation
 state and checked again on the briefing clock, so an open page expires yesterday's comparison without waiting for another
 snapshot emission. The rail retains existing assessment tones; failures and missing evidence never become “all normal.”
 Loading, unavailable or insufficient assessments stay verbal even on a quiet day with only optional context, and an
 unavailable assessment retains its error rail rather than being downgraded by a load-comparison clause.
+Caution from an optional load comparison applies only when that clause fits the sentence budget and is actually shown.
 
 MCP impact review: **no public contract/authority impact**. Existing `query_planned_workouts_by_date`,
 `get_planned_workout_completions`, Training metric reads and independently consented Timeline-note reads already expose

@@ -80,11 +80,11 @@ describe('Dashboard daily briefing', () => {
   it('selects existing assessments and conditional load/recovery/sleep copy without an expansion', () => {
     const value = input(); value.signals = [{ id: 'readiness', label: 'Readiness', sourceLabel: 'Derived', state: 'attention',
       statusText: 'Mixed', summaryText: 'Readiness is Mixed', detailText: '' }];
-    value.loadComparison = { direction: 'higher', utcDayMs }; value.recoveryText = '2h'; value.sleepText = 'last night’s Suunto sleep was 7h';
+    value.loadComparison = { direction: 'higher', utcDayMs }; value.recoveryFinishTimeMs = now + 7200000; value.sleepText = 'last night’s Suunto sleep was 7h';
     const result = buildDashboardDailyBriefing(value);
     expect(result.tone).toBe('caution'); expect(result.headline).toContain('Readiness is Mixed');
     expect(result.headline).toContain('above your four-week weekly average');
-    expect(result.headline).toContain('imported recovery remaining is 2h'); expect(result.headline).toContain('Suunto sleep');
+    expect(result.headline).toContain('imported recovery remaining is 02h 00m'); expect(result.headline).toContain('Suunto sleep');
   });
   it('does not fabricate missing duration or complete partial recordings', () => {
     const value = input(); value.events.data = [event('a')]; value.events.complete = false;
@@ -98,12 +98,12 @@ describe('Dashboard daily briefing', () => {
     expect(buildDashboardDailyBriefing(value)).toMatchObject({ tone: 'error', headline: expect.stringContaining('Readiness is unavailable') });
   });
   it.each(['loading', 'unavailable', 'insufficient'] as const)('does not let recovery context hide %s readiness on a quiet day', state => {
-    const value = input(); value.recoveryText = '2h';
+    const value = input(); value.recoveryFinishTimeMs = now + 7200000;
     value.signals = [{ id: 'readiness', label: 'Readiness', sourceLabel: '', state,
       statusText: state, summaryText: `Readiness is ${state}`, detailText: '' }];
     const result = buildDashboardDailyBriefing(value);
     expect(result.headline).toContain(`Readiness is ${state}`);
-    expect(result.headline).toContain('imported recovery remaining is 2h');
+    expect(result.headline).toContain('imported recovery remaining is 02h 00m');
     value.loadComparison = { direction: 'higher', utcDayMs };
     if (state === 'unavailable') expect(buildDashboardDailyBriefing(value).tone).toBe('error');
   });
@@ -136,6 +136,28 @@ describe('Dashboard daily briefing', () => {
     expect(buildDashboardDailyBriefing(value).headline).not.toContain('above your four-week weekly average');
     value.loadComparison.utcDayMs = utcDayMs + 86400000;
     expect(buildDashboardDailyBriefing(value).headline).toContain('above your four-week weekly average');
+  });
+  it('does not keep an expired recovery estimate after the page resumes', () => {
+    const value = input(); value.recoveryFinishTimeMs = now + 7200000;
+    expect(buildDashboardDailyBriefing(value).headline).toContain('Imported recovery remaining');
+    value.nowMs += 3600000;
+    expect(buildDashboardDailyBriefing(value).headline).toContain('Imported recovery remaining is 01h 00m');
+    value.nowMs += 2 * 3600000;
+    expect(buildDashboardDailyBriefing(value).headline).not.toMatch(/imported recovery remaining/i);
+  });
+  it.each([null, undefined, NaN, Infinity, now - 1, now, now + 500])('omits missing, invalid or expired recovery deadline %s', recoveryFinishTimeMs => {
+    expect(buildDashboardDailyBriefing({ ...input(), recoveryFinishTimeMs }).headline).not.toMatch(/imported recovery remaining/i);
+  });
+  it('does not color the rail for a load clause omitted by the sentence budget', () => {
+    const value = input(); const recording = event('ride', undefined, 3600);
+    recording.name = 'R'.repeat(100); value.events.data = [recording];
+    value.schedule.data!.workouts = [workout('planned', { title: 'P'.repeat(100) })];
+    value.completions.data = [link('planned')]; value.notes = [note('travel', { title: 'N'.repeat(120) })];
+    value.signals = [{ id: 'readiness', label: 'Readiness', sourceLabel: '', state: 'insufficient',
+      statusText: 'Awaiting sleep', summaryText: 'Readiness is waiting for today’s sleep', detailText: '' }];
+    value.loadComparison = { direction: 'higher', utcDayMs };
+    const result = buildDashboardDailyBriefing(value);
+    expect(result.headline).not.toContain('four-week'); expect(result.tone).toBe('neutral');
   });
   it('uses local midnight, configured week start and calendar-day lookahead', () => {
     const sunday = new Date(2026, 9, 25, 23, 59);

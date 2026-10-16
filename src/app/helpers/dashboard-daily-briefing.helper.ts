@@ -1,6 +1,6 @@
 import { DataDuration, type EventInterface, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { isTimelineNoteVisible, timelineNoteOverlaps, type TimelineNote } from '@shared/timeline-notes';
-import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+import { formatUnitAwareDataValue, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { formatActivityCalendarDateParam, resolveActivityCalendarPrimaryRange } from './activity-calendar.helper';
 import { resolveCalendarCompletionCoverage, type CalendarPeriodSchedule, type CalendarPeriodSource } from './calendar-period-summary.helper';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
@@ -57,7 +57,7 @@ export interface DashboardBriefingContext {
   completions: CalendarPeriodSource<readonly TrainingWorkoutCompletionV1[]>;
   notes: readonly TimelineNote[];
   notesReady: boolean;
-  recoveryText?: string;
+  recoveryFinishTimeMs?: number | null;
   sleepText?: string;
   loadComparison?: DashboardBriefingLoadComparison | null;
   unitSettings?: UserUnitSettingsInterface | null;
@@ -143,14 +143,23 @@ export function buildDashboardDailyBriefing(input: DashboardBriefingContext): {
   const nextDate = next ? getDateTimeFormatter(input.locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
     .format(new Date(`${next.localDate}T12:00:00Z`)) : '';
   const nextClause = next && !todayPlans.length ? `next on your plan is ${title(next.title)} on ${nextDate}` : '';
-  const recovery = input.recoveryText && input.recoveryText !== '--' ? `imported recovery remaining is ${input.recoveryText}` : '';
+  // Use Today's existing deadline, not a formatted duration that can freeze while the tab sleeps.
+  const recoverySeconds = input.recoveryFinishTimeMs != null && Number.isFinite(input.recoveryFinishTimeMs)
+    ? Math.floor((input.recoveryFinishTimeMs - input.nowMs) / 1000) : 0;
+  const recoveryText = recoverySeconds > 0 ? formatUnitAwareDataValue(DataDuration.type, recoverySeconds, input.unitSettings,
+    { compactDuration: true, stripRepeatedUnit: true }) : '';
+  const recovery = recoveryText ? `imported recovery remaining is ${recoveryText}` : '';
   const sleep = input.sleepText ? input.sleepText : '';
+  let loadIncluded = false;
   for (const candidate of [load, progress, nextClause, recovery, sleep]) {
-    if (candidate && clauses.length < 4 && clauses.join('; ').length + candidate.length <= 360) clauses.push(candidate);
+    if (candidate && clauses.length < 4 && clauses.join('; ').length + candidate.length <= 360) {
+      clauses.push(candidate);
+      if (candidate === load) loadIncluded = true;
+    }
   }
   let headline = clauses.length ? clauses.join('; ') : assessment.headline.replace(/\.$/, '');
   headline = headline.charAt(0).toUpperCase() + headline.slice(1) + '.';
-  const tone = issues.length ? 'caution' : assessment.state === 'unavailable' ? 'error' : load ? 'caution'
+  const tone = issues.length ? 'caution' : assessment.state === 'unavailable' ? 'error' : loadIncluded ? 'caution'
     : assessment.state === 'available' || assessment.state === 'within-range' ? 'positive' : 'neutral';
   return { headline, tone };
 }

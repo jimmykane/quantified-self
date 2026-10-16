@@ -67,7 +67,7 @@
   @if (isOwnerDashboard) {
     <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals"
       [notesContext]="timelineNotes()" [notesStatus]="timelineNotesStatus()"
-      [recoveryText]="dashboardTodayReadiness.recoveryFinishText ? dashboardTodayReadiness.recoveryText : ''"
+      [recoveryFinishTimeMs]="dashboardTodayReadiness.recoveryFinishTimeMs"
       [sleepText]="dashboardBriefingSleepText" [loadComparison]="dashboardBriefingLoadComparison" />
   }
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"

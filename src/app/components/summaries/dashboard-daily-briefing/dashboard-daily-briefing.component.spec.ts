@@ -58,6 +58,14 @@ describe('Dashboard daily briefing', () => {
     authenticated.set(null); fixture.detectChanges(); expect(events.observed).toBe(false); expect(plans.observed).toBe(false);
     expect(fixture.nativeElement.querySelector('section')).toBeNull();
   });
+  it('uses the current local date when authentication resolves after midnight', () => {
+    authenticated.set(null); const fixture = create(); expect(calendar.watchSummaryEvents).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date(2026, 9, 17, 12)); authenticated.set(owner); fixture.detectChanges();
+    expect(calendar.watchSummaryEvents).toHaveBeenCalledWith(owner, {
+      startMs: new Date(2026, 9, 17).getTime(), endExclusiveMs: new Date(2026, 9, 18).getTime(),
+    });
+    expect(calendar.watchSummaryEvents).toHaveBeenCalledTimes(1);
+  });
   it('registers today’s notes once, renders edits as text and clears hidden notes', () => {
     const fixture = create(); const reportRange = vi.fn();
     const context: TimelineNoteChartContext = { ownerUid: 'owner', notes: [], select: vi.fn(), reportRange };
@@ -94,6 +102,16 @@ describe('Dashboard daily briefing', () => {
     expect(fixture.nativeElement.textContent).toContain('above your four-week weekly average');
     vi.advanceTimersByTime(60_000); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('above your four-week weekly average');
+  });
+  it('refreshes and expires recovery on focus after suspension without rereading source data', () => {
+    const fixture = create(); const nowMs = Date.now();
+    fixture.componentRef.setInput('recoveryFinishTimeMs', nowMs + 7200000); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('recovery remaining is 02h 00m');
+    vi.setSystemTime(nowMs + 3600000); window.dispatchEvent(new Event('focus')); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('recovery remaining is 01h 00m');
+    vi.setSystemTime(nowMs + 10800000); window.dispatchEvent(new Event('focus')); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toMatch(/imported recovery remaining/i);
+    expect(calendar.watchSummaryEvents).toHaveBeenCalledTimes(1);
   });
   it('withholds completion progress on restore/error rather than claiming a rest day', () => {
     const fixture = create(); training.watchWorkoutCompletionsForWorkouts.mockReturnValue(of([]));
