@@ -39,6 +39,17 @@ when the updated email is not part of a marketing campaign. Its existing 256 MiB
 change needs a separately approved deployment and production memory check. The former `projectEventTagCatalog` endpoint
 has since been retired and is excluded from discovery. Targets absent from the map use the complete entrypoint.
 
+## Derived-metrics observer isolation
+
+`observeDerivedMetricsHealth` loads directly from `derived-metrics/monitoring-schedule`. This new Gen 2 read-only
+observer uses 512 MiB, 60 seconds, maximum one instance, `europe-west2`, and `*/15 * * * *` UTC, with no secrets or
+minimum warm instances. Its lightweight canonical-kind dependency excludes Sports Lib, derived builders, Cloud Tasks,
+the complete entrypoint, MCP, AI and admin handlers. Full discovery includes the new target; the compiled check
+compares its isolated Firebase descriptor against fresh discovery and verifies its explicit runtime/schedule options.
+Existing ingress/calculation handlers retain their original resources, triggers, retry and claim/publication behavior.
+The [Training runbook](training-workspace.md#derived-metrics-cloud-monitoring-831) owns the sample bounds, metrics,
+costs, exclusions, tests and separately approved deployment/activation steps. No production changes follow from tests.
+
 ## Admin handler isolation
 
 The remaining 16 exports from `functions/src/admin/index.ts` now load from their direct owner modules: users, queues,
