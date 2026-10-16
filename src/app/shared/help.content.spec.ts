@@ -602,6 +602,7 @@ describe('help.content', () => {
     expect(health).toContain('**All** starts with **Your recent Health** highlights');
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
+    expect(health).toContain('**At a glance is currently hidden on Dashboard.** Today and your saved charts remain available.');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
     expect(health).toContain('Dashboard **At a glance** is always sentence-only');
     expect(health).toContain('**Daily context in At a glance:**');

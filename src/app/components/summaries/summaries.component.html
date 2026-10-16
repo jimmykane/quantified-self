@@ -64,7 +64,7 @@
   </div>
   }
   @if (showTodaySummary) {
-  @if (isOwnerDashboard) {
+  @if (isOwnerDashboard && showDailyBriefing) {
     <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals"
       [notesContext]="timelineNotes()" [notesStatus]="timelineNotesStatus()"
       [recoveryFinishTimeMs]="dashboardTodayReadiness.recoveryFinishTimeMs"

@@ -1568,7 +1568,23 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('app-dashboard-daily-briefing')).toBeNull();
   });
 
-  it('adds owner-only change evidence without rewriting or hiding saved Dashboard charts', () => {
+  it('hides At a glance without starting its readers or hiding Today and saved charts', () => {
+    const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: savedTiles } } } as SummariesComponent['user'];
+    mockUserService.user.set(component.user);
+    component.isOwnerDashboard = true;
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('app-dashboard-daily-briefing')).toBeNull();
+    expect(host.querySelector('.dashboard-current-state-row')).not.toBeNull();
+    expect(TestBed.inject(ActivityCalendarService).watchSummaryEvents).not.toHaveBeenCalled();
+    expect(TestBed.inject(TrainingPlansService).watchCalendarSchedule).not.toHaveBeenCalled();
+    expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('adds owner-only change evidence without rewriting or hiding saved Dashboard charts when re-enabled', () => {
+    component.showDailyBriefing = true;
     const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
     const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
     component.user = { uid: 'owner', settings: { dashboardSettings } } as any;
@@ -1595,6 +1611,7 @@ describe('SummariesComponent', () => {
   });
 
   it('binds current load, recovery and source-labelled sleep into the owner sentence', () => {
+    component.showDailyBriefing = true;
     vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 16, 12));
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     mockUserService.user.set(component.user); component.isOwnerDashboard = true;
@@ -1613,6 +1630,7 @@ describe('SummariesComponent', () => {
   });
 
   it('keeps all five ordinary Today assessments to one sentence without extra rows or a new score', () => {
+    component.showDailyBriefing = true;
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as any;
     mockUserService.user.set(component.user);
     component.showActions = true; component.isOwnerDashboard = true;
@@ -1637,6 +1655,7 @@ describe('SummariesComponent', () => {
   });
 
   it.each(['Mixed', 'Recover'])('keeps %s readiness to a sentence without duplicating Today’s metric evidence', label => {
+    component.showDailyBriefing = true;
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
     mockUserService.user.set(component.user);
     component.isOwnerDashboard = true;
