@@ -17,6 +17,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('event tag catalog concurr
     await db.terminate();
   });
 
+  // Contending Firestore transactions can back off beyond the five-second unit-test default.
   it('keeps distinct and same-name additions from simultaneous server transactions', async () => {
     const uid = `event-tag-catalog-${randomUUID()}`;
     users.push(uid);
@@ -44,5 +45,5 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('event tag catalog concurr
     expect((await catalog.get()).size).toBe(2);
     expect((await catalog.doc(eventTagCatalogKey('Race')).get()).data()?.name.toLowerCase()).toBe('race');
     expect((await catalog.doc(eventTagCatalogKey('Trail')).get()).data()).toEqual({ name: 'Trail' });
-  });
+  }, 30_000);
 });

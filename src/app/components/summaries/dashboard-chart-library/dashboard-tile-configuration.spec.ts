@@ -10,6 +10,28 @@ import {
   DataDuration,
   DataEnergy,
   DataHeartRateAvg,
+  DataSpeedAvg,
+  DataSpeedAvgKilometersPerHour,
+  DataSpeedAvgMilesPerHour,
+  DataSpeedAvgFeetPerSecond,
+  DataSpeedAvgMetersPerMinute,
+  DataSpeedAvgFeetPerMinute,
+  DataSpeedAvgKnots,
+  DataSpeedMin,
+  DataSpeedMinKilometersPerHour,
+  DataSpeedMinMilesPerHour,
+  DataSpeedMinFeetPerSecond,
+  DataSpeedMinMetersPerMinute,
+  DataSpeedMinFeetPerMinute,
+  DataSpeedMinKnots,
+  DataSpeedMax,
+  DataSpeedMaxKilometersPerHour,
+  DataSpeedMaxMilesPerHour,
+  DataSpeedMaxFeetPerSecond,
+  DataSpeedMaxMetersPerMinute,
+  DataSpeedMaxFeetPerMinute,
+  DataSpeedMaxKnots,
+  SpeedUnits,
   DataStrokeRateAvg,
   DataStrokeRateMax,
   DataStrokeRateMin,
@@ -221,6 +243,36 @@ describe('DashboardTileConfiguration', () => {
     component = new DashboardTileConfiguration(dialogData, dialogRefMock, dialogMock as never,
       userServiceMock as never, hapticsMock as never);
     component.initialize();
+  });
+
+  it.each([
+    [SpeedUnits.MetersPerSecond, [DataSpeedAvg.type, DataSpeedMin.type, DataSpeedMax.type]],
+    [SpeedUnits.KilometersPerHour, [DataSpeedAvgKilometersPerHour.type, DataSpeedMinKilometersPerHour.type, DataSpeedMaxKilometersPerHour.type]],
+    [SpeedUnits.MilesPerHour, [DataSpeedAvgMilesPerHour.type, DataSpeedMinMilesPerHour.type, DataSpeedMaxMilesPerHour.type]],
+    [SpeedUnits.FeetPerSecond, [DataSpeedAvgFeetPerSecond.type, DataSpeedMinFeetPerSecond.type, DataSpeedMaxFeetPerSecond.type]],
+    ['Speed in meters per minute', [DataSpeedAvgMetersPerMinute.type, DataSpeedMinMetersPerMinute.type, DataSpeedMaxMetersPerMinute.type]],
+    ['Speed in feet per minute', [DataSpeedAvgFeetPerMinute.type, DataSpeedMinFeetPerMinute.type, DataSpeedMaxFeetPerMinute.type]],
+    [SpeedUnits.Knots, [DataSpeedAvgKnots.type, DataSpeedMinKnots.type, DataSpeedMaxKnots.type]],
+  ] as const)('uses canonical speed statistics for %s', (speedUnit, expected) => {
+    dialogData.user.settings.unitSettings.speedUnits = [speedUnit];
+    component.initialize();
+    expect(component.dataGroups.find(group => group.name === 'Speed')?.data).toEqual(expected);
+  });
+
+  it('retains preference order for multiple speed units', () => {
+    dialogData.user.settings.unitSettings.speedUnits = [SpeedUnits.MilesPerHour, SpeedUnits.MetersPerSecond];
+    component.initialize();
+    expect(component.dataGroups.find(group => group.name === 'Speed')?.data).toEqual([
+      DataSpeedAvgMilesPerHour.type, DataSpeedMinMilesPerHour.type, DataSpeedMaxMilesPerHour.type,
+      DataSpeedAvg.type, DataSpeedMin.type, DataSpeedMax.type,
+    ]);
+  });
+
+  it('keeps baseline groups when a stored speed unit is unsupported', () => {
+    dialogData.user.settings.unitSettings.speedUnits = [SpeedUnits.MilesPerHour, 'unsupported'];
+    component.initialize();
+    expect(component.dataGroups.some(group => group.name === 'Speed')).toBe(false);
+    expect(component.dataGroups.some(group => group.name === 'Heart Rate')).toBe(true);
   });
 
   it('should create', () => {

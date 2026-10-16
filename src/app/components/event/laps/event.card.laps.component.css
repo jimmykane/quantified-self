@@ -16,6 +16,18 @@
   max-width: 48px;
 }
 
+/* Cross-leg context needs a readable label while retaining the table's shared horizontal scroll. */
+.lap-context-table .lap-index-cell {
+  flex-basis: 128px;
+  width: 128px;
+  max-width: 128px;
+}
+
+.lap-context-table .lap-index-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .lap-selection-cell {
   flex: 0 0 48px;
   justify-content: center;

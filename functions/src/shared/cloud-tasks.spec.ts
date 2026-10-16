@@ -124,6 +124,20 @@ describe('Cloud Tasks Utils', () => {
     });
 
     describe('task dispatch', () => {
+        it.each(['normal', 'heavy'])('uses a separate deterministic task name for a replacement source (%s)', async tier => {
+            const { enqueueSportsLibReparseTask, enqueueSportsLibReparseHeavyTask } = await import('./cloud-tasks');
+            const enqueue = tier === 'heavy' ? enqueueSportsLibReparseHeavyTask : enqueueSportsLibReparseTask;
+            await expect(enqueue('job-1', { taskNameSuffix: 'source-2', scheduleDelaySeconds: 30 })).resolves.toBe(true);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith({ jobId: 'job-1' }, expect.objectContaining({
+                id: `${tier === 'heavy' ? 'reparse-heavy' : 'reparse'}-job-1-source-2`, scheduleDelaySeconds: 30,
+            }));
+            hoisted.mockTaskQueue.enqueue.mockRejectedValue({ code: 'functions/task-already-exists' });
+            await expect(enqueue('job-1', { taskNameSuffix: 'source-2' })).resolves.toBe(false);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenLastCalledWith({ jobId: 'job-1' }, expect.objectContaining({
+                id: `${tier === 'heavy' ? 'reparse-heavy' : 'reparse'}-job-1-source-2`,
+            }));
+        });
+
         it('enqueues workout work through the fully-qualified Firebase task queue', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
 

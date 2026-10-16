@@ -30,6 +30,7 @@ import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.servi
 import { EventTagService } from '../../services/event-tag.service';
 import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
+import { TrainingLoadDialogComponent } from '../training-load/training-load-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
@@ -128,6 +129,40 @@ describe('EventSummaryComponent', () => {
         next.detectChanges();
         expect(next.nativeElement.querySelector('.rpe-chip')?.textContent)
             .toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, value, settings as never)?.text);
+    });
+
+    it.each([
+        { isMerge: true },
+        { mergeType: 'benchmark' },
+        { mergeType: ' Benchmark ', isMerge: false },
+    ])('hides and guards Training load for comparison records %j', classification => {
+        fixture.componentRef.setInput('event', { ...mockEvent, ...classification });
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('[aria-label="Edit Training load"]')).toBeNull();
+        component.openTrainingLoad();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([{}, { isMerge: true, mergeType: 'multi' }])('opens Training load for an owned eligible workout %j', classification => {
+        fixture.componentRef.setInput('event', { ...mockEvent, ...classification });
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('[aria-label="Edit Training load"]') as HTMLButtonElement;
+        expect(button).toBeTruthy();
+        button.click();
+        expect(mockDialog.open).toHaveBeenCalledWith(TrainingLoadDialogComponent, expect.objectContaining({
+            data: { event: component.event, user: mockUser, unitSettings: component.unitSettings },
+        }));
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    });
+
+    it('does not show or open Training load for another viewer', () => {
+        expect(fixture.nativeElement.querySelector('[aria-label="Edit Training load"]')).toBeNull();
+        component.openTrainingLoad();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
     });
 
     it('places the impact below the primary summary and before tags, devices, and further statistics', () => {

@@ -118,6 +118,22 @@ describe('AppEventReprocessService', () => {
     });
   });
 
+  it.each([
+    ['MONITORING_SOURCE', 'daily monitoring data'],
+    ['ROUTE_SOURCE', 'upload it from Routes'],
+    ['NON_ACTIVITY_SOURCE', 'not a recorded activity'],
+    ['MIXED_SOURCES_REQUIRING_REVIEW', 'need review'],
+  ])('shows the %s skip without refreshing or modifying the event', async (reason, message) => {
+    const event = makeTargetEvent();
+    const onProgress = vi.fn();
+    functionsServiceMock.call.mockResolvedValueOnce({ data: { status: 'skipped', reason, sourceFilesCount: 1 } });
+    await expect(service.reimportEventFromOriginalFiles({ uid: 'u1' } as any, event, { onProgress }))
+      .rejects.toMatchObject({ code: 'NON_ACTIVITY_SOURCE', message: expect.stringContaining(message) });
+    expect(eventServiceMock.getEventAndActivities).not.toHaveBeenCalled();
+    expect(event.clearActivities).not.toHaveBeenCalled();
+    expect(onProgress.mock.calls.some(([progress]) => progress.phase === 'done')).toBe(false);
+  });
+
   it('should map regenerate callable failures to PARSE_FAILED', async () => {
     const event = makeTargetEvent();
     functionsServiceMock.call.mockRejectedValueOnce(new Error('functions/internal'));

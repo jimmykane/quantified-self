@@ -1292,8 +1292,24 @@ Activity imports, manual activity uploads, comparisons, merges, and manual/provi
 Cloud Storage and supplies the base64 checksum in `metadata.crc32c` with `validation: 'crc32c'`.
 Cloud Storage checks the supplied checksum before committing the object; the SDK also validates the
 returned checksum. This explicit metadata avoids depending on an SDK's default checksum-header behavior.
-Already compressed files are hashed and retained as compressed bytes. Object paths, generation
-tracking, original-file provenance, and deletion/connection guards remain unchanged.
+Already compressed files are hashed and retained as compressed bytes. Generation tracking,
+original-file provenance, and deletion/connection guards remain in force.
+
+Provider activity imports, manual activity uploads and merges additionally isolate distinct original bytes under
+`users/{uid}/events/{eventId}/sources/{sha256}/original[_index].{extension}`. The shared EventWriter saves the adapter's
+actual path in both original-file metadata fields. An older upload or staged promotion finishing late cannot overwrite
+a newer revision's bytes after its Firestore writes were rejected. Identical bytes reuse the same path, with no extra
+Storage or Firestore requests; different revisions occupy separate objects until normal event/account cleanup.
+Existing objects keep their paths and remain readable without migration. Downloads and reparse follow metadata;
+historical manual sends accept only the legacy or exact digest path inside the same owner/event and retain all
+provenance, format, size and generation checks. Existing event-prefix cleanup and Storage Rules cover nested paths;
+public-event sharing continues to expose source objects within that event folder, including retained revisions.
+Comparisons and saved routes retain their existing writers. See [Training persistence](training-workspace.md) for
+the complementary Firestore source reservation and control-preservation contract.
+
+Monitoring impact is **unchanged**: reviewed `tools/import-monitoring/definitions.mjs` and the recorded-import runbook;
+the same workers, persistence failures, committed outcomes, retries and cleanup paths apply. No queue, lease,
+scheduler, monitoring label or provider request changes. Existing Help remains accurate and MCP schemas are unchanged.
 
 Provider activity originals staged under `event-write-staging/` receive the same validation before
 promotion. Promotion remains a server-side copy, which Cloud Storage validates against the source
@@ -1827,3 +1843,16 @@ Failed late staging writes rearm retired cleanup after save or metadata errors, 
 Saved recording review distinguishes known ineligibility from temporary read failures. Missing/invalid originals remain exclusions; unavailable reads pause preparation and retain the private criteria, cursor and reviewed rows for continuation. This command creates no provider work. Monitoring is **unchanged**: delivery queues, backlog/worker outcomes, retry/lease policy and fixed telemetry labels are unaffected. MCP and Training contracts are unchanged.
 
 Stopping closes retry authority for provider-confirmed processing failures and releases their private temporary files/quota while preserving the failed result and operation identifiers. Finished retryable batches retain the Stop control, including after Pro lapse. Active/uncertain operations retain their sources; saved archive files are never deleted. Cleanup failures remain resumable through the existing Stop cursor and operation trigger. A later confirmed failure after Stop completes releases its source through the existing retry-enabled delivery projection; open failures keep their retry source. Monitoring is **unchanged**: native admission/projection-trigger error/latency diagnostics and the existing hourly cleanup failure/heartbeat fallback cover these release paths, with no new scheduler, queue outcome, worker retry policy or telemetry label. MCP and Training contracts are unaffected.
+
+### Suunto EnergySense parser support
+
+The adopted Sports Lib 22.0.0 maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
+to Estimated Sustainable Distance plus its source/sampled minimum. Its raw distance unit is assumed to be metres pending
+provider confirmation. Cur and Min remain source observations, EnduranceValid is not an eligibility rule, and absent FIT
+fields are not synthesized. Canonical metric labels and reparse compatibility are described in the
+[reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#pending-energysense-library-candidate) and
+[MCP contract](mcp-server.md#energysense-and-endurance-streams-pending-coordinated-release).
+
+Monitoring review: covered unchanged by the existing import/reparse queue monitoring. This is an offline parser and
+presentation extension: no provider transport, scopes, queue state, retry, scheduler, secret, data-write endpoint,
+alert condition or deployed resource changes. Existing sanitized persistence and provider outcomes remain authoritative.

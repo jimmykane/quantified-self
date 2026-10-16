@@ -67,6 +67,42 @@ describe('EventWriter', () => {
         };
     });
 
+    it('does not launch source writes when the original-file upload fails', async () => {
+        storageAdapter.uploadFile.mockRejectedValue(new Error('upload interrupted'));
+        await expect(writer.writeAllEventData('user', eventMock, {
+            data: new Uint8Array([1]), extension: 'fit', startDate: new Date(),
+        })).rejects.toThrow('upload interrupted');
+        expect(adapter.setDoc).not.toHaveBeenCalled();
+    });
+
+    it('freezes load identity before source writes and propagates a final metadata failure', async () => {
+        const persist = vi.fn(async () => {
+            expect(adapter.setDoc).toHaveBeenCalled();
+            throw new Error('source changed');
+        });
+        adapter.prepareTrainingLoad = vi.fn(async parsed => {
+            expect(adapter.setDoc).not.toHaveBeenCalled();
+            expect(parsed).toBe(eventMock);
+            return persist;
+        });
+        await expect(writer.writeAllEventData('user-1', eventMock)).rejects.toThrow('source changed');
+        expect(adapter.prepareTrainingLoad).toHaveBeenCalledOnce();
+        expect(persist).toHaveBeenCalledOnce();
+    });
+    it.each(['prepare', 'source', 'finalize'] as const)('preserves a history lifecycle skip during %s without logging a write failure', async phase => {
+        const skipped = Object.assign(new Error('History import was superseded'), { name: 'HistoryLifecycleChangedError' });
+        const logger: LogAdapter = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const guardedWriter = new EventWriter(adapter, storageAdapter, undefined, logger);
+        if (phase === 'source') adapter.setDoc = vi.fn().mockRejectedValue(skipped);
+        adapter.prepareTrainingLoad = vi.fn(async () => {
+            if (phase === 'prepare') throw skipped;
+            return async () => { if (phase === 'finalize') throw skipped; };
+        });
+        await expect(guardedWriter.writeAllEventData('user-1', eventMock)).rejects.toBe(skipped);
+        expect(logger.error).not.toHaveBeenCalled();
+        if (phase === 'prepare') expect(adapter.setDoc).not.toHaveBeenCalled();
+    });
+
     it('should write activities, streams, and event in order', async () => {
         await writer.writeAllEventData('user-1', eventMock);
 
@@ -129,15 +165,16 @@ describe('EventWriter', () => {
         expect(eventWrite?.[1]).not.toHaveProperty('benchmarkReviewTags');
     });
 
-    it('should upload original file if provided', async () => {
+    it.each([undefined, 'users/user-1/events/event-1/sources/digest/original.fit'])('retains the uploaded original location (%s)', async retainedPath => {
         const originalFile = {
             data: Buffer.from('test'),
             extension: 'fit',
             startDate: new Date(),
             originalFilename: 'test.fit',
         };
-        storageAdapter.uploadFile.mockResolvedValueOnce({ generation: '101' });
-        await writer.writeAllEventData('user-1', eventMock, originalFile);
+        storageAdapter.uploadFile.mockResolvedValueOnce({ path: retainedPath, generation: '101' });
+        const saved = await writer.writeAllEventData('user-1', eventMock, originalFile);
+        expect(saved[0].path).toBe(retainedPath ?? 'users/user-1/events/event-1/original.fit');
 
         expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
             'users/user-1/events/event-1/original.fit',
@@ -149,7 +186,7 @@ describe('EventWriter', () => {
             ['users', 'user-1', 'events', 'event-1'],
             expect.objectContaining({
                 originalFile: expect.objectContaining({
-                    path: 'users/user-1/events/event-1/original.fit',
+                    path: retainedPath ?? 'users/user-1/events/event-1/original.fit',
                     bucket: 'quantified-self-io',
                     generation: '101',
                     startDate: originalFile.startDate,
@@ -157,7 +194,7 @@ describe('EventWriter', () => {
                 }),
                 originalFiles: expect.arrayContaining([
                     expect.objectContaining({
-                        path: 'users/user-1/events/event-1/original.fit',
+                        path: retainedPath ?? 'users/user-1/events/event-1/original.fit',
                         bucket: 'quantified-self-io',
                         generation: '101',
                         startDate: originalFile.startDate,

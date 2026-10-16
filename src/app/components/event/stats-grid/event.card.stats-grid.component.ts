@@ -32,6 +32,8 @@ import { expandStatsTypesForCompositeDiff } from '../../../helpers/header-stats-
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { hasEventDiveSourceRecords } from '../../../helpers/event-dive-source-records.helper';
 
+import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
+
 const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   overall: 'leaderboard',
   performance: 'monitoring',
@@ -67,6 +69,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
   public activityTypes: ActivityTypes[] = [];
+  public get metricManufacturer(): string | undefined {
+    return getCommonMetricManufacturer(this.selectedActivities);
+  }
   public metricTabs: SummaryMetricTab[] = [];
   public selectedTabIndex = 0;
   public tabAnimationDuration = `${SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS}ms`;

@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, inject } from '@angular/core';
 import {
   ActivityInterface,
@@ -29,6 +30,7 @@ interface SwimLengthTableRow {
   Lap: string;
   Split: string;
   Duration: string;
+  timingExplanation?: string;
   Distance: string;
   Type: string;
   Stroke: string;
@@ -192,13 +194,14 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Lap: this.formatOptionalInteger(swimLength.lapIndex),
       Split: '',
       Duration: this.formatDuration(swimLength),
+      timingExplanation: getRejectedSwimTiming(swimLength) ? SWIM_TIMING_UNAVAILABLE_REASON : undefined,
       Distance: this.formatSwimDistanceValue(isRestSwimLength(swimLength)
         ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength),
         getNominalSwimLengthsDisplayMeters(displayContext, [swimLength])),
       Type: this.formatLabel(swimLength.type),
       Stroke: this.formatLabel(swimLength.stroke),
       Strokes: this.formatOptionalInteger(swimLength.strokes),
-      'Swim Pace': this.formatSwimPace(swimLength.avgSpeed)
+      'Swim Pace': getRejectedSwimTiming(swimLength) ? '' : this.formatSwimPace(swimLength.avgSpeed)
         || (!isRestSwimLength(swimLength) ? this.formatGroupSwimPace(getSwimLengthDuration(swimLength), getSwimLengthDistance(swimLength)) : ''),
       'Average Stroke Rate': this.formatStrokeRate(swimLength.avgCadence),
       'Average Heart Rate': this.formatHeartRate(swimLength.avgHeartRate),
@@ -247,9 +250,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       key: `${activityKey}-group-${index + 1}-${firstIndex}-${lastIndex}`,
       label: firstIndex === lastIndex ? `Length ${firstIndex}` : `Lengths ${firstIndex}-${lastIndex}`,
       summaryRow: this.buildGroupSummaryRow(rowViews, displayContext),
-      activeDuration: this.formatDurationValue(this.sumDataValues(
+      activeDuration: this.formatDurationValue(this.completeDuration(
         rowViews.map(rowView => rowView.swimLength).filter(swimLength => !this.isIdleOrRestSwimLength(swimLength)),
-        swimLength => swimLength.timerTime ?? swimLength.elapsedTime,
       )),
       restDuration: this.formatGroupRestDuration(rowViews),
       rows,
@@ -294,7 +296,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const activeSwimLengths = swimLengths.filter(swimLength => !this.isIdleOrRestSwimLength(swimLength));
     const firstIndex = swimLengths[0]?.index ?? 0;
     const lastSwimLength = swimLengths[swimLengths.length - 1];
-    const totalDuration = this.sumDataValues(swimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
+    const totalDuration = this.completeDuration(swimLengths);
     const totalDistance = this.sumNumericValues(swimLengths, swimLength => isRestSwimLength(swimLength)
       ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength));
     const activeDuration = activeSwimLengths.every(length => getSwimLengthDuration(length) !== null)
@@ -330,7 +332,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const restSwimLengths = rowViews
       .map(rowView => rowView.swimLength)
       .filter(swimLength => this.isIdleOrRestSwimLength(swimLength));
-    const restDuration = this.sumDataValues(restSwimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
+    const restDuration = this.completeDuration(restSwimLengths);
 
     return this.formatDurationValue(restDuration);
   }
@@ -346,8 +348,14 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return label || `${activity?.type || 'Swimming'}`.trim();
   }
 
+  private completeDuration(lengths: AppSwimLength[]): number | null {
+    return lengths.length && lengths.every(length => getSwimLengthDuration(length) !== null)
+      ? sumSwimValues(lengths.map(length => getSwimLengthDuration(length)!)) : null;
+  }
+
   private formatDuration(swimLength: AppSwimLength): string {
-    return this.formatDurationValue(this.getFiniteDataValue(swimLength.timerTime ?? swimLength.elapsedTime));
+    return getRejectedSwimTiming(swimLength)?.timerTime !== undefined ? 'Unavailable'
+      : this.formatDurationValue(getSwimLengthDuration(swimLength));
   }
 
   private formatDurationValue(seconds: number | null): string {

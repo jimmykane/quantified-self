@@ -44,6 +44,7 @@ export {
   persistentMultipleTabManager,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
   startAfter,
   terminate,

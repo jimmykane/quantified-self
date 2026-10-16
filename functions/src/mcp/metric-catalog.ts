@@ -202,7 +202,13 @@ export function resolveSportsLibNumericMetric(
     return null;
   }
 
-  const exact = catalogByType.get(normalized);
+  // Display terminology resolves to the same discovered canonical class; it never adds a metric.
+  const endurance = /^(?:(minimum|maximum|average) )?(?:suunto )?energysense endurance$/i.exec(normalized);
+  const distance = /^(?:(minimum|ending) )?(?:suunto )?energysense sustainable distance$/i.exec(normalized);
+  const prefix = (value?: string) => value ? `${value[0].toUpperCase()}${value.slice(1).toLowerCase()} ` : '';
+  const alias = endurance ? `${prefix(endurance[1])}Stamina`
+    : distance ? `${distance[1]?.toLowerCase() === 'minimum' ? 'Minimum ' : ''}Estimated Sustainable Distance` : normalized;
+  const exact = catalogByType.get(alias);
   if (exact) {
     return exact;
   }

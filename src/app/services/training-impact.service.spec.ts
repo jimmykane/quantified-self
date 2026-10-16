@@ -8,11 +8,14 @@ import {
   createDashboardDerivedMetricsMissingState,
   DashboardDerivedMetricsService,
 } from './dashboard-derived-metrics.service';
+import { TrainingLoadService } from './training-load.service';
 import { TrainingImpactService } from './training-impact.service';
+import type { EventInterface } from '@sports-alliance/sports-lib';
 
 describe('TrainingImpactService', () => {
   const viewer$ = new BehaviorSubject<any>({ uid: 'owner' });
   const users = { user$: viewer$.asObservable(), user: signal<any>({ uid: 'owner' }) };
+  const loads = { watchEffective: vi.fn(() => of(new Map())) };
   const derived = {
     watch: vi.fn(() => of(createDashboardDerivedMetricsMissingState())),
     ensureForDashboard: vi.fn(),
@@ -21,6 +24,7 @@ describe('TrainingImpactService', () => {
   function service(): TrainingImpactService {
     TestBed.configureTestingModule({ providers: [
       TrainingImpactService,
+      { provide: TrainingLoadService, useValue: loads },
       { provide: AppUserService, useValue: users },
       { provide: DashboardDerivedMetricsService, useValue: derived },
     ] });
@@ -47,7 +51,7 @@ describe('TrainingImpactService', () => {
     derived.watch.mockReturnValueOnce(of(state));
     const values: string[] = [];
     service().watch('owner').subscribe(value => values.push(value.status)).unsubscribe();
-    expect(values).toEqual(['updating', 'ready']);
+    expect(values).toEqual(['ready']);
     expect(derived.watch).toHaveBeenCalledWith({ uid: 'owner' }, {
       metricKinds: [DERIVED_METRIC_KINDS.Form], reportReadErrors: true,
     });
@@ -56,6 +60,33 @@ describe('TrainingImpactService', () => {
     });
   });
 
+  it.each(['available', 'excluded'])('waits for Form after a newer %s load edit and never reads another owner’s metadata', (status) => {
+    viewer$.next({ uid: 'owner' });
+    loads.watchEffective.mockReturnValueOnce(of(new Map([['e', { score: 0, status, updatedAtMs: 200 }]])));
+    derived.watch.mockReturnValueOnce(of({ ...createDashboardDerivedMetricsMissingState(), formStatus: 'ready',
+      formPoints: [], formUpdatedAtMs: 100 }));
+    const instance = service();
+    const states: string[] = []; instance.watch('owner').subscribe(value => states.push(value.status)).unsubscribe();
+    expect(states).toEqual(['updating']);
+    loads.watchEffective.mockClear(); viewer$.next({ uid: 'other' });
+    instance.watch('owner').subscribe().unsubscribe(); expect(loads.watchEffective).not.toHaveBeenCalled();
+  });
+  it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('does not let benchmark metadata hold a completed day in updating state %j', classification => {
+    viewer$.next({ uid: 'owner' });
+    const workout = { getID: () => 'workout', isMerge: true, mergeType: 'multi' } as EventInterface;
+    const benchmark = { getID: () => 'benchmark', ...classification } as EventInterface;
+    loads.watchEffective.mockImplementationOnce((...args: any[]) => of(new Map(
+      (args[1] as EventInterface[]).map(event => [event.getID(), {
+        score: 9, status: 'available', updatedAtMs: event === benchmark ? 200 : 50,
+      }]),
+    )));
+    derived.watch.mockReturnValueOnce(of({ ...createDashboardDerivedMetricsMissingState(), formStatus: 'ready',
+      formPoints: [], formUpdatedAtMs: 100 }));
+    const states: string[] = [];
+    service().watch('owner', [workout, benchmark]).subscribe(value => states.push(value.status)).unsubscribe();
+    expect(states).toEqual(['ready']);
+    expect(loads.watchEffective).toHaveBeenLastCalledWith('owner', [workout]);
+  });
   it('shares the owner Form listener and tears it down after the last subscriber', () => {
     vi.clearAllMocks();
     viewer$.next({ uid: 'owner' });
@@ -84,7 +115,7 @@ describe('TrainingImpactService', () => {
     }));
     const values: string[] = [];
     service().watch('owner').subscribe(value => values.push(value.status)).unsubscribe();
-    expect(values).toEqual(['updating', 'error']);
+    expect(values).toEqual(['error']);
   });
 
   it.each(['stale', 'building'] as const)('keeps a %s Form snapshot in updating state', (formStatus) => {
@@ -101,8 +132,7 @@ describe('TrainingImpactService', () => {
     const values: Array<{ status: string; formPoints: unknown }> = [];
     service().watch('owner').subscribe(value => values.push(value)).unsubscribe();
     expect(values).toEqual([
-      { status: 'updating', formPoints: null },
-      { status: 'updating', formPoints: null },
+      { status: 'updating', formPoints: null, loadsByEventId: new Map() },
     ]);
   });
 });

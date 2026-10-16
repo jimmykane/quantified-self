@@ -1,3 +1,5 @@
+import { attachEventTrainingLoads, attachActivityTrainingLoad } from '../training-load/training-load-reader';
+import { attachedEffectiveTrainingLoad, recordedTrainingStressScore } from '../../../shared/training-load-policy';
 import { groupRecordedIntensityZones, INTENSITY_POLICY_VERSION } from '../../../shared/intensity-zones';
 import { readinessHrvObservations } from '../../../shared/readiness';
 import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
@@ -233,8 +235,6 @@ import {
     type TrainingBuildWorkoutSeed, type TrainingBuildWorkoutSeedContext,
 } from './training-build-workout-seed';
 
-const FORM_STAT_TYPE = 'Training Stress Score';
-const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
@@ -649,17 +649,9 @@ function resolveRawStatNumericValue(
 }
 
 function resolveTrainingStressScore(eventData: Record<string, unknown>): number | null {
-    const preferred = resolveRawStatNumericValue(eventData, FORM_STAT_TYPE);
-    if (preferred !== null && preferred >= 0) {
-        return preferred;
-    }
-
-    const legacy = resolveRawStatNumericValue(eventData, LEGACY_FORM_STAT_TYPE);
-    if (legacy !== null && legacy >= 0) {
-        return legacy;
-    }
-
-    return null;
+    const modeled = attachedEffectiveTrainingLoad(eventData);
+    if (modeled) return modeled.status === 'excluded' ? null : modeled.score;
+    return recordedTrainingStressScore(eventData);
 }
 
 function resolveRecoveryEventEndTimeMs(eventData: Record<string, unknown>): number | null {
@@ -1370,6 +1362,7 @@ export function joinTrainingActivitySources(
         const activityData = (doc.data() || {}) as Record<string, unknown>;
         const eventId = toSafeString(activityData.eventID).trim();
         const eventData = eventById.get(eventId);
+        if (eventData) attachActivityTrainingLoad(doc.id, activityData, eventData);
         const discipline = resolveTrainingDisciplineFromActivityType(activityData.type);
         if (!eventId || !eventData || (!discipline && options.includeUnclassified === false)) {
             return [];
@@ -5584,7 +5577,7 @@ export async function fetchDerivedMetricsEventDocs(uid: string): Promise<Firesto
         .collection('events')
         .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
-    return snapshot.docs;
+    return attachEventTrainingLoads(uid, snapshot.docs);
 }
 
 export async function fetchDerivedMetricsActivityDocs(

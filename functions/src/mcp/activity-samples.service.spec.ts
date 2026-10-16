@@ -1,4 +1,4 @@
-import { ActivityTypes, DataHeartRate, DataPower, DataCadence, DataAltitude, DataLatitudeDegrees, EventImporterJSON, FileType, Privacy } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DynamicDataLoader, DataHeartRate, DataPower, DataCadence, DataAltitude, DataLatitudeDegrees, EventImporterJSON, FileType, Privacy } from '@sports-alliance/sports-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActivitySampleCache, ACTIVITY_SAMPLE_CACHE_LIMITS } from './activity-sample-cache';
 import { activitySampleResultBytes, ActivitySamplesCodec, ActivitySamplesDependencies, ActivitySamplesInput, buildActivitySampleDataset, MCP_ACTIVITY_SAMPLES_LIMITS, queryActivitySamples } from './activity-samples.service';
@@ -20,7 +20,7 @@ function fixture(streams: Record<string, (number | null)[]> = { [DataHeartRate.t
     parseSource: vi.fn(async () => EventImporterJSON.getEventFromJSON({
       name: 'Private title', srcFileType: FileType.FIT, description: 'private description', privacy: Privacy.Private,
       isMerge: false, startDate: start, endDate: start + (length - 1) * 1000, stats: {}, activities: [{
-        name: 'Private device', startDate: start, endDate: start + (length - 1) * 1000, type: ActivityTypes.Running,
+        name: 'Private child activity', startDate: start, endDate: start + (length - 1) * 1000, type: ActivityTypes.Running,
         powerMeter: false, trainer: false, stats: {}, streams, laps: [],
         creator: {name: 'Private device', serialNumber: 'serial', devices: []}, intensityZones: [], events: [],
       }],
@@ -36,6 +36,36 @@ function fixture(streams: Record<string, (number | null)[]> = { [DataHeartRate.t
 }
 
 describe('activity samples', () => {
+  it('reads EnergySense from the original JSON with canonical units, null gaps, zero and rebound across pages', async () => {
+    try { DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { return; }
+    const start = 1700000000000;
+    const iso = (second: number) => new Date(start + second * 1000).toISOString();
+    const f = fixture({Stamina: [80, null, 0, 90]});
+    delete f.deps.parseSource;
+    vi.mocked(f.deps.context).mockResolvedValue({identityFingerprint: 'identity', sourceFiles: [{path: 'private.json'}],
+      existingActivities: [{startDate: start, endDate: start + 3000, type: ActivityTypes.Running, getStat: () => null}], targetExistingIndex: 0});
+    vi.mocked(f.deps.loadSource).mockResolvedValue(Buffer.from(JSON.stringify({DeviceLog: {
+      Device: {Name: 'private-device', SerialNumber: 'private-serial', Info: {HW: '1', SW: '1'}},
+      Header: {DateTime: iso(0), Duration: 3, EnduranceValid: 0},
+      Windows: [{Window: {Type: 'Activity', Duration: 3, EnduranceDistance: {Cur: 8200, Min: 0}}}],
+      Samples: [{TimeISO8601: iso(0), Events: [{Activity: {ActivityType: 3}}], Endurance: 80, EnduranceDistance: 8000},
+        {TimeISO8601: iso(1), Endurance: null, EnduranceDistance: null},
+        {TimeISO8601: iso(2), Endurance: 0, EnduranceDistance: 0},
+        {TimeISO8601: iso(3), Events: [{Lap: {Type: 'Stop'}}], Endurance: 90, EnduranceDistance: 9000}],
+    }})));
+    const metrics = ['EnergySense endurance', 'EnergySense sustainable distance'];
+    const first = await f.run({metrics});
+    const second = await f.run({metrics, cursor: first.nextCursor!});
+    expect(first.series.map(series => [series.metric, series.canonicalUnit, series.values])).toEqual([
+      ['estimated_sustainable_distance', 'meters', [8000, null]], ['stamina', 'percent', [80, null]],
+    ]);
+    expect(second.series.map(series => series.values)).toEqual([[0, 9000], [0, 90]]);
+    expect(second.nextCursor).toBeNull();
+    expect(f.deps.loadSource).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify([first, second])).not.toMatch(/private|EnduranceValid|EnduranceDistance|8200/);
+    await expect(f.run({metrics: ['EnergySense']})).rejects.toMatchObject({code: 'invalid_request'});
+  });
+
   it('reconstructs three hours of aligned readings across pages, preserving zeros, gaps and the final second with one parse', async () => {
     const hr = Array.from({length: 10801}, (_, i) => i % 19 === 0 ? null : 90 + i % 90);
     const power = Array.from({length: 10799}, (_, i) => i % 50 ? 200 : 0);
@@ -58,6 +88,10 @@ describe('activity samples', () => {
     expect(hearts).toEqual(hr); expect(watts).toEqual([...power, null, null]);
     expect(f.deps.loadSource).toHaveBeenCalledTimes(1); expect(f.deps.consumeParse).toHaveBeenCalledTimes(1);
     expect(f.deps.parseSource).toHaveBeenCalledTimes(1); expect(f.deps.context).toHaveBeenCalledTimes(12);
+    // The negative output check must cover names actually retained by JSON hydration.
+    const parsed = await vi.mocked(f.deps.parseSource).mock.results[0].value;
+    expect(parsed.getFirstActivity().name).toBe('Private child activity');
+    expect(parsed.getFirstActivity().creator.name).toBe('Private device');
   });
 
   it('uses inclusive start/exclusive end, deduplicates aliases, and pads absent metrics with null', async () => {

@@ -1166,7 +1166,10 @@ The calendar card has no bottom padding.
 The caption button provides the full totals and coverage
 explanation on tap, hover or keyboard focus; its accessible name retains the visible skipped count. The monthly
 calculations, bounded readers and completion markers remain intact. Workout-read failures retain a retry action.
-Calendar **Week** keeps recorded parent-event volume above its day grid. A flat,
+Calendar **Week** keeps recorded parent-event volume above its day grid. The period summary labels its saved
+TSS statistic **Recorded TSS**; it does not claim to apply private load controls. Selected-day Training impact and
+Training metrics use modeled load. This distinction preserves recorded-statistic queries and avoids adding a
+per-event metadata join to the period summary. Excluded workouts retain their recorded statistics and volume. A flat,
 initially collapsed **Planned workouts** panel appears only for a period with eligible workouts; its heading shows
 scheduled and remaining counts. Opening it exposes planned and remaining non-skipped totals plus nonzero or unknown
 status counts. **With an activity** describes exact stored completion evidence without implying adherence. Zero planning
@@ -4356,7 +4359,7 @@ users/{uid}/derivedMetrics/{metricKind}
 ### Events
 
 Parent event documents provide event identity, date, tags, merged-event classification, parent TSS, and display metadata.
-Overall load and top contributors use parent-event TSS to avoid double-counting a multisport event.
+Overall load and top contributors use the shared effective-load resolver once per event. Reparsed or controlled multisport workouts sum included legs; legacy untouched events retain parent TSS. Parent-only TSS is never allocated across legs.
 
 The shared classifier treats `mergeType: 'benchmark'` and legacy `isMerge: true` as merged benchmark events. A
 `mergeType: 'multi'` parent is a standard multisport event and remains eligible so its child legs can be analysed.
@@ -4514,13 +4517,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
 | Metric kind | Training use | Primary source |
 | --- | --- | --- |
-| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Parent event TSS |
+| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Effective modeled workout TSS |
 | `recovery_now` | Imported recovery-remaining card | Bounded parent event recovery stats |
-| `acwr` | Load metrics | Parent event TSS |
-| `ramp_rate` | State and load metrics | Parent event TSS |
-| `monotony_strain` | Load metrics | Parent event TSS |
-| `form_now`, `form_plus_7d` | Current/projected freshness values | Parent event TSS |
-| `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
+| `acwr` | Load metrics | Effective modeled workout TSS |
+| `ramp_rate` | State and load metrics | Effective modeled workout TSS |
+| `monotony_strain` | Load metrics | Effective modeled workout TSS |
+| `form_now`, `form_plus_7d` | Current/projected freshness values | Effective modeled workout TSS |
+| `freshness_forecast` | Zero-future-load scenario chart | Effective modeled workout TSS |
 | `intensity_distribution` | Global intensity chart | Joined child activity power/HR zones |
 | `training_summary` | Overall comparison, ten-group Training Mix, and context/profile summaries | Joined normalized activities |
 | `training_capacity` | Imported FTP/VO2 observations plus separately labelled manual VO2 references | Joined activities and qualifying manual Health VO2 point measurements |
@@ -5329,7 +5332,7 @@ Overview only.
 
 It intentionally separates parent-event load from child-activity composition:
 
-- Parent events determine total TSS and top contributors. This avoids double-counting multisport legs.
+- The effective-load resolver determines workout totals and top contributors once per parent, summing included legs without double-counting.
 - Child activities determine the ten Training groups plus aggregate Other and unknown Unclassified composition/rhythm.
 
 The cards show:
@@ -5386,7 +5389,7 @@ The workspace grid stays content-sized instead of stretching to a neighboring ch
 12px vertical / 16px horizontal padding and a 4px history inset; charts remain aligned within each row when details
 wrap. Missing histories do not reserve a synthetic chart. Public preview padding remains unchanged.
 CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
-ACWR and Strain reuse their prepared `trend8Weeks` observations. Monotony uses the existing Form series' daily TSS
+ACWR and Strain reuse their prepared `trend8Weeks` observations. Monotony uses the existing Form series' effective modeled daily TSS
 and the same `resolveTrainingMonotonyStrain` calculation in `shared/training-load.ts` as the backend: rolling up-to-seven-day
 mean divided by population standard deviation. Its latest available observation in each UTC week is bounded by the
 Monotony snapshot's day cutoff. Zero-variance windows and missing daily evidence stay unavailable; Strain history is
@@ -5414,7 +5417,7 @@ point. Ramp has no sample until a prior seven-day CTL observation exists, and it
 This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
 scope, consent, provider action or backend deployment change.
 
-Daily load is TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
+Daily load is effective modeled TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
 
 ```text
 CTL_today = CTL_previous + (load_today - CTL_previous) / 42
@@ -5433,11 +5436,712 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+### File-only TSS evaluation and owner load controls
+
+Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
+available. Each result records its score (including valid zero), actual method, imported/calculated provenance,
+estimate flag and missing-input/fallback reasons. Walking, Nordic Walking, Hiking and Trekking use imported TSS →
+calibrated HR → calorie MET → unavailable; calculated power and running pace are ineligible. Other sports retain
+their existing Automatic order with corrected HR eligibility. A preferred HR/MET calculation falls back through the
+eligible Automatic order. Valid nonnegative file-imported TSS wins regardless of preference; previous calculated
+TSS is never treated as imported on recalculation.
+
+Sports Lib 21.6.14 distinguishes absent/unusable required inputs from an eligible calculation that cannot return a
+valid score. POWER, running PACE, SWIM_PACE and MET keep method-specific missing-input reasons before calculation;
+a rejected result uses the existing `calculation-unavailable` token. Formulas, the calculated-score guard, imported
+priority, valid zero and Automatic/HR/MET fallback selection are unchanged. The private load editor explains either
+case without claiming that all unavailable calculations lack inputs. Existing saved evaluations need the normal
+source-file reparse lifecycle to refresh reasons when parsed inputs are no longer available.
+
+Native Activity JSON restores saved child names independently of parent event titles. Names present in stored JSON
+need no original-file reparse; names absent from stored JSON need source-backed reparse when the original contains a name. GPX activity and route importers keep
+the exporter name but no longer assign GPX schema version 1.0/1.1 as a device manufacturer or software version.
+Unknown, missing and blank TCX sports become canonical `Unknown Sport`; recognized types retain normal indoor
+classification. Correcting persisted GPX attribution or TCX classification needs targeted source-backed reparse and
+normal summary refresh. Existing strict identity matching protects policies/controls; ambiguous matches still require
+review. No bulk rewrite, automatic scan, new storage operation or provider request is introduced.
+
+HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
+threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
+`zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
+setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
+settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
+
+Sports Lib 21.6.6 removes explicit timer pauses from HR integration across eligible sports, including gaps spanning
+a pause, and excludes HR readings inside pauses. A reading exactly at a stop may close the preceding active interval.
+Forty active minutes at threshold plus twenty paused minutes yield 66.7 HR TSS. With no explicit timer events,
+elapsed-time integration remains unchanged; aggregate timer/moving duration does not identify pause positions.
+HR readings entirely inside a pause leave HR unavailable and allow the existing fallback order.
+
+Power TSS and IF require independent FIT FTP or an explicit library override; QS supplies no athlete overrides.
+The same-ride FTP estimate remains a statistic but is ineligible calibration. Calculated NP uses overlapping complete
+30-second windows, includes recorded zeros, and restarts at gaps, invalid samples and timer boundaries; stopped
+samples are excluded, including FIT stop-disable variants. Device NP is retained on normal import. Power TSS uses
+the full eligible duration. Cycling, MTB, downhill and enduro use biking-specific maximum HR with general fallback.
+Inconsistent percent-max HR settings whose threshold is below the first valid zone boundary are rejected; no zone
+weights or replacement calibration are inferred. Imported TSS retains priority throughout.
+
+Sports Lib 21.6.8 accepts NP 0 and POWER TSS 0 when complete eligible recorded zero-power windows establish it,
+with valid independent FTP and duration. A zero NP summary alone is insufficient. Missing FIT/TCX/GPX power fields padded
+with zeros are excluded from that evidence; short, gappy and paused-only records cannot manufacture a window.
+Private recorded-zero provenance survives same-instance regeneration and is absent from ordinary Activity JSON.
+This does not change positive device-NP precedence, HR gap integration, calorie MET, or imported-score priority.
+
+Sports Lib 21.6.9 applies recorded-power coverage to every calculated NP window, including windows with positive
+power. Missing sensor fields remain unknown even when compatibility streams contain padded zeros. One recorded
+250 W sample among an hour of HR-only records cannot establish calculated NP or POWER TSS; with valid threshold
+HR throughout, Automatic falls back to 100 HR TSS. Actual recorded zero-power windows remain eligible. Positive
+device NP and imported TSS retain their normal-import priority. Regenerate mode deliberately rebuilds derived NP
+from recorded coverage and preserves its private evidence on the same parsed Activity instance.
+
+FIT session boundaries assign a record shared with the next session only to that next session, preventing HR or
+power from one leg from supplying another leg's calculation. A standalone or final session retains its own terminal
+record. Session zone durations resolve `time_in_zone.reference_index` against the unique session `message_index`,
+not the session's array position; missing or ambiguous matches do not borrow another leg's zones. Corrected zone
+durations can change intensity summaries even when imported TSS stays unchanged.
+
+When a FIT timer summary is absent, null or zero, an unambiguous timer timeline anchored at the leg's start can
+supply active duration. It must agree with the elapsed session bounds and contain known, non-conflicting timer
+states. A positive file timer summary remains authoritative. Forty active minutes at threshold plus twenty paused
+minutes then yield 66.7 POWER TSS even without a timer summary. An explicitly all-paused timeline establishes zero
+active duration; private provenance prevents subsequent regeneration from substituting elapsed time. Generic
+legacy zero durations without that evidence retain their existing compatibility behavior. Suunto JSON/SML
+`Pause.State` events supply leg-relative stop/resume events, so readings recorded during a pause do not inflate
+calculated HR, power or running-pace load.
+
+These source-evidence corrections apply to new imports. Historical corrections require the existing original-file
+reparse or original-file **Regenerate statistics** action, followed by normal derived-summary refresh. A Training
+rebuild or Activity JSON reconstruction alone cannot recover discarded source timer events, session ownership or
+raw power coverage. Reparse preserves imported TSS, saved load controls and dated policies through the existing
+strict identity/deletion checks. No saved-route reparse, stored schema, additional database operation or provider
+request is needed. Monitoring coverage is unchanged: the import bundle retains the same four provider labels and
+committed-outcome/failure signals; reparse retains its existing worker stages, version guards, retries and heavy routing.
+This calculation change neither enables scanners nor applies monitoring resources.
+
+Sports Lib 21.6.10 additionally requires a positive-duration supported HR interval. Invalid or zero HR readings break
+integration; a single isolated reading cannot establish HR load, and readings are not extrapolated before the first
+or after the last observation. Interior smart-recording gaps retain the existing handling; no arbitrary
+gap cutoff is added. Observed resting HR can still establish valid zero load. Explicit reevaluation refreshes privately
+tagged calculated NP/IF after input changes, preserving device-supplied NP, imported TSS and cached getter semantics.
+
+The coordinated Sports Lib 21.6.12 update also preserves valid session-scoped FIT HR/FTP calibration ahead of unrelated
+global defaults, merges complementary same-time sensor records, retains invalid pool-HR boundaries, and calculates
+TCX timing across its tracks without double-counting overlapping laps. Missing FIT duration summaries use credible
+session timestamps or unambiguous session-owned records, retaining existing duration limits. Pool-length dates and
+generated readings stay inside their owning swim/lap and applicable recorded timer interval; actual recorded streams
+remain intact. Native event/activity/lap JSON safely skips legacy null/non-finite scalar summaries and omits non-finite
+summary exports, retaining finite zero, provider scores, structured values and raw stream gaps. This is the isolated
+JSON compatibility correction, not adoption of the separate unreleased activity catalog. The read correction needs no
+source reparse; historical parser/timing corrections require the original-file lifecycle and normal derived refresh.
+No new fields, schemas, storage operations, MCP scopes or planning/delivery capabilities are introduced. Neither this
+adoption nor a package release starts a production reparse campaign; saved routes need no source reparse.
+
+Sports Lib 21.6.13 adds four source-parser corrections. FIT daily monitoring, settings, course and other explicit
+non-workout file types are rejected before they can become synthetic Unknown Sport workouts. Completed workout
+`activity_summary` files, including Wahoo exports without sensor records, remain accepted when they contain an explicit
+session; timestamped events alone cannot create a session for that type. Ordinary `activity` files and missing file
+types retain legacy activity compatibility. Rejected new imports fail normally. Reparse classifies confirmed historical
+monitoring, route and other non-activity sources as explicit skips, with mixed sources requiring review. It preserves
+saved events, activities, load controls, originals and existing volume; unclassified parser failures remain failures.
+The private source assessment is reused only while original references and verified Storage generations/checksums
+match, including across library releases. Changed originals become eligible again; reopening a completed skip uses a
+persisted task generation so the old queue task's retained name cannot block it. Storage lookup outages stay retryable
+and do not turn committed skips into heavy-timeout failures. See the
+[non-activity reparse contract](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#non-activity-originals-retained-as-events)
+for validation, retry, transaction and monitoring safeguards. This does not migrate sources into Health or Routes,
+exclude their historical modeled load, or clean up workout volume automatically; cleanup needs separate review and approval.
+
+COROS GPX direct `hr` readings in the ClueTrust GPXDATA 1/0 namespace now populate the existing Heart Rate stream.
+Namespace prefixes are irrelevant; unrelated direct `hr` tags, blank/non-finite values and ambiguous repeated tags
+are not accepted. Finite zero and existing direct `heartrate`/nested Garmin precedence are retained. Restored HR
+samples do not supply missing resting/threshold/maximum calibration, so calculated HR TSS can remain unavailable.
+
+Mixed-sport Suunto JSON/SML no longer assigns unscoped header SpeedZones boundaries to every leg. A leg needs its
+own applicable speed-zone thresholds; a single resolved sport may still use the shared header. Conflicting explicit
+sport identifiers cannot donate another leg's thresholds. Leg-local durations/boundaries remain intact, and native
+JSON roundtrips cannot restore rejected global thresholds. Imported TSS and eligible HR/MET fallback retain priority.
+
+FIT pool-distance recovery recognizes a whole-session distance repeated only on the final active lap when earlier
+active laps omit distance. Multiple active laps must have complete, uniquely owned, positive, nonoverlapping pool
+lengths whose total agrees with that final value, including declared active-length counts when present. A complete
+monotonic recorded counter covering those lengths from zero to the same total is preferred, even when a session
+summary disagrees. Otherwise the generator uses complete length distance only if an independent session summary
+agrees. Partial, reset, invalid, late-starting or early-ending counters cannot corroborate this correction. Conflicting
+or incomplete evidence retains existing behavior; consistent lap distances and single-lap handling are unchanged.
+Comparisons use encoded FIT centimetre/second precision. This avoids adding earlier fallback lengths to a repeated
+session total, preserving the corrected counter through source-backed statistics regeneration.
+
+Apply these historical parser corrections through the existing original-file lifecycle and derived refresh; merely
+refreshing Training cannot recover discarded source evidence. Source hydration can show corrected existing HR/distance
+chart metrics without persisting them. No new metric classes, units, schemas, MCP fields/scopes, storage operations,
+provider requests or automatic reparse campaign are introduced. Existing import failure/DLQ signals and terminal
+reparse diagnostics remain applicable; this release provisions no additional monitoring resources.
+
+The 21.6.10 consumer build exposed computed namespace access in dashboard speed-unit selection that retained the
+whole Sports Lib export namespace. Explicit canonical speed-stat imports preserve supported and legacy units,
+including base metres-per-second statistics, while reducing the initial bundle by approximately 70 kB. The production
+build passes the unchanged `1440kb` initial budget and existing public-output checks. This import correction changes
+no stored units, Training calculations or MCP contracts.
+
+Suunto JSON/SML locates Activity, Lap, Stop and Altitude entries by event kind rather than array position. Consistent
+all-paused duration summaries preserve zero active duration. Multisport zone durations come from each leg's window;
+whole-workout zone duration is used only for a single leg. Shared speed thresholds are eligible only when the source
+resolves to one sport; mixed-sport legs require applicable local thresholds. FIT pool length is
+canonical metres; a narrow nonconforming Suunto statute-unit correction requires consistent independent recorded
+speed/timer/lap-distance evidence and no conflicting native-metre evidence. FIT lap ownership honors unique explicit
+references when summary order differs; missing-session active time must be supported by complete contiguous lap
+timers or an unambiguous recorded timer timeline. Historical parser corrections require original-file reparse and
+normal derived refresh, preserving the existing control/deletion fences and public schemas.
+
+A complete, unique session-matched FIT calibration that satisfies the same HR ordering may ignore zero placeholders
+in lower-priority `zones_target` or profile settings. This exception does not fill missing session settings or accept
+invalid session calibration. Ambiguous session references, conflicting repeated settings, nonnumeric values and
+negative settings retain the existing rejection checks. QS still supplies no athlete settings.
+
+Pool and open-water swim pace calculations never infer a threshold from the workout's own average speed, even when
+heuristic fallbacks are enabled. Existing explicit threshold override interfaces remain compatible; other eligible
+Automatic methods keep their order. Missing swim threshold skips swim pace and records `missing-swim-threshold`,
+which the owner editor explains alongside an available fallback or unavailable result. Invalid speed or duration
+retains `missing-pace-inputs`. Imported nonnegative TSS, including zero, remains authoritative; recalculation removes
+or replaces stale calculated swim scores. The shared duration resolver, rest handling and calorie/MET formula are
+unchanged by this correction.
+
+Running pace TSS uses equivalent flat speed `speed × Cost(grade) / 3.6`, where Cost is the Minetti running-cost
+polynomial. It retains valid zero-speed samples, requires complete rolling 30-second windows, and restarts those
+windows at invalid readings, gaps and explicit timer state changes. The full eligible active duration supplies the
+TSS duration factor. Insufficient pace coverage falls through to the existing candidates; complete all-zero coverage
+can produce valid zero TSS. No threshold, body mass or pause position is inferred.
+
+FIT pool imports preserve real recorded HR instead of replacing it with lap/length averages. On the parsed activity
+instance, gaps remain gaps through repeated stream/statistic regeneration; private source evidence is not serialized
+into Activity JSON. Length/lap HR is used only when valid recorded HR is wholly absent. A single length-bearing lap
+can generate missing streams while retaining its existing recorded streams. Invalid/nonincreasing pool summary ends
+are repaired from valid positive file durations before assigning lengths, retaining associated recorded readings within
+the next-session and maximum-duration bounds. Unambiguous start-time windows and compatible explicit length indexes
+retain boundary lengths and final rests without borrowing across sessions. Generated rest
+lengths add no distance or speed; incomplete/ambiguous ownership cannot establish a complete generated distance total.
+When lagging lap timestamps leave positive lap distance without an active length, an available recorded distance
+stream supplies the counter instead of an incomplete generated total.
+These source-backed timing corrections use the existing strict leg reconciliation and owner-review path on reparse.
+FIT multisport imports retain a pre-leg stopped timer state
+only when original session timing unambiguously corroborates it. Full-duration sessions retain implicit restarts,
+while missing or conflicting timing does not invent pauses. These in-memory corrections add no database operations.
+
+MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
+10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
+not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
+
+Settings keeps Training load in the Preferences disclosure group. Its sport-policy editor initializes on first
+expansion, then remains mounted while collapsed so drafts and the existing policy subscription survive section
+changes. Each family saves its own dated policy; the main Settings Save changes action continues to save only
+ordinary account/app preferences. This integration preserves the current Settings layout and adds no policy reads
+before the Training load section is opened. Existing workout-reflection leaves and their independent Rules/MCP
+contracts remain unchanged; this synchronization adds no planning or provider delivery capability.
+Source fingerprints omit Feeling and Rated Perceived Exertion because workout feedback is not a TSS input.
+Adding, editing or clearing either field preserves calculated load and the existing cache entry; recorded TSS,
+calories, body mass, dates and the other source statistics remain guarded against stale calculations.
+
+Owners open **Training load** from the activity action menu. The editor separates recorded, Automatic and modeled
+TSS, explains the actual method/fallback, and supports a preferred method, 0–9999 numeric override (one decimal),
+per-leg inclusion, whole-workout exclusion and reset. Exclusions retain history and volume. Missing load remains
+distinct from a valid zero and from exclusion. Clearing the numeric field removes the override; an explicit zero
+remains a valid override. Multisport overrides belong to individual legs; included available legs sum once at full
+precision, with rounding applied only for display and unavailable coverage explained in the editor and impact.
+Excluded sessions do not count as missing-load sessions. Reset restores the saved per-leg policy rather than today's
+Settings. A whole-workout reset also explicitly releases retained unmatched controls; per-leg reset retains any
+explicit association.
+
+The Training load action and owner Training impact use the same event classifier as Form and MCP: explicit
+`mergeType: 'benchmark'` and legacy merged comparison records are excluded, while `mergeType: 'multi'` remains an
+eligible combined workout. Comparison records do not offer the load editor, and its handler also rejects them.
+Owner-excluded standard workouts retain the editor so they can be included again. Incidental benchmark display
+metadata does not override the persisted Training classification. This UI alignment changes no stored controls,
+calculations, database write paths, MCP schema/scope or Training planning/provider delivery contract.
+
+Event-table merges assemble stored activity summaries without regenerating child statistics. In particular, a calculated
+POWER/HR score retains its method and value even though stored activity documents have no streams or private file
+calibration. Merging never replaces it with a calorie MET fallback or relabels it as imported. The merged workout
+copies each source leg's saved evaluations, immutable applied policy and effective method/inclusion/override controls;
+a whole-source exclusion becomes exclusion of its corresponding merged legs. Imported zero and override zero stay
+valid. Legacy source legs retain recorded scores without inventing evaluations or distributing a parent-only score.
+The combined modeled total sums included legs once; it never adds the parent score again. Benchmark classification
+is unchanged. Original workouts remain unchanged and still contribute according to their own controls: owners must
+exclude the originals or the combined result when both represent the same effort. Exclusion retains history and volume.
+
+Merge-specific EventWriter preparation reads source load metadata and validates the selected parent/child snapshots and original-file
+references/generations in an owner-scoped, deletion-guarded transaction. It rejects pending, stale or unresolved source load instead of guessing.
+Stable result/source-derived activity IDs prevent duplicate children after partial failures. A pending result/cache is
+written before source writes; finalization verifies the persisted result and refreshes its compact load cache while
+retaining concurrent target control edits. Source snapshots are frozen at preparation; later source control changes do
+not edit the separate merged workout. Preparation-only retries reuse saved target policies and controls. Completed
+request replay still returns the existing result. No extra original-file parse or athlete settings are needed; the
+additional reads/writes are bounded to this explicit merge, with no recurring rebuild join. Older completed merges are
+not silently repaired: original-file reparse can refresh calculations, but owners must review their load controls because
+lost source snapshots cannot be reconstructed from the merged activity summaries alone.
+
+MCP impact: existing recorded-stat reads preserve their meaning, and Training impact uses the same effective-load
+resolver/cache for the merged event. Saved policies, control maps, source identities and fingerprints remain private.
+No public schema, scope, reason, tool, planning/delivery capability or plugin changes are introduced. Tests cover actual
+Sports Lib JSON aggregation, calculated scores, imported zero, copied exclusions/overrides, parent/leg totals, source
+changes, preparation-only retries, concurrent target edits and deletion fences, including real Firestore transactions.
+
+After saving controls, the editor reloads its metadata and sport policy heads before showing updated load or allowing
+another edit. If that refresh fails, it hides the old load and form, stops the loading indicator, and explains that the
+write succeeded but the editor must be reopened. A failed read also unsubscribes the other pending refresh read.
+A rejected write retains the draft for review. This affects editor
+readiness only; persisted policies, calculation semantics and MCP contracts are unchanged.
+Closing/destroying the editor unsubscribes any pending metadata/policy reads. A submitted save still completes,
+but its late result cannot start another refresh, change the closed editor's state or give success/error feedback.
+Async source-fingerprint checks also discard results after destruction. Reopening reads the current saved state;
+this lifecycle handling adds no database operations and has no MCP contract impact.
+
+Settings → Training load uses the existing ten sport families, including Walking & Hiking. Defaults are
+Automatic/included. Saving appends an immutable server-timestamped revision in
+`users/{uid}/trainingLoadPolicies/{family}/revisions/{revisionId}` and updates the revision-checked head. The leg
+editor can copy method/inclusion to future family defaults, never a numeric override. First import chooses the last
+revision effective at the leg's recorded start time, so old/delayed uploads do not acquire today's defaults. Each
+leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it. Matched legs reuse that
+snapshot without querying policy history again; only new legs select a dated policy.
+
+Only saves that create a future sport-policy revision request a UUID, using the shared browser compatibility guard.
+Workout-only overrides, exclusion and resets do not depend on UUID support. If a browser cannot create the revision
+ID, Settings and the combined workout/future-preference save fail before opening a transaction, explain that the
+browser needs updating, and retain the draft. Combined saves remain atomic. Revision IDs remain stable across
+transaction retries; server timestamps, policy history, Rules and MCP contracts are unchanged.
+
+The Settings editor retains dirty drafts while policy updates arrive. After a successful save it displays the newest
+observed policy head and uses that revision for the next edit. Pending save completions belong to the current account
+and editor lifetime; switching accounts or closing Settings prevents stale completions from changing form state or
+giving feedback. This coordination uses the existing policy listener and adds no database operations. It does not
+change persisted policy semantics or MCP contracts; policy history remains private.
+
+Saving unchanged leg controls compares values independently of Firestore map field order. It leaves the workout's
+revision and load timestamp unchanged, avoiding an unnecessary metadata write and preventing Training impact from
+waiting for a rebuild that correctly ignores unchanged controls. An explicit copy to future sport defaults still
+saves its dated policy revision independently. This uses the existing transaction reads and adds no database work;
+owner Rules, load calculations, queue behavior and MCP contracts are unchanged. Existing help remains applicable:
+future defaults do not change the current workout's saved policy or copy its numeric override.
+
+For legacy workouts without saved evaluations, neutral Automatic/included leg preferences retain the recorded parent
+TSS, even if the parent differs from the sum of recorded leg scores. This also applies when the editor copies those
+preferences to future workouts. A numeric override (including zero), exclusion or effective method change activates
+leg-based resolution; reparse uses its saved candidates normally. The shared resolver applies this rule to the editor,
+backend cache and Training reads without additional database operations. Per-leg recorded scores stay independent;
+parent-only scores are never distributed. MCP schemas, grants and private-metadata boundaries are unchanged.
+
+Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
+leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
+transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
+revision updates/deletes and cross-event associations. Before provider ingestion, manual upload or source-file
+reparse overwrites any existing source document, backend EventWriter adapters durably freeze legacy identities in
+the server-owned `legacyLegs` field. This evidence survives partial-write retries and does not advance the load
+timestamp. Preparation atomically sets `sourceWritePending` and caches an unavailable load (or whole-workout
+exclusion) before source writes. This covers already-warm caches as well as the first full-history warmup. After source writes, a second transaction
+refreshes candidates, checks the persisted source, preserves the latest controls and atomically updates the compact
+load cache. It clears the pending marker, records exact source update times and advances `sourceRevision` only when
+the shared derived-source projection changes. Failed preparation/finalization must be retried through the original
+writer; never clear a pending marker manually to bypass incomplete candidates. Finalization consumes the frozen
+evidence before old leg cleanup. Metadata preparation and persistence failures propagate to the caller for retry. Preparation also computes any uncached evaluations before EventWriter
+serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
+Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
+
+Legacy reconciliation uses every frozen leg as identity-matching evidence, including legs without owner controls.
+Otherwise, removing or correcting one leg could make its override appear to match a similar surviving leg. Legs
+without controls supply matching context only: they do not become retained unmatched records or reuse a default
+policy as though it were a saved dated policy. Their parsed successors still select the policy applicable to their
+recorded start time. An ambiguous controlled leg remains unavailable pending explicit reassociation or reset.
+Matching uses the existing `legacyLegs` snapshot without extra identity reads, writes or scans; a leg correctly
+recognized as new uses the usual dated-policy lookup, which an incorrect control match would have skipped.
+
+Interrupted first imports use the same frozen-identity safeguard once their parent exists. Before the first retry
+overwrites source documents, preparation captures the existing legs even though `sourceFirstImport` is still set.
+Further retries reuse that snapshot. Renamed matching legs retain their controls; reused IDs cannot move controls
+to different legs, and missing frozen evidence requires owner review. First-import controls select their initial
+dated policy using the original leg's sport and recorded start, including when that leg becomes unmatched. This
+adds one bounded child query (at most 101 results, rejecting more than 100 legs) to that first interrupted-import
+retry. The identity lookup adds no reads to uninterrupted first imports, completed reparses or warm Training rebuilds.
+An unmatched first-import control now also selects its initial dated policy instead of keeping an assumed default.
+Existing transactional
+authorization, deletion fences, latest-control preservation and attempt reservations remain in force. Existing help
+and retry monitoring apply; there is no MCP schema, planning, mutation, provider-delivery or private-data exposure change.
+
+`prepareTrainingLoadMetadata` is the import/reparse entry point and returns the finalizer for that reserved attempt.
+Finalization is internal and always requires the preparation's `sourceWriteId`; there is no direct persistence path
+without preparation. Tests use the same prepare → source write → finalize sequence, and retries of the same finalizer
+remain idempotent. Normal imports and merges share `trainingLoadSourceSnapshot` for the derived-source digest and
+exact source write timestamps, after their respective ownership/source checks. This helper preserves the existing
+digest format, source projection, leg ordering and timestamp precision. It performs no reads or writes; cache,
+policy, control, deletion and retry safeguards remain at their existing transaction boundaries.
+
+When an import runs inside the connection-history execution context, both metadata preparation and finalization
+recheck that context's connection/credential/lease authority in their own transaction, alongside the caller's existing
+write authorization. Revocation or a superseded history run cannot commit load metadata or its cache after authority
+changes. EventWriter preserves `HistoryLifecycleChangedError` through source and metadata writes so the coordinator
+records its existing lifecycle skip rather than a retryable write failure. Ordinary imports have no history guard reads.
+This reuses the current context, transactions and monitoring skip classification; it adds no queue, provider request,
+public MCP contract or Training calculation.
+
+The source-file **Regenerate statistics** path protects freshly parsed FTP, duration, timer/elapsed/moving time, pause,
+energy, body mass, gender and maximum-HR setting before regenerating derived statistics. These inputs come from the
+new original-file parse, never the stored activity or current athlete settings. File HR calibration and intensity zones
+remain attached to the same activity. Keeping inputs available prevents an imported FTP from being replaced by a
+20-minute estimate and paused timer time from being replaced by wall-clock duration. Normalized power and intensity
+factor still regenerate from the streams and protected inputs. The missing-FTP estimate remains available as a
+statistic but cannot supply power TSS or IF; private original-file calibration remains attached to the parsed instance.
+
+Regeneration preserves every finite positive canonical distance selected by the fresh source-file parse before
+rebuilding derived statistics. A monotonic counter or moving GPS does not establish complete recording coverage:
+a counter can stop advancing early, begin late, reset or disagree with the source total. QS therefore does not replace
+the parsed total with final-minus-first or choose the larger value. Sports Lib owns source interpretation and any
+independently corroborated correction. Missing or zero parsed distance still follows the existing library generation
+path. This does not copy old stored values, validate a source total independently, or guess reset boundaries.
+Recorded streams remain intact; derived speed/pace and event volume use each preserved leg total once.
+
+The aligned root and Functions 22.0.0 dependencies include the Sports Lib chronology correction. It can retain the complete explicit time span of a single-session FIT recording only when
+monotonic session-owned records anchor its endpoints and complete, non-conflicting timer events from one timer group
+corroborate the recorded active duration within FIT timestamp quantization. Elapsed time and pause duration then
+describe the full chronology; recorded active duration stays unchanged. Unsupported chronology retains the existing
+corrupt-date handling, and the maximum-duration limit still applies. Adoption requires the same released package in
+both consumers. Historical lost records require original-file reparse and normal derived refresh; a Training rebuild
+or saved Activity JSON alone cannot restore them. Release, deployment and production reparse remain on hold pending
+separate approval; neither correction enables a scanner or changes a public schema, write path or queue lifecycle.
+
+Sports Lib 22.0.0 also includes two FIT bounds safeguards. A lap's
+positive source start/end and elapsed duration must agree at FIT whole-second timestamp precision, have a unique raw
+start and a unique containing explicit source session, and remain within the resolved activity. When supplied, timer
+time must be finite and nonnegative. A timer greater than elapsed time must also quantize to that same whole-second
+source span (its floor or ceiling); an absent timer is allowed. This uses encoded precision, with no additional
+tolerance. Only then may its source end take precedence over unrelated records assigned by the parser's cascade.
+Missing or conflicting proof
+retains the existing recovery path. The terminal-record safeguard applies only to an otherwise clamped, sole explicit
+session: complete alternating timer events from one group must start at the session start and stop at the last ordered
+raw record, exactly at the ceiling of fractional source elapsed time. Each active interval needs distinct record
+support, and its combined duration must agree with source active time within the precision of the encoded timestamps.
+This preserves the supported final record and corrects elapsed/pause values without adding timer/active time or relaxing
+the maximum-duration bound. Zero-length or unsupported timer intervals do not qualify. Both corrections require the
+original source and the same separately approved adoption/reparse lifecycle; they do not initiate a historical rewrite.
+
+Pool swims use that same parsed-total rule. The former QS-only length/lap corroboration gate is unnecessary:
+Sports Lib already owns FIT pool counter/length/session precedence. QS does not reinterpret those inputs during
+regeneration. Historical distance corrections require original-file **Regenerate statistics** and normal derived
+refresh. This in-memory change adds no database operations, public fields, scopes or planning/delivery capabilities.
+
+The Suunto JSON/SML timing correction is included in Sports Lib 22.0.0. Windows without
+`PauseDuration` contain active time; elapsed time comes from their owning interval. Explicit elapsed/pause pairs keep
+their semantics. Contradictory active duration requires independent non-conflicting pause-state evidence, or a single-leg
+header whose start, float32 active precision and recorded sample envelope agree. Window-count/sport conflicts cannot
+donate another leg's timing. Without recovery evidence, active/timer/pause statistics, duration-dependent load
+candidates (including HR) and newly calculated or cached durability evidence remain unavailable; valid imported TSS
+remains eligible, including zero. HR calibration alone cannot establish active duration. Parent active/pause
+totals require all legs. This does not extend Suunto dates or recover later records from contradictory chronology.
+CSV duration export uses the shared canonical display and leaves unavailable active duration blank; a valid zero
+remains a formatted zero. Multi-day values use the same day-aware display as other canonical duration surfaces.
+Original-file parsing retains the private evidence through regeneration and metadata finalization; ordinary JSON
+preserves resulting values/absence but cannot recover that evidence. Adoption requires aligned root/Functions versions
+and the existing sanitized source-backed lifecycle, strict identity review and derived refresh. No bulk rewrite,
+release, deployment, scanner activation, provider call, metric token or MCP contract change is included.
+
+After restoring any other missing parsed statistics, regeneration refreshes all TSS evaluations. By default (or with
+`preserveImportedTss: true`) it restores the parsed score and method together, preserving imported scores including zero
+and methodless legacy imports, recalculating known calculated scores, and removing unavailable calculated scores.
+For an explicit `preserveImportedTss: false`, QS removes both score and method before the final evaluation: sports-lib
+21.6.1 always preserves an imported stat regardless of that deprecated option, so forwarding the flag is insufficient.
+This is an internal regeneration contract, not a new UI setting. No score is restored after evaluation. Recorded TSS
+and private candidates therefore describe the same completed regeneration, including repeated runs and unavailable
+results. This correction adds only in-memory work, with no additional Firestore reads/writes, queue work, provider calls,
+or MCP schema/scope/mutation changes. Training planning reads, proposals and provider delivery are unaffected. Monitoring
+coverage is unchanged: existing reparse transform, persistence and failure stages still own the operation and its retries.
+
+Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
+excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load
+unavailable until the owner explicitly reassociates or resets them. Missing legacy identity evidence also requires
+review; a newly written activity with a reused ID cannot establish the old control's identity. Reassociation survives
+the next reparse, and copying preferences uses the newly associated activity's sport family.
+Retained unmatched identities stay outside automatic matching on later reparses, even if their old identity reappears.
+Only an explicit owner association makes one eligible to match again; otherwise its saved controls remain pending review.
+Bounds: 100 source legs/controls per event and 200 retained identities; reaching the retained bound requires review
+before further reparse.
+
+`shared/training-load-policy.ts` owns the effective-load resolver for Form, weekly load, ACWR, comparisons, sport
+contributions and impact. Full-history backend rebuilds read compact resolved loads from the private,
+server-owned `users/{uid}/trainingLoadCache` collection instead of joining one metadata document per event. Hash-prefix
+buckets start with one hex digit and split atomically at 100 entries or 400,000 JSON bytes; entries are bounded at
+100,000 bytes. Branch documents have `leaf: false`; a single leaf query retrieves the current buckets. Each entry
+contains only the resolved parent/per-leg results and source guards, never policy history or full evaluations.
+Unqueried cache entries and metadata control/candidate maps are exempt from indexing. Empty leaf documents are
+removed so deleted history stops adding rebuild reads. Buckets are flat documents without descendants; branch
+documents remain to route future writes and are omitted from the leaf query. All cache records are below the
+recursively deleted user root.
+
+The shared resolver sums included, available leg scores in ascending numeric order and sorts the aggregate diagnostic
+set, including primary-reason selection when every included leg is unavailable. Reading identical Firestore leg maps in another order therefore produces the same parent summary, avoiding
+floating-point freshness mismatches and unnecessary cache writes. Individual leg values retain their full precision;
+the editor's one-decimal display is not used to round modeled load.
+
+A versioned `state` document becomes ready only after the first **full-history** build warms existing metadata.
+That cold build uses exact owner paths in batches of at most 100 and refreshes existing metadata with at most four
+concurrent transactions, rereading current sources and controls before every cache write. Interrupted imports warm
+as unavailable (or explicitly excluded), so one pending file does not block other workouts.
+Final persistence replaces that placeholder atomically. Existing untouched legacy workouts need no cache entry and keep
+recorded load. Future imports update their cache atomically; owner edits refresh it before invalidation even outside
+the derived-metrics rollout gate. Event deletion removes its cached entry. Cache maintenance checks the account
+root and deletion tombstone transactionally. A failed cache refresh retries without publishing invalidation first.
+Immediate legacy controls may still require a bounded child join, and ordinary source corrections/deletions refresh
+those legacy entries before invalidation, including outside the derived rollout gate. Moving a leg refreshes both
+its former and current parents. Parsed cache refreshes validate the saved active leg IDs against current child
+existence, event ownership and source fingerprints in the same transaction. A changed, deleted or moved leg makes
+the cached workout unavailable until a matching source is restored/reparsed; delayed owner edits cannot recertify
+stale candidates. Whole-workout exclusion still wins. Exact active IDs omit obsolete legs awaiting reparse cleanup.
+Uncoordinated child source changes refresh parsed entries too; device-label-only changes do not require this extra
+verification. Focused MCP impact/editor reads keep their exact metadata reads.
+
+Steady-state full rebuild overhead is one cache-state read plus the populated leaf documents (Firestore bills a
+minimum of one read for an empty query). The emulator fixture with 1,001 single-leg controlled workouts uses 16
+leaves: **17 reads instead of 1,001**, a 98.3% reduction in this feature's load-join reads. This is not a reduction in
+the pre-existing event/activity reads or an estimate of the whole Firebase bill. Large multisport entries split
+sooner. First warmup still pays the metadata scan and cache preparation once; imports/edits add bounded transactional
+cache maintenance, and a split costs additional writes. Parsed cache refreshes add one exact source read per active
+leg (maximum 100), including owner edits and final metadata-trigger refreshes; whole-workout exclusions and pending
+imports skip those reads. This validation adds no reads to an already-warm full-history rebuild. Identical refreshes
+skip the cache write. An import writes
+a pending cache result and then its final result, adding a bounded preparation read/write. Even an unchanged reimport
+advances load freshness and requests a targeted load rebuild when it clears a pending result: another build may
+have observed that pending state. Matching reparses still avoid policy lookups; unchanged source projections
+avoid full-source invalidation. No original-file
+reparse is required to warm this cache, and it does not recalculate historical TSS.
+
+The five event/activity/sleep/Health/load trigger entrypoints keep their existing Firestore paths, retry policy,
+512 MiB memory and concurrency of one. Their semantic no-op and preparation-only checks run before dynamically
+loading the cache/calculation/Cloud Tasks handler. Both pending and final metadata writes remain; this avoids heavy
+startup work for ignored deliveries rather than removing a trigger invocation. Coordinated event/activity writes
+check current metadata before loading the calculation registry; irrelevant Health records exit before that load too.
+Cache refresh and Cloud Tasks modules load only when needed. Import or handler errors still
+propagate for retry. Compiled entrypoint checks prevent Sports Lib, cache builders and Cloud Tasks from returning
+to the eager trigger import graph.
+
+Preparation, finalization and trigger cache refresh batch the account root, deletion tombstone and already-known
+source/metadata references into one transaction read. Finalization includes its expected child references in that
+batch. Every transaction retry rereads them; authorization, attempt ownership, current controls, source fingerprints,
+policy selection and atomic cache writes retain their existing checks. Reads that depend on returned metadata (legacy
+children, active leg IDs, policy history and cache bucket traversal) remain subsequent transaction reads. Batching
+reduces network round trips, not the number of billed documents on a successful ordinary import.
+
+The derived worker starts only its required independent Form, bounded recovery, activity, Readiness sleep and Health
+queries together. Seed validation still precedes the building transition; Best Build sleep still waits for the
+canonical parent/activity join. All started queries settle before failure bookkeeping, including any guarded cache
+warmup performed by event loading. Deletion/generation checks still run before publishing and completion. This changes
+waiting time, not source bounds, query eligibility, snapshot contents or rebuild frequency. The existing 2 GiB worker
+memory and concurrency of one remain. Existing query-duration and source-count logs can measure the effect after a
+separately approved deployment; local startup timings are not monthly billing guarantees.
+
+Help/MCP/monitoring review: these execution changes leave user behavior, recorded/modeled-load semantics, public
+contracts and planning/provider actions unchanged. Existing Help guidance remains accurate. Trigger identities,
+queue scopes, debounce, leases, retries, failure logs and monitoring filters remain unchanged; no new operational
+resource, schema, index or migration is required.
+
+For imports, source triggers check the pending marker and committed update times, leaving invalidation to the final
+metadata write. Completed changed sources use normal full-source ingress; owner-only load edits retain targeted
+load ingress. This prevents the import's source and load metadata from independently requesting the same rebuild.
+Independent edits, retries and stale-leg cleanup can still legitimately request additional work. Owner controls
+edited during a pending import refresh the current cached state: whole-workout exclusion takes effect immediately,
+while other modeled results remain unavailable until finalization. The shared resolver keeps this state consistent
+in rebuilds, the editor and MCP. `loadRevision` and `updatedAt` advance when finalization clears a pending result,
+even if reimported source fields are identical. Cache-dependent ingress selects its debounce bucket immediately
+before enqueueing, after cache maintenance and deletion guards, so late deliveries do not reuse an expired bucket. `sourceFirstImport` preserves dated selection across
+partial first-import retries; it is removed on successful finalization. Owner revision/updatedAt-only changes are ignored.
+Each import, reparse or merge preparation also reserves a private server-owned `sourceWriteId` in the existing
+metadata transaction. Source-document writes, finalization, reparse cleanup and completion metadata must still own
+that reservation, including after a newer attempt completes. Each existing Firestore write transaction checks the
+reservation before writing, alongside its deletion and history-authorization checks.
+Source fingerprints alone cannot establish ownership: a newer parser can recognize another zero-load multisport leg
+without changing the parent totals or the older leg. A superseded finalizer fails before changing candidates, controls
+or cache state; the current attempt can finish and repeated finalization of that same attempt remains idempotent.
+Owner edits preserve the reservation and remain independent of it. A retry reserves a new identifier while retaining
+frozen legacy identities, dated policies and latest controls. Each guarded source/completion transaction adds one
+metadata document read (including any Firestore contention retries); no new transaction or normal-path write is
+needed for that check. Warm Training rebuild reads are unchanged. A repeated preparation refreshes the reservation
+in its existing transaction. Source writes start only after original-file uploads succeed, so an upload failure cannot
+return while activity writes are still running. Reparse cleanup refreshes event-scoped child membership in guarded
+transactions of at most 400 documents per page; it cannot rely on the snapshot taken before parsing, which may miss
+children written by an interrupted attempt. Each cleanup page reads its current children (including retained legs)
+and deletion/attempt guards, even when nothing needs deleting. This adds bounded reparse reads and can add a cleanup
+transaction where the old snapshot predicted no stale children. It adds no import or rebuild scan. Reservation-only changes do
+not invalidate derived metrics. MCP impact is none: the marker is never projected, and public schemas, planning reads,
+mutations and provider delivery are unchanged. Existing help remains accurate; the editor already describes incomplete
+imports as unavailable. Queue monitoring coverage is unchanged: existing persistence-phase errors and worker retry
+handling cover superseded source writes, finalizers and cleanup, with no new queue, scan, provider action or deployment.
+Original bytes need separate protection because Storage cannot join the reservation transaction. Provider imports,
+manual uploads and merges retain each distinct byte revision at
+`users/{uid}/events/{eventId}/sources/{sha256}/original[_index].{extension}` and save that actual path in the existing
+original-file metadata. SHA-256 covers the exact retained bytes, including gzip. A delayed older upload or staged
+promotion cannot replace the current revision's bytes. Identical retries reuse a path; different revisions remain
+under the same event prefix for existing guarded cleanup. This adds hashing and storage for distinct revisions,
+without extra Firestore or Storage requests. Existing paths remain readable and are not migrated or deleted.
+Downloads, reparse and historical sends resolve the stored path; manual sends retain their exact owner/event,
+format, provenance, size and generation checks. Storage sharing remains the existing event-folder policy, including
+retained revisions of a public event. MCP schemas, user-facing controls and Help are unchanged.
+Browser and backend use the same canonical source projection for SHA-256
+fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
+is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
+leg edits until stale activity details are reopened. The
+Sports Lib JSON reader preserves zero W/kg power-curve values so reopening a saved leg does not falsely change its
+source fingerprint. This read compatibility fix needs no historical reparse and exposes no additional MCP fields. The
+`onTrainingLoadMetadataWrite` trigger refreshes the private cache, invalidates affected kinds and increments the event
+mutation/workout input versions; timestamp/revision-only bookkeeping does not invalidate. Impact waits when a load
+edit is newer than Form. CTL 42 days, ATL 7 days and UTC-day bucketing are unchanged.
+
+Legacy activities keep existing values until original-file reparse. Override and exclusion work immediately; HR/MET
+selection requires stored evaluations or **Reimport activity from file**. Recorded-TSS statistics, metric rankings
+and raw statistic queries keep their meaning. Training and impact use modeled load. Existing MCP reads honor
+controls without exposing policy metadata, widening frozen public schemas or adding mutation capabilities; owner
+exclusions never increment benchmark counts, and output validation accepts them outside the benchmark/incomplete
+subsets. MCP source rewrites remain updating even without a cached score; identities needing owner review remain
+unavailable rather than being counted as missing recorded TSS. Stale benchmark metadata cannot block otherwise
+usable day contributions in MCP or the app; the app omits benchmark metadata listeners from impact calculations.
+Recent owner exclusions still wait for the Form rebuild. Actual service responses are
+checked against the strict output validator, including partial days. Built-in Assistant instructions distinguish
+recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
+provider delivery changes.
+
+Swimming correction MCP review: the new missing-threshold reason stays in owner-only load metadata and the editor.
+Training impact uses the existing ready/partial/unavailable projection and frozen reasons, while recorded statistic
+queries retain their existing meaning. Focused service tests cover an unavailable swim and its estimated fallback,
+validate the strict public output schema, and reject private reason/calibration/policy leakage. No tool, scope,
+public schema, mutation, planning read, provider delivery or bundled-plugin change is needed. Existing activities
+retain their values until an approved original-file reparse refreshes candidates; deployment alone does not rewrite
+history. No derived schema bump or route reparse is required for this calculation-only change.
+Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
+compatible with the older Sports Lib version used to build an existing frontend.
+
+### Sports Lib 22.0.0 adoption and develop integration
+
+The frontend and Functions handle optional active duration, timer, moving time and pause getters without substituting
+elapsed time or zero for missing/rejected active timing. Existing Stamina keys remain stable; source-only parent
+observations, strict leg identity and private Training controls retain their existing regeneration contracts.
+The rebase preserves Calendar planned-workout summaries separately from recorded modeled load, current owner tags,
+nominal yard-pool display and lap-column ordering. Nominal display values never enter timing, pace or load calculations;
+cross-leg laps remain generic and are omitted from sport-specific averages.
+
+Package adoption changes the runtime reparse target but does not enable either scanner. Check scanner settings before
+any separately approved deployment. Historical source corrections require an explicitly authorized original-file
+reparse; no automatic campaign, production write or source download is part of this integration. The detailed release
+history below records earlier checks and is not a claim that those old packages remain installed.
+
+MCP review preserves develop's current planning reads and proposals, the additive endurance v2 tools, and the frozen
+registered schemas/history. The pending digest describes the combined candidate; no contract promotion or client
+refresh is performed. Calendar's Recorded TSS label changes presentation only: plan/workout read payloads, completion
+evidence, consent, mutations and provider delivery are unchanged.
+
+Verification against develop `8c48e325a`: CI passed all frontend and Functions suites after correcting the
+merged pending digest; local coverage included 9,814 frontend tests and all 21 contract tests. All 209 Rules tests,
+49 lifecycle emulator tests and 73 test-runner/policy guards pass. Functions and production frontend builds,
+service-worker/public startup output, endpoint loading, secret bindings and isolated plugin validation pass. A further
+186 Calendar/help tests cover the recorded-versus-modeled label. Offline corpus replay found no new regression in
+regeneration, native round trips or routes; source files and detailed evidence remain outside the repositories.
+
+The follow-up review against develop `95cd0b7de` preserves Garmin overnight-HR source invalidation alongside Training
+load cache coordination, plus the newer activity-send limits and retry handling. The combined MCP candidate retains
+scope-gated calculated sleep-HR guidance and additive endurance reads without changing the registered contract.
+Regression coverage now also verifies that neutral legacy preferences preserve the recorded parent total through
+the editor and compact cache; zero overrides and exclusions still take effect immediately. This changes no parser
+output, storage schema, provider behavior or deployment authority.
+
+
+Root and Functions pin published Sports Lib 22.0.0 with FIT Parser 6.2.2 and matching package integrity.
+The separate activity-catalog expansion remains unadopted; both consumers retain 131 canonical sports.
+
+#### Earlier published dependency verification
+
+The earlier published Sports Lib 21.6.9 release incorporated
+the earlier file-calibrated load corrections plus FIT session-boundary/zone ownership, source-backed timer recovery,
+Suunto pause/resume events and complete recorded-power coverage. A read-only replay of 1,100 unique original files
+(1,176 legs) had no parse failures. All 3,528 Automatic/HR/MET evaluations retained their scores and methods relative
+to 21.6.8, and all 366 imported scores were preserved. Independent source checks verified all 98 normalized-power
+statistic changes and eight Suunto timer timelines. A separate QS regeneration replay of 320 files (342 legs) passed
+6,613 checks without violations; its one two-metre distance reduction follows the corrected shared-boundary record
+ownership. Synthetic regressions verify the load corrections that this sample did not exercise. Private originals
+and detailed audit results remain outside Git.
+MCP review: this update adds no metric token, unit, output field, reason code, scope, mutation, planning capability or
+plugin change. Recorded queries consume saved statistics; Training impact consumes the existing modeled-load resolver.
+Corrected historical load needs original-file reparse and the normal derived-summary refresh. Existing controls and
+dated policy snapshots remain protected. No new database operation, provider request, queue or saved-route reparse is needed.
+Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate
+explicit approvals; no historical values are rewritten merely by deploying this change.
+
+The 21.6.14 release candidate passed 3,031 Sports Lib tests across 145 suites (five existing skips), ESM/CJS builds,
+documentation and package verification. QS passed 530 focused Functions tests in a clean serial run, 248 frontend
+checks, Functions and production app builds, and the unchanged MCP contract check. Concurrent test runs initially hit
+runner communication/time limits; the clean run passed without test or runner errors.
+Adoption of the published package passed another 209 focused version, parser, reparse and private-output checks.
+Integration with develop at `d98763ce4` passed 186 frontend and 258 provider/queue checks, followed by Functions and
+production app builds, service-worker/public startup verification and the unchanged MCP contract check.
+A read-only local comparison covered 20,000 unique retained originals: 19,334 accepted activity sources, 166 unchanged
+non-workout rejections, and 500 routes. All 59,268 Automatic/HR/MET selections across 19,756 legs retained their scores,
+methods, provenance and estimate flags. Complete serialized outputs and streams matched after the expected creator/type
+corrections. Native JSON retained 318 nonempty child names; 429 GPX activities and all 500 routes lost only the incorrect
+schema-version manufacturer. One TCX source became canonical Unknown Sport; four preference diagnostics on two
+activities changed to calculation-unavailable, with no score changes. All 500 routes retained geometry and summaries.
+Authored cases cover range rejection, missing inputs, accepted boundaries, zero/imported priority and native JSON
+compatibility. Private originals and detailed results stay outside Git; verification performed no production reads or writes.
+
+Training load policy/helper tests use the frontend `helpers-node` project; editor/service tests remain in `angular`.
+The Settings disclosure regression explicitly renders its fixture, preserving the shared logic-only setup.
+Editor/service specs record their Angular injection and lifecycle requirements in the frontend policy registry.
+Training load persistence remains registered once in the lifecycle emulator group, excluded from ordinary Functions
+collection and run through the dedicated emulator configuration. The rebase retains the current
+frontend/delivery shard planners, worker limits and complete report gates; it changes no load or MCP contract.
+
+Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
+exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. Timestamp
+coverage uses real Admin SDK timestamps with nonzero sub-millisecond nanoseconds: load decreases and
+mixed-day exclusions still wait for a newer Form snapshot, and session impact resumes after that snapshot arrives.
+These timestamps remain private; output validation and identity-redaction checks cover both pending and ready results.
+The Firestore emulator verifies delayed policy selection, idempotent duplicates, changed/reused leg IDs, partial-write retries,
+missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. Cache tests
+cover the warm/cold read paths, transactionally split buckets, unchanged-write suppression, policy query avoidance,
+zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
+17 steady-state document reads. The persistence emulator suite allows 30 seconds per test for real transaction
+contention and retry backoff, matching the other transaction suites; this is not a production latency target.
+Its atomicity, retained-control and read-count assertions remain required. This test-only timing allowance changes
+no runtime behavior, database operations or MCP contracts. Review regressions also cover warm-cache pending imports, exclusion/reset during
+interrupted imports, parser evaluation failures before reservation, removed/recreated empty leaves, leg moves and
+cache maintenance outside rollout. Further regressions cover changed/deleted/moved parsed legs with unchanged
+parent statistics, delayed owner edits against those stale sources, restoration by reparse, obsolete leg cleanup,
+and device-label edits avoiding source validation. This optimization changes no public MCP schema, scope or mutation contract; Training
+planning/provider delivery remains unaffected. The actual
+editor and Settings were exercised with synthetic local data at desktop and
+320/390-pixel phone widths. No original user FIT file or production data was used.
+
 #### Activity and selected-day Training impact
 
 Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
-completed activity's recorded TSS participates in this model. They do not query activity history or create a separate
-derived snapshot. For one activity:
+completed activity's modeled TSS participates in this model. They do not query activity history or create a separate
+derived snapshot. Calendar's lightweight event adapter exposes an empty leg list and retains the complete stored
+statistics and end time as source fields for fingerprint validation. This avoids treating a summary object as a fully
+hydrated Sports Lib event. Impact validates saved active leg identities and fingerprints as well
+as the parent; the editor also refuses leg edits when a saved active leg is missing from the opened workout.
+
+Event details reuse their existing live hydrated legs, with no additional source query. For a selected Calendar
+workout with parsed candidates, or legacy per-leg controls, the load reader opens a live owner-scoped child query
+only when hydrated legs are absent. The query is limited to 101 documents to enforce the 100-leg bound. It adds
+reads for the returned legs (or Firestore's empty-query minimum) and later changed documents while that selected
+workout is observed; it does not scan history or add full-rebuild reads. Untouched legacy workouts, pending imports
+and whole-workout exclusions need no child query. Switching workouts, exclusion or unsubscribing releases the
+listener. Child corrections/deletions switch impact to updating until matching source data is available. While a
+new selection's modeled result is loading, a previous selection's ready snapshot cannot supply a recorded-TSS
+fallback for the newly selected workout. The shared resolver continues to distinguish missing load, zero and
+exclusion. A selected day waits if any selected session is updating: it suppresses contributions and the old Form
+outcomes even when another session already has a usable score. Once the sources are current, ready totals return;
+genuinely missing load still allows an explicitly partial total. This is presentation-only and adds no reads,
+writes or rebuilds. The same waiting state applies when the selected contributions together exceed the saved
+Form load for any UTC day, with tolerance only for floating-point summation error. Individually fitting sessions
+cannot certify an aggregate that the saved day does not yet contain. Session, Calendar-day and MCP impact use the
+same shared total comparison, scaling machine precision to load and term count. Equivalent decimal totals such as
+33.1 + 33.2 versus 66.3 remain usable; a real excess still waits for Form. This comparison does not round, alter or
+persist any load, and adds no reads or rebuilds. These corrections preserve the existing MCP updating semantics and all public schemas,
+scopes and mutation contracts; no plugin rebuild is needed.
+
+For one activity:
 
 ```text
 Fitness load (CTL) contribution = activity TSS / 42
@@ -5484,7 +6188,7 @@ the accessible label and hover/keyboard tooltip **How Training impact is calcula
 are disabled (`matTooltipTouchGestures="off"`), so long-press handling never suppresses mobile scrolling. A tap or
 keyboard activation still controls a labelled hidden region through `aria-expanded` and
 `aria-controls`, with one selection-haptic owner per activation. The initially collapsed explanation contains the
-workout's recorded TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
+workout's modeled TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
 physiological-adaptation disclaimer. Disclosure state is component-local, survives same-event ready refreshes, and
 resets when the event/day context or availability changes; it adds no subscription, request, or setting.
 Full-day breakdowns and compact Calendar/Dashboard/day-sheet summaries retain their existing role/outcome wording,
@@ -5890,6 +6594,36 @@ swolf_change = final_swolf - first_swolf
 
 Higher pace retention is better. Lower SWOLF change is steadier. SWOLF remains unavailable if it is not recorded.
 
+### Contradicted recorded pool timing
+
+Sports Lib can mark a lap or length with additive `timingValidity` metadata when a complete, single-session pool FIT
+workout independently contradicts its recorded timer or elapsed duration. It compares against the conservative whole
+workout envelope, widened by all summary timestamps and, for laps, valid child totals. It does not use a fixed duration
+cap, `timer > elapsed`, a single lap boundary, or a multisport leg boundary to classify timing. Incomplete evidence and
+multisession files remain unchanged; valid long rests and cross-leg laps retain their existing ownership.
+
+Rejected fields are unavailable, not zero. A valid independent elapsed value is retained, but cannot replace a rejected
+active timer. Length/lap identities, distance, strokes and rest classification survive import, native JSON, persistence
+and regeneration. Bounds retained for containment are not measured durations. No synthetic readings come from flagged
+lengths; an affected active length prevents a complete generated distance counter. Recorded streams and authoritative
+workout totals remain available. Removing a corrupt length-derived Moving time can allow regeneration from valid
+recorded samples; imported TSS and valid workout timer/elapsed totals keep their existing precedence.
+
+An affected active length makes pool durability ineligible with `missing-output` and zero qualifying coverage; deleting
+it from a denominator must not make coverage appear better. Valid rests do not disqualify otherwise comparable active
+lengths. The validity marker participates in the durability fingerprint. In event details, incomplete active timing
+withholds set totals, calculated pace, normalized SWOLF and weighted stroke rate where those calculations require it.
+Native lap time cannot silently fill rejected length time. Unrelated distance/stroke totals and recorded values remain
+available, with an explanation in the lap/length view.
+
+`shared/swim-timing.ts` provides compatible reads of optional metadata for the frontend and MCP; classification remains
+in Sports Lib. MCP retains frozen schemas and existing nullable timing fields, with no raw validity metadata, rejected
+values, new scopes or mutations exposed. This is a recorded-data/durability correction, not a Training planning change.
+Existing write sanitization preserves the marker and null values. Historical classification requires an original-file
+reparse after coordinated package adoption; refreshing Training or restoring old JSON alone cannot supply that evidence.
+No queue lifecycle, policy, Rules, index or automatic reparse campaign is added. Root and Functions adopt these corrections together through published Sports Lib 22.0.0.
+QS deployment and any historical reparse remain separately approved operations.
+
 ### Eligibility and missing evidence
 
 Persisted ineligibility reasons include:
@@ -6027,6 +6761,22 @@ long-running heavy reparse jobs before changing queue retry policy.
 
 Event detail uses the same sports-lib analyzer and may request a transient timeline for visualization. This does not alter
 the Training rule: aggregate Training snapshots use only persisted compact activity evidence.
+
+Before reusing cached evidence or running the analyzer, the event-detail performance service requires a finite,
+positive canonical `Duration` stat on each activity. This read-time guard preserves unavailable active timing after
+ordinary Activity JSON reload, which cannot restore private original-file timing evidence. Start/end dates, elapsed
+time, moving time and a timer-only stat cannot substitute for `Duration` at this boundary. Older activities with a valid
+positive `Duration` remain supported even without a separate timer stat; zero remains a valid recorded duration but
+cannot establish a long-session durability comparison. Missing or invalid active duration yields neither a durability
+summary nor a plotted timeline, including when an older cached summary exists. Other eligible selected legs remain
+independently available.
+
+The guard is local to event-detail durability. It does not rewrite activity JSON, remove stored compact evidence,
+recalculate saved modeled TSS, change generic Sports Lib duration fallbacks, query history, or trigger reparse. Stored
+Training durability continues through its existing snapshot path. An original-file correction still follows the
+separately approved parser adoption/reparse lifecycle above. MCP impact is none: there is no new metric, public field,
+schema, scope, instruction, planning/delivery capability or mutation; persisted Training projections and bounded
+transient source chart/sample reads retain their existing contracts.
 
 The event performance-chart region uses a shared `23.1vh` height. On extra-small viewports, the durability eligibility
 summary starts collapsed behind an accessible disclosure button so the plot retains useful vertical space. Expanding the
@@ -6579,8 +7329,9 @@ whether the scheduled event or route scanner can discover and enqueue new candid
 already queued work can dispatch. A `RUNNING` Cloud Tasks queue does not enable automatic reparse, and a disabled scanner
 does not pause Cloud Tasks. Keep these labels distinct in operational UI and diagnostics.
 
-Source-backed reparses preserve meaningful existing activity creator names so user device renames survive parser
-upgrades. Parser placeholders (`Unknown` and `Unknown Device`) yield only when the newly parsed activity contains a
+Activity child names, parent event titles, and creator/device names are distinct fields. Restoring a saved child name
+from native JSON does not rename the parent event or the device. Source-backed reparses preserve meaningful existing
+activity creator names so user device renames survive parser upgrades. Parser placeholders (`Unknown` and `Unknown Device`) yield only when the newly parsed activity contains a
 meaningful creator identity; when the new parse is also blank or a placeholder, the existing placeholder remains. Keep
 this rule aligned across the backend reparse worker and both frontend source-hydration paths so loading the same retained
 original cannot produce different creator metadata.
@@ -6869,29 +7620,33 @@ formulas remain unchanged. Source-backed historical classification corrections r
 regeneration after coordinated package adoption; the [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
 owns the operational transition.
 
-Native event/activity/lap JSON reads tolerate legacy null/non-finite scalar stats, and summary exports omit non-finite
-numbers. Runtime stopped pace remains infinite; finite zero/negative metrics, imported TSS and method, structured stats
-and stream null gaps remain intact. Every canonical type keeps a finite provider TSS when preservation is true/default;
-false discards it and uses the existing calculation policy. This read correction needs no source reparse or Training
-schema bump. No numeric catalog token/unit, MCP output field, scope, projection, consent, mutation, planning or delivery
-capability changes. Queue lifecycle and sanitized persistence paths remain unchanged; no MCP deferral is needed.
+The native event/activity/lap JSON subset of these compatibility changes is included in Sports Lib 21.6.12: reads
+tolerate legacy null/non-finite scalar stats, and summary exports omit non-finite numbers. Runtime stopped pace remains
+infinite; finite zero/negative metrics, imported TSS and method, structured stats and stream null gaps remain intact.
+Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
+or the deprecated preservation flag. QS's explicit internal regeneration removal is documented in the Training load
+contract above. This read correction needs no source reparse or Training schema bump. No numeric catalog token/unit,
+MCP output field, scope, projection, consent, mutation, planning or delivery capability changes. Queue lifecycle and
+sanitized persistence paths remain unchanged; no MCP deferral is needed.
 The downloaded public files remain outside the repositories, and profile-only cases use documented names and synthetic
 FIT. FIT Parser decoding work belongs to the separate agent; no parser changes are part of this task.
 
 Follow-up review prevents a known provider profile from replacing an unrelated FIT parent through a general alias;
 compatible broad-parent refinements and explicit parent/profile composites retain their existing behavior. Shared Polar
-profile spellings retain all documented FIT contexts. Route and route-file JSON also omit invalid scalar summaries and
-skip legacy null/non-finite values; files with no valid summaries use existing child-route aggregation. This read-only
-compatibility correction needs no saved-route source reparse. Training formulas, the installed packages, the public MCP
-contract and the sanitized persistence boundary remain unchanged; no MCP deferral is needed.
+profile spellings retain all documented FIT contexts. The isolated route and route-file JSON correction is included in
+Sports Lib 21.6.14; the catalog/profile additions remain on the separate unreleased branch. Route serialization omits
+non-finite scalar exports, restoration skips legacy null/non-finite values, and existing child-route aggregation applies
+when no valid file summaries remain. Finite zero, partial-summary precedence and geometry validation remain intact.
+This JSON correction needs no saved-route source reparse; the separate GPX manufacturer correction does. Training formulas, the public MCP contract and the
+sanitized persistence boundary remain unchanged; no MCP deferral is needed.
 
 Verification after follow-up review: 4,164 Sports Lib tests pass across 41 suites; both package formats build and 13 documentation pages verify.
 All 171 Polar FIT appendix profiles resolve under their documented pair/name inputs. All 170 valid public FIT files
 survive JSON re-import (112 failed before the correction); one truncated sample remains rejected. All 41 provider TSS
-scores pass default/true preservation and false removal/recalculation. Runtime checks cover all 245 types, the 121
+scores pass default/true preservation. Runtime checks cover all 245 types, the 121
 Suunto protocol pairs and the strict MCP catalog. The 113 MCP output/Training-impact tests and contract check pass.
-Changed-file lint passes; repository-wide lint reports existing errors in unchanged files. No package adoption or
-production rewrite was performed.
+Changed-file lint passes; repository-wide lint reports existing errors in unchanged files. No catalog/route package
+adoption or production rewrite was performed for that branch validation.
 
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema

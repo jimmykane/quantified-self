@@ -1,8 +1,9 @@
+import { activityStreamSeriesSchema } from './activity-stream.schema';
 import { MCP_WORKOUT_REFLECTION_TOOLS, MCP_WORKOUT_REFLECTION_OUTPUTS } from './workout-reflections.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
 import { currentHrvRangeSchema, currentReadinessHistorySchema } from './readiness-output-schemas';
-import { MCP_ACTIVITY_SAMPLES_SCHEMA } from './activity-samples.schema';
+import { MCP_ACTIVITY_SAMPLES_SCHEMA, MCP_ACTIVITY_SAMPLES_V2_SCHEMA } from './activity-samples.schema';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -29,6 +30,7 @@ import {
   MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
   MCP_ACTIVITY_CHART_MAX_POINTS,
   MCP_ACTIVITY_CHART_METRICS,
+  MCP_ACTIVITY_STREAM_METRICS,
 } from './activity-chart.service';
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
@@ -96,6 +98,9 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_activity_jumps',
   'list_activity_swim_lengths',
   'list_activity_chart_metrics',
+  'list_activity_chart_metrics_v2',
+  'get_activity_chart_data_v2',
+  'get_activity_samples_v2',
   'get_activity_samples',
   'get_activity_chart_data',
   'get_activity_metrics',
@@ -451,8 +456,9 @@ const trainingImpactOutput = z.strictObject({
       !== coverage.requestedSessionCount
     || coverage.modeledSessionCount + coverage.unavailableSessionCount
       !== coverage.eligibleSessionCount
+    // Owner load exclusions contribute to the total without belonging to either legacy subset.
     || coverage.benchmarkOrMergeSessionCount + coverage.notCompletedSessionCount
-      !== coverage.excludedSessionCount
+      > coverage.excludedSessionCount
   ) {
     context.addIssue({
       code: 'custom',
@@ -1267,6 +1273,14 @@ const chartCatalogMetricSchemas = MCP_ACTIVITY_CHART_METRICS.map(metric => (
   }).meta({ title: `McpChartCatalog_${metric.id}` })
 )) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
 const chartCatalogMetric = z.union(chartCatalogMetricSchemas);
+const chartCatalogMetricSchemasV2 = MCP_ACTIVITY_STREAM_METRICS.map(metric => (
+  z.strictObject({
+    metric: z.literal(metric.id),
+    label: z.literal(metric.label),
+    canonicalUnit: z.literal(metric.unit),
+  }).meta({ title: `McpChartCatalog_${metric.id}` })
+)) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
+const chartCatalogMetricV2 = z.union(chartCatalogMetricSchemasV2);
 const activityOverviewChartMetric = z.enum(
   MCP_ACTIVITY_CHART_METRICS.map(metric => metric.id) as [
     typeof MCP_ACTIVITY_CHART_METRICS[number]['id'],
@@ -1299,6 +1313,17 @@ const chartSeriesSchemas = MCP_ACTIVITY_CHART_METRICS.map(metric => (
   }).meta({ title: `McpChartSeries_${metric.id}` })
 )) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
 const chartSeries = z.union(chartSeriesSchemas);
+const chartSeriesV2 = activityStreamSeriesSchema({
+  xValues: z.array(number).max(MCP_ACTIVITY_CHART_MAX_POINTS),
+  values: z.array(number).max(MCP_ACTIVITY_CHART_MAX_POINTS),
+  sourceSampleCount: count,
+  returnedSampleCount: count,
+  missingSampleCount: count,
+}).superRefine((value, context) => {
+  if (value.xValues.length !== value.values.length || value.returnedSampleCount !== value.values.length) {
+    context.addIssue({ code: 'custom', message: 'Chart arrays and returnedSampleCount must align.' });
+  }
+});
 const chartLocation = z.strictObject({
   xValues: z.array(number).max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
   latitudeDegrees: z.array(z.number().min(-90).max(90))
@@ -1524,9 +1549,10 @@ function paginatedItems<T extends z.ZodType>(items: T) {
   });
 }
 
-function chartDataOutput(includeLocation: boolean) {
+function chartDataOutput(includeLocation: boolean, includeEndurance = false) {
   const schema = z.strictObject({
     ...chartDataBaseShape,
+    ...(includeEndurance ? { series: z.array(chartSeriesV2).min(1).max(4) } : {}),
     ...(includeLocation ? {
       location: chartLocation.optional(),
     } : {}),
@@ -1806,7 +1832,33 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         maximumLocation: z.literal(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
       }),
     }),
+    list_activity_chart_metrics_v2: z.strictObject({
+      activityType: z.string().min(1).max(120).nullable(),
+      metrics: z.array(chartCatalogMetricV2),
+      xAxes: z.tuple([
+        z.strictObject({
+          xAxis: z.literal('elapsed_time'),
+          canonicalUnit: z.literal('seconds'),
+        }),
+        z.strictObject({
+          xAxis: z.literal('distance'),
+          canonicalUnit: z.literal('meters'),
+        }),
+      ]).meta({
+        minItems: 2,
+        maxItems: 2,
+        additionalItems: false,
+      }),
+      pointLimits: z.strictObject({
+        defaultPerMetric: z.literal(MCP_ACTIVITY_CHART_DEFAULT_POINTS),
+        maximumPerMetric: z.literal(MCP_ACTIVITY_CHART_MAX_POINTS),
+        defaultLocation: z.literal(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
+        maximumLocation: z.literal(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
+      }),
+    }),
     get_activity_samples: MCP_ACTIVITY_SAMPLES_SCHEMA,
+    get_activity_samples_v2: MCP_ACTIVITY_SAMPLES_V2_SCHEMA,
+    get_activity_chart_data_v2: chartDataOutput(scope.activityLocation, true),
     get_activity_chart_data: chartDataOutput(scope.activityLocation),
     get_activity_metrics: z.strictObject({
       selectedMetricCount: count,

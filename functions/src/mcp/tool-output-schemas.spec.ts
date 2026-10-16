@@ -1583,6 +1583,9 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
   },
   list_activity_chart_metrics: {},
+  list_activity_chart_metrics_v2: {},
+  get_activity_samples_v2: {activityRef: ACTIVITY_REF, metrics: ['heart_rate']},
+  get_activity_chart_data_v2: {activityRef: ACTIVITY_REF, metrics: ['heart_rate'], xAxis: 'elapsed_time', includeLocation: true},
   get_activity_samples: {activityRef: ACTIVITY_REF, metrics: ['heart_rate']},
   get_activity_chart_data: {
     activityRef: ACTIVITY_REF,
@@ -2124,6 +2127,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       idempotentHint: true,
       openWorldHint: false,
     });
+    const enduranceTools = tools.filter(tool => ['list_activity_chart_metrics_v2', 'get_activity_chart_data_v2', 'get_activity_samples_v2'].includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(enduranceTools), 'utf8')).toBeLessThan(24 * 1024);
     const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
     const trainingImpactTools = tools.filter(tool => tool.name === 'get_training_impact');
     const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
@@ -2136,7 +2141,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !enduranceTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -2418,6 +2423,35 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
     expect(JSON.parse((result.content[0] as {text: string}).text).error).toBe('query_too_large');
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(256 * 1024);
+  });
+
+  it('keeps endurance streams additive and rejects provider fields and units outside their dimensions', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    connections.push(connection);
+    const registry = createMcpOutputSchemaRegistry({activityLocation: false, routeLocation: false});
+    for (const [metric, canonicalUnit] of [['stamina', 'percent'], ['potential_stamina', 'percent'], ['estimated_sustainable_distance', 'meters']]) {
+      const chart = {activityType: 'Running', xAxis: 'elapsed_time', xAxisUnit: 'seconds', series: [{metric, canonicalUnit, xValues: [0, 4, 8], values: [100, 0, 80], sourceSampleCount: 9, returnedSampleCount: 3, missingSampleCount: 6}]};
+      expect(registry.get_activity_chart_data.safeParse(chart).success).toBe(false);
+      expect(registry.get_activity_chart_data_v2.safeParse(chart).success).toBe(true);
+      expect(registry.get_activity_chart_data_v2.safeParse({...chart, creator: {serialNumber: 'private'}}).success).toBe(false);
+      expect(registry.get_activity_chart_data_v2.safeParse({...chart, series: [{...chart.series[0], canonicalUnit: 'calories'}]}).success).toBe(false);
+      service.getActivityChartData.mockResolvedValueOnce(chart as never);
+      const result = await connection.client.callTool({name: 'get_activity_chart_data_v2', arguments: {activityRef: ACTIVITY_REF, metrics: [metric]}});
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(chart);
+      const reads = service.getActivityChartData.mock.calls.length;
+      const legacy = await connection.client.callTool({name: 'get_activity_chart_data', arguments: {activityRef: ACTIVITY_REF, metrics: [metric]}});
+      expect(legacy.isError).toBe(true);
+      expect(service.getActivityChartData.mock.calls).toHaveLength(reads);
+    }
+    const denied = await connectFixtureServer(createFixtureDataService(), []);
+    connections.push(denied);
+    const names = (await denied.client.listTools()).tools.map(tool => tool.name);
+    expect(names).not.toContain('get_activity_chart_data_v2');
+    expect(names).not.toContain('get_activity_samples_v2');
+    const location = await connection.client.callTool({name: 'get_activity_chart_data_v2', arguments: {activityRef: ACTIVITY_REF, metrics: ['stamina'], includeLocation: true}});
+    expect(location.isError).toBe(true);
   });
 
   it('bounds both serialized copies of tagged activity results', async () => {
@@ -2821,6 +2855,25 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
             modeledSessionCount: 0,
             excludedSessionCount: 1,
             benchmarkOrMergeSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'excluded' as const,
+          reason: 'no_usable_sessions' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            excludedSessionCount: 1,
+            benchmarkOrMergeSessionCount: 0,
+            notCompletedSessionCount: 0,
           },
           contribution: null,
           sessionRole: null,

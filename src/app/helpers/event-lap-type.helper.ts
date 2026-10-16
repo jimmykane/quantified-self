@@ -1,9 +1,8 @@
 import { ActivityInterface, LapInterface, LapTypes } from '@sports-alliance/sports-lib';
 
 export type EventLapTypeInput = LapTypes | string | null | undefined;
-type EventLapLike = Pick<LapInterface, 'type'>;
 type EventLapActivityLike = Pick<ActivityInterface, 'getLaps'> & Partial<Pick<
-  ActivityInterface, 'startDate' | 'endDate' | 'getDuration' | 'getDistance'
+  ActivityInterface, 'startDate' | 'endDate' | 'getDuration' | 'getDistance' | 'type'
 >>;
 
 // Terminal chart/map markers remain separate from lap table visibility.
@@ -95,7 +94,46 @@ function isWholeActivityLap(activity: EventLapActivityLike, lap: LapInterface): 
     ));
 }
 
-export function getVisibleEventLaps(activity: EventLapActivityLike): LapInterface[] {
+/** An endpoint outside this leg must not be clamped to its last map/chart sample. */
+export function isEventLapEndpointInActivity(activity: EventLapActivityLike, lap: LapInterface): boolean {
+  const start = activity.startDate?.getTime();
+  const end = activity.endDate?.getTime();
+  const point = lap.endDate?.getTime();
+  if (![start, end, point].every(Number.isFinite)) return true;
+  // Some saved laps have collapsed dates but an explicit, leg-local sample index.
+  // Retain the existing index fallback without accepting a shared boundary on both legs.
+  if (point === start && lap.startDate?.getTime() === start) {
+    const index = lap.getEndIndex?.(activity as ActivityInterface);
+    return Number.isFinite(index) && index > 0;
+  }
+  return point > start && point <= end;
+}
+
+export function getEventLapContextLabel(
+  activity: EventLapActivityLike,
+  lap: LapInterface,
+  activities: readonly EventLapActivityLike[] = [],
+): string {
+  const start = lap.startDate?.getTime();
+  const end = lap.endDate?.getTime();
+  const activityStart = activity.startDate?.getTime();
+  const activityEnd = activity.endDate?.getTime();
+  if (![start, end, activityStart, activityEnd].every(Number.isFinite)
+    || (start >= activityStart && end <= activityEnd)) {
+    return '';
+  }
+  const overlapping = activities.filter(a => Math.min(end, +a.endDate) > Math.max(start, +a.startDate));
+  // A later source end alone does not establish another sport or activity leg.
+  if (start >= activityStart && !overlapping.some(a => a !== activity)) {
+    return '';
+  }
+  const sports = new Set(overlapping.map(a => a.type).filter(Boolean));
+  return sports.size > 1 ? 'Multisport lap' : 'Across activity legs';
+}
+
+export function getVisibleEventLaps(
+  activity: EventLapActivityLike, activities: readonly EventLapActivityLike[] = [],
+): LapInterface[] {
   const laps = activity.getLaps?.() || [];
   if (laps.length === 1 && isWholeActivityLap(activity, laps[0])) {
     return [];
@@ -103,7 +141,17 @@ export function getVisibleEventLaps(activity: EventLapActivityLike): LapInterfac
 
   // Session end is a real final segment after earlier laps, including short
   // remainders. The provider's trigger does not determine table visibility.
-  return laps.filter((lap: EventLapLike) => normalizeEventLapType(lap.type) !== '');
+  return laps.filter(lap => {
+    if (!normalizeEventLapType(lap.type)) return false;
+    if (isEventLapEndpointInActivity(activity, lap)) return true;
+    const owners = activities.filter(a => a !== activity && isEventLapEndpointInActivity(a, lap)
+      && Number.isFinite(a.startDate?.getTime()) && Number.isFinite(a.endDate?.getTime())
+      && a.getLaps().filter(other => +other.startDate === +lap.startDate && +other.endDate === +lap.endDate
+        && normalizeEventLapType(other.type) === normalizeEventLapType(lap.type)).length === 1);
+    // Missing or ambiguous ownership stays visible. This is a display projection;
+    // stored laps and source statistics are never rewritten here.
+    return owners.length !== 1;
+  });
 }
 
 export function hasVisibleEventLaps(activities: readonly EventLapActivityLike[] | null | undefined): boolean {

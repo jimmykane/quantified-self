@@ -51,7 +51,9 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_swim_lengths',
   'get_activity_overview',
   'list_activity_chart_metrics',
+  'list_activity_chart_metrics_v2',
   'get_activity_chart_data',
+  'get_activity_chart_data_v2',
   'get_activity_metrics',
   'rank_activities_by_metric',
   'list_routes',
@@ -356,7 +358,7 @@ function projectAssistantInputSchema(
       };
     }
   }
-  if (activityLocationEnabled || name !== 'get_activity_chart_data') {
+  if (activityLocationEnabled || !['get_activity_chart_data', 'get_activity_chart_data_v2'].includes(name)) {
     return projectedSchema;
   }
   const properties = projectedSchema.properties;

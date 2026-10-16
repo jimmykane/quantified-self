@@ -1318,6 +1318,28 @@ describe('MCP data service', () => {
     });
   });
 
+  it.each([0, undefined])('deduplicates Stamina and EnergySense aliases using only canonical persisted data (%s)', async value => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1', connectionId: 'connection-1', appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'), endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    const stats = { ...(value === undefined ? {} : { Stamina: value }), 'EnergySense Endurance': 99 };
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockResolvedValue({
+      id: 'activity-1', data: { eventID: 'event-1', stats },
+    });
+    const result = await service.getActivityMetrics({
+      uid: 'user-1', connectionId: 'connection-1', activityRef: listed.activities[0].activityRef,
+      metrics: ['Stamina', 'energysense endurance', 'Suunto EnergySense Endurance'],
+    });
+    expect(dependencies.fetchActivityMetricDocument).toHaveBeenCalledExactlyOnceWith('user-1', 'activity-1', ['Stamina']);
+    expect(result).toMatchObject({ selectedMetricCount: 1, availableMetricCount: value === undefined ? 0 : 1,
+      metrics: [{ type: 'Stamina', value: value ?? null, available: value !== undefined, unit: '%' }],
+    });
+    expect(stats).toEqual({ ...(value === undefined ? {} : { Stamina: value }), 'EnergySense Endurance': 99 });
+  });
+
   it('returns only explicitly selected canonical numeric metrics for a referenced activity', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
@@ -1603,7 +1625,7 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('private-rowing-source');
   });
 
-  it('does not mislabel pre-19 lap stroke rate as cadence', async () => {
+  it.each([0, 7, 9])('preserves source lap ID %s without mislabeling pre-19 stroke rate as cadence', async lapId => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument({ type: ActivityTypes.Rowing }),
     ]);
@@ -1620,7 +1642,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         type: ActivityTypes.Rowing,
         laps: [{
-          lapId: 1,
+          lapId,
           type: 'Manual',
           startDate: Date.parse('2026-07-01T08:00:00.000Z'),
           endDate: Date.parse('2026-07-01T08:10:00.000Z'),
@@ -1637,6 +1659,7 @@ describe('MCP data service', () => {
       activityRef: listed.activities[0].activityRef,
     });
 
+    expect(result.items[0].lapNumber).toBe(lapId);
     expect(result.items[0].stats).toMatchObject({
       averageCadenceRpm: null,
       maximumCadenceRpm: null,
@@ -1693,6 +1716,28 @@ describe('MCP data service', () => {
       ascentMeters: null,
       descentMeters: null,
     });
+  });
+
+  it('projects corrected source lap statistics without exposing private matching evidence', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({ uid: 'user-1', connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io', limit: 1 });
+    const start = Date.parse('2026-07-01T08:00:00.000Z');
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({ id: 'activity-1', data: {
+      eventID: 'event-1', type: ActivityTypes.Running,
+      laps: [{ lapId: 1, type: 'Distance', startDate: start, endDate: start + 440_000,
+        stats: { [DataDistance.type]: 1000, [DataDuration.type]: 439.9 },
+        sourceWindow: { ActivityId: 3, privateMatchingEvidence: 'private-evidence' },
+      }],
+    } });
+    const result = await service.listActivityLaps({ uid: 'user-1', connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ startTimeMs: start, endTimeMs: start + 440_000,
+      stats: { durationSeconds: 439.9, distanceMeters: 1000 } });
+    expect(JSON.stringify(result)).not.toContain('private-evidence');
+    expect(JSON.stringify(result)).not.toContain('sourceWindow');
   });
 
   it('rejects oversized activity overview projections before chart-source reads', async () => {
@@ -2979,6 +3024,81 @@ describe('MCP data service', () => {
       energyKilocalories: 5,
     }]);
     expect(JSON.stringify(result)).not.toContain('privateExtension');
+  });
+
+  it('withholds rejected swim and lap timing through existing nullable fields without exposing metadata', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        laps: [{ startDate: Date.parse('2026-07-01T08:00:00.000Z'), endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          stats: { [DataDuration.type]: 4000000, [DataDistance.type]: 25 },
+          timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } }],
+        swimLengths: [{
+          index: 4,
+          lapIndex: 1,
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          type: 'active',
+          stroke: 'freestyle',
+          strokes: 18,
+          elapsedTime: 30,
+          timerTime: 4000000,
+          timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 },
+          distance: 25,
+          poolLength: 25,
+          avgSpeed: 0.83,
+          avgCadence: 36,
+          avgHeartRate: 130,
+          maxHeartRate: 142,
+          swolf: 48,
+          calories: 5,
+          privateExtension: { source: 'provider' },
+        }],
+      },
+    });
+
+    const result = await service.listActivitySwimLengths({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+
+    expect(result.items).toEqual([{
+      index: 0,
+      sourceIndex: 4,
+      lapIndex: 1,
+      startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-01T08:00:30.000Z'),
+      type: 'active',
+      stroke: 'freestyle',
+      strokeCount: 18,
+      elapsedTimeSeconds: 30,
+      timerTimeSeconds: null,
+      distanceMeters: 25,
+      poolLengthMeters: 25,
+      averageSpeedMetersPerSecond: 0.83,
+      averageCadenceRpm: 36,
+      averageHeartRateBpm: 130,
+      maximumHeartRateBpm: 142,
+      swolf: 48,
+      energyKilocalories: 5,
+    }]);
+    expect(JSON.stringify(result)).not.toMatch(/privateExtension|timingValidity|exceeds-workout-envelope|4000000/);
+    const laps = await service.listActivityLaps({ uid: 'user-1', connectionId: 'connection-1', activityRef: activities.activities[0].activityRef });
+    expect(laps.items[0].stats).toMatchObject({ durationSeconds: null, distanceMeters: 25 });
+    expect(JSON.stringify(laps)).not.toMatch(/timingValidity|exceeds-workout-envelope|4000000/);
   });
 
   it('rejects oversized activity list and detail materialization', async () => {

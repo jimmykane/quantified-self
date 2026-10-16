@@ -625,6 +625,14 @@ describe('EventActionsComponent', () => {
             expect(component.isReprocessing).toBe(false);
         });
 
+        it('shows the retained-route explanation without a successful reprocessing notification', async () => {
+            const message = 'Reprocessing skipped: the original is a route. The saved activity has been kept.';
+            mockEventReprocessService.regenerateEventStatistics.mockRejectedValueOnce(new ReprocessError('NON_ACTIVITY_SOURCE', message));
+            await component.reGenerateStatistics();
+            expect(mockProcessingService.failJob).toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(message, undefined, { duration: 4000 });
+        });
+
         it('should fail processing job and show snackbar on regenerate failure', async () => {
             mockEventReprocessService.regenerateEventStatistics.mockRejectedValueOnce(
                 new ReprocessError('PARSE_FAILED', 'boom'),

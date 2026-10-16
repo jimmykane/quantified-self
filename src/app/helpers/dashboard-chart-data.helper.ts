@@ -1,3 +1,4 @@
+import { SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE } from '@shared/endurance-metrics';
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
 import {
@@ -482,7 +483,7 @@ export function formatDashboardAxisNumericValue(
     return '--';
   }
 
-  if (chartDataType === DataDistance.type) {
+  if (chartDataType && [DataDistance.type, SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE].includes(chartDataType)) {
     const normalizedUnitSettings = normalizeUserUnitSettings(unitSettings);
     if (normalizedUnitSettings.distanceUnits === DistanceUnits.Miles) {
       const display = resolveUnitAwareDisplayFromValue(chartDataType, numericValue, normalizedUnitSettings, {
@@ -526,7 +527,7 @@ export function resolveDashboardAxisDisplayUnit(
   fallbackUnit = '',
 ): string {
   const numericAxisMax = Math.abs(toFiniteNumber(axisMax) ?? 0);
-  if (chartDataType === DataDistance.type) {
+  if (chartDataType && [DataDistance.type, SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE].includes(chartDataType)) {
     const normalizedUnitSettings = normalizeUserUnitSettings(unitSettings);
     if (normalizedUnitSettings.distanceUnits === DistanceUnits.Miles) {
       const display = resolveUnitAwareDisplayFromValue(

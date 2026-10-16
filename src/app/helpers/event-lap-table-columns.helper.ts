@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming } from '@shared/swim-timing';
 import {
   ActivityInterface,
   ActivityTypeGroups,
@@ -10,6 +11,7 @@ import {
   DataDescentTime,
   DataDistance,
   DataDuration,
+  DataElapsedTime, DataTimerTime, DataPause,
   DataEnergy,
   DataEffortPaceAvg,
   DataEHPE,
@@ -523,6 +525,10 @@ export const getEventLapMetricStat = (
   lap: LapInterface,
   metricType: string,
 ): DataInterface | null => {
+  const rejected = getRejectedSwimTiming(lap);
+  if (rejected && (metricType === DataPause.type
+    || rejected.timerTime !== undefined && [DataDuration.type, DataTimerTime.type, DataMovingTime.type].includes(metricType)
+    || rejected.elapsedTime !== undefined && metricType === DataElapsedTime.type)) return null;
   if (metricType === EVENT_LAP_STROKE_COLUMN) {
     return null;
   }

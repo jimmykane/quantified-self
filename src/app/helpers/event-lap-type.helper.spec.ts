@@ -9,6 +9,8 @@ import {
   hasVisibleEventLaps,
   isEventLapTypeAllowed,
   normalizeEventLapType,
+  isEventLapEndpointInActivity,
+  getEventLapContextLabel,
 } from './event-lap-type.helper';
 
 function createActivityWithLapTypes(types: Array<LapTypes | string | null | undefined>): ActivityInterface {
@@ -69,6 +71,48 @@ function createActivity(laps: LapInterface[]): ActivityInterface {
 }
 
 describe('event lap table visibility', () => {
+  it('shows a shared multisport lap only in its ending leg without clipping its source interval', () => {
+    const lap = createLap(LapTypes.Manual, 0, 450_000, 450, 1200);
+    const first = createActivity([lap]);
+    first.endDate = new Date(300_000);
+    first.type = ActivityTypes.Swimming;
+    const last = createActivity([createLap(LapTypes.Manual, 0, 450_000, 450, 1200)]);
+    last.startDate = new Date(300_000);
+    last.type = ActivityTypes.Running;
+    expect(getVisibleEventLaps(first, [first, last])).toEqual([]);
+    expect(getVisibleEventLaps(last, [first, last])).toHaveLength(1);
+    expect(getEventLapContextLabel(last, last.getLaps()[0], [first, last])).toBe('Multisport lap');
+    expect(isEventLapEndpointInActivity(first, lap)).toBe(false);
+    expect(isEventLapEndpointInActivity(last, lap)).toBe(true);
+    expect(+lap.startDate).toBe(0);
+    expect(first.getLaps()).toEqual([lap]);
+  });
+
+  it('keeps uncertain ownership visible rather than dropping an unmatched source lap', () => {
+    const lap = createLap(LapTypes.Manual, 0, 750_000, 700, 1200);
+    const activity = createActivity([lap]);
+    activity.startDate = new Date(100_000);
+    expect(getVisibleEventLaps(activity, [activity])).toEqual([lap]);
+    expect(getEventLapContextLabel(activity, lap, [activity])).toBe('Across activity legs');
+    expect(isEventLapEndpointInActivity(activity, lap)).toBe(false);
+  });
+
+  it('does not label a single-sport terminal timing overrun as a lap across activity legs', () => {
+    const lap = createLap(LapTypes.Manual, 300_000, 601_000, 301, 1200);
+    const activity = createActivity([lap]);
+    expect(getVisibleEventLaps(activity, [activity])).toEqual([lap]);
+    expect(getEventLapContextLabel(activity, lap, [activity])).toBe('');
+  });
+
+  it('retains duplicate rows when multiple ending legs make ownership ambiguous', () => {
+    const lap = createLap(LapTypes.Manual, 0, 450_000, 450, 1200);
+    const first = createActivity([lap]);
+    first.endDate = new Date(300_000);
+    const owners = [createActivity([lap]), createActivity([lap])];
+    owners.forEach(a => a.startDate = new Date(300_000));
+    expect(getVisibleEventLaps(first, [first, ...owners])).toEqual([lap]);
+  });
+
   it.each([LapTypes.session_end, LapTypes.Manual, LapTypes.Time, LapTypes.Distance])(
     'hides a sole %s lap that duplicates the whole activity', type => {
       const activity = createActivity([createLap(type)]);

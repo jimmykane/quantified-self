@@ -424,6 +424,12 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain('list_routes');
       expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data');
       expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics');
+      expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics_v2');
+      expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data_v2');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_samples_v2');
+      const enduranceSchema = session.tools.find(tool => tool.name === 'get_activity_chart_data_v2')?.inputSchema;
+      expect(enduranceSchema?.properties).not.toHaveProperty('includeLocation');
+      expect(enduranceSchema?.properties).not.toHaveProperty('maxLocationPoints');
       expect(session.tools.map(tool => tool.name)).not.toContain(
         'search_activities_near_location',
       );

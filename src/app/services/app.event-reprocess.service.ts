@@ -34,6 +34,7 @@ export interface ReprocessResult {
 
 export type ReprocessErrorCode =
   | 'NO_ORIGINAL_FILES'
+  | 'NON_ACTIVITY_SOURCE'
   | 'PARSE_FAILED'
   | 'MULTI_FILE_INCOMPLETE'
   | 'PERSIST_FAILED';
@@ -111,6 +112,18 @@ export class AppEventReprocessService {
 
     if (functionResult.status === 'skipped' && functionResult.reason === 'NO_ORIGINAL_FILES') {
       throw new ReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this event.');
+    }
+
+    if (functionResult.status === 'skipped') {
+      const messages: Record<string, string> = {
+        MONITORING_SOURCE: 'Reprocessing skipped: the original contains daily monitoring data. The saved activity has been kept.',
+        ROUTE_SOURCE: 'Reprocessing skipped: the original is a route or course. Download it and upload it from Routes. The saved activity has been kept.',
+        NON_ACTIVITY_SOURCE: 'Reprocessing skipped: the original is not a recorded activity. The saved activity has been kept.',
+        MIXED_SOURCES_REQUIRING_REVIEW: 'Reprocessing skipped: the source files include different kinds of data and need review. All saved activities and originals have been kept.',
+      };
+      const message = messages[functionResult.reason || ''];
+      throw new ReprocessError(message ? 'NON_ACTIVITY_SOURCE' : 'PARSE_FAILED',
+        message || 'Reprocessing was skipped. The saved activity has been kept.');
     }
 
     const refreshedEvent = await firstValueFrom(this.eventService.getEventAndActivities(user, eventID));

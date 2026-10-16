@@ -118,6 +118,51 @@ describe('processDerivedMetricsTask', () => {
         });
     });
 
+    it('starts independent source queries together and waits for the activity join before Build sleep', async () => {
+        let release!: (value: unknown[]) => void;
+        const pending = new Promise<unknown[]>(resolve => { release = resolve; });
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: Object.values(DERIVED_METRIC_KINDS), startedAtMs: Date.now(), eventMutationVersion: 11,
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockReturnValueOnce(pending);
+        const task = (processDerivedMetricsTask as any)({ data: { uid: 'owner', generation: 12 } });
+        try {
+            await vi.waitFor(() => expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledTimes(1));
+            expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledTimes(1);
+            expect(hoisted.fetchRecoveryLookbackEventDocs).toHaveBeenCalledTimes(1);
+            expect(hoisted.fetchTrainingReadinessSleepDocs).toHaveBeenCalledTimes(1);
+            expect(hoisted.fetchDerivedMetricsHealthDocs).toHaveBeenCalledTimes(2);
+            expect(hoisted.hasAnyDerivedMetricsHealthRecord).toHaveBeenCalledTimes(1);
+            expect(hoisted.joinTrainingActivitySources).not.toHaveBeenCalled();
+            expect(hoisted.fetchTrainingBuildSleepDocs).not.toHaveBeenCalled();
+            expect(hoisted.writeDerivedMetricSnapshotsReady).not.toHaveBeenCalled();
+        } finally { release([{ id: 'form-doc' }]); await task; }
+        expect(hoisted.joinTrainingActivitySources).toHaveBeenCalledWith(
+            [{ id: 'activity-doc' }], [{ id: 'form-doc' }], expect.anything());
+        expect(hoisted.fetchTrainingBuildSleepDocs).toHaveBeenCalledWith('owner',
+            [{ activityId: 'joined-activity' }], expect.anything(), expect.any(Number), null);
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledTimes(1);
+    });
+
+    it('drains other source queries before failure writes and never publishes partial results', async () => {
+        let release!: (value: unknown[]) => void;
+        const pending = new Promise<unknown[]>(resolve => { release = resolve; });
+        hoisted.fetchDerivedMetricsEventDocs.mockRejectedValueOnce(new Error('event query failed'));
+        hoisted.fetchRecoveryLookbackEventDocs.mockReturnValueOnce(pending);
+        const result = (processDerivedMetricsTask as any)({ data: { uid: 'owner', generation: 12 } })
+            .then(() => null, (error: Error) => error);
+        try {
+            await vi.waitFor(() => expect(hoisted.fetchRecoveryLookbackEventDocs).toHaveBeenCalledTimes(1));
+            expect(hoisted.markDerivedMetricSnapshotsFailed).not.toHaveBeenCalled();
+            expect(hoisted.failDerivedMetricsProcessing).not.toHaveBeenCalled();
+            expect(hoisted.writeDerivedMetricSnapshotsReady).not.toHaveBeenCalled();
+        } finally { release([]); }
+        expect((await result)?.message).toBe('event query failed');
+        expect(hoisted.markDerivedMetricSnapshotsFailed).toHaveBeenCalledTimes(1);
+        expect(hoisted.failDerivedMetricsProcessing).toHaveBeenCalledTimes(1);
+        expect(hoisted.writeDerivedMetricSnapshotsReady).not.toHaveBeenCalled();
+    });
+
     it('isolates full-history Training builds while retaining memory headroom', () => {
         expect(taskDispatchRegistration.options).toContainEqual(expect.objectContaining({
             concurrency: 1,

@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, resolveSwimTiming } from '../../../shared/swim-timing';
 import { runMcpWorkoutReflection } from './workout-reflections.service';
 import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
@@ -2169,7 +2170,9 @@ function projectLap(value: unknown, index: number, activityType?: unknown) {
     endTimeMs,
     startSampleIndex: asSafeInteger(lap.startIndex),
     endSampleIndex: asSafeInteger(lap.endIndex),
-    stats: projectActivityStats(lap.stats, activityType),
+    stats: { ...projectActivityStats(lap.stats, activityType),
+      ...(getRejectedSwimTiming(lap)?.timerTime !== undefined ? { durationSeconds: null } : {}),
+    },
   };
 }
 
@@ -2244,8 +2247,8 @@ function projectSwimLength(value: unknown, index: number) {
     type: asBoundedString(length.type, 40, /^[\p{L}\p{N}_ -]+$/u),
     stroke: asBoundedString(length.stroke, 40, /^[\p{L}\p{N}_ -]+$/u),
     strokeCount: asSafeInteger(length.strokes),
-    elapsedTimeSeconds: asNonNegativeNumber(length.elapsedTime),
-    timerTimeSeconds: asNonNegativeNumber(length.timerTime),
+    elapsedTimeSeconds: resolveSwimTiming(length).elapsedTime,
+    timerTimeSeconds: resolveSwimTiming(length).timerTime,
     distanceMeters: asNonNegativeNumber(length.distance),
     poolLengthMeters: asNonNegativeNumber(length.poolLength),
     averageSpeedMetersPerSecond: asNonNegativeNumber(length.avgSpeed),
@@ -6368,8 +6371,8 @@ export function createMcpDataService(
         activityTypes,
       };
     },
-    listActivityChartMetrics(activityType?: string) {
-      return listActivityChartMetrics(activityType);
+    listActivityChartMetrics(activityType?: string, includeEndurance = false) {
+      return listActivityChartMetrics(activityType, includeEndurance);
     },
     async listMetrics(input: ListMetricsInput): Promise<ListMetricsResult> {
       const rawLimit = Math.floor(input.limit || 50);

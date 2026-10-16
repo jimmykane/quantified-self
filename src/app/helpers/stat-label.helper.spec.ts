@@ -1,8 +1,31 @@
 import { DataPowerAvg, DataSpeedAvgKilometersPerHour } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { normalizeUnitDerivedStatLabel, normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+import { getCommonMetricManufacturer, getEnduranceMetricLabel } from '@shared/endurance-metrics';
 
 describe('stat-label.helper', () => {
+  it('labels verified Suunto endurance without renaming canonical or Garmin metrics', () => {
+    expect(normalizeUnitDerivedTypeLabel('Average Stamina', undefined, { manufacturer: 'suunto' })).toBe('Average EnergySense Endurance');
+    expect(normalizeUnitDerivedTypeLabel('Stamina', undefined, { manufacturer: 'Garmin' })).toBe('Stamina');
+    expect(normalizeUnitDerivedTypeLabel('Potential Stamina', undefined, { manufacturer: 'Suunto' })).toBe('Potential Stamina');
+    expect(normalizeUnitDerivedTypeLabel('Stamina')).toBe('Stamina');
+    expect(getEnduranceMetricLabel('Stamina', { surface: 'picker' })).toContain('Stamina / Suunto EnergySense Endurance');
+    expect(getEnduranceMetricLabel('EnergySense')).toBeNull();
+  });
+
+  it('keeps ending estimates distinct from streams and preserves qualifiers in imperial labels', () => {
+    expect(normalizeUnitDerivedTypeLabel('Estimated Sustainable Distance', undefined, { manufacturer: 'Suunto', surface: 'stat' })).toBe('Ending EnergySense Sustainable Distance');
+    expect(normalizeUnitDerivedTypeLabel('Estimated Sustainable Distance in miles', undefined, { manufacturer: 'Suunto', surface: 'stream' })).toBe('EnergySense Sustainable Distance');
+    expect(normalizeUnitDerivedTypeLabel('Minimum Estimated Sustainable Distance in miles', undefined, { manufacturer: 'Suunto', surface: 'stat' })).toBe('Minimum EnergySense Sustainable Distance');
+    expect(normalizeUnitDerivedTypeLabel('Estimated Sustainable Distance', undefined, { surface: 'stat' })).toBe('Ending Sustainable Distance');
+  });
+
+  it('requires common explicit manufacturer evidence in combined views', () => {
+    expect(getCommonMetricManufacturer([{ creator: { manufacturer: 'Suunto' } }])).toBe('Suunto');
+    expect(getCommonMetricManufacturer([{ creator: { manufacturer: 'Suunto' } }, { creator: { manufacturer: 'Garmin' } }])).toBeUndefined();
+    expect(getCommonMetricManufacturer([{ creator: { manufacturer: 'Suunto' } }, {}])).toBeUndefined();
+    expect(getCommonMetricManufacturer([])).toBeUndefined();
+  });
   it('should normalize unit-derived type labels without qualifiers', () => {
     expect(normalizeUnitDerivedTypeLabel('Speed in kilometers per hour')).toBe('Speed');
     expect(normalizeUnitDerivedTypeLabel('Distance in miles')).toBe('Distance');
