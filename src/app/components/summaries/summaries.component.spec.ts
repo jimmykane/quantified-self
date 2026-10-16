@@ -359,7 +359,7 @@ describe('SummariesComponent', () => {
   it('shares one private notes workspace with tiles and the calendar, and removes it on another profile', async () => {
     component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile] } } } as SummariesComponent['user'];
     component.eventUser = component.user;
-    fixture.detectChanges(); await Promise.resolve(); TestBed.flushEffects(); fixture.detectChanges();
+    fixture.detectChanges(); await Promise.resolve(); fixture.detectChanges();
     const workspace = fixture.debugElement.query(By.directive(TimelineNotesWorkspaceComponent)).componentInstance as TimelineNotesWorkspaceComponent;
     const source = component.timelineNotes;
     expect(source()).toBe(workspace.context());
@@ -371,7 +371,7 @@ describe('SummariesComponent', () => {
     expect(mockBottomSheet.open.mock.calls.at(-1)?.[1].data.timelineNotes).toBe(source);
     fixture.componentRef.setInput('eventUser', { uid: 'other-profile' });
     fixture.componentRef.setInput('showActions', false);
-    fixture.detectChanges(); await Promise.resolve(); TestBed.flushEffects(); fixture.detectChanges();
+    fixture.detectChanges(); await Promise.resolve(); fixture.detectChanges();
     expect(fixture.debugElement.query(By.directive(TimelineNotesWorkspaceComponent))).toBeNull();
     expect(source()).toBeNull();
     workspace.open();
