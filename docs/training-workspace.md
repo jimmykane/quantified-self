@@ -679,6 +679,26 @@ meaning of `/training`. Manual planning is available without a provider connecti
 plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is an opt-in Pro action
 and must never be inferred from merely connecting a service.
 
+### Remembered Plans view
+
+The Plans/Standalone selector saves the last explicit choice in the owner settings document at
+`appSettings.trainingWorkspace.plansView` (`plans` or `standalone`). Opening the general `/training/plans` page restores
+that choice; missing or invalid values default to Plans without a write or migration. Restored Standalone uses its
+canonical browse URL with replacement navigation. Explicit plan, workout, create, Standalone and library links retain
+their own scope, and live settings updates never replace a draft. This does not remember a specific plan or activate one.
+
+The existing `AppUserSettingsQueryService.updateTrainingWorkspacePreferences` validates and owner-fences the narrow
+leaf merge, preserving destinations, shortcuts and other settings. Rapid selections save in order through a shared
+service queue, including across route destruction/recreation; account changes
+discard queued writes and stale feedback. A failed save leaves the chosen view usable and reports that it could not
+be remembered. Hydration/no-op choices are silent; accepted switches retain one selection haptic.
+
+MCP impact review: **no wire or authority impact**. This account-owned navigation preference is not a plan/workout
+field, scheduling/completion rule, read projection or mutation. Existing independently consented planning reads and
+strict proposals remain unchanged; no relevant MCP coverage is deferred. No new callable, Rules/index deployment,
+plugin update, derived refresh or provider action is required. Component and settings-service regressions cover
+restoration, explicit route priority, narrow writes, failures, queued choices, ownership and draft preservation.
+
 ### Public discovery and launch claims
 
 `/features/training-plans` is the canonical public, prerendered and indexable discovery page. It is registered in the

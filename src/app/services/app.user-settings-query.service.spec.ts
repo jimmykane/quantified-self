@@ -391,6 +391,58 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('Training workspace preferences', () => {
+        it('orders Plans view writes across callers and continues after a failed earlier save', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            let started!: () => void;
+            const firstStarted = new Promise<void>(resolve => { started = resolve; });
+            let failFirst!: (error: Error) => void;
+            mockUserService.updateUserProperties.mockImplementationOnce(() => {
+                started();
+                return new Promise<void>((_resolve, reject) => { failFirst = reject; });
+            });
+            const first = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'standalone' });
+            const firstResult = first.catch(error => error);
+            await firstStarted;
+            const last = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'plans' });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+            failFirst(new Error('offline'));
+            expect(await firstResult).toBeInstanceOf(Error);
+            await last;
+            expect(mockUserService.updateUserProperties.mock.calls.map(call => call[1])).toEqual([
+                { settings: { appSettings: { trainingWorkspace: { plansView: 'standalone' } } } },
+                { settings: { appSettings: { trainingWorkspace: { plansView: 'plans' } } } },
+            ]);
+        });
+
+        it('rechecks the owner before a queued Plans view reaches Firestore', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            let started!: () => void;
+            const firstStarted = new Promise<void>(resolve => { started = resolve; });
+            let finishFirst!: () => void;
+            mockUserService.updateUserProperties.mockImplementationOnce(() => {
+                started();
+                return new Promise<void>(resolve => { finishFirst = resolve; });
+            });
+            const first = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'standalone' });
+            await firstStarted;
+            const last = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'plans' });
+            const rejected = expect(last).rejects.toThrow('account changed');
+            mockUserSubject.next(createMockUser({ uid: 'other-owner' }));
+            finishFirst();
+            await first;
+            await rejected;
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(['plans', 'standalone'] as const)('saves the %s Plans view without replaying other settings', async plansView => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            await service.updateTrainingWorkspacePreferences('test-uid', { plansView });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { appSettings: { trainingWorkspace: { plansView } } },
+            });
+        });
+
         it('writes only the requested client-owned Training preference map', async () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);
@@ -431,6 +483,8 @@ describe('AppUserSettingsQueryService', () => {
 
         it.each([
             [{ preferredDestination: 'unknown' }, 'destination'],
+            [{ plansView: 'library' }, 'Plans view'],
+            [{ plansView: null }, 'Plans view'],
             [{ sportShortcuts: [] }, 'sport shortcuts'],
             [{ sportShortcuts: ['running', 'running'] }, 'sport shortcuts'],
             [{ sportShortcuts: ['running', 'cycling', 'swimming', 'rowing', 'strength'] }, 'no more than 4'],

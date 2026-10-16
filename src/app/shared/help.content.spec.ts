@@ -235,6 +235,12 @@ describe('help.content', () => {
     expect(copy).toContain('interactive sample calendar, and read-only workout profiles');
     expect(copy).toContain('never load account data or save changes');
   });
+  it('explains remembered Plans navigation without changing the active training plan', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('Your last **Plans** or **Standalone** selection is remembered in your account settings');
+    expect(copy).toContain('creation screen still open that destination');
+    expect(copy).toContain('This does not activate or switch your training plan');
+  });
   it('explains exact prescription subtotals, bounded estimates and unknown duration without changing delivery or recorded totals', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['## Understand workout totals', '**Workout totals** updates', 'before you save',

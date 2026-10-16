@@ -22,6 +22,7 @@ import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
 import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, throwError, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -71,6 +72,7 @@ describe('PlansWorkspaceComponent', () => {
   let deleteTrainingPlan: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
   let snackBarOpen: ReturnType<typeof vi.fn>;
+  let savePreferences: ReturnType<typeof vi.fn>;
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let userSignal: ReturnType<typeof signal<typeof user | null>>;
   let userSubject: BehaviorSubject<typeof user | null>;
@@ -117,6 +119,7 @@ describe('PlansWorkspaceComponent', () => {
     deleteTrainingPlan = vi.fn();
     dialogOpen = vi.fn();
     snackBarOpen = vi.fn();
+    savePreferences = vi.fn().mockResolvedValue(undefined);
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [PlansWorkspaceComponent],
@@ -127,6 +130,7 @@ describe('PlansWorkspaceComponent', () => {
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
+        { provide: AppUserSettingsQueryService, useValue: { updateTrainingWorkspacePreferences: savePreferences } },
         { provide: AppHapticsService, useValue: haptics },
         { provide: WorkoutLibraryService, useValue: { watch: libraryWatch,
           get: libraryGet, mutate: libraryMutate, place: libraryPlace } },
@@ -2368,6 +2372,124 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('.plans-empty-state')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('.plans-empty-state button')?.textContent).toContain('Create your first plan');
+  });
+
+  it('restores Standalone on a fresh general Plans visit without saving or haptics', async () => {
+    const savedUser = { ...user, settings: { ...user.settings, appSettings: { trainingWorkspace: { plansView: 'standalone' } } } };
+    userSignal.set(savedUser); userSubject.next(savedUser);
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.view()).toBe('standalone');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/standalone'], expect.objectContaining({ replaceUrl: true }));
+    expect(savePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('honors an explicit plan link despite a saved Standalone preference', async () => {
+    const savedUser = { ...user, settings: { ...user.settings, appSettings: { trainingWorkspace: { plansView: 'standalone' } } } };
+    userSignal.set(savedUser); userSubject.next(savedUser);
+    setRouteState({ planId: 'active-plan' });
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.view()).toBe('plans');
+    expect(fixture.componentInstance.selectedPlanId()).toBe('active-plan');
+    expect(savePreferences).not.toHaveBeenCalled();
+  });
+
+  it('remembers explicit tab changes only, keeping initialization and unchanged choices silent', async () => {
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.view()).toBe('plans');
+    expect(savePreferences).not.toHaveBeenCalled();
+    await fixture.componentInstance.selectView('plans');
+    expect(savePreferences).not.toHaveBeenCalled();
+    (fixture.nativeElement.querySelector('mat-button-toggle[value="standalone"] button') as HTMLButtonElement).click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(savePreferences).toHaveBeenLastCalledWith(user.uid, { plansView: 'standalone' });
+    await fixture.componentInstance.selectView('plans');
+    expect(savePreferences).toHaveBeenLastCalledWith(user.uid, { plansView: 'plans' });
+    expect(savePreferences).toHaveBeenCalledTimes(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the last selected view while an earlier save is pending', async () => {
+    const fixture = await renderPlans();
+    let finishFirst!: () => void;
+    savePreferences.mockImplementationOnce(() => new Promise<void>(resolve => { finishFirst = resolve; }));
+    const first = fixture.componentInstance.selectView('standalone');
+    await Promise.resolve();
+    const last = fixture.componentInstance.selectView('plans');
+    expect(savePreferences).toHaveBeenCalledTimes(2);
+    finishFirst();
+    await Promise.all([first, last]);
+    expect(savePreferences.mock.calls.map(call => call[1])).toEqual([{ plansView: 'standalone' }, { plansView: 'plans' }]);
+    expect(fixture.componentInstance.view()).toBe('plans');
+  });
+
+  it('keeps the selected view and explains a failed save without losing later saves', async () => {
+    const fixture = await renderPlans();
+    vi.spyOn((fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar, 'open').mockImplementation(snackBarOpen);
+    savePreferences.mockRejectedValueOnce(new Error('offline'));
+    await fixture.componentInstance.selectView('standalone');
+    expect(fixture.componentInstance.view()).toBe('standalone');
+    expect(snackBarOpen).toHaveBeenCalledWith(expect.stringContaining('Could not remember your Plans view'), 'Dismiss', expect.anything());
+    expect(haptics.error).toHaveBeenCalledOnce();
+    await fixture.componentInstance.selectView('plans');
+    expect(savePreferences).toHaveBeenLastCalledWith(user.uid, { plansView: 'plans' });
+  });
+
+  it.each(['plans', 'invalid', null])('falls back to Plans for a saved %s value without writing defaults', async plansView => {
+    const savedUser = { ...user, settings: { ...user.settings, appSettings: { trainingWorkspace: { plansView } } } };
+    userSignal.set(savedUser); userSubject.next(savedUser);
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.view()).toBe('plans');
+    expect(savePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { mode: 'browse' as const, scope: 'standalone' as const, expected: 'standalone' },
+    { mode: 'create' as const, scope: 'plans' as const, expected: 'plans' },
+    { mode: 'edit' as const, workoutId: 'plan-workout', expected: 'plans' },
+    { mode: 'library-browse' as const, expected: 'plans' },
+  ])('does not replace an explicit $mode/$scope route with the preference', async ({ expected, ...options }) => {
+    const savedUser = { ...user, settings: { ...user.settings, appSettings: { trainingWorkspace: { plansView: 'standalone' } } } };
+    userSignal.set(savedUser); userSubject.next(savedUser);
+    setRouteState(options);
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.view()).toBe(expected);
+    expect(TestBed.inject(Router).navigate).not.toHaveBeenCalled();
+    expect(savePreferences).not.toHaveBeenCalled();
+  });
+
+  it('gives no stale failure feedback across an account switch', async () => {
+    const fixture = await renderPlans();
+    let failFirst!: (error: Error) => void;
+    savePreferences.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failFirst = reject; }));
+    const first = fixture.componentInstance.selectView('standalone');
+    await Promise.resolve();
+    const nextUser = { ...user, uid: 'other-owner' };
+    userSignal.set(nextUser); userSubject.next(nextUser);
+    setRouteState({}, true);
+    fixture.detectChanges();
+    failFirst(new Error('late failure'));
+    await first;
+    expect(fixture.componentInstance.view()).toBe('plans');
+    expect(savePreferences).toHaveBeenCalledTimes(1);
+    expect(savePreferences).toHaveBeenCalledWith(user.uid, { plansView: 'standalone' });
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it('does not replace an open workout draft when the saved preference updates', async () => {
+    setRouteState({ mode: 'create', scope: 'plans' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('title', 'Keep my draft');
+    const savedUser = { ...user, settings: { ...user.settings, appSettings: { trainingWorkspace: { plansView: 'standalone' } } } };
+    userSignal.set(savedUser); userSubject.next(savedUser);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.componentInstance.view()).toBe('plans');
+    expect(fixture.componentInstance.editor()?.value.title).toBe('Keep my draft');
+    expect(savePreferences).not.toHaveBeenCalled();
   });
 
   it('keeps standalone to one heading and one add action without plan creation controls', async () => {

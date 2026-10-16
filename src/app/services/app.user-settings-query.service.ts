@@ -43,6 +43,7 @@ export class AppUserSettingsQueryService {
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private logger = inject(LoggerService);
+    private plansViewWrites: Promise<void> = Promise.resolve();
 
     /**
      * Base user stream, distinct until the user object identity modification or deep content change.
@@ -154,6 +155,19 @@ export class AppUserSettingsQueryService {
             throw new Error('A signed-in account and Training preference are required.');
         }
         const normalizedPreferences = this.normalizeTrainingWorkspacePreferences(preferences);
+        if (normalizedPreferences.plansView !== undefined) {
+            // Shared across route instances, so a closed page cannot overwrite a newer choice.
+            const write = this.plansViewWrites.then(() => this.writeTrainingWorkspacePreferences(expectedUserUID, normalizedPreferences));
+            this.plansViewWrites = write.catch(() => undefined);
+            return write;
+        }
+        return this.writeTrainingWorkspacePreferences(expectedUserUID, normalizedPreferences);
+    }
+
+    private async writeTrainingWorkspacePreferences(
+        expectedUserUID: string,
+        normalizedPreferences: Partial<TrainingWorkspacePreferences>,
+    ): Promise<void> {
         const user = await this.getCurrentUser();
         if (!user?.uid || user.uid !== expectedUserUID) {
             throw new Error('The signed-in account changed before the Training preference could be saved.');
@@ -188,6 +202,7 @@ export class AppUserSettingsQueryService {
         }
         const supportedKeys = new Set<keyof TrainingWorkspacePreferences>([
             'preferredDestination',
+            'plansView',
             'sportShortcuts',
         ]);
         if (Object.keys(preferences).some(key => !supportedKeys.has(key as keyof TrainingWorkspacePreferences))) {
@@ -195,6 +210,12 @@ export class AppUserSettingsQueryService {
         }
 
         const normalized: Partial<TrainingWorkspacePreferences> = {};
+        if (Object.prototype.hasOwnProperty.call(preferences, 'plansView')) {
+            if (preferences.plansView !== 'plans' && preferences.plansView !== 'standalone') {
+                throw new Error('The Training Plans view is not supported.');
+            }
+            normalized.plansView = preferences.plansView;
+        }
         if (Object.prototype.hasOwnProperty.call(preferences, 'preferredDestination')) {
             if (!isTrainingDestinationId(preferences.preferredDestination)) {
                 throw new Error('The Training destination is not supported.');
