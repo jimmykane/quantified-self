@@ -343,7 +343,8 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
-    // Help also explains QS-calculated Garmin sleep-window HR and its coverage requirements.
+    // Help also explains ongoing-note comparisons, stored versus requested history,
+    // and QS-calculated Garmin sleep-window HR with its coverage requirements.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-16');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

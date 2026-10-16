@@ -9,6 +9,17 @@ interface FieldOverride {
   indexes?: unknown[];
 }
 
+describe('Stored history availability indexes', () => {
+  it('supports bounded first stored Sleep dates per provider without indexing private sports data', () => {
+    const config = JSON.parse(readFileSync(resolve(__dirname, '../firestore.indexes.json'), 'utf8'));
+    expect(config.indexes).toContainEqual({ collectionGroup: 'sleepSessions', queryScope: 'COLLECTION', fields: [
+      { fieldPath: 'source.provider', order: 'ASCENDING' }, { fieldPath: 'sleepDate', order: 'ASCENDING' },
+      { fieldPath: '__name__', order: 'ASCENDING' },
+    ] });
+    expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'sleepSessions', fieldPath: 'sportsLibData', ttl: false, indexes: [] });
+  });
+});
+
 describe('Workout library Firestore retention', () => {
   it('expires private mutation receipts but keeps deleted-ID tombstones durable', () => {
     const config = JSON.parse(readFileSync(resolve(__dirname, '../firestore.indexes.json'), 'utf8')) as {

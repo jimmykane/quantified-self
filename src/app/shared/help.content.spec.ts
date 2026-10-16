@@ -41,6 +41,18 @@ describe('help.content', () => {
     expect(content).toContain('the history chart stays visible either way');
     expect(content).toContain('neutral rail does not classify a numerical change as good/bad');
   });
+  it('explains ongoing notes, fixed after-windows and missing historical evidence without asking users to end or move notes', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Ongoing notes can be compared without ending them.**', 'Ending a note does not move those dates',
+      '**first** 7, 14 or 28 days', '**No eligible readings for these dates**', 'failed checks are shown as unavailable',
+      "Keep the note's real start date", 'cannot create history the provider no longer supplies']) expect(content).toContain(phrase);
+  });
+  it('separates requested import dates, stored first dates and previously reported Sleep-only provider cutoffs', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Requested range** from **Stored history**', 'not complete or gap-free coverage',
+      '**Refresh stored dates**', 'without starting an import', '**Last reported Garmin Sleep history cutoff**',
+      'never applied to Health']) expect(content).toContain(phrase);
+  });
   it('explains saved Suunto route import scope without enabling outbound directions', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('Suunto also includes existing saved routes');

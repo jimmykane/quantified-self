@@ -67,6 +67,10 @@
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
   },
+  "src/app/services/recorded-history-start.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and the current-user signal to verify bounded owner-only Firestore SDK reads, cancellation and same-UID account replacement fences."
+  },
   "src/app/services/timeline-note-comparison-navigation.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed for the injected Router and account signal/effect lifecycle, verifying owner-scoped return navigation and memory invalidation."

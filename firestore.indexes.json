@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "sleepSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "source.provider", "order": "ASCENDING" },
+        { "fieldPath": "sleepDate", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
     },

@@ -1,14 +1,21 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { ConnectionHistoryOptionComponent, ConnectionHistoryStatusComponent } from './connection-history.component';
+import { RecordedHistoryStartService } from '../../../services/recorded-history-start.service';
 
 const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-const users = { retryConnectionHistoryImport: vi.fn() };
-beforeEach(() => { vi.clearAllMocks(); TestBed.configureTestingModule({ imports: [ConnectionHistoryOptionComponent, ConnectionHistoryStatusComponent],
-  providers: [{ provide: AppHapticsService, useValue: haptics }, { provide: AppUserService, useValue: users }] }); });
+const users = { retryConnectionHistoryImport: vi.fn(), user: signal<{ uid: string; isAnonymous?: boolean } | null>({ uid: 'owner' }) };
+const history = { firstSleepDate: vi.fn(), firstHealthDate: vi.fn(), lastReportedGarminSleepCutoff: vi.fn() };
+beforeEach(() => { vi.clearAllMocks(); users.user.set({ uid: 'owner' });
+  history.firstSleepDate.mockResolvedValue('2026-09-12'); history.firstHealthDate.mockResolvedValue('2026-09-13');
+  history.lastReportedGarminSleepCutoff.mockResolvedValue(Date.parse('2026-09-12T05:00:00Z'));
+  TestBed.configureTestingModule({ imports: [ConnectionHistoryOptionComponent, ConnectionHistoryStatusComponent],
+  providers: [{ provide: AppHapticsService, useValue: haptics }, { provide: AppUserService, useValue: users },
+    { provide: RecordedHistoryStartService, useValue: history }] }); });
 describe('recent history option', () => {
   it('is selected by default, uses supported data types and stays silent on hydration', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); fixture.detectChanges();
@@ -130,6 +137,64 @@ describe('recent history status', () => {
     users.retryConnectionHistoryImport.mockRejectedValue(new Error('Operation cancelled because its account or view changed.'));
     await fixture.componentInstance.retry();
     expect(fixture.componentInstance.error()).toBe('');
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+  const sleepHealthStatus = { runId: 'opaque', rangePreset: 'maximum', startMs: Date.parse('2021-10-13T00:00:00Z'),
+    endMs: Date.parse('2026-10-13T05:00:00Z'), updatedAtMs: 3, active: false, canRetry: false,
+    steps: [{ id: 'sleep', resources: ['sleep'], status: 'requested', count: 2 },
+      { id: 'health', resources: ['health'], status: 'requested', count: 10 }] };
+  const flush = async (fixture: ReturnType<typeof TestBed.createComponent<ConnectionHistoryStatusComponent>>) => {
+    for (let i = 0; i < 10; i++) { fixture.detectChanges(); TestBed.flushEffects(); await Promise.resolve(); }
+    fixture.detectChanges();
+  };
+  it('checks owner-scoped stored dates only on expansion, separately from requested range and historical Sleep limits', async () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', sleepHealthStatus); await flush(fixture);
+    expect(history.firstSleepDate).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentInstance.setExpanded(true); await flush(fixture);
+    expect(history.firstSleepDate).toHaveBeenCalledExactlyOnceWith('owner', 'GarminAPI', expect.any(AbortSignal));
+    expect(history.firstHealthDate).toHaveBeenCalledExactlyOnceWith('owner', 'GarminAPI', expect.any(AbortSignal));
+    const copy = fixture.nativeElement.textContent;
+    expect(copy).toContain('Requested range: Maximum available (5 years)');
+    expect(copy).toContain('first stored date Sep 12, 2026');
+    expect(copy).toContain('not confirmed data coverage');
+    expect(copy).toContain('not a guarantee for the current account or for Health metrics');
+    expect(copy).toContain('Gaps and missing metrics may remain');
+    expect(users.retryConnectionHistoryImport).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('status', { ...sleepHealthStatus, updatedAtMs: 4,
+      steps: sleepHealthStatus.steps.map(step => ({ ...step, count: 25 })) }); await flush(fixture);
+    expect(history.firstSleepDate).toHaveBeenCalledOnce();
+    fixture.componentInstance.refreshStoredHistory(); fixture.componentInstance.refreshStoredHistory(); await flush(fixture);
+    expect(history.firstSleepDate).toHaveBeenCalledTimes(2); expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+  it('distinguishes an unavailable read from no stored records and never applies Garmin limits to Suunto', async () => {
+    history.firstSleepDate.mockRejectedValue(new Error('offline')); history.firstHealthDate.mockResolvedValue(null);
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('service', ServiceNames.SuuntoApp); fixture.componentRef.setInput('status', sleepHealthStatus);
+    fixture.componentInstance.setExpanded(true); await flush(fixture);
+    expect(fixture.nativeElement.textContent).toContain('stored history could not be checked');
+    expect(fixture.nativeElement.textContent).toContain('no records stored yet');
+    expect(history.lastReportedGarminSleepCutoff).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.stored-history button').disabled).toBe(false);
+  });
+  it.each(['provider', 'run', 'owner', 'closed', 'destroyed'])('discards late stored dates when %s changes', async change => {
+    let finish!: (value: string) => void;
+    history.firstSleepDate.mockReturnValueOnce(new Promise(done => finish = done));
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', sleepHealthStatus); fixture.componentInstance.setExpanded(true); await flush(fixture);
+    const oldSignal = history.firstSleepDate.mock.calls[0][2];
+    if (change === 'provider') fixture.componentRef.setInput('service', ServiceNames.WahooAPI);
+    if (change === 'run') fixture.componentRef.setInput('status', { ...sleepHealthStatus, runId: 'replacement', steps: [] });
+    if (change === 'owner') users.user.set(null);
+    if (change === 'closed') fixture.componentInstance.setExpanded(false);
+    if (change === 'destroyed') fixture.destroy(); else await flush(fixture);
+    expect(oldSignal.aborted).toBe(true); finish('2020-01-01');
+    if (change !== 'destroyed') {
+      await flush(fixture);
+      expect(fixture.componentInstance.storedHistory()).toEqual([]);
+      expect(fixture.componentInstance.sleepCutoff()).toBeNull();
+    }
     expect(haptics.error).not.toHaveBeenCalled();
   });
 });

@@ -47,6 +47,13 @@ Treat this table as a high-level orientation, not a partner API specification. T
 
 Provider overview cards must name combined history imports consistently with their focused tools. COROS uses **Sleep & daily Health history** and **Import history** because its daily-data replay always queues both domains. Garmin and Suunto use their corresponding combined labels while Health is available, with availability-aware fallback wording where those providers support a Sleep-only path.
 
+Connection-history status distinguishes **Requested range** from the first retained Sleep/Health dates read for the
+selected provider. These optional bounded owner reads do not establish gap-free coverage or a particular run's delivery.
+Garmin's saved Sleep cutoff is labelled **Last reported** and never reused as a Health-family or replacement-account limit.
+See [requested versus stored history](connection-history-import.md#requested-range-versus-stored-history) for the single
+provider/date Sleep index and frontend-only release boundary. Monitoring is **unchanged** across #829/#830/#847: no
+queue lifecycle, provider API, retry policy or telemetry contract changes. MCP and Training contracts are unaffected.
+
 Dashboard onboarding must recognize durable connections and history requests when users return. Empty activity data does not imply an unconnected service: offer connection setup only after the owner-scoped connection state confirms none are connected. A saved Garmin connection-history run containing Sleep or Health replaces the generic import offer, including queued, failed and skipped runs; direct progress/retry remains in Services. Keep legacy manual-history markers and wait for metadata before deciding. This presentation change leaves the existing coordinator and downstream monitoring bundles, queue lifecycle and MCP contracts unchanged.
 
 All four providers' manual activity-history tools honor active manual leases and show **Import already running** for `already-exists` conflicts with either a manual lease or an automatic recent-history reservation. Preserve that typed error as HTTP 409 at callable boundaries; do not wrap expected contention into HTTP 500 or log it as an ERROR. Genuine provider/ingestion failures keep their existing handling. See [shared history operations](connection-history-import.md#shared-operations) for the unchanged lifecycle/monitoring boundaries and backend-first release order.

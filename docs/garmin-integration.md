@@ -319,4 +319,11 @@ Connections offers **Import history from this service**, selected by default for
 
 Garmin requests activities, Sleep and all registered Health families through the existing backfill operations and paced Health cursor. The run snapshots its family inventory and reports **History requested; data may take hours or days to arrive.** Request acceptance is not proof of delivery.
 
+Expanded status separately shows the requested dates and the first retained Garmin Sleep/Health records. Stored dates
+can include earlier imports/accounts and do not imply complete coverage or eligible readings for every metric. The
+existing saved Sleep minimum is displayed only as **Last reported Garmin Sleep history cutoff**, never as a current-account
+guarantee or a minimum for Health families. This read-only presentation changes no provider requests, queue lifecycle,
+monitoring or MCP contract; its shared Sleep provider/date index must be released before the frontend. See the
+[stored-history contract](connection-history-import.md#requested-range-versus-stored-history).
+
 See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.

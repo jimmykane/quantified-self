@@ -3,22 +3,31 @@ import { HEALTH_METRIC_IDS } from '@shared/health';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { buildHealthMetricWorkspaceView, type HealthWorkspaceSeries } from '../helpers/health-workspace.helper';
-import { addComparisonDays, comparisonDateCarrier, noteComparisonWindow,
+import { addComparisonDays, buildNoteComparisonRows, comparisonDateCarrier, noteComparisonWindow,
   type NoteComparisonDays, type NoteComparisonMetric, type NoteComparisonWindow } from '../helpers/timeline-note-comparison.helper';
 import { HealthMetricQueryService } from './health-metric-query.service';
 import type { HealthWorkspaceRangeLoad } from './app.health.service';
+import { RecordedHistoryStartService } from './recorded-history-start.service';
+
+export interface ComparisonHistoryStart {
+  resource: 'sleep' | 'health';
+  firstDate: string | null;
+  unavailable: boolean;
+}
 
 export interface TimelineNoteComparisonEvidence {
   window: NoteComparisonWindow;
   series: HealthWorkspaceSeries[];
   complete: Record<NoteComparisonMetric, boolean>;
   notices: string[];
+  historyStarts?: ComparisonHistoryStart[];
 }
 
 /** Read-only composition of the existing owner-scoped Health and normalized Sleep paths. */
 @Injectable({ providedIn: 'root' })
 export class TimelineNoteComparisonService {
   private readonly queries = inject(HealthMetricQueryService);
+  private readonly history = inject(RecordedHistoryStartService);
   async load(uid: string, note: TimelineNote, days: NoteComparisonDays, signal: AbortSignal,
     nowMs = Date.now()): Promise<TimelineNoteComparisonEvidence> {
     const current = () => this.queries.isOwner(uid) && !signal.aborted;
@@ -58,6 +67,20 @@ export class TimelineNoteComparisonService {
     const notices = [!complete.sleep_duration ? 'Sleep readings failed or reached the bounded read limit.' : '',
       !completeHealth(hrv) ? 'Nightly HRV readings failed or reached the bounded read limit.' : '',
       !complete.resting_heart_rate ? 'Daily resting heart-rate readings failed or reached the bounded read limit.' : ''].filter(Boolean);
-    return { window, series, complete, notices };
+    // Only explain a successfully loaded but empty comparison. Metadata failure never changes its evidence/gates.
+    const historyStarts: ComparisonHistoryStart[] = [];
+    if (Object.values(complete).every(Boolean)
+      && buildNoteComparisonRows(series, window, complete).every(row => row.beforeCount + row.afterCount === 0)) {
+      const starts = await Promise.allSettled([
+        this.history.firstSleepDate(uid, undefined, signal), this.history.firstHealthDate(uid, undefined, signal),
+      ]);
+      if (!current()) throw new Error('Comparison account changed or view closed.');
+      for (const [index, resource] of (['sleep', 'health'] as const).entries()) {
+        const result = starts[index];
+        historyStarts.push({ resource, firstDate: result.status === 'fulfilled' ? result.value : null,
+          unavailable: result.status === 'rejected' });
+      }
+    }
+    return { window, series, complete, notices, historyStarts };
   }
 }

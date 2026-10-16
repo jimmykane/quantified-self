@@ -1,4 +1,4 @@
-import { Component, computed, DestroyRef, inject, input, output, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -18,6 +18,13 @@ import {
 } from '@shared/connection-history';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserService } from '../../../services/app.user.service';
+import { RecordedHistoryStartService } from '../../../services/recorded-history-start.service';
+import type { SleepProvider } from '@shared/sleep';
+
+const providers: Partial<Record<ServiceNames, SleepProvider>> = {
+  [ServiceNames.GarminAPI]: 'GarminAPI', [ServiceNames.SuuntoApp]: 'SuuntoApp', [ServiceNames.COROSAPI]: 'COROSAPI',
+};
+interface StoredHistoryStart { resource: 'sleep' | 'health'; label: string; firstDate: string | null; unavailable: boolean; }
 
 const labels: Record<HistoryResource, string> = { activities: 'activities', sleep: 'Sleep', health: 'Health', routes: 'saved routes' };
 interface HistoryRetryView { runId: string; service: ServiceNames; }
@@ -63,7 +70,20 @@ export class ConnectionHistoryStatusComponent {
   });
   readonly haptics = inject(AppHapticsService);
   private readonly users = inject(AppUserService);
+  private readonly historyStarts = inject(RecordedHistoryStartService);
   private readonly destroyRef = inject(DestroyRef);
+  readonly expanded = signal(false);
+  readonly checkingHistory = signal(false);
+  readonly storedHistory = signal<StoredHistoryStart[]>([]);
+  readonly sleepCutoff = signal<number | null>(null);
+  readonly cutoffUnavailable = signal(false);
+  readonly storedHistoryTitleId = computed(() => `stored-history-${providers[this.service()] || 'other'}`);
+  private readonly historyRefresh = signal(0);
+  // Progress counters can update for every bounded import window. Only a changed run/resource scope needs a new check.
+  private readonly historyScope = computed(() => JSON.stringify([this.status()?.runId,
+    [...new Set(this.status()?.steps.flatMap(step => step.resources) || [])].sort()]));
+  private historyVersion = 0;
+  private historyController: AbortController | null = null;
   readonly rangeLabel = computed(() => {
     const status = this.status();
     return status ? historyRangeLabel(this.service(), status.rangePreset) : '';
@@ -83,6 +103,45 @@ export class ConnectionHistoryStatusComponent {
       requested: 'History requested; data may take hours or days to arrive.', processed: 'Processed', skipped: 'Skipped', failed: 'Failed' })[step.status],
   })));
   readonly needsReconnect = computed(() => this.steps().some(step => /reconnect|authorization|permission/i.test(step.message || '')));
+  constructor() {
+    effect(() => {
+      const owner = this.users.user(), provider = providers[this.service()], expanded = this.expanded();
+      this.historyRefresh(); this.historyScope();
+      untracked(() => { const status = this.status();
+        void this.checkStoredHistory(expanded && owner && status ? owner.uid : null,
+          provider, status?.steps.flatMap(step => step.resources) || []); });
+    });
+    this.destroyRef.onDestroy(() => { this.historyVersion++; this.historyController?.abort(); });
+  }
+  setExpanded(expanded: boolean): void {
+    if (this.expanded() === expanded) return;
+    this.haptics.selection(); this.expanded.set(expanded);
+  }
+  refreshStoredHistory(): void {
+    if (!this.expanded() || this.checkingHistory()) return;
+    this.haptics.selection(); this.checkingHistory.set(true); this.historyRefresh.update(value => value + 1);
+  }
+  private async checkStoredHistory(uid: string | null, provider: SleepProvider | undefined, resources: HistoryResource[]): Promise<void> {
+    const version = ++this.historyVersion;
+    this.historyController?.abort(); this.historyController = new AbortController();
+    const signal = this.historyController.signal;
+    this.storedHistory.set([]); this.sleepCutoff.set(null); this.cutoffUnavailable.set(false); this.checkingHistory.set(false);
+    if (!uid || !provider) return;
+    const requested = (['sleep', 'health'] as const).filter(resource => resources.includes(resource));
+    if (!requested.length) return;
+    this.checkingHistory.set(true);
+    const [starts, cutoff] = await Promise.all([
+      Promise.allSettled(requested.map(resource => resource === 'sleep'
+        ? this.historyStarts.firstSleepDate(uid, provider, signal) : this.historyStarts.firstHealthDate(uid, provider, signal))),
+      provider === 'GarminAPI' && requested.includes('sleep')
+        ? this.historyStarts.lastReportedGarminSleepCutoff(uid, signal).then(value => ({ value, failed: false }), () => ({ value: null, failed: true }))
+        : Promise.resolve({ value: null, failed: false }),
+    ]);
+    if (this.destroyRef.destroyed || version !== this.historyVersion || signal.aborted) return;
+    this.storedHistory.set(requested.map((resource, index) => ({ resource, label: labels[resource],
+      firstDate: starts[index].status === 'fulfilled' ? starts[index].value : null, unavailable: starts[index].status === 'rejected' })));
+    this.sleepCutoff.set(cutoff.value); this.cutoffUnavailable.set(cutoff.failed); this.checkingHistory.set(false);
+  }
   reviewReconnect(): void { if (!this.disabled()) { this.haptics.selection(); this.reconnect.emit(); } }
   private matchesCurrentRun(view: HistoryRetryView | null): boolean {
     return !!view && view.runId === this.status()?.runId && view.service === this.service();

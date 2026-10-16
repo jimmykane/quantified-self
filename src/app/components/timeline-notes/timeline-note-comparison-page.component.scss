@@ -15,6 +15,10 @@
 .comparison-periods strong { font: var(--mat-sys-label-large); }
 .comparison-error { color: var(--mat-sys-error); }
 .comparison-notice { font: var(--mat-sys-body-small); }
+.comparison-availability { margin-block: 16px; }
+.comparison-availability h2 { font: var(--mat-sys-title-small); margin-block: 0 6px; }
+.comparison-availability ul { padding-inline-start: 20px; }
+.comparison-availability li { margin-block: 6px; overflow-wrap: anywhere; }
 .comparison-history { border-top: 1px solid var(--mat-sys-outline-variant); padding-block-start: 18px; margin-block-start: 4px; --health-metric-series-chart-height: 250px; }
 .comparison-history-heading h2 { font: var(--mat-sys-title-medium); margin: 0; }
 .comparison-history-heading mat-form-field { width: 220px; }
