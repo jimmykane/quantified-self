@@ -5,7 +5,7 @@ import { ActivityUtilities, type EventInterface } from '@sports-alliance/sports-
 import { defaultAppliedTrainingLoadPolicy, isTrainingLoadMethod, recordedTrainingStressScore,
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
-import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { getUserDeletionGuardedDocumentsInTransaction } from '../shared/user-deletion-guard';
 import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../../../shared/training-load-source';
 import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint } from './training-load-cache';
 import { trainingLoadSourceSnapshot } from './training-load-source-snapshot';
@@ -113,10 +113,10 @@ export async function prepareTrainingLoadMetadata(
   // The final metadata transaction then reads the cached, non-mutating results.
   activities.forEach(activity => ActivityUtilities.getTrainingStressScoreEvaluations(activity));
   const firstImport = await db.runTransaction(async transaction => {
-    const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+    const { guard, snapshots: [parent, snapshot] } = await getUserDeletionGuardedDocumentsInTransaction(
+      db, transaction, uid, [eventRef, metaRef]);
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
     if (authorize) await authorize(db, transaction);
-    const [parent, snapshot] = await transaction.getAll(eventRef, metaRef);
     const previous = snapshot.data() as TrainingLoadMetadata | undefined;
     const prepare = async (fields: Partial<TrainingLoadMetadata>) => {
       const pending: TrainingLoadMetadata = { version: 1, excluded: false, controls: {}, revision: 1, ...previous, ...fields };
@@ -171,11 +171,11 @@ async function finalizeTrainingLoadMetadata(
   const metaRef = eventRef.collection('metaData').doc('trainingLoad');
   const parentFingerprint = trainingLoadSourceFingerprint(event.toJSON());
   await db.runTransaction(async transaction => {
-    const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+    const { guard, snapshots: [parent, snapshot, ...savedActivities] } = await getUserDeletionGuardedDocumentsInTransaction(
+      db, transaction, uid, [eventRef, metaRef,
+        ...candidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`))]);
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
     if (authorize) await authorize(db, transaction);
-    const [parent, snapshot, ...savedActivities] = await transaction.getAll(eventRef, metaRef,
-      ...candidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`)));
     if (!parent.exists || trainingLoadSourceFingerprint(parent.data() ?? {}) !== parentFingerprint ||
       candidates.some((leg, index) => !savedActivities[index]?.exists ||
         savedActivities[index].data()?.eventID !== eventId ||

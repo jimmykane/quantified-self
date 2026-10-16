@@ -5756,6 +5756,35 @@ have observed that pending state. Matching reparses still avoid policy lookups; 
 avoid full-source invalidation. No original-file
 reparse is required to warm this cache, and it does not recalculate historical TSS.
 
+The five event/activity/sleep/Health/load trigger entrypoints keep their existing Firestore paths, retry policy,
+512 MiB memory and concurrency of one. Their semantic no-op and preparation-only checks run before dynamically
+loading the cache/calculation/Cloud Tasks handler. Both pending and final metadata writes remain; this avoids heavy
+startup work for ignored deliveries rather than removing a trigger invocation. Coordinated event/activity writes
+check current metadata before loading the calculation registry; irrelevant Health records exit before that load too.
+Cache refresh and Cloud Tasks modules load only when needed. Import or handler errors still
+propagate for retry. Compiled entrypoint checks prevent Sports Lib, cache builders and Cloud Tasks from returning
+to the eager trigger import graph.
+
+Preparation, finalization and trigger cache refresh batch the account root, deletion tombstone and already-known
+source/metadata references into one transaction read. Finalization includes its expected child references in that
+batch. Every transaction retry rereads them; authorization, attempt ownership, current controls, source fingerprints,
+policy selection and atomic cache writes retain their existing checks. Reads that depend on returned metadata (legacy
+children, active leg IDs, policy history and cache bucket traversal) remain subsequent transaction reads. Batching
+reduces network round trips, not the number of billed documents on a successful ordinary import.
+
+The derived worker starts only its required independent Form, bounded recovery, activity, Readiness sleep and Health
+queries together. Seed validation still precedes the building transition; Best Build sleep still waits for the
+canonical parent/activity join. All started queries settle before failure bookkeeping, including any guarded cache
+warmup performed by event loading. Deletion/generation checks still run before publishing and completion. This changes
+waiting time, not source bounds, query eligibility, snapshot contents or rebuild frequency. The existing 2 GiB worker
+memory and concurrency of one remain. Existing query-duration and source-count logs can measure the effect after a
+separately approved deployment; local startup timings are not monthly billing guarantees.
+
+Help/MCP/monitoring review: these execution changes leave user behavior, recorded/modeled-load semantics, public
+contracts and planning/provider actions unchanged. Existing Help guidance remains accurate. Trigger identities,
+queue scopes, debounce, leases, retries, failure logs and monitoring filters remain unchanged; no new operational
+resource, schema, index or migration is required.
+
 For imports, source triggers check the pending marker and committed update times, leaving invalidation to the final
 metadata write. Completed changed sources use normal full-source ingress; owner-only load edits retain targeted
 load ingress. This prevents the import's source and load metadata from independently requesting the same rebuild.

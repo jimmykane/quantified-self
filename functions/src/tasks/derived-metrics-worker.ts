@@ -137,44 +137,6 @@ export const processDerivedMetricsTask = onTaskDispatched({
             return;
         }
         const sourceFetchStart = Date.now();
-        const formDocs = sourceRequirements.needsFormDocs
-            ? (
-                projectionFormSnapshotSeed
-                    ? []
-                    : await fetchDerivedMetricsEventDocs(uid)
-            )
-            : [];
-        const recoveryNowDocs = sourceRequirements.needsRecoveryNowDocs
-            // Recovery-now must always use bounded lookback docs, even when Form is processed in the same task.
-            // Reusing full-history form docs inflates segment counts and breaks "recovery left now" semantics.
-            ? await fetchRecoveryLookbackEventDocs(uid)
-            : [];
-        const trainingActivityDocs = sourceRequirements.needsTrainingActivityDocs
-            ? await fetchDerivedMetricsActivityDocs(uid, {
-                includeSwimLengths: sourceRequirements.needsTrainingSwimLengths,
-            })
-            : [];
-        const trainingActivities = sourceRequirements.needsTrainingActivityDocs
-            ? joinTrainingActivitySources(trainingActivityDocs, formDocs, {
-                includeUnclassified: dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingExplanation)
-                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingPowerSystems)
-                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.IntensityDistribution)
-                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.EasyPercent)
-                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.HardPercent),
-            })
-            : [];
-        const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs
-            ? await fetchTrainingBuildSleepDocs(
-                uid,
-                trainingActivities,
-                trainingBuildBenchmarkSettings,
-                buildAtMs,
-                trainingBuildWorkoutSeed,
-            )
-            : [];
-        const trainingReadinessSleepDocs = sourceRequirements.needsTrainingReadinessSleepDocs
-            ? await fetchTrainingReadinessSleepDocs(uid, buildAtMs)
-            : [];
         // Health calendarDate follows the source-local offset. Widen the UTC
         // source windows by one calendar day and let each builder enforce its
         // exact timestamp bounds.
@@ -184,7 +146,18 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const bodyWeightHealthStartDate = new Date(
             buildAtMs - (56 * 24 * 60 * 60 * 1000),
         ).toISOString().slice(0, 10);
-        const [bodyWeightHealthDocs, hasAnyBodyWeightHealthRecord, vo2HealthDocs] = await Promise.all([
+        // Start only required, independent queries. Keep Recovery-now's bounded
+        // lookback separate from Form and the two sleep envelopes distinct.
+        const sourceQueries = [
+            sourceRequirements.needsFormDocs && !projectionFormSnapshotSeed
+                ? fetchDerivedMetricsEventDocs(uid) : Promise.resolve([]),
+            sourceRequirements.needsRecoveryNowDocs
+                ? fetchRecoveryLookbackEventDocs(uid) : Promise.resolve([]),
+            sourceRequirements.needsTrainingActivityDocs
+                ? fetchDerivedMetricsActivityDocs(uid, { includeSwimLengths: sourceRequirements.needsTrainingSwimLengths })
+                : Promise.resolve([]),
+            sourceRequirements.needsTrainingReadinessSleepDocs
+                ? fetchTrainingReadinessSleepDocs(uid, buildAtMs) : Promise.resolve([]),
             sourceRequirements.needsBodyWeightHealthDocs
                 ? fetchDerivedMetricsHealthDocs(
                     uid,
@@ -209,7 +182,32 @@ export const processDerivedMetricsTask = onTaskDispatched({
                     healthEndDate,
                 )
                 : Promise.resolve([]),
-        ]);
+        ] as const;
+        // Drain all queries before failure bookkeeping/retry: event loading can
+        // also warm the guarded load cache. Never leave that work detached.
+        const sourceResults = await Promise.allSettled(sourceQueries);
+        const failedSource = sourceResults.find(result => result.status === 'rejected');
+        if (failedSource?.status === 'rejected') throw failedSource.reason;
+        const [formDocs, recoveryNowDocs, trainingActivityDocs, trainingReadinessSleepDocs,
+            bodyWeightHealthDocs, hasAnyBodyWeightHealthRecord, vo2HealthDocs] = await Promise.all(sourceQueries);
+        const trainingActivities = sourceRequirements.needsTrainingActivityDocs
+            ? joinTrainingActivitySources(trainingActivityDocs, formDocs, {
+                includeUnclassified: dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingExplanation)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingPowerSystems)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.IntensityDistribution)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.EasyPercent)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.HardPercent),
+            })
+            : [];
+        const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs
+            ? await fetchTrainingBuildSleepDocs(
+                uid,
+                trainingActivities,
+                trainingBuildBenchmarkSettings,
+                buildAtMs,
+                trainingBuildWorkoutSeed,
+            )
+            : [];
         const sourceFetchDurationMs = Date.now() - sourceFetchStart;
         const snapshotBuildStart = Date.now();
 

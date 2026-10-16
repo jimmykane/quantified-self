@@ -195,6 +195,10 @@ const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
   ] },
 };
+const DERIVED_SOURCE_TRIGGER_TARGETS = new Set([
+  'onDashboardDerivedMetricsActivityWrite', 'onDashboardDerivedMetricsEventWrite',
+  'onDashboardDerivedMetricsSleepWrite', 'onDashboardDerivedMetricsHealthWrite', 'onTrainingLoadMetadataWrite',
+]);
 const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -337,6 +341,14 @@ function probe(targetArgument: string): void {
   const mcpTarget = runtimeTarget === 'mcpApi';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
+    if (runtimeTarget && DERIVED_SOURCE_TRIGGER_TARGETS.has(runtimeTarget) && (
+      path.includes('/node_modules/@sports-alliance/sports-lib/')
+      || path.includes('/node_modules/@google-cloud/tasks/')
+      || path.includes('/lib/functions/src/training-load/')
+      || path.endsWith('/lib/functions/src/derived-metrics/derived-metrics-source-handler.js')
+      || path.endsWith('/lib/functions/src/derived-metrics/derived-metrics.service.js')
+      || path.endsWith('/lib/functions/src/shared/cloud-tasks.js')
+    )) return true;
     if (
       (path.includes('/node_modules/@genkit-ai/') && !assistantProposalTarget)
       || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)

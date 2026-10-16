@@ -1,9 +1,11 @@
 import * as admin from 'firebase-admin';
+import { trainingLoadSourceFingerprint } from './training-load-source-fingerprint';
+export { trainingLoadSourceFingerprint, trainingLoadWriteTime } from './training-load-source-fingerprint';
 import { createHash } from 'node:crypto';
 import { resolveEffectiveTrainingLoad, unresolvedTrainingLoadLegs, type EffectiveTrainingLoad,
   type TrainingLoadActivity, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
-import { canonicalTrainingLoadValue, serializeTrainingLoadSource } from '../../../shared/training-load-source';
-import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { canonicalTrainingLoadValue } from '../../../shared/training-load-source';
+import { getUserDeletionGuardStateInTransaction, getUserDeletionGuardedDocumentsInTransaction } from '../shared/user-deletion-guard';
 
 export const TRAINING_LOAD_CACHE_VERSION = 1;
 export const TRAINING_LOAD_CACHE_MAX_ENTRIES = 100;
@@ -18,10 +20,6 @@ export interface TrainingLoadSummary {
   legs: Record<string, { fingerprint: string | null; load: EffectiveTrainingLoad }>;
 }
 interface Bucket { version: 1; leaf: boolean; entries: Record<string, TrainingLoadSummary>; }
-export const trainingLoadSourceFingerprint = (data: Parameters<typeof serializeTrainingLoadSource>[0]): string =>
-  createHash('sha256').update(serializeTrainingLoadSource(data)).digest('hex');
-export const trainingLoadWriteTime = (time: { seconds: number; nanoseconds: number } | undefined): string =>
-  time ? `${time.seconds}:${time.nanoseconds}` : '';
 export const trainingLoadCacheKey = (eventId: string): string => createHash('sha256').update(eventId).digest('hex');
 const bucketRef = (db: admin.firestore.Firestore, uid: string, prefix: string) =>
   db.doc(`users/${uid}/trainingLoadCache/b_${prefix}`);
@@ -95,10 +93,10 @@ export async function prepareTrainingLoadCacheWrite(db: admin.firestore.Firestor
 export async function refreshTrainingLoadSummary(uid: string, eventId: string): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async transaction => {
-    const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+    const { guard, snapshots: [parent, snapshot] } = await getUserDeletionGuardedDocumentsInTransaction(
+      db, transaction, uid, [db.doc(`users/${uid}/events/${eventId}`),
+        db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`)]);
     if (guard.shouldSkip) return;
-    const [parent, snapshot] = await transaction.getAll(db.doc(`users/${uid}/events/${eventId}`),
-      db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`));
     const metadata = snapshot.data() as TrainingLoadMetadata | undefined;
     let activities: (TrainingLoadActivity & Record<string, unknown>)[] = [];
     if (parent.exists && metadata && !metadata.sourceWritePending && !metadata.legs && Object.keys(metadata.controls).length) {
