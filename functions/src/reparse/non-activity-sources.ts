@@ -120,15 +120,17 @@ export async function hasUnchangedNonActivitySources(
                     await admin.storage().bucket(bucket).file(source.path).getMetadata();
                     return false;
                 } catch (error) {
-                    if (`${(error as { code?: unknown })?.code}` !== '404') return false;
+                    if (`${(error as { code?: unknown })?.code}` !== '404') throw error;
                 }
             }
             const [metadata] = await admin.storage().bucket(source.bucket).file(source.path).getMetadata();
             if (metadata.generation !== source.generation || metadata.md5Hash !== source.md5) return false;
-        } catch {
-            // Missing objects and transient metadata failures go through the normal reparse
-            // path, where actual download failures remain visible and retryable.
-            return false;
+        } catch (error) {
+            // A missing object invalidates the assessment. An unavailable lookup proves
+            // neither change nor stability: retry without discarding a committed skip or
+            // falling into the interrupted-heavy-attempt terminal guard.
+            if (`${(error as { code?: unknown })?.code}` === '404') return false;
+            throw error;
         }
     }
     return true;

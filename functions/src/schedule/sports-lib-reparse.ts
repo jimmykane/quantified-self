@@ -393,6 +393,13 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }
 
             const routingDecision = resolveSportsLibReparseRoutingDecision(eventData);
+            const previousSourceRetryGeneration = Number.isSafeInteger(existingJobData?.sourceRetryGeneration)
+                && (existingJobData?.sourceRetryGeneration as number) > 0
+                ? existingJobData?.sourceRetryGeneration as number : 0;
+            // Completed skip tasks may still have reserved Cloud Tasks names. Use a
+            // new generation for replaced originals, then retain it through retries.
+            const sourceRetryGeneration = previousSourceRetryGeneration
+                + (existingStatus === 'completed' && isNonActivitySkipReason(existingJobData?.skipReason) ? 1 : 0);
 
             const basePayload: SportsLibReparseJob = {
                 uid,
@@ -400,6 +407,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 eventPath: eventRef.path,
                 targetSportsLibVersion,
                 status: 'pending',
+                ...(sourceRetryGeneration ? { sourceRetryGeneration } : {}),
                 processingTier: routingDecision.processingTier,
                 ...(routingDecision.heavyReason ? { heavyReason: routingDecision.heavyReason } : {}),
                 ...(routingDecision.eventDurationMs !== null ? { eventDurationMs: routingDecision.eventDurationMs } : {}),
@@ -441,9 +449,14 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 const enqueueTask = routingDecision.processingTier === 'heavy'
                     ? enqueueSportsLibReparseHeavyTask
                     : enqueueSportsLibReparseTask;
-                const taskCreated = enqueueDelaySeconds > 1
-                    ? await enqueueTask(jobId, enqueueDelaySeconds)
-                    : await enqueueTask(jobId);
+                const taskCreated = sourceRetryGeneration
+                    ? await enqueueTask(jobId, {
+                        taskNameSuffix: `source-${sourceRetryGeneration}`,
+                        ...(enqueueDelaySeconds > 1 ? { scheduleDelaySeconds: enqueueDelaySeconds } : {}),
+                    })
+                    : enqueueDelaySeconds > 1
+                        ? await enqueueTask(jobId, enqueueDelaySeconds)
+                        : await enqueueTask(jobId);
                 if (taskCreated) {
                     enqueuedCount++;
                 } else {

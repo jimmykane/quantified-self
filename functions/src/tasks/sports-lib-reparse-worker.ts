@@ -1,7 +1,7 @@
-import { hasUnchangedNonActivitySources } from '../reparse/non-activity-sources';
+import { hasUnchangedNonActivitySources, isNonActivitySkipReason } from '../reparse/non-activity-sources';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
@@ -260,7 +260,9 @@ async function requeueHeavyFromNormalWorker(
             await deleteForUserDeletion('before_heavy_task_enqueue');
             return;
         }
-        taskCreated = await enqueueSportsLibReparseHeavyTask(jobId);
+        taskCreated = job.sourceRetryGeneration
+            ? await enqueueSportsLibReparseHeavyTask(jobId, { taskNameSuffix: `source-${job.sourceRetryGeneration}` })
+            : await enqueueSportsLibReparseHeavyTask(jobId);
     } catch (error) {
         const errorMessage = getErrorMessage(error);
         await markJobFailed(jobRef, errorMessage, { clearEnqueuedAt: true });
@@ -439,17 +441,32 @@ async function processSportsLibReparseTaskRequest(
             admin.firestore().doc(`users/${job.uid}/events/${job.eventId}`).get(),
             admin.firestore().doc(`users/${job.uid}/events/${job.eventId}/metaData/reparseStatus`).get(),
         ]);
-        if (event.exists && await hasUnchangedNonActivitySources(status.data(), extractSourceFiles(event.data() || {}))) {
+        const savedStatus = status.data();
+        const checkedAt = savedStatus?.checkedAt;
+        // The guarded status commit completes this attempt even if its sources
+        // subsequently change. Finish the old skip; the scheduler will invalidate
+        // its assessment and dispatch the replacement with a fresh task generation.
+        // Compare full server timestamps so an older attempt within the same ms
+        // cannot bypass the heavy interruption guard.
+        const skipCommittedDuringAttempt = savedStatus?.status === 'skipped'
+            && isNonActivitySkipReason(savedStatus.reason)
+            && savedStatus.nonActivitySources?.schemaVersion === 1
+            && savedStatus.targetSportsLibVersion === targetSportsLibVersion
+            && checkedAt instanceof Timestamp && job.updatedAt instanceof Timestamp
+            && (checkedAt.seconds > job.updatedAt.seconds
+                || (checkedAt.seconds === job.updatedAt.seconds && checkedAt.nanoseconds >= job.updatedAt.nanoseconds));
+        if (event.exists && (skipCommittedDuringAttempt
+            || await hasUnchangedNonActivitySources(savedStatus, extractSourceFiles(event.data() || {})))) {
             if (await shouldSkipForUserDeletion(job, jobId, 'before_recovered_skip')) {
                 await deleteForUserDeletion('before_recovered_skip');
                 return;
             }
-            await jobRef.set({ status: 'completed', skipReason: status.data()?.reason,
+            await jobRef.set({ status: 'completed', skipReason: savedStatus?.reason,
                 processedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
                 lastError: FieldValue.delete(), failureReason: FieldValue.delete(),
                 terminalFailure: FieldValue.delete(), terminalFailureAt: FieldValue.delete(),
             }, { merge: true });
-            logger.info('[sports-lib-reparse-worker] Recovered committed non-activity skip.', { jobId, reason: status.data()?.reason });
+            logger.info('[sports-lib-reparse-worker] Recovered committed non-activity skip.', { jobId, reason: savedStatus?.reason });
             return;
         }
     }

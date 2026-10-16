@@ -281,6 +281,8 @@ export interface SportsLibReparseJob {
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
     skipReason?: string;
+    /** Stable across enqueue retries; advances when reopening a completed source skip. */
+    sourceRetryGeneration?: number;
     supersededAt?: unknown;
     supersededBySportsLibVersion?: string;
     createdAt: unknown;

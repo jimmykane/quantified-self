@@ -69,7 +69,7 @@ describe('non-activity reparse sources', () => {
         expect(await hasUnchangedNonActivitySources(status, sources)).toBe(false);
         mocks.metadata.mockResolvedValue([{ generation: '1', md5Hash: 'changed' }]);
         expect(await hasUnchangedNonActivitySources(status, sources)).toBe(false);
-        mocks.metadata.mockRejectedValue(new Error('not found'));
+        mocks.metadata.mockRejectedValue({ code: 404 });
         expect(await hasUnchangedNonActivitySources(status, sources)).toBe(false);
     });
     it('invalidates fallback classifications when the preferred bucket gains an original', async () => {
@@ -85,7 +85,19 @@ describe('non-activity reparse sources', () => {
         mocks.metadata.mockResolvedValue([{ generation: 'new', md5Hash: 'replacement' }]);
         expect(await hasUnchangedNonActivitySources(status, sources)).toBe(false);
         mocks.metadata.mockRejectedValue({ code: 503 });
-        expect(await hasUnchangedNonActivitySources(status, sources)).toBe(false);
+        await expect(hasUnchangedNonActivitySources(status, sources)).rejects.toEqual({ code: 503 });
+    });
+    it('keeps metadata outages retryable instead of declaring the source changed', async () => {
+        const sources = [{ path: 'source.fit', bucket: 'bucket' }];
+        const status = { status: 'skipped', reason: 'MONITORING_SOURCE', nonActivitySources: {
+            schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources), sources: [{
+                ...sources[0], referenceBucket: 'bucket', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'monitoring',
+            }],
+        } };
+        for (const code of [403, 429, 503]) {
+            mocks.metadata.mockRejectedValue({ code });
+            await expect(hasUnchangedNonActivitySources(status, sources)).rejects.toEqual({ code });
+        }
     });
 
     it('does no storage work for normal statuses or incomplete evidence', async () => {

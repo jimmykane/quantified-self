@@ -5397,7 +5397,9 @@ types retain legacy activity compatibility. Rejected new imports fail normally. 
 monitoring, route and other non-activity sources as explicit skips, with mixed sources requiring review. It preserves
 saved events, activities, load controls, originals and existing volume; unclassified parser failures remain failures.
 The private source assessment is reused only while original references and verified Storage generations/checksums
-match, including across library releases. Changed originals become eligible again. See the
+match, including across library releases. Changed originals become eligible again; reopening a completed skip uses a
+persisted task generation so the old queue task's retained name cannot block it. Storage lookup outages stay retryable
+and do not turn committed skips into heavy-timeout failures. See the
 [non-activity reparse contract](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#non-activity-originals-retained-as-events)
 for validation, retry, transaction and monitoring safeguards. This does not migrate sources into Health or Routes,
 exclude their historical modeled load, or clean up workout volume automatically; cleanup needs separate review and approval.

@@ -839,11 +839,33 @@ describe('scheduleSportsLibReparseScan', () => {
         })]);
         await (scheduleSportsLibReparseScan as any)({});
         expect(hoisted.sourceMetadata).toHaveBeenCalledTimes(1);
-        if (changed) expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+        if (changed) {
+            expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1', { taskNameSuffix: 'source-1' });
+            expect(hoisted.jobSet).toHaveBeenCalledWith('job-1', expect.objectContaining({ sourceRetryGeneration: 1 }), { merge: true });
+        }
         else {
             expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
             expect(hoisted.jobSet).not.toHaveBeenCalled();
         }
+    });
+
+    it.each(['normal', 'heavy'])('preserves the replacement task generation after an enqueue failure (%s)', async tier => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.resolveSportsLibReparseRoutingDecision.mockReturnValue({ processingTier: tier, eventDurationMs: null });
+        hoisted.existingJobsById.set('job-1', { status: 'failed', sourceRetryGeneration: 2, attemptCount: 1 });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'replacement.fit' } })]);
+        await (scheduleSportsLibReparseScan as any)({});
+        expect(tier === 'heavy' ? hoisted.enqueueSportsLibReparseHeavyTask : hoisted.enqueueSportsLibReparseTask)
+            .toHaveBeenCalledWith('job-1', { taskNameSuffix: 'source-2' });
+        expect(hoisted.jobSet).toHaveBeenCalledWith('job-1', expect.objectContaining({ sourceRetryGeneration: 2 }), { merge: true });
+    });
+
+    it('advances the task generation for another replacement of a completed skip', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.existingJobsById.set('job-1', { status: 'completed', skipReason: 'MONITORING_SOURCE', sourceRetryGeneration: 2, attemptCount: 3 });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'replacement.fit' } })]);
+        await (scheduleSportsLibReparseScan as any)({});
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1', { taskNameSuffix: 'source-3' });
     });
 
     it('should skip override candidate when reparseStatus has a terminal failure for current target', async () => {

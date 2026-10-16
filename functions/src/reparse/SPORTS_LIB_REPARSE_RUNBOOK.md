@@ -623,15 +623,24 @@ Scheduler and executing CLI reuse a saved assessment across library versions onl
 Storage generations/checksums match. The scheduler reuses its existing status read; only previously classified source
 sets incur Storage metadata lookups. Ordinary reparses incur no extra Storage metadata reads. Changed references or
 replaced objects make the source eligible again, including completed skip jobs for the same target. A newly available
-preferred-bucket object also invalidates an assessment made from a fallback bucket. A failed lookup
-falls through to normal reparse/download handling. Bump the assessment schema if a future importer changes which file
+preferred-bucket object also invalidates an assessment made from a fallback bucket. A missing object falls through to
+normal reparse/download handling; an unavailable or denied metadata lookup propagates for retry instead of being
+treated as proof of a changed source. In particular, an interrupted heavy worker retains its committed skip while
+Storage is unavailable, rather than writing a false heavy-timeout failure. Bump the assessment schema if a future importer changes which file
 types count as activities. Old terminal failures without an assessment retain their established version-specific
 suppression until a new target or explicit reprocessing; no speculative classification is created from an old error.
 
 A handled task remains `completed` with `skipReason`; this means task handling completed, not that an activity was
 rewritten. Its event status remains `skipped`, stale error/terminal markers are cleared, and it emits INFO logs.
-An interrupted worker checks an already committed assessment before applying the existing heavy-timeout guard; other
-interrupted/heavy failures retain that guard. CLI `skippedNonActivitySources` is separate from completed/failed counts;
+Reopening a completed skip increments the job's `sourceRetryGeneration` and uses a `source-N` task-name suffix, avoiding
+the completed task's retained name. That generation is saved before enqueue and reused after enqueue failures and
+normal-to-heavy routing; another completed skip followed by another replacement advances it again. Job identity,
+queue limits, task payload and ordinary first-dispatch names remain unchanged.
+An interrupted worker recognizes a skip committed for the same target after that attempt started, comparing full
+Firestore server timestamps. It completes that handled attempt even when originals have since changed; the scheduler
+then invalidates the assessment and queues the replacement. Without that commit evidence it checks an unchanged
+assessment before applying the existing heavy-timeout guard; older/different-target skips with changed sources cannot
+bypass the guard. CLI `skippedNonActivitySources` is separate from completed/failed counts;
 dry-run remains metadata-only and does not discover new classifications by downloading originals. Interactive event
 reprocessing reports a clear skip, keeps the saved activity and suggests downloading/uploading a course from Routes.
 The callable response excludes the private assessment. Saved-route reprocessing itself is unchanged.
@@ -643,7 +652,9 @@ included in a monitoring cleanup. No deletion, migration to Routes/Health, campa
 Monitoring coverage decision: **unchanged**. Reviewed `tools/import-monitoring/definitions.mjs` filters only
 `[ActivityImport]` events and `processWorkoutTask`, not these workers. Existing reparse task acknowledgements,
 per-event statuses and Admin Queue Monitor remain the operational surface; skips no longer inflate failed jobs/error
-logs, and real failure signals remain. No new alerts or low-cardinality metric labels are needed for this outcome
+logs, and real failure signals remain. Replacement task suffixes preserve the same queues and acknowledgement contract;
+lookup outages propagate through existing failure/retry diagnostics rather than becoming terminal heavy failures.
+No new alerts or low-cardinality metric labels are needed for this outcome
 classification, and no production monitoring configuration was applied. MCP impact: no tool, metric, schema, scope,
 consent, planning/delivery action or private output changes. Help explains the interactive skip and route recovery.
 
