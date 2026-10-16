@@ -42,6 +42,8 @@ export interface TrainingLoadMetadata {
   parentFingerprint?: string;
   /** Server-owned source-write coordination; source triggers wait for final candidates. */
   sourceWritePending?: boolean;
+  /** Server-owned reservation; a superseded source attempt cannot finalize newer metadata. */
+  sourceWriteId?: string;
   sourceFirstImport?: boolean;
   sourceWriteTimes?: Record<string, string>;
   sourceDigest?: string;

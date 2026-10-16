@@ -157,6 +157,34 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect((await db.doc(metadataPath(uid)).get()).data()).toEqual(before);
   });
 
+  it.each(['pending', 'completed'])('rejects an older finalizer after a newer multisport import is %s', async phase => {
+    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    const original = workout();
+    const finishOlder = await prepareTrainingLoadMetadata(uid, original);
+    await source(uid, original);
+    // A later parser recognizes an additional zero-load leg without changing
+    // the independently recorded parent summary or the original leg.
+    const revised = workout();
+    const extra = EventImporterJSON.getEventFromJSON({ name: 'Transition', startDate: +revised.endDate, endDate: +revised.endDate,
+      activities: [{ startDate: +revised.endDate, endDate: +revised.endDate, type: ActivityTypes.Cycling,
+        creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+        stats: { Duration: 0, 'Training Stress Score': 0 } }] } as any).getFirstActivity().setID('transition');
+    revised.addActivity(extra);
+    const finishNewer = await prepareTrainingLoadMetadata(uid, revised);
+    await source(uid, revised);
+    if (phase === 'completed') await finishNewer();
+    const ref = db.doc(metadataPath(uid));
+    const before = (await ref.get()).data();
+    await expect(finishOlder()).rejects.toThrow(/superseded|source changed/);
+    expect((await ref.get()).data()).toEqual(before);
+    if (phase === 'pending') await finishNewer();
+    const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(Object.values(saved.legs!).map(leg => leg.activityId).sort()).toEqual(['leg', 'transition']);
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ score: 9, status: 'available' });
+    await finishNewer();
+    expect((await ref.get()).data()).toEqual(saved);
+  });
+
   it('preserves calculated load and cache writes when workout feedback is added, edited or removed', async () => {
     const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
     await completeTrainingLoadCacheWarmup(uid);
@@ -428,7 +456,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       revision: 1, method: 'MET', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)) });
     const event = workout(); const finish = await prepareTrainingLoadMetadata(uid, event);
     await source(uid, event);
-    await db.doc(metadataPath(uid)).set({ version: 1, revision: 1, excluded: false, controls: { leg: { override: 0 } } });
+    // A client edit preserves server-owned preparation fields, as Rules require.
+    await db.doc(metadataPath(uid)).update({ revision: 2, controls: { leg: { override: 0 } } });
     await finish();
     const result = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
     expect(result.legs!.leg.policy).toMatchObject({ revision: 1, method: 'MET' });

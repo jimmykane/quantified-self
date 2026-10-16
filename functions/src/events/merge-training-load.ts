@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, unresolvedTrainingLoadLegs,
   type TrainingLoadControl, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -100,6 +100,7 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
   const resultId = event.getID()!;
   const resultRef = db.doc(`users/${uid}/events/${resultId}`);
   const metaRef = resultRef.collection('metaData').doc('trainingLoad');
+  const sourceWriteId = randomUUID();
   const parentFingerprint = trainingLoadSourceFingerprint(event.toJSON());
   const activityFingerprints = new Map(event.getActivities().map(activity =>
     [activity.getID()!, trainingLoadSourceFingerprint(activity.toJSON())]));
@@ -136,7 +137,7 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
     }
     const pending: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,
       excluded: previous?.excluded ?? false, legs: copied.legs, controls: previous?.controls ?? copied.controls,
-      parentFingerprint, sourceWritePending: true, sourceFirstImport: true,
+      parentFingerprint, sourceWritePending: true, sourceWriteId, sourceFirstImport: true,
       ...(previous?.updatedAt !== undefined ? { updatedAt: previous.updatedAt } : {}),
       ...(previous?.sourceDigest ? { sourceDigest: previous.sourceDigest } : {}),
       sourceRevision: previous?.sourceRevision ?? 0, loadRevision: previous?.loadRevision ?? 0 };
@@ -152,7 +153,7 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
     const [parent, savedMetadata, ...activities] = await transaction.getAll(resultRef, metaRef,
       ...ids.map(id => db.doc(`users/${uid}/activities/${id}`)));
     const previous = savedMetadata.data() as TrainingLoadMetadata | undefined;
-    if (!parent.exists || !previous?.legs || previous.parentFingerprint !== parentFingerprint ||
+    if (!parent.exists || !previous?.legs || previous.sourceWriteId !== sourceWriteId || previous.parentFingerprint !== parentFingerprint ||
       trainingLoadSourceFingerprint(parent.data()!) !== parentFingerprint || Object.keys(previous.legs).length !== ids.length ||
       activities.some((activity, index) => !activity.exists || activity.data()?.eventID !== resultId ||
         trainingLoadSourceFingerprint(activity.data()!) !== activityFingerprints.get(ids[index]) ||

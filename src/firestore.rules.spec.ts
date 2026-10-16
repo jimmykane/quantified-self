@@ -94,7 +94,7 @@ describe('Firestore Security Rules', () => {
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc(cachePath).set({ version: 1, leaf: true, entries: {} });
                 await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
-                    sourceWritePending: true, sourceRevision: 1, sourceWriteTimes: { event: '1:2' } });
+                    sourceWritePending: true, sourceWriteId: 'server-attempt', sourceRevision: 1, sourceWriteTimes: { event: '1:2' } });
             });
             const owner = testEnv.authenticatedContext('owner').firestore();
             await assertSucceeds(owner.doc(cachePath).get());
@@ -103,7 +103,7 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc(cachePath).set({ version: 1, leaf: true, entries: {} }));
             await assertFails(owner.doc(cachePath).delete());
             for (const fields of [{ sourceWritePending: false }, { sourceFirstImport: true }, { sourceRevision: 2 }, { loadRevision: 2 },
-                { sourceWriteTimes: {} }, { sourceDigest: 'forged' }])
+                { sourceWriteTimes: {} }, { sourceWriteId: 'forged' }, { sourceDigest: 'forged' }])
                 await assertFails(owner.doc(path).update({ ...await edit(2), ...fields }));
             await assertSucceeds(owner.doc(path).update(await edit(2)));
         });

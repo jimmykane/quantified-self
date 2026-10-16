@@ -98,6 +98,7 @@ export async function prepareTrainingLoadMetadata(
   if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metaRef = eventRef.collection('metaData').doc('trainingLoad');
+  const sourceWriteId = randomUUID();
   // Native JSON imports may not have parse-time evaluations yet. Power evaluation
   // can derive stats, so finish it before EventWriter snapshots source documents.
   // The final metadata transaction then reads the cached, non-mutating results.
@@ -108,20 +109,18 @@ export async function prepareTrainingLoadMetadata(
     if (authorize) await authorize(db, transaction);
     const [parent, snapshot] = await transaction.getAll(eventRef, metaRef);
     const previous = snapshot.data() as TrainingLoadMetadata | undefined;
-    const prepare = async (fields: Partial<TrainingLoadMetadata>, changed = true) => {
+    const prepare = async (fields: Partial<TrainingLoadMetadata>) => {
       const pending: TrainingLoadMetadata = { version: 1, excluded: false, controls: {}, revision: 1, ...previous, ...fields };
       const cacheWrite = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId,
         summarizeTrainingLoad(eventId, parent.data() ?? {}, pending));
-      if (changed) {
-        if (snapshot.exists) transaction.update(metaRef, fields);
-        else transaction.set(metaRef, pending);
-      }
+      if (snapshot.exists) transaction.update(metaRef, fields);
+      else transaction.set(metaRef, pending);
       cacheWrite.write();
     };
     if (!parent.exists || previous?.sourceFirstImport || previous?.legs || previous?.legacyLegs) {
-      const pending = { sourceWritePending: true, ...(!parent.exists ? { sourceFirstImport: true } : {}),
-        revision: (previous?.revision ?? 0) + (previous?.sourceWritePending ? 0 : 1) };
-      await prepare(pending, !previous?.sourceWritePending);
+      const pending = { sourceWritePending: true, sourceWriteId, ...(!parent.exists ? { sourceFirstImport: true } : {}),
+        revision: (previous?.revision ?? 0) + 1 };
+      await prepare(pending);
       return previous?.sourceFirstImport === true || !parent.exists;
     }
     const children = await transaction.get(db.collection(`users/${uid}/activities`)
@@ -133,12 +132,12 @@ export async function prepareTrainingLoadMetadata(
         recordedTss: recordedTrainingStressScore(data), evaluations: null,
         policy: defaultAppliedTrainingLoadPolicy(data.type) } satisfies TrainingLoadLeg];
     }));
-    const frozen = { legacyLegs, sourceWritePending: true, revision: (previous?.revision ?? 0) + 1 };
+    const frozen = { legacyLegs, sourceWritePending: true, sourceWriteId, revision: (previous?.revision ?? 0) + 1 };
     // Pending reads are unavailable; finalization advances freshness and owns invalidation.
     await prepare(frozen);
     return false;
   });
-  return () => persistTrainingLoadMetadata(uid, event, authorize, firstImport);
+  return () => persistTrainingLoadMetadata(uid, event, authorize, firstImport, sourceWriteId);
 }
 
 /** Called by all backend writers while parse-time candidates remain available. */
@@ -146,6 +145,7 @@ export async function persistTrainingLoadMetadata(
   uid: string, event: EventInterface,
   authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
   firstImport = false,
+  expectedSourceWriteId?: string,
 ): Promise<void> {
   const db = admin.firestore();
   const eventId = event.getID();
@@ -174,6 +174,10 @@ export async function persistTrainingLoadMetadata(
       throw new Error('Training load source changed during import; retry the source write.');
     }
     let previous = snapshot.exists ? snapshot.data() as TrainingLoadMetadata : null;
+    // Parent totals and individual child values can be identical across different
+    // leg sets. They prove source consistency, not ownership of this finalization.
+    if (expectedSourceWriteId !== undefined ? previous?.sourceWriteId !== expectedSourceWriteId : previous?.sourceWritePending)
+      throw new Error('Training load source write was superseded; retry the source import.');
     const firstImportControlKeys = new Set<string>();
     // Old documents may already have been overwritten using reused IDs. Only
     // pre-write evidence can associate a legacy control with its original leg.
@@ -206,6 +210,7 @@ export async function persistTrainingLoadMetadata(
       ...savedActivities.map(doc => [`activity:${doc.id}`, trainingLoadWriteTime(doc.updateTime)])]);
     const next: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,
       excluded: previous?.excluded ?? false, ...reconciled, parentFingerprint,
+      ...(previous?.sourceWriteId ? { sourceWriteId: previous.sourceWriteId } : {}),
       sourceWritePending: false, sourceWriteTimes, sourceDigest,
       sourceRevision: (previous?.sourceRevision ?? 0) + (previous?.sourceDigest === sourceDigest ? 0 : 1), updatedAt: FieldValue.serverTimestamp() };
     const loadContent = (value: TrainingLoadMetadata) => canonical({ excluded: value.excluded,

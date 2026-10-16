@@ -165,6 +165,13 @@ duplicate representation themselves. Completed older merges are not rewritten au
 can recover file-based candidates, but owners must review their controls when earlier merges lost source snapshots.
 No production repair, scanner or new recurring rebuild read is enabled by this correction.
 
+Import/reparse and merge preparation reserve a private `sourceWriteId`; finalization checks it transactionally before
+publishing load metadata. An older attempt cannot clear a newer pending import or replace its multisport leg set merely
+because the parent totals still match. A superseded attempt fails through the existing persistence/retry path; the
+current attempt can finish normally. Retrying preparation preserves frozen legacy identities, dated policies and owner
+controls while reserving a new identifier. Repeating the same successful finalizer remains idempotent. The marker is
+server-owned and adds no normal-import or full-rebuild reads, public fields, scanner changes or production operations.
+
 Sports Lib 21.6.10 further corrects unsupported HR coverage, explicit reevaluation of calculated NP, Suunto event-array
 selection and validated zero active time, multisport zone-duration ownership, FIT canonical pool-length units and
 source-backed lap/session timing. Apply parser corrections only through the existing original-file lifecycle for

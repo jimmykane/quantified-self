@@ -5738,6 +5738,18 @@ in rebuilds, the editor and MCP. `loadRevision` and `updatedAt` advance when fin
 even if reimported source fields are identical. Cache-dependent ingress selects its debounce bucket immediately
 before enqueueing, after cache maintenance and deletion guards, so late deliveries do not reuse an expired bucket. `sourceFirstImport` preserves dated selection across
 partial first-import retries; it is removed on successful finalization. Owner revision/updatedAt-only changes are ignored.
+Each import, reparse or merge preparation also reserves a private server-owned `sourceWriteId` in the existing
+metadata transaction. Finalization must still own that reservation, including after a newer attempt completes.
+Source fingerprints alone cannot establish ownership: a newer parser can recognize another zero-load multisport leg
+without changing the parent totals or the older leg. A superseded finalizer fails before changing candidates, controls
+or cache state; the current attempt can finish and repeated finalization of that same attempt remains idempotent.
+Owner edits preserve the reservation and remain independent of it. A retry reserves a new identifier while retaining
+frozen legacy identities, dated policies and latest controls. This adds no reads or writes to normal imports or warm
+rebuilds; a repeated preparation refreshes the reservation in its existing transaction. Reservation-only changes do
+not invalidate derived metrics. MCP impact is none: the marker is never projected, and public schemas, planning reads,
+mutations and provider delivery are unchanged. Existing help remains accurate; the editor already describes incomplete
+imports as unavailable. Queue monitoring coverage is unchanged: existing persistence-phase errors and worker retry
+handling cover a superseded finalizer, with no new queue, scan, provider action or deployment.
 Browser and backend use the same canonical source projection for SHA-256
 fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks

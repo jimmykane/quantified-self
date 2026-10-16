@@ -130,6 +130,19 @@ describe('merge Training load snapshots', () => {
 });
 
 describe('merge metadata coordination', () => {
+  it.each(['pending', 'completed'])('rejects an older merge finalizer after a newer attempt is %s', async phase => {
+    const a = source('a'), b = source('b'); putSource(a); putSource(b);
+    const merged = mergeRecordedEvents([a.event, b.event], 'merged');
+    const finishOlder = await prepareMergedTrainingLoad('u', merged, [a.item, b.item]);
+    persist(merged);
+    const finishNewer = await prepareMergedTrainingLoad('u', merged, [a.item, b.item]);
+    if (phase === 'completed') await finishNewer();
+    const before = structuredClone(state.docs.get(metadataPath));
+    await expect(finishOlder()).rejects.toThrow(/changed|review|superseded/);
+    expect(state.docs.get(metadataPath)).toEqual(before);
+    if (phase === 'pending') await finishNewer();
+    expect(resolveEffectiveTrainingLoad(merged, state.docs.get(metadataPath))).toMatchObject({ score: 200, status: 'available' });
+  });
   it('stages unavailable, publishes correct total/cache, and preserves a concurrent result override', async () => {
     const a = source('a'), b = source('b'); putSource(a); putSource(b);
     const merged = mergeRecordedEvents([a.event, b.event], 'merged');
