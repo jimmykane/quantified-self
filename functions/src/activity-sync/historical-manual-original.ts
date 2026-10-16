@@ -24,8 +24,11 @@ export interface HistoricalOriginalFile {
 }
 
 export function isOwnerOriginalPath(userID: string, eventID: string, path: string): boolean {
-    return path === `users/${userID}/events/${eventID}/original.fit`
-        || path === `users/${userID}/events/${eventID}/original.fit.gz`;
+    const prefix = `users/${userID}/events/${eventID}/`;
+    if (!path.startsWith(prefix)) return false;
+    const relative = path.slice(prefix.length);
+    return relative === 'original.fit' || relative === 'original.fit.gz'
+        || /^sources\/[a-f0-9]{64}\/original\.fit(?:\.gz)?$/.test(relative);
 }
 
 export function historicalFitExtension(path: string): 'fit' | 'fit.gz' | null {

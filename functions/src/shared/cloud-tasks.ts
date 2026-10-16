@@ -29,7 +29,7 @@ let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
 const SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS.timeoutSeconds;
 const SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS.timeoutSeconds;
 
-interface EnqueueSportsLibReparseHeavyTaskOptions {
+interface EnqueueSportsLibReparseTaskOptions {
     scheduleDelaySeconds?: number;
     taskNameSuffix?: string;
 }
@@ -711,14 +711,21 @@ export async function enqueueGarminHealthBackfillTask(
 /**
  * Enqueue a single sports-lib reparse job task.
  */
-export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<boolean> {
+export async function enqueueSportsLibReparseTask(
+    jobId: string,
+    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseTaskOptions | number,
+): Promise<boolean> {
     const { projectId, location, sportsLibReparseQueue } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
+    const options = typeof optionsOrScheduleDelaySeconds === 'number'
+        ? { scheduleDelaySeconds: optionsOrScheduleDelaySeconds }
+        : (optionsOrScheduleDelaySeconds || {});
     const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const taskId = `reparse-${safeJobId}`;
+    const safeTaskNameSuffix = options.taskNameSuffix ? `-${sanitizeTaskNamePart(options.taskNameSuffix)}` : '';
+    const taskId = `reparse-${safeJobId}${safeTaskNameSuffix}`;
     const payload = { jobId };
 
     return enqueueTaskWithRetry({
@@ -727,7 +734,7 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
         functionName: sportsLibReparseQueue,
         taskId,
         payload,
-        scheduleDelaySeconds,
+        scheduleDelaySeconds: options.scheduleDelaySeconds,
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseDispatcher] Task already exists for job ${jobId}, skipping`,
         failedLogPrefix: `[ReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
@@ -739,7 +746,7 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
  */
 export async function enqueueSportsLibReparseHeavyTask(
     jobId: string,
-    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseHeavyTaskOptions | number,
+    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseTaskOptions | number,
 ): Promise<boolean> {
     const { projectId, location, sportsLibReparseHeavyQueue } = config.cloudtasks;
     if (!projectId) {

@@ -387,6 +387,10 @@ also private presentation only. Canonical recipes, planned/saved-workout reads, 
 scopes, consent and provider actions stay unchanged; Guide fields, allocation results and mapping/recovery metadata
 remain excluded. No catalog refresh, contract promotion or plugin rebuild is needed. See
 [swimming allocation and recovery](training-workspace.md#swimming-field-allocation-and-headings-v15).
+Timed-Rest v16 native Suunto countdown alerts likewise have **no wire impact**: they are private provider metadata,
+not a new recipe setting, target, read metric, provider action, tool, scope or consent. Canonical planned-workout reads
+remain unchanged; strict recipes/proposals/outputs reject injected `alerts` and `countdown` fields. No contract promotion,
+catalog refresh or plugin rebuild is needed. See [countdown evidence and recovery](training-workspace.md#native-timed-rest-countdown-alerts-v16).
 The native-app **Duplicate to…** shortcut in completed-workout sync details reuses the existing scheduled-workout copy contract; existing
 read projections expose the new planned copy without copying completion/delivery state. Native **Send a fresh Guide**
 is a new app-only explicit action, not an addition to the registered MCP/Assistant provider-action union. Strict
@@ -798,6 +802,12 @@ The internal adapter is implementation-only and does not alter the registered pu
 tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the
 Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See
 `docs/assistant.md` for the exact internal boundary and maintenance checklist.
+
+Built-in instruction variants name only its consented tag/location capabilities and describe Training preparation
+followed by app-owned confirmation, not external apply tools. Preview descriptions use the same distinction. The
+Assistant's per-generation catalog/read-first guard remains authoritative, and rejected calls log only recognized
+catalog names, fixed reasons and bounded counters. External instructions, schemas, scopes and approval are unchanged;
+this correction requires no registered-app rescan or bundled-plugin rebuild.
 
 ## Public endpoints
 
@@ -1542,6 +1552,17 @@ existing retained Suunto or FIT source gains the new metrics. This changes neith
 scopes, nor bundled plugin instructions, so it does not itself add a registered-app refresh, contract promotion, or local
 plugin-sync requirement beyond any independently pending contract update.
 
+Sports Lib 21.6.13 corrects existing source data without adding metric tokens or changing registered contracts:
+COROS GPX ClueTrust HR becomes the existing Heart Rate stream, mixed-sport Suunto pace calibration requires applicable
+sport-owned thresholds, and corroborated pool distance avoids a cumulative final-lap double count. On-demand charts
+can expose corrected existing HR/distance streams after runtime adoption; recorded metric queries change only after
+source-backed import/reparse persists corrected summaries. Imported TSS and private load controls retain priority.
+Explicit non-workout FIT files are rejected during source hydration/reparse; completed activity-summary FIT files with
+an explicit session remain supported, including Wahoo summaries without sensor records. Historical summary reads remain
+unchanged until a separate authorized lifecycle action. A rejected reparse does not delete the saved event or route data into
+Health. No MCP scope, tool, reason, field, unit, schema, plugin instruction, or mutation capability is added; no contract
+promotion or registered-app refresh is needed solely for these source corrections.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
@@ -1718,6 +1739,18 @@ The response is a new allowlisted object. Summary and lap stats are limited to d
 average/maximum speed, heart rate, power, locomotion cadence, and energy. Canonical Stroke Rate is available through
 the selected numeric metric surface rather than being mislabeled in the fixed cadence summary field. Swim lengths expose
 only their normalized timing, distance, pool, stroke, SWOLF, energy, speed, cadence-shaped rate, and heart-rate fields.
+When the parser's optional pool `timingValidity` marker rejects a source timer/elapsed value, swim detail projections
+return `null` in the existing affected timing field; lap duration likewise stays `null` for a rejected timer, including
+when stale numeric stats coexist with the marker. Distance/strokes/rest rows remain available. The marker, its reason,
+and raw rejected values are never forwarded. No schema, consent, scope or mutation capability changes are introduced.
+The pending native JSON correction preserves valid source lap IDs, including zero and nonconsecutive values; the
+existing `lapNumber` projection carries those saved IDs, while pagination/indexes remain array-based. Complete
+multisport timer/elapsed totals and retained source-only parent distance/energy use existing canonical numeric fields.
+Per-leg values are not populated from parent totals. These repairs add no metric names, response fields, grants, scopes,
+or mutation capabilities, and expose no source provenance or private Training metadata.
+The matching Sports Lib declaration correction exposes existing optional time getters as `Data… | undefined`.
+It adds no persisted fields or public MCP fields: selected absent metrics remain unavailable, fixed nullable detail
+fields remain `null`, and measured zero remains zero. The typing correction alone needs no data migration or reparse.
 For swimming, the frozen `averageCadenceRpm` wire field contains the source stroke rate; its compatibility name cannot be
 renamed without a registered-contract transition. Jump records expose timestamp, distance,
 height, hang time, speed, rotations, and score. The jump `timestampMs` is an activity-relative elapsed offset in
@@ -2064,9 +2097,10 @@ already returned by one complete bounded activity read for an exact `localDate` 
 validates that every referenced activity started on that local date. Planned workouts and references from another date
 are invalid input.
 
-The service reads only those exact activity and parent-event documents plus `users/{uid}/derivedMetrics/form`; it does
-not query activity history. Its field masks retain only the event link, start/end times, current or legacy TSS, and the
-event merge/benchmark flags. Account deletion is checked before and after the reads. Activity and event documents are
+The service reads only those exact activity and parent-event documents, their owner-only Training load metadata, and
+`users/{uid}/derivedMetrics/form`; it does not query activity history. Its field masks retain the event link, start/end
+times, activity type, recorded stats needed for source-fingerprint validation, and event merge/benchmark flags. These
+source fields stay internal. Account deletion is checked before and after the reads. Activity and event documents are
 queried in Firestore `in` batches of at most 30, so the public 32-reference limit remains bounded without a composite
 index. The complete result is limited to 16 KiB and still uses the ordinary per-connection MCP request limit.
 
@@ -2080,10 +2114,22 @@ that this does not measure physiological adaptation.
 
 Statuses distinguish `ready`, `partial`, `updating`, `unavailable`, and `excluded`. Reasons preserve partial coverage,
 missing TSS, benchmark/merge exclusion, incomplete activities, Form building/staleness/failure, no usable selected
-session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution. Current
-TSS takes precedence over the legacy Power Training Stress Score field. A ready Form payload must match the current
+session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution.
+Recorded metric reads keep their original meaning: current TSS takes precedence over legacy Power Training Stress Score. Training impact instead resolves owner-modeled per-leg load from private event metadata, including zero overrides, saved method/inclusion policies and workout exclusions. It never distributes a parent-only score to legs. Excluded-by-owner records increment only `excludedSessionCount`, not benchmark or incomplete counts; the frozen reason remains `no_usable_sessions` when no selected sessions are usable. Policy revisions, control maps, calibration and source fingerprints never appear in the public projection. A load edit newer than Form reports updating. These implementation changes add no public fields, scopes or mutation capability. Full Training snapshot rebuilds use server-owned compact load buckets after a one-time metadata warmup; focused impact reads still fetch exact event metadata. Cache contents and import coordination fields remain private and do not enter MCP responses. Pending imports use the existing updating state through the shared load resolver; whole-workout exclusions retain the existing excluded state and Form-freshness checks. A ready Form payload must match the current
 internal Form payload version, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed
 as updating.
+
+Output validation treats benchmark/merge and incomplete-session counts as subsets of the total exclusion count;
+owner exclusions must not be relabelled to satisfy the old equality. A source rewrite reports `updating` even when
+its cached score or leg match is temporarily unavailable. A retained identity awaiting owner review reports
+`unavailable` / `no_usable_sessions` (or partial day coverage), without exposing the private reason or counting it as
+missing TSS. Focused tests validate actual service results against the strict output schema and exercise owner
+exclusions on all three transports. Stale benchmark/incomplete selections cannot hold up other selected sessions;
+a recent owner exclusion still waits for Form to remove its previous contribution. These runtime checks preserve the
+registered JSON schemas and require no local plugin rebuild, catalog rescan, new consent or mutation capability.
+Session and selected-day load comparisons share the app's machine-precision tolerance, scaled by load and summed
+term count. Numerically equivalent decimal totals do not falsely report `form_updating`; genuinely higher selected
+load still waits for Form. No stored scores, wire fields, read counts or refresh behavior change.
 
 The built-in Assistant allowlists the same tool. It resolves exact opaque references through its existing completed-
 activity workflow, prepares Form, preserves separate UTC outcomes, and renders compact deterministic evidence without
@@ -2101,6 +2147,34 @@ provider action, Assistant routing, registered-app contract, or bundled plugin a
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
 payload schema, structured-output fixture, and positive and negative redaction-contract tests.
+
+Sports Lib 21.6.9 corrects source timer events/duration, multisport record and zone ownership, and recorded-power
+coverage. Existing metric reads still return persisted statistics; corrected historical values require original-file
+reparse and the normal Training refresh. On-demand source reads remain transient and do not update saved statistics.
+Training impact continues to project the existing modeled-load resolver through its strict public schema. Private
+source evidence, calibration and saved controls stay excluded. No metric token, unit, tool, field, reason, scope,
+consent, plan/workout read, mutation or provider-delivery contract changes; no registered-contract promotion,
+catalog rescan or bundled-plugin sync is required for these parser corrections.
+
+Distance regeneration retains every finite positive canonical total from the fresh source parse. Monotonic or
+moving streams cannot prove complete coverage; stalled and truncated counters must not replace that total. Missing
+or zero totals still use existing generation. Sports Lib owns source interpretation, including pool evidence. The single-session FIT chronology
+correction is included in the aligned Sports Lib 22.0.0 dependencies; it preserves corroborated elapsed chronology
+without replacing recorded active duration. Existing persisted metric reads change only after authorized source-backed
+persistence and normal derived refresh. Source chart/sample reads remain transient, and their 250,000 materialized-sample
+limit still rejects oversized recordings rather than silently clipping them. These corrections add no metric token,
+unit, public field/reason, schema, scope, consent, mutation or Training planning/delivery capability. Source evidence,
+calibration, policies and controls remain private; no contract promotion, registered-app refresh or plugin sync is needed.
+The Suunto JSON/SML timing correction in 22.0.0 likewise uses existing canonical active/elapsed/pause fields.
+Unrecoverable contradictory active duration is absent, not zero. It needs source-backed
+persistence before saved MCP metrics change; source timing evidence stays private. No Training planning or delivery
+read/write contract is affected.
+
+Stats-only event-table merges preserve recorded per-leg TSS/method and transfer saved load evaluations, policies and
+controls through private transactional metadata. Training impact resolves the resulting included-leg total without
+adding the parent score; source workout exclusion becomes exclusion of its copied legs. Originals remain unchanged.
+These merge corrections add no public field, reason, schema, scope, mutation or planning capability. Private source
+snapshots and controls remain excluded from MCP projections; existing frozen-contract checks remain authoritative.
 
 ## Sleep projection
 
@@ -2675,3 +2749,60 @@ Production rollout is deliberately separate from implementation. Deploy Firestor
 and callable Functions, and Hosting rewrites only after reviewing the target Firebase project. Verify discovery metadata,
 OAuth login/consent, scope denial, token refresh/rotation, revocation, query limits, timezone/DST behavior, redaction, and
 account cleanup before enabling clients.
+
+### Sports Lib 21.6.14 consumer compatibility review
+
+Activity JSON name restoration, GPX creator attribution and unknown TCX sport fallback use the existing explicit
+read projections. Child names/notes and creator/device/provider metadata remain private; separately authorized parent
+event title/description reads are unchanged. TSS rejection diagnostics use the existing private
+`calculation-unavailable` token and do not add Training-impact reasons or fields. Recorded numeric queries and modeled
+load keep their existing meanings. There is no schema/digest, tool, scope, consent, mutation, plugin, Training planning
+or provider-delivery change; no contract promotion or MCP deferral is needed. Verify strict outputs and negative
+identity-leakage coverage when adopting the same published package in root and Functions.
+
+### Native Suunto multisport lap correction in Sports Lib 22.0.0
+
+The adopted Sports Lib 22.0.0 correction matches timestamped lap summaries to their sport and source boundary, including
+partial laps emitted at sport changes. It does not promote lap metrics to activity totals, add canonical tokens, or
+change the fixed activity-lap schema, grants, pagination or field masks. Genuine cross-sport laps retain their full
+interval; per-leg stream coverage cannot supply whole-lap averages. Existing saved lap reads change only after a
+coordinated package adoption and authorized source reparse. Source windows/matching evidence remain private. QS's
+deduplicated, labelled lap-table projection is presentation only and does not rewrite existing documents. No new
+Training planning, mutation or provider capability is added.
+
+## EnergySense and endurance streams (pending coordinated release)
+
+Sports Lib keeps `Stamina` and its existing summary tokens unchanged. The new numeric
+`Estimated Sustainable Distance` and `Minimum Estimated Sustainable Distance` classes are discovered from `DataStore`,
+not a parallel catalog. They become available to numeric reads only when a valid canonical value is persisted.
+Qualified EnergySense endurance aliases resolve to Stamina; qualified sustainable-distance aliases resolve to the
+new distance. Bare EnergySense and target-distance wording do not resolve. Provider-facing labels never create keys.
+
+Three additive read tools preserve the frozen registered tools: `list_activity_chart_metrics_v2`,
+`get_activity_chart_data_v2`, and `get_activity_samples_v2`. Their catalog adds `stamina` and `potential_stamina` in
+percent and `estimated_sustainable_distance` in metres to the existing stream choices. The strict output schemas
+bind each metric to its exact unit, reject private neighboring fields, and share a compact schema with a 24 KiB
+combined discovery budget. Legacy catalog, chart/sample schemas and overview capabilities stay frozen; legacy calls
+reject the new metrics before source reads. New clients must discover the additive tools rather than treating the
+legacy overview as an exhaustive list of new stream support.
+
+The existing Activity details grant, identity matching, selected-stream parsing, original-file byte/sample/runtime
+budgets, full-domain chart downsampling, detailed-sample pagination, cursor/source/access checks and cache limits
+apply unchanged. Coordinates still require the dependent location grant; samples never return coordinates, absolute
+timestamps, device/provider metadata, raw field names or original files. Nothing persists streams or calls a provider.
+A catalog entry describes support, not evidence that a particular file contains it. Missing FIT observations stay missing.
+
+Keep zero, null gaps and rebounds. Provider endings and minima are source observations and can differ from the last
+sample or sampled minimum. Sustainable distance is neither travelled distance nor distance remaining to a target;
+never sum estimates across legs/devices or interpret them as Training load. Suunto `EnduranceDistance` is provisionally
+interpreted as metres by explicit integration decision pending provider confirmation; `EnduranceValid` is undocumented.
+
+The built-in Assistant can discover and visualize the additive charts, with location fields stripped in coordinate-free
+chats. Detailed samples remain excluded from its tool allowlist. Activity and cross-domain bundled guidance distinguishes
+the two EnergySense dimensions and discovers runtime capabilities. No scopes, mutations, consent defaults, Firestore
+rules, Training planning/derived formulas, indexes, provider queue lifecycle or monitoring resources change.
+
+Root and Functions now pin published 22.0.0 in both manifests and lockfiles. The app still gates its new distance
+chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
+release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
+promotion, real-profile plugin install or historical reparse is performed by this implementation.

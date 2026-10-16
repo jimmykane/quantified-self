@@ -36,6 +36,16 @@ describe('Timeline note comparisons', () => {
     expect(() => noteComparisonWindow({ ...note, startDate: '2026-02-30' }, 7, now)).toThrow();
     expect(() => noteComparisonWindow({ ...note, startDate: '0001-01-01' }, 7, now)).toThrow('supported calendar');
   });
+  it('compares an ongoing note without ending it and never moves after-days to the latest readings or note end', () => {
+    const ongoing = { ...note, endDate: null }, ended = { ...note, endDate: '2026-10-14' };
+    const ongoingWindow = noteComparisonWindow(ongoing, 7, now), endedWindow = noteComparisonWindow(ended, 7, now);
+    expect(ongoingWindow).toEqual(endedWindow);
+    expect(ongoingWindow.after).toEqual({ startDate: '2026-10-01', endDate: '2026-10-07' });
+    const currentSeries = series();
+    currentSeries.points.push({ ...currentSeries.points[0], calendarDate: '2026-10-14', value: 999 });
+    const result = buildNoteComparisonRows([currentSeries], ongoingWindow, complete)[2];
+    expect(result.status).toBe('comparable'); expect(result.difference).toBe(4); expect(result.after).toBe(64);
+  });
   it('calculates equal-weight daily medians without mutating or using downsampled readings', () => {
     const s = series(); s.points.push(...Array.from({ length: 1000 }, () => ({ ...s.points[0], value: 80 })));
     const result = row([s]);

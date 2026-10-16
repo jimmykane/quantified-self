@@ -5,3 +5,7 @@
 .history-step p { margin: 0; }
 .history-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .history-summary { color: var(--mat-sys-on-surface-variant); margin-block: 8px 20px; }
+.history-explanation { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.stored-history { margin-block: 16px; }
+.stored-history h3 { font: var(--mat-sys-title-small); margin-block: 0 8px; }
+.stored-history p { overflow-wrap: anywhere; }

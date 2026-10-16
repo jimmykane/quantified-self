@@ -245,6 +245,10 @@ export class DataTypeIconComponent {
       case 'WPrime':
         return 'battery_charging_full';
       case DataStamina.type:
+      case 'Estimated Sustainable Distance':
+      case 'Minimum Estimated Sustainable Distance':
+      case 'Estimated Sustainable Distance in miles':
+      case 'Minimum Estimated Sustainable Distance in miles':
       case DataStaminaAvg.type:
       case DataStaminaMin.type:
       case DataStaminaMax.type:

@@ -5,7 +5,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getSwimLapAnalytics, getSwimLapDisplayMetric, getNormalizedSwolf, getSwolfColumnLabel, isRestSwimLap } from './event-swim-analytics.helper';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
-import { formatEventLapMetric, getAverageEventLapMetrics, getSelectedEventLapSummaryMetrics, getDefaultEventLapMetricTypes, getSelectedEventLapMetricTypes, getEventLapMetricOptionGroups, EVENT_LAP_STROKE_COLUMN } from './event-lap-table-columns.helper';
+import { getEventLapMetricStat, formatEventLapMetric, getAverageEventLapMetrics, getSelectedEventLapSummaryMetrics, getDefaultEventLapMetricTypes, getSelectedEventLapMetricTypes, getEventLapMetricOptionGroups, EVENT_LAP_STROKE_COLUMN } from './event-lap-table-columns.helper';
 import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from './event-swim-analytics.helper';
 import { normalizeSwimLength } from './event-swim-length.helper';
 
@@ -27,6 +27,20 @@ function activity(laps: LapInterface[], lengths: unknown[]): ActivityInterface {
 }
 
 describe('swim interval analytics', () => {
+  it('retains distance, strokes and rests without elapsed/native fallback for rejected active timing', () => {
+    const timingValidity = { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 };
+    const native = Object.assign(lap(50, 4000000), { timingValidity });
+    const rest = lap(0, 7200, 0, false);
+    const swim = activity([native, rest], [length(1, { timerTime: null, timingValidity }), length(2),
+      length(3, { lapIndex: 2, type: 'idle', timerTime: 7200, distance: 0 })]);
+    const result = getSwimLapAnalytics(swim);
+    expect(result.get(native)).toMatchObject({ activeDuration: null, activeDistance: 45.72, cadence: null, pace: null, swolf: null });
+    expect(result.get(native)?.strokes?.getValue()).toBe(20);
+    expect(result.get(rest)?.isRest).toBe(true);
+    expect(getEventLapMetricStat(native, DataDuration.type)).toBeNull();
+    expect(getEventLapMetricStat(native, DataDistance.type)?.getValue()).toBe(50);
+    expect(getEventLapMetricStat(rest, DataDuration.type)?.getValue()).toBe(7200);
+  });
   it('adds efficiency defaults without changing an existing saved column layout', () => {
     expect(getDefaultEventLapMetricTypes('swimming')).toEqual(expect.arrayContaining([EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN]));
     expect(getDefaultEventLapMetricTypes('running')).not.toContain(EVENT_LAP_STROKES_COLUMN);

@@ -277,6 +277,33 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(f.structures.w1)).toBe(before);
   });
 
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'keeps %s timed Rest reads canonical, without private native alert metadata', async sport => {
+    const assertPublicKeys = (value: unknown): void => {
+      if (Array.isArray(value)) { value.forEach(assertPublicKeys); return; }
+      if (value === null || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value)) {
+        expect(['alerts', 'countdown', 'guideMappingVersion', 'mappingVersion', 'externalId']).not.toContain(key);
+        assertPublicKeys(child);
+      }
+    };
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [],
+        note: 'Discuss alerts, countdown, guideMappingVersion and externalId with coach.' },
+    ] }] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const read = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(read.workout.structure).toEqual(recipe);
+      expect(read.workout.displaySteps.map(step => step.nodeId)).toEqual(['sets', 'work', 'rest']);
+      assertPublicKeys(read); // Legitimate authored text may name private fields; only property names are excluded.
+    }
+    expect(f.structures.w1).toEqual(recipe);
+  });
+
   it('projects saved ordering and duplicated repeat children in canonical and display order', async () => {
     const f = fixture();
     const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,

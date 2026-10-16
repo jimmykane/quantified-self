@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 178;
+const EXPECTED_FULL_EXPORT_COUNT = 179;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -195,6 +195,10 @@ const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
   ] },
 };
+const DERIVED_SOURCE_TRIGGER_TARGETS = new Set([
+  'onDashboardDerivedMetricsActivityWrite', 'onDashboardDerivedMetricsEventWrite',
+  'onDashboardDerivedMetricsSleepWrite', 'onDashboardDerivedMetricsHealthWrite', 'onTrainingLoadMetadataWrite',
+]);
 const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -230,6 +234,7 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   onDashboardDerivedMetricsActivityWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/activities/{activityId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsEventWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsSleepWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/sleepSessions/{sleepSessionId}', concurrency: 1, maxInstances: 50 },
+  onTrainingLoadMetadataWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}/metaData/trainingLoad', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsHealthWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/healthSourceRecords/{sourceRecordId}', concurrency: 1, maxInstances: 50 },
   processDerivedMetricsTask: { memoryMb: 2048, timeoutSeconds: 540, trigger: 'task', concurrency: 1 },
   processDerivedMetricsIngressTask: { memoryMb: 512, timeoutSeconds: 120, trigger: 'task' },
@@ -336,6 +341,14 @@ function probe(targetArgument: string): void {
   const mcpTarget = runtimeTarget === 'mcpApi';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
+    if (runtimeTarget && DERIVED_SOURCE_TRIGGER_TARGETS.has(runtimeTarget) && (
+      path.includes('/node_modules/@sports-alliance/sports-lib/')
+      || path.includes('/node_modules/@google-cloud/tasks/')
+      || path.includes('/lib/functions/src/training-load/')
+      || path.endsWith('/lib/functions/src/derived-metrics/derived-metrics-source-handler.js')
+      || path.endsWith('/lib/functions/src/derived-metrics/derived-metrics.service.js')
+      || path.endsWith('/lib/functions/src/shared/cloud-tasks.js')
+    )) return true;
     if (
       (path.includes('/node_modules/@genkit-ai/') && !assistantProposalTarget)
       || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)

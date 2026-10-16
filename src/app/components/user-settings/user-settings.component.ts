@@ -47,6 +47,7 @@ import {
 } from '../../helpers/unit-setup-preset.helper';
 import {
   getAppAdvancedChartDataTypes,
+  getChartMetricPickerLabel,
   getAppBasicChartDataTypes,
   getAppCanonicalChartDataTypes,
 } from '../../helpers/app-chart-data-types.helper';
@@ -57,7 +58,7 @@ import {
   normalizeAppFormatLocalePreference,
 } from '../../shared/adapters/app-locale';
 
-type SettingsSectionId = 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
+type SettingsSectionId = 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
 
 interface SettingsSectionOption {
   id: SettingsSectionId;
@@ -73,6 +74,7 @@ interface SettingsSectionOption {
   standalone: false
 })
 export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
+  public readonly getChartMetricPickerLabel = getChartMetricPickerLabel;
 
   public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
   public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;
@@ -90,6 +92,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public readonly sectionOrder: SettingsSectionId[] = [
     'units',
     'dashboard',
+    'training',
     'charts',
     'map',
     'privacy',
@@ -107,6 +110,12 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       label: 'Dashboard',
       description: 'Summary and table behavior',
       icon: 'dashboard_customize',
+    },
+    {
+      id: 'training',
+      label: 'Training load',
+      description: 'Dated sport preferences for fitness and fatigue',
+      icon: 'monitor_heart',
     },
     {
       id: 'charts',
@@ -134,8 +143,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     },
   ];
   public readonly settingsGroups = [
-    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 4) },
-    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(4) },
+    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 5) },
+    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(5) },
   ];
   public readonly brandTextMaxLength = 60;
 

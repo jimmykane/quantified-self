@@ -92,6 +92,25 @@ describe('EventCardSwimLengthsComponent', () => {
     fixture.detectChanges();
   });
 
+  it('shows why timing is unavailable, preserves rows and avoids partial set totals', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ timerTime: null, elapsedTime: 30, endDate: 1778945259000,
+        timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } }),
+      createSwimLength({ index: 2, timerTime: 30 }),
+      createSwimLength({ index: 3, type: 'idle', timerTime: 7200, distance: 0 }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.rows).toHaveLength(3);
+    expect(group.rows[0]).toMatchObject({ Duration: 'Unavailable', Distance: '25 m', 'Swim Pace': '', 'Normalized SWOLF': '' });
+    expect(group.rows[2].isRest).toBe(true);
+    expect(group.summaryRow).toMatchObject({ Duration: '', Distance: '50 m', 'Swim Pace': '', 'Normalized SWOLF': '', 'Average Stroke Rate': '' });
+    group.expanded = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Recorded timing exceeds the workout timeline');
+    expect(fixture.nativeElement.querySelectorAll('mat-row')).toHaveLength(3);
+  });
+
   it.each([6, 10])('renders each recorded 25-yard length of a %s-length interval inline without duplicating set headers', count => {
     const laps = [{}, {}] as LapInterface[];
     const activity = { ...createActivity(Array.from({ length: count }, (_, index) => createSwimLength({

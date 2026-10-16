@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "sleepSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "source.provider", "order": "ASCENDING" },
+        { "fieldPath": "sleepDate", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
     },
@@ -1737,6 +1746,11 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "trainingLoadCache", "fieldPath": "entries", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "controls", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "legs", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "legacyLegs", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "sourceWriteTimes", "indexes": [] },
     {
       "collectionGroup": "trainingCleanupJobs", "fieldPath": "nextAttemptAtMs", "ttl": false,
       "indexes": [

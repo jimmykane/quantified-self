@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, RejectedSwimTiming } from '@shared/swim-timing';
 import {
   ActivityInterface,
   DataActiveLap,
@@ -13,6 +14,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 export interface AppSwimLength {
+  timingValidity?: RejectedSwimTiming;
   index: number;
   lapIndex: number | null;
   startDate: Date;
@@ -110,6 +112,7 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
   }
 
   return {
+    ...(getRejectedSwimTiming(record) ? { timingValidity: getRejectedSwimTiming(record) } : {}),
     index,
     lapIndex: normalizeNumber(getRecordValue(record, 'lapIndex')),
     startDate,

@@ -19,6 +19,7 @@ export class HeaderStatsComponent implements OnChanges {
   @Input() singleValueTypes: string[] = [];
   @Input() unitSettings?: UserUnitSettingsInterface;
   @Input() activityTypes: string[] = [];
+  @Input() metricManufacturer?: string;
   @Input() layout: 'grid' | 'condensed' = 'grid';
   @Input() showDiff = false;
   @Input() diffByType?: Map<string, { display: string; percent: number; color: string }>;
@@ -42,6 +43,7 @@ export class HeaderStatsComponent implements OnChanges {
       || !!changes['stats']
       || !!changes['unitSettings']
       || !!changes['activityTypes']
+      || !!changes['metricManufacturer']
       || !!changes['singleValueTypes'];
 
     if (shouldRebuildStats) {
@@ -75,7 +77,7 @@ export class HeaderStatsComponent implements OnChanges {
   }
 
   getNormalizedStatLabel(stat: DataInterface) {
-    return normalizeUnitDerivedStatLabel(stat);
+    return normalizeUnitDerivedStatLabel(stat, { manufacturer: this.metricManufacturer });
   }
 
   getCompositeUnit(card: HeaderStatCard): string {
@@ -159,7 +161,8 @@ export class HeaderStatsComponent implements OnChanges {
 
     this.displayedStats = enrichedStats;
 
-    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes)
+    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes,
+      { manufacturer: this.metricManufacturer })
       .map((card) => ({
         ...card,
         valueItems: card.valueItems.filter((valueItem) => !this.isInvalidDisplayToken(valueItem.displayValue)),

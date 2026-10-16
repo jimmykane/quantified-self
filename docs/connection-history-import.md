@@ -15,6 +15,29 @@ The checkbox uses the shared capability inventory for its description. Dashboard
 
 Dashboard setup actions read durable service state on every visit. The empty-activity card offers **Connect service** only after confirming that no activity service is connected, including for accounts with dismissed prompts or without Pro. A saved Garmin connection-history run covering Sleep or Health suppresses the generic history prompt from admission onward, even with zero records or failed/skipped steps; progress and retries remain in Services. Activity-only history does not suppress the Sleep/Health offer. The prompt waits for service metadata and preserves the older manual backfill markers. These frontend decisions change no queue, monitoring, MCP, consent or provider API contract.
 
+## Requested range versus stored history
+
+The expanded owner-only History import status labels the selected boundary **Requested range**, never delivered
+coverage. It reads the first retained Sleep and Health date for that provider only when opened, on a changed run/resource
+scope, or on **Refresh stored dates**. Progress-counter updates do not repeat these reads. Each query is date/ID ordered
+and limited to one existing owner-readable document. Earlier imports/accounts can contribute retained records; first
+dates do not assert per-metric availability, gap-free coverage, or delivery by this run. Failed reads are unavailable,
+not empty. Closing, teardown or account/provider/run changes discard pending results. No provider request or write occurs.
+
+Garmin's existing `sleepSyncState/GarminAPI.providerMinBackfillStartMs`, when present, is shown separately as **Last
+reported Garmin Sleep history cutoff**. It is a historical provider response, not authority for a new account or request.
+Health families can have independent minima, and none is inferred from Sleep or the first stored Health record.
+No new cutoff projection, queue state, callable, backfill or migration is added.
+
+Release the added collection-scope `sleepSessions(source.provider ASC, sleepDate ASC, __name__ ASC)` index before the
+frontend. Health reuses its existing provider/date index; Rules already allow these bounded owner reads. No Functions
+or Rules deployment is required for this presentation change. Preparing the index is not authorization to deploy it.
+
+Monitoring decision: **unchanged**, after reviewing the recorded-import (#829), Health/Sleep (#830), and connection-history
+(#847) source bundles. No admission, task/worker outcome, ingestion, retry/lease policy, telemetry label or alert condition
+changes. The UI adds only optional bounded SDK reads; existing downstream and coordinator monitoring remain authoritative.
+MCP/Assistant tools, scopes, consent, exposed data and comparison calculations are unchanged.
+
 ## Suunto saved-route library
 
 The connection option names saved routes and explains that its date picker applies to activity/Sleep/Health history,

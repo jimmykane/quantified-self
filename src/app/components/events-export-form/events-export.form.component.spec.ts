@@ -20,11 +20,15 @@ import {
   ActivityTypes,
   DataActivityTypes,
   DataDistance,
+  DataDuration,
   DataSpeed,
   DataSpeedAvg,
   DataSwimPace,
   DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
+  EventImporterJSON,
+  FileType,
+  Privacy,
   SwimPaceUnits
 } from '@sports-alliance/sports-lib';
 
@@ -199,6 +203,33 @@ describe('EventsExportFormComponent', () => {
     const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
     await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
   });
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])(
+    'exports unavailable duration as an empty cell while keeping zero and canonical durations (%s)', async distanceUnits => {
+      component.user.settings.unitSettings = { ...component.user.settings.unitSettings, distanceUnits };
+      component.exportFromGroup.get('name')?.setValue(true);
+      component.exportFromGroup.get('duration')?.setValue(true);
+      component.events = [undefined, 0, 600, 90000].map((seconds, index) => {
+        const event = EventImporterJSON.getEventFromJSON({
+          name: `Duration-${index}`, startDate: 0, endDate: 90000000, srcFileType: FileType.FIT,
+          description: null, isMerge: false, privacy: Privacy.Private, stats: {}, activities: [],
+        });
+        if (seconds !== undefined) event.setDuration(new DataDuration(seconds));
+        return EventImporterJSON.getEventFromJSON(event.toJSON());
+      });
+
+      await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+
+      const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
+      await expect(readBlobText(blob)).resolves.toBe([
+        'Name,Duration',
+        '"Duration-0",""',
+        `"Duration-1","${new DataDuration(0).getDisplayValue()}"`,
+        `"Duration-2","${new DataDuration(600).getDisplayValue()}"`,
+        `"Duration-3","${new DataDuration(90000).getDisplayValue(true, false).trim()}"`,
+        '',
+      ].join('\r\n'));
+    });
 
   it('uses unambiguous local date keys for CSV dates and the filename', async () => {
     component.exportFromGroup.get('startDate')?.setValue(true);

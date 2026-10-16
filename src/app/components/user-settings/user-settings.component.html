@@ -36,7 +36,7 @@
         <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
         @let sectionTemplates = {
-          dashboard: dashboardSettings,
+          dashboard: dashboardSettings, training: trainingLoadSettings,
           map: mapSettings, charts: chartSettings, units: unitSettings,
           privacy: privacySettings, account: accountSettings
         };
@@ -110,6 +110,14 @@
           </button>
         </footer>
         }
+
+        <ng-template #trainingLoadSettings>
+          <div class="settings-panel-body">
+            @defer (when activeSection === 'training') {
+              <app-training-load-settings [uid]="user.uid"></app-training-load-settings>
+            }
+          </div>
+        </ng-template>
 
         <ng-template #profileSettings>
           <div class="settings-panel-body">
@@ -266,7 +274,7 @@
                 @for (group of dataGroups; track group.name) {
                 <mat-optgroup [label]="group.name">
                   @for (data of group.data; track $index) {
-                  <mat-option [value]="data">{{ data }}</mat-option>
+                  <mat-option [value]="data">{{ getChartMetricPickerLabel(data) }}</mat-option>
                   }
                 </mat-optgroup>
                 }

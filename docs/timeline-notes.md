@@ -107,6 +107,16 @@ daytime HRV and sleep resting/average/minimum HR never substitute for these metr
 series with evidence on both sides; subsequent source choices stay pinned locally across window changes and do not
 rewrite Health or Dashboard preferences. Missing selections stay unavailable rather than switching one side's source.
 
+The landing page and detail method explicitly allow ongoing notes without requiring an end date. Detail period labels
+name the days before the start and the **first** days after it, not recent days of an ongoing period. Ending a note
+never moves these windows. If all three reads complete successfully but no eligible day is present, the detail page
+adds **No eligible readings for these dates** with the earliest stored Sleep session and Health record across all sources.
+`RecordedHistoryStartService` uses at most one server-read document per collection, ordered by recorded date and ID;
+it never loads historical samples or changes comparison inputs. These broad first dates do not assert per-metric
+eligibility, account continuity, gap-free coverage or import completion. Failed metadata reads remain unavailable
+independently of the comparison gates, and late results are fenced by owner and view cancellation. Refresh readings
+rechecks them; the Connections link only navigates to existing import status, never starts provider work.
+
 Each recorded date contributes one median value; the comparison uses the median of those daily values, before any chart
 downsampling. Existing normalized Sleep grouping and Health reference/HRV identity projections remain authoritative.
 At least 5/7, 10/14 or 20/28 recorded days/nights are required **on each side**. A failed/limited read, source conflict,
@@ -155,6 +165,9 @@ Controls reuse Material, app haptics, canonical Sports Lib display/unit settings
 No comparison, summary or preference is persisted. There is no new callable, collection, index, Rule, migration, provider
 integration, score, Training calculation, or MCP/Assistant tool/schema/scope/consent change. Frontend/Hosting release is
 separately approved work; no backend deployment is required for this feature.
+The optional Connections stored-date view shares the read-only first-date service and adds one provider/date Sleep
+index (see [connection history](connection-history-import.md#requested-range-versus-stored-history)); the all-source
+note diagnostic uses existing single-field indexes and does not require that provider-specific index.
 
 ## Workspace annotation loading
 

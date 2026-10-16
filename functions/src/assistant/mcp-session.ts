@@ -51,7 +51,9 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_swim_lengths',
   'get_activity_overview',
   'list_activity_chart_metrics',
+  'list_activity_chart_metrics_v2',
   'get_activity_chart_data',
+  'get_activity_chart_data_v2',
   'get_activity_metrics',
   'rank_activities_by_metric',
   'list_routes',
@@ -356,7 +358,7 @@ function projectAssistantInputSchema(
       };
     }
   }
-  if (activityLocationEnabled || name !== 'get_activity_chart_data') {
+  if (activityLocationEnabled || !['get_activity_chart_data', 'get_activity_chart_data_v2'].includes(name)) {
     return projectedSchema;
   }
   const properties = projectedSchema.properties;
@@ -486,7 +488,12 @@ export async function createAssistantMcpSession(
       return tool ? [{
         name: tool.name as AssistantMcpToolName,
         title: tool.title || tool.name,
-        description: tool.description || tool.title || tool.name,
+        // The public preview describes native MCP approval. In this adapter the
+        // same proposal is confirmed by the user in QS, never by a model tool.
+        description: (tool.description || tool.title || tool.name).replace(
+          /\bapply_(?:training_changes|saved_workout_change)\b/g,
+          'app-owned Apply confirmation in Quantified Self (not a model tool)',
+        ),
         inputSchema: projectAssistantGeminiSchema(name, projectAssistantInputSchema(
           name,
           tool.inputSchema as AssistantMcpToolDefinition['inputSchema'],

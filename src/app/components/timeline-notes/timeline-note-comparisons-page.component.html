@@ -11,6 +11,7 @@
   <section class="comparison-notes" aria-labelledby="saved-comparison-notes-title" [attr.aria-busy]="loading()">
     <h2 id="saved-comparison-notes-title">Choose a note</h2>
     <p class="notes-meta">Each comparison uses matching before-and-after windows and keeps sources separate. Observed differences do not prove cause and effect.</p>
+    <p class="notes-meta">Ongoing notes work too. We compare 7, 14 or 28 days before the note’s start with the first days after it—not the latest days of an ongoing note. You need recorded readings on both sides; connecting a device later may not provide that older history.</p>
     @if (loading()) {
       <mat-progress-bar mode="indeterminate" aria-label="Loading saved notes" />
       <p class="notes-meta" role="status">Loading saved notes…</p>

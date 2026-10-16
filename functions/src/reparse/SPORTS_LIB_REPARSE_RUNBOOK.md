@@ -7,7 +7,110 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
-### Unreleased provider-profile and JSON compatibility corrections
+### EnergySense support in Sports Lib 22.0.0
+
+<a id="pending-energysense-library-candidate"></a>
+
+Canonical Stamina and Potential Stamina keys remain compatible; presentation naming needs no data migration or duplicate
+stat. The new Estimated Sustainable Distance and Minimum Estimated Sustainable Distance keys require a supported
+original JSON/SML reparse to persist historical source observations. Chart hydration can read those observations on
+demand without storing streams. FIT-only originals cannot recreate fields they never recorded.
+
+Root and Functions now pin published Sports Lib 22.0.0 with FIT Parser 6.2.2. Use only the existing authorized
+original-file reparse lifecycle to update historical observations. Regeneration seeds freshly parsed Stamina/endurance endings and minima before deriving missing
+statistics; it never carries stale persisted observations over the new parse. Preserve source zero, per-leg identity,
+source-minimum precedence, sanitized writes and latest user edits/Training controls. Repeat reparse is idempotent and
+must not add renamed aliases or streams to Firestore. Derived Training formulas and snapshots need no schema bump for
+these metrics alone. No automatic backfill or production campaign is authorized.
+
+Suunto EnduranceDistance is assumed to be metres pending provider confirmation. Its Cur summary describes an ending
+estimate, not necessarily the final sample; its Min can be lower than the sampled minimum. EnduranceValid remains
+undocumented and does not erase populated observations. No average, maximum, multisport sum or FIT mapping is invented.
+
+### Sports Lib 21.6.11 reserved FIT header compatibility
+
+Sports Lib 21.6.11 introduced FIT Parser 6.2.2 compatibility, retained by the current root/Functions pin. Ordinary activity decoding can again read
+existing Bryton and Magene originals whose normal record headers set reserved bit 4. Compatibility requires complete
+message definitions and payloads within the declared data section. Strict/raw readers retain their rejection policy;
+other invalid data-header bits and checksum policy are unchanged. Imported TSS and existing Training formulas retain
+their meaning. Successfully parsed files need no migration or rebuild solely for this correction.
+
+Retry a previously rejected retained original through the existing authorized upload/reparse lifecycle after deployment.
+Do not patch stored file bytes, bypass the normal writer, or turn this dependency update into a global repair campaign.
+Package publication and dependency adoption do not deploy QS, enable scanners, or authorize production reparsing.
+There are no new public metric tokens, schemas, MCP fields/scopes, write paths, or monitoring lifecycle changes.
+
+### Sports Lib 21.6.12 source evidence and JSON compatibility
+
+The coordinated root/Functions update retains session-scoped FIT HR/FTP calibration, complementary sensor records,
+pool HR dropout boundaries, multi-track TCX timing and evidence-backed FIT session bounds when duration summaries
+are missing. Pool-length dates and generated readings stay within their owning swim/lap and applicable timer interval;
+recorded streams remain intact. The isolated native event/activity/lap JSON correction safely skips legacy null or
+non-finite scalar summaries and omits non-finite summary exports, retaining finite zero, imported scores and raw stream
+gaps. It does not adopt the separate unreleased activity catalog described below.
+
+JSON reads need no original-file reparse. Apply historical parser and timing corrections only through the authorized
+original-file lifecycle and existing derived refresh, including QS's parsed-distance preservation described below.
+No new fields, schemas, storage operations, MCP capabilities, saved-route reparse or automatic campaign are required.
+Package adoption does not deploy QS or authorize production rewrites.
+
+### Sports Lib 21.6.13 source classification, HR and distance corrections
+
+Keep root and Functions on the same released version. This parser update rejects explicit non-workout FIT file types,
+including daily monitoring, settings and course files, instead of generating Unknown Sport workouts. Completed Wahoo
+and other `activity_summary` files remain supported when they contain an explicit session, including summaries with no
+sensor records or with imported TSS zero. Sessionless summary files cannot synthesize workouts from timestamped events.
+Ordinary activity files and legacy files without a file type retain compatibility. Reparse now classifies confirmed
+non-activity originals as explicit skips, as described below, while retaining existing events, activities, controls and
+originals. Unclassified parser failures retain the existing error handling.
+Do not delete those historical records or count a skip as an automatic volume repair. No Health import is added.
+
+COROS GPX direct `hr` in the ClueTrust GPXDATA 1/0 namespace restores the existing Heart Rate stream, preserving zero,
+namespace independence and legacy heartrate/Garmin precedence. Unrelated, blank/non-finite or ambiguous readings are
+ignored. Restoring samples does not invent HR calibration and therefore need not make HR TSS available.
+
+Mixed-sport Suunto JSON/SML no longer copies unscoped header SpeedZones boundaries onto every leg. Single-sport header
+thresholds and applicable leg-local thresholds remain eligible; conflicting sport identifiers cannot donate calibration.
+Imported TSS, valid HR/MET fallback and native JSON roundtrip behavior retain their established contracts.
+
+FIT pool-distance recovery avoids adding earlier fallback length distance to a whole-session total repeated only on
+the final active lap. Recovery requires complete, uniquely owned positive pool lengths with consistent counts and
+nonoverlapping active intervals across multiple active laps. Prefer a complete monotonic zero-to-total recorded counter
+covering those lengths, including when a session summary disagrees. Otherwise use complete length geometry only if the
+independent session summary agrees. Incomplete or conflicting evidence does not qualify; consistent lap distances and
+single-lap behavior remain unchanged. See the Training guide for the precise source-evidence contract.
+
+Use authorized original-file reparse/regeneration and normal derived refresh for historical corrections. A Training
+rebuild cannot recover lost source samples or threshold ownership. Package publication/dependency adoption starts no
+campaign, deploys nothing, and adds no storage queries, provider calls, public schemas or MCP capabilities.
+Monitoring review: provider parse rejections retain existing import failure/DLQ telemetry. Confirmed historical
+non-activity sources use the INFO skip path below; genuine reparse failures retain failure logs and retry handling.
+The recorded-import alert bundle explicitly does not cover Sports Lib reprocessing. No monitoring configuration is
+changed or applied by this update.
+
+### Sports Lib 21.6.14 names, creator attribution and fallback diagnostics
+
+The earlier adoption of published 21.6.14 used matching npm integrity. All 1,349 package files matched the verified
+candidate, and 209 focused version, parser, reparse and private-output checks pass against the published installation.
+Native Activity JSON restores saved child names independently
+of the parent event title and creator/device name. Stored names need no source reparse; discarded names require source
+evidence. GPX activity/route creators retain their exporter name without treating the schema version as a manufacturer
+or device software version. Unknown TCX sports resolve to `Unknown Sport` instead of undefined; recognized sport and
+indoor detection behavior remains intact. Persisted attribution/type corrections require the existing targeted original-
+file lifecycle and normal summaries; ambiguous leg matching keeps existing controls and requires review.
+
+TSS evaluation distinguishes missing required inputs from a calculation that cannot produce a valid result. The latter
+uses the existing private `calculation-unavailable` reason, preserving formulas, guards, imported scores, valid zero,
+method eligibility and fallback order. Refresh old reasons through authorized original-file reparse when parsed inputs
+are no longer available. No derived schema, numeric metric, MCP scope/field or planning/delivery capability changes.
+
+The isolated route JSON correction is also included: omit non-finite scalar exports, skip legacy null/non-finite
+summaries on restoration, and aggregate children only when no valid file summary remains. Valid zero, partial summary
+precedence and geometry validation remain intact. This read compatibility needs no original or route reparse. Correcting
+GPX creator provenance separately requires source evidence. Package adoption does not deploy QS, enable scanners,
+start a production campaign or authorize direct data edits.
+
+### Unreleased provider-profile and catalog corrections
 
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
 English `Breathwork` or French `Ex. respiration` profile. It adds 14 Polar FIT display aliases and honors explicit Polar
@@ -24,18 +127,171 @@ Retained original files or specific saved provider profiles are required to corr
 existing targeted reparse lifecycle. Regenerate affected event summaries, activity-type aggregates, applicable
 existing durability evidence and Training snapshots through normal sanitized ingress. Saved routes need no source reparse.
 
-Event/activity/lap JSON reads now skip legacy null/non-finite scalar stats; finite zero/negative values, provider TSS
-and method, structured stats and stream gaps remain intact. Summary exports omit non-finite scalar numbers while
-runtime zero-speed pace can remain infinite. This compatibility read does not require an original file or a reparse.
+The event/activity/lap JSON subset of these compatibility changes is included in Sports Lib 21.6.12. Those reads skip
+legacy null/non-finite scalar stats; finite zero/negative values, provider TSS and method, structured stats and stream
+gaps remain intact. Summary exports omit non-finite scalar numbers while runtime zero-speed pace can remain infinite.
+This compatibility read does not require an original file or a reparse.
 Any explicitly requested persistence rewrite must still use the existing sanitized writer, never direct Firestore edits.
-Route and route-file JSON apply the same invalid-scalar summary policy. When no valid route-file summaries remain,
-existing aggregation regenerates them from the child routes. Saved routes need no source reparse for this read correction.
-TSS preservation remains true/default = retain finite provider score; false = discard and use existing calculation policy.
+The isolated route and route-file JSON correction is included in 21.6.14 as described above. Catalog/profile additions
+remain separate and unreleased; adopting the JSON subset does not adopt those classifications.
+Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
+or the deprecated preservation flag. QS's explicit internal regeneration removal is documented separately below.
 
 There are no new numeric metric tokens/units, formulas, derived schemas, planning/delivery capabilities, registered
 MCP fields/scopes, queue lifecycle, write paths or monitoring changes. Dynamic activity discovery uses existing fields.
 Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
-this task does not adopt a package, deploy, enable scanners, start reparsing or change FIT Parser source.
+the separate catalog/profile correction remains unadopted. It does not deploy, enable scanners, start reparsing or change
+FIT Parser source.
+
+### Sports Lib 21.6.1 file-calibrated Training load
+
+The coordinated root and Functions dependency is published Sports Lib 22.0.0, with FIT Parser 6.2.2. It retains the file-calibrated
+load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
+HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
+FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power
+coverage. Deployment and production reparse each require separate approval.
+
+New source-file imports use the corrected calculations. Historical calculated power scores without independent FTP
+may fall back or become unavailable; calculated HR scores exclude explicit timer pauses, including gaps spanning a
+pause. Regenerate mode retains file calibration and timer events through repeated calculation. Imported scores remain
+authoritative by default. Correct historical values only through the existing original-file reparse lifecycle, then
+refresh derived Training summaries. Saved routes and schemas need no migration. The target continues to follow the
+installed runtime version; this dependency update does not enable either automatic scanner or launch a campaign.
+
+Event-table merging is a distinct stats-only path: it preserves recorded leg TSS/method and copies the source's saved
+Training load evaluations, applied policies and controls without reparsing originals. Pending/stale or unresolved
+source metadata blocks the merge for review. Preparation/finalization use stable activity IDs, source fingerprints,
+concurrency/deletion fences and the existing private load cache. Source workouts are not altered; users can exclude a
+duplicate representation themselves. Completed older merges are not rewritten automatically. Original-file reparse
+can recover file-based candidates, but owners must review their controls when earlier merges lost source snapshots.
+No production repair, scanner or new recurring rebuild read is enabled by this correction.
+
+Import/reparse and merge preparation reserve a private `sourceWriteId`; source writes, finalization, reparse cleanup
+and completion metadata check it within their Firestore transactions before writing. An older attempt cannot clear a newer pending import or replace its multisport leg set merely
+because the parent totals still match. A superseded attempt fails through the existing persistence/retry path; the
+current attempt can finish normally. Retrying preparation preserves frozen legacy identities, dated policies and owner
+controls while reserving a new identifier. Repeating the same successful finalizer remains idempotent. The marker is
+server-owned. Each guarded source/completion transaction adds one metadata read; warm full-rebuild reads and normal
+write counts are unchanged. Cleanup also queries current event children in guarded pages of at most 400 documents,
+including retained legs, so a stale pre-parse snapshot cannot leave partial-attempt children behind. A page runs even
+when the original snapshot predicted no deletions; budget its child reads and deletion/attempt guards per reparse.
+Original-file uploads finish before source-document writes start. No public fields,
+scanner changes or production operations are introduced.
+
+Sports Lib 21.6.10 further corrects unsupported HR coverage, explicit reevaluation of calculated NP, Suunto event-array
+selection and validated zero active time, multisport zone-duration ownership, FIT canonical pool-length units and
+source-backed lap/session timing. Apply parser corrections only through the existing original-file lifecycle for
+historical records; ordinary JSON cannot restore raw source evidence. Public metric/schema/MCP shapes stay unchanged.
+See the Training guide for precise input eligibility and the narrow Suunto pool-unit compatibility rule.
+
+Running pace corrections require original-file reparse to apply grade cost, zero-speed, active-duration and complete
+window semantics. Pool HR preservation and unambiguous multisport initial timer-state recovery likewise require the
+original source file. Regeneration keeps the same parsed instance so private recorded-HR gap provenance and source
+calibration remain available. Existing recorded values are not rewritten by a dependency update alone.
+
+Complete eligible recorded zero-power windows can establish POWER TSS 0 with independent FTP and duration. A zero NP
+summary or zeros inserted for missing FIT/TCX/GPX power fields do not establish this. Private source evidence stays attached
+to the same parsed instance through regeneration; ordinary JSON cannot restore it.
+
+Sports Lib 21.6.9 extends recorded-power coverage to positive calculated NP windows: missing fields padded with
+zeros cannot create a usable window or suppress an eligible HR fallback. Its FIT corrections assign shared-boundary
+records to the next leg, match zone durations by unique session message index, and derive a missing/zero timer summary
+only from an unambiguous start-anchored timeline consistent with session bounds. Positive timer summaries retain
+precedence; a validated all-paused zero cannot fall back to elapsed time during regeneration. Suunto JSON/SML pause
+and resume events now reach the existing timer-aware calculations. See the Training guide for exact eligibility.
+
+Apply these five corrections to historical activities through original-file reparse and normal derived refresh;
+a Training rebuild or reconstruction from stored Activity JSON cannot restore discarded source evidence. Keep the
+same parsed instances through regeneration and metadata finalization. Saved load controls, dated policies, imported
+scores and strict leg/deletion checks remain unchanged. No saved-route reparse or schema migration is required.
+Monitoring impact is unchanged: no provider labels, commit outcomes, queue stages, retries, dispatch limits or heavy
+routing change. Existing provider-import metrics and reparse diagnostics remain applicable; this release neither
+enables scanners nor provisions monitoring resources.
+
+Pool FIT imports retain final boundary/rest lengths, support generated streams from one lap while preserving its
+recorded streams, and repair invalid summary end times from valid file durations before assigning lengths. Rest
+lengths do not add distance/speed; ambiguous ownership cannot supply a complete generated distance total. Source-backed
+date corrections follow existing strict leg reconciliation, preserving unmatched controls for owner review.
+
+Regenerate mode retains every finite positive canonical distance from the fresh source parse. Monotonic counters
+and moving GPS do not prove complete coverage and no longer overwrite that total. Stalled, truncated, late-starting,
+reset or conflicting counters remain recorded streams, not a second source-selection rule in QS. Sports Lib owns
+source corrections; QS neither chooses the larger distance nor sums counter segments. Missing/zero totals still use
+normal generation. Derived speed/pace and event volume use preserved leg totals once. Apply historical corrections
+through original-file regeneration and the existing derived refresh; old stored statistics never supply the value.
+This in-memory change adds no database operations, provider requests or public MCP capability.
+
+The multi-day chronology correction is included in the aligned 22.0.0 dependencies. It requires a single session, monotonic session-owned endpoint records and complete consistent
+timer events from one timer group whose active duration agrees with the recorded summary within FIT timestamp
+quantization. It preserves the full elapsed span and later records while retaining active timer duration and existing
+maximum-duration protection. Conflicting chronology keeps the existing corrupt-date handling. After coordinated
+package adoption, historical lost records require the retained original and normal source-backed reparse/derived
+refresh. Existing strict leg matching, owner controls and deletion fences remain authoritative. No release, deployment,
+scanner activation or production reparse is authorized by preparing this correction.
+
+Pool swims follow the same parsed-total rule; the former QS-only lap/length gate has been removed. FIT evidence
+selection and corroborated corrections remain in Sports Lib. No saved-route reparse is needed.
+
+The Suunto JSON/SML correction included in 22.0.0 separates window active time from elapsed time and rejects
+negative pauses. Independent timer/header evidence may recover contradictory duration; otherwise active/timer/pause
+and duration-dependent load/durability remain unavailable. Ambiguous leg windows cannot borrow whole-workout timing. Native JSON
+preserves missing values but not private source evidence. After coordinated package adoption, historical correction
+requires original-file reparse, the same parsed instances through candidate preparation, strict identity/control
+reconciliation and ordinary derived refresh. Root and Functions use the same published 22.0.0 package.
+Source evidence remains private; this introduces no metric/schema/MCP change or production campaign.
+
+New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
+Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
+maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
+Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
+
+Regenerate mode keeps the freshly parsed FTP, timing and HR/MET inputs available before rebuilding derived statistics
+and refreshing TSS candidates. It does not copy calibration from the old stored activity. Imported scores, including
+zero and methodless imports, retain their provenance by default; unavailable calculated scores are removed. An internal
+explicit `preserveImportedTss: false` removes score and method at the QS boundary because sports-lib 21.6.1 does not
+honor that flag alone. Recorded TSS and private evaluations must agree before EventWriter persists them. See
+`docs/training-workspace.md` for the protected inputs and recalculation contract. This uses the existing transform,
+persistence and failure stages without additional database calls or changes to monitoring, retries or queues.
+
+Historical recordings keep their current recorded values until source-backed reparse. Numeric overrides and exclusions
+work immediately; HR/MET selection needs cached evaluations. Before overwriting any event/activity document, reparse
+durably freezes legacy identities in private server-owned metadata. Retries retain this evidence even when IDs are
+reused or a previous attempt wrote only part of the source. Reparse then refreshes calculated candidates after
+sanitized event/activity writes and before stale child removal. Its transaction preserves the latest controls and
+original dated policy snapshot, checks source fingerprints and deletion guards, and uses strict leg identity matching
+without TSS. Ambiguous matches or missing old identity evidence retain controls and leave modeled load unavailable
+until owner reassociation or reset. Identity preparation does not advance the load timestamp. Clearing a pending
+import advances load freshness and requests a targeted load rebuild even when the source is identical, because an
+intermediate build may have observed the pending state. Repeated finalization without pending state or changed
+inputs is idempotent. Changed load metadata invalidates affected Training snapshots.
+
+Keep automatic event and route scanners disabled. This change needs no saved-route reparse. Use the existing targeted
+original-file action for an approved historical correction; do not bulk-rewrite recorded scores or distribute parent
+TSS across multisport legs. Validate the installed runtime/target version before any separately approved campaign.
+
+### Prepared pool timing validity correction (not released)
+
+Adopting the candidate parser classifies only source-proven impossible lap/length timing in complete single-session
+pool FIT files. It adds optional `timingValidity` JSON metadata while withholding contradicted timer/elapsed fields.
+Rest/length rows, ownership and distance/strokes remain; valid elapsed time cannot substitute for rejected active time.
+Native JSON and activity write sanitization retain the marker, and repeated regeneration cannot restore rejected time.
+Pool durability becomes unavailable for affected active lengths rather than reporting improved coverage. Moving time
+previously summed from corrupt length timers can instead use valid recorded samples; session totals and imported TSS
+retain precedence. Routes, multisession files, incomplete evidence and valid long rests retain existing behavior.
+
+Existing activities need original-file reparse after a released package is adopted in both root and Functions. Training
+refresh alone cannot classify legacy timing. Use the normal version-gated queue and derived invalidation; do not start a
+campaign, change its target, or update the aligned package versions as part of preparing this patch. MCP/frontend
+readers tolerate old documents and project missing timing through their existing contracts. See the Training guide's
+“Contradicted recorded pool timing” section for consumer behavior and eligibility.
+
+The accompanying duration declaration correction makes `getDuration()`, `getTimer()`, `getMovingTime()` and
+`getPause()` explicitly return their Data object or `undefined` on events, activities and laps. This matches their
+existing runtime behavior; it does not introduce a new persisted shape or require a reparse by itself. Keep guarded
+reads in displays, exports, fingerprints and calculations, retaining measured zero. Do not substitute dates, elapsed
+time or zero for rejected active time. Swim-length timing fields and their resolver retain the separate `null` contract.
+Verify consumers against the locally packed candidate before release, with root/Functions dependencies still aligned
+to the published version. This typing-only integration adds no Training/MCP metric, scope, schema or mutation.
 
 ### Sports Lib 21.5.0 recorded swim distance display
 
@@ -339,7 +595,68 @@ TTL:
 Common outcomes:
 - `status=completed`
 - `status=skipped, reason=NO_ORIGINAL_FILES`
+- `status=skipped, reason=MONITORING_SOURCE | ROUTE_SOURCE | NON_ACTIVITY_SOURCE | MIXED_SOURCES_REQUIRING_REVIEW`
 - `status=failed, reason=REPARSE_FAILED`
+
+### Non-activity originals retained as events
+
+The source parser first attempts the ordinary activity import. Only its exact non-activity rejection is considered
+for classification. FIT classification requires a complete strict raw decode (including CRC), consistent explicit
+file types and no activity/session messages. Monitoring and other non-activity types also require no laps. FIT courses
+may contain legitimate lap summaries; both FIT courses and GPX route-only sources must pass the route importer with
+usable geometry. Missing types, activity/activity-summary types, conflicting declarations, broken geometry, corrupted
+files and unrelated failures do not become skips. No classification is inferred from Unknown Sport, a title or zero TSS.
+
+Per-event outcomes distinguish `MONITORING_SOURCE`, `ROUTE_SOURCE`, `NON_ACTIVITY_SOURCE` and
+`MIXED_SOURCES_REQUIRING_REVIEW`, all with `status=skipped`. Mixed sets include parsed activities plus classified
+non-activity sources or different non-activity kinds. No subset is persisted. Any unclassified/download failure keeps
+the overall attempt failed/retryable according to existing rules; it cannot be hidden behind a classified sibling.
+
+The existing owner-only, server-written `metaData/reparseStatus` holds `nonActivitySources`: assessment schema version,
+original-reference fingerprint, and per-source kind, preferred/resolved bucket/path, raw-byte SHA-256/MD5 and verified Storage
+generation. A post-download metadata check must match the raw-byte MD5 before recording its generation. Every status
+transaction rechecks the account deletion guard and event existence; a classified skip also verifies current original
+references before committing. Missing events use the lifecycle-skip path so failure handling cannot recreate metadata.
+It never updates event/activity content, processing version, volume or Training load. No new metadata collection exists.
+
+Scheduler and executing CLI reuse a saved assessment across library versions only while original references and live
+Storage generations/checksums match. The scheduler reuses its existing status read; only previously classified source
+sets incur Storage metadata lookups. Ordinary reparses incur no extra Storage metadata reads. Changed references or
+replaced objects make the source eligible again, including completed skip jobs for the same target. A newly available
+preferred-bucket object also invalidates an assessment made from a fallback bucket. A missing object falls through to
+normal reparse/download handling; an unavailable or denied metadata lookup propagates for retry instead of being
+treated as proof of a changed source. In particular, an interrupted heavy worker retains its committed skip while
+Storage is unavailable, rather than writing a false heavy-timeout failure. Bump the assessment schema if a future importer changes which file
+types count as activities. Old terminal failures without an assessment retain their established version-specific
+suppression until a new target or explicit reprocessing; no speculative classification is created from an old error.
+
+A handled task remains `completed` with `skipReason`; this means task handling completed, not that an activity was
+rewritten. Its event status remains `skipped`, stale error/terminal markers are cleared, and it emits INFO logs.
+Reopening a completed skip increments the job's `sourceRetryGeneration` and uses a `source-N` task-name suffix, avoiding
+the completed task's retained name. That generation is saved before enqueue and reused after enqueue failures and
+normal-to-heavy routing; another completed skip followed by another replacement advances it again. Job identity,
+queue limits, task payload and ordinary first-dispatch names remain unchanged.
+An interrupted worker recognizes a skip committed for the same target after that attempt started, comparing full
+Firestore server timestamps. It completes that handled attempt even when originals have since changed; the scheduler
+then invalidates the assessment and queues the replacement. Without that commit evidence it checks an unchanged
+assessment before applying the existing heavy-timeout guard; older/different-target skips with changed sources cannot
+bypass the guard. CLI `skippedNonActivitySources` is separate from completed/failed counts;
+dry-run remains metadata-only and does not discover new classifications by downloading originals. Interactive event
+reprocessing reports a clear skip, keeps the saved activity and suggests downloading/uploading a course from Routes.
+The callable response excludes the private assessment. Saved-route reprocessing itself is unchanged.
+
+Cleanup is separate: first produce a private, live-verified inventory, distinguish monitoring from courses and mixed
+sources, and obtain explicit approval for exact deletions. Courses can contain useful navigation data and must not be
+included in a monitoring cleanup. No deletion, migration to Routes/Health, campaign, or deployment is authorized here.
+
+Monitoring coverage decision: **unchanged**. Reviewed `tools/import-monitoring/definitions.mjs` filters only
+`[ActivityImport]` events and `processWorkoutTask`, not these workers. Existing reparse task acknowledgements,
+per-event statuses and Admin Queue Monitor remain the operational surface; skips no longer inflate failed jobs/error
+logs, and real failure signals remain. Replacement task suffixes preserve the same queues and acknowledgement contract;
+lookup outages propagate through existing failure/retry diagnostics rather than becoming terminal heavy failures.
+No new alerts or low-cardinality metric labels are needed for this outcome
+classification, and no production monitoring configuration was applied. MCP impact: no tool, metric, schema, scope,
+consent, planning/delivery action or private output changes. Help explains the interactive skip and route recovery.
 
 ### Processing metadata doc
 - Path: `users/{uid}/events/{eventId}/metaData/processing`
@@ -353,6 +670,21 @@ Expected fields:
 Notes:
 - this doc is user-writable by product decision
 - users can influence only their own eligibility by modifying it
+
+## Source-summary and round-trip corrections
+
+Both `reimport` and `regenerate` preserve finite nonnegative fresh parent distance/energy observations that differ from
+the available child totals. Capture occurs before edit carryover, only for one unmerged parsed source. Restoration
+requires the same source legs, sport types and time windows. Old stored stats are never used, matching child sums remain
+free to regenerate, and parent-only observations are never distributed to legs. Multi-file and explicitly merged events
+continue to rebuild summaries from their children. This changes no child TSS, Training policy or load metadata, and
+adds no stored fields or reads. Existing readers of recorded parent totals see the preserved source observations.
+
+Sports Lib 22.0.0 also preserves valid native JSON lap IDs and independently sums complete multisport
+`Timer time`/`Elapsed time` values. Existing child timing can be aggregated locally; recovering previously
+lost source-only parent observations or already-renumbered lap IDs requires retained originals through the normal
+reparse lifecycle. Root and Functions now use that same published release. No production
+reparse or scanner enablement is authorized by these fixes.
 
 ## Parse + Write Rules
 - Supported source types: `fit`, `gpx`, `tcx`, `json`, `sml` (also `.gz` variants)
@@ -531,3 +863,15 @@ Local npm commands in `functions/package.json`:
 - `reparse-sports-lib-events`
 - `backfill-sports-lib-processing-code`
 - `backfill-event-processing-entity`
+
+## Suunto multisport lap matching in Sports Lib 22.0.0
+
+The 22.0.0 correction replaces ordinal native Suunto multisport lap-summary matching with timestamp/sport evidence,
+retains partial summaries at sport changes and stops recovering lap active duration from an unverified global span.
+Source-global laps remain intact and appear once on their ending leg. One leg's streams must not generate full-lap
+averages or reinterpret sport-specific metrics for a cross-leg lap. Public model shape and canonical tokens stay
+compatible. Historical incorrect lap statistics require retained-original parsing after coordinated root/Functions
+package adoption; native JSON alone cannot recover the correct summary association. Existing controls, applied
+policies, leg identities, recorded event totals and normal sanitization/version/deletion guards remain authoritative.
+The runtime target follows the adopted package version. This integration does not enable a campaign or require
+saved-route reparsing. QS deployment and production reparse remain separate approvals.

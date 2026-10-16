@@ -69,6 +69,11 @@
 
 <ng-template #swimLengthTable let-group>
       <section class="table-container">
+        @for (row of group.rows; track $index) {
+          @if (row.timingExplanation) {
+            <p class="mat-body-small">Length {{ row['#'] }}: {{ row.timingExplanation }}</p>
+          }
+        }
         <table mat-table [dataSource]="group.rows">
           @for (column of group.columns; track column.name) {
           <ng-container [matColumnDef]="column.name" [sticky]="column.sticky">

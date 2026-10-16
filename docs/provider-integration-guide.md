@@ -47,6 +47,13 @@ Treat this table as a high-level orientation, not a partner API specification. T
 
 Provider overview cards must name combined history imports consistently with their focused tools. COROS uses **Sleep & daily Health history** and **Import history** because its daily-data replay always queues both domains. Garmin and Suunto use their corresponding combined labels while Health is available, with availability-aware fallback wording where those providers support a Sleep-only path.
 
+Connection-history status distinguishes **Requested range** from the first retained Sleep/Health dates read for the
+selected provider. These optional bounded owner reads do not establish gap-free coverage or a particular run's delivery.
+Garmin's saved Sleep cutoff is labelled **Last reported** and never reused as a Health-family or replacement-account limit.
+See [requested versus stored history](connection-history-import.md#requested-range-versus-stored-history) for the single
+provider/date Sleep index and frontend-only release boundary. Monitoring is **unchanged** across #829/#830/#847: no
+queue lifecycle, provider API, retry policy or telemetry contract changes. MCP and Training contracts are unaffected.
+
 Dashboard onboarding must recognize durable connections and history requests when users return. Empty activity data does not imply an unconnected service: offer connection setup only after the owner-scoped connection state confirms none are connected. A saved Garmin connection-history run containing Sleep or Health replaces the generic import offer, including queued, failed and skipped runs; direct progress/retry remains in Services. Keep legacy manual-history markers and wait for metadata before deciding. This presentation change leaves the existing coordinator and downstream monitoring bundles, queue lifecycle and MCP contracts unchanged.
 
 All four providers' manual activity-history tools honor active manual leases and show **Import already running** for `already-exists` conflicts with either a manual lease or an automatic recent-history reservation. Preserve that typed error as HTTP 409 at callable boundaries; do not wrap expected contention into HTTP 500 or log it as an ERROR. Genuine provider/ingestion failures keep their existing handling. See [shared history operations](connection-history-import.md#shared-operations) for the unchanged lifecycle/monitoring boundaries and backend-first release order.
@@ -523,14 +530,14 @@ metadata. Monitoring is **covered/unchanged** by provider/event filters; no dash
 See [app preview and verification](training-workspace.md#suunto-app-workout-preview-v13) for the impact review and
 separately approved release/app verification still required.
 
-Pool/open-water swimming now selects private v15 for bounded, configurable Work/Rest fields. Selected planned
+Pool/open-water swimming without timed Rest selects private v15 for bounded, configurable Work/Rest fields. Selected planned
 interval numbers use the heading (13-character limit), not a text metric slot. Previous/next prescription distances
 share one compact, explicitly planned text field without an ending instruction; Suunto may crop this text beside
 native numbers. A shared allocator drives delivery and the app's per-step Included/Heading/Omitted report, with
 Rest listed first and no watch-visibility promise. Native stroke count remains separate from stroke rate.
 Short generated timed-Rest popups (at most 20 seconds, no authored note)
 are omitted to avoid overlapping the next Work alert, without changing timing/laps or promising forced haptics.
-All other sports retain exactly v13. Canonical owner config preferences become immutable private operation/proof
+Other sports without timed Rest retain exactly v13. Canonical owner config preferences become immutable private operation/proof
 snapshots; frozen v14 and earlier recovery precedes an eligible same-ID update under unchanged consent/authority/Pro gates.
 The existing scheduler handles saved display preferences; no new queue, Rules or index is needed. Monitoring is
 **covered/unchanged**; MCP Training schemas/read coverage stay unchanged and reject these private fields.
@@ -539,6 +546,19 @@ updates remain undocumented capabilities, not guessed upload fields. See the sin
 [swimming screen contract](training-workspace.md#configurable-swimming-guide-screens-v14) and
 [v15 allocation/recovery verification](training-workspace.md#swimming-field-allocation-and-headings-v15).
 This change still needs separately approved Functions/frontend deployment and physical watch verification.
+
+Recipes with timed Rest now select private **v16**, adding a native `default` alert with a `stepDuration` condition
+and `countdown: { type: "standard" }` at the exact Rest duration. This applies across supported sports, including
+swimming and Gym set rests, by default without a QS toggle. Manual/distance Rest and active Recovery are excluded.
+Timing, targets, lap/transition graphs and screens remain unchanged apart from bounded presentation fallback needed
+to fit alert bytes. Frozen v15/v13 recovery still proves original acceptance before an eligible same-ID update;
+alert readback is strict, pinning/consent/completed-copy fences remain intact, and there is no automatic recreation.
+An authorized partner-API QA upload/readback and owner watch test confirmed countdown sound/vibration, **not** a
+long final tone or exact five-second sequence. Quiet/tones-off behavior remains unverified. This extension was
+discovered in public unofficial client code, not the published partner schema; no dependency or internal endpoint
+is added. Monitoring is covered/unchanged and MCP has no wire impact. See
+[v16 evidence, bounds and verification](training-workspace.md#native-timed-rest-countdown-alerts-v16).
+The application change still requires a separately approved Functions deployment; no frontend settings change is needed.
 
 An explicit **Send a fresh Guide** review can reserve a new Suunto external identity for the same eligible QS workout,
 without changing or deleting the earlier Guide. This is not absence detection or automatic repair: hidden Guides may
@@ -1272,8 +1292,24 @@ Activity imports, manual activity uploads, comparisons, merges, and manual/provi
 Cloud Storage and supplies the base64 checksum in `metadata.crc32c` with `validation: 'crc32c'`.
 Cloud Storage checks the supplied checksum before committing the object; the SDK also validates the
 returned checksum. This explicit metadata avoids depending on an SDK's default checksum-header behavior.
-Already compressed files are hashed and retained as compressed bytes. Object paths, generation
-tracking, original-file provenance, and deletion/connection guards remain unchanged.
+Already compressed files are hashed and retained as compressed bytes. Generation tracking,
+original-file provenance, and deletion/connection guards remain in force.
+
+Provider activity imports, manual activity uploads and merges additionally isolate distinct original bytes under
+`users/{uid}/events/{eventId}/sources/{sha256}/original[_index].{extension}`. The shared EventWriter saves the adapter's
+actual path in both original-file metadata fields. An older upload or staged promotion finishing late cannot overwrite
+a newer revision's bytes after its Firestore writes were rejected. Identical bytes reuse the same path, with no extra
+Storage or Firestore requests; different revisions occupy separate objects until normal event/account cleanup.
+Existing objects keep their paths and remain readable without migration. Downloads and reparse follow metadata;
+historical manual sends accept only the legacy or exact digest path inside the same owner/event and retain all
+provenance, format, size and generation checks. Existing event-prefix cleanup and Storage Rules cover nested paths;
+public-event sharing continues to expose source objects within that event folder, including retained revisions.
+Comparisons and saved routes retain their existing writers. See [Training persistence](training-workspace.md) for
+the complementary Firestore source reservation and control-preservation contract.
+
+Monitoring impact is **unchanged**: reviewed `tools/import-monitoring/definitions.mjs` and the recorded-import runbook;
+the same workers, persistence failures, committed outcomes, retries and cleanup paths apply. No queue, lease,
+scheduler, monitoring label or provider request changes. Existing Help remains accurate and MCP schemas are unchanged.
 
 Provider activity originals staged under `event-write-staging/` receive the same validation before
 promotion. Promotion remains a server-side copy, which Cloud Storage validates against the source
@@ -1807,3 +1843,16 @@ Failed late staging writes rearm retired cleanup after save or metadata errors, 
 Saved recording review distinguishes known ineligibility from temporary read failures. Missing/invalid originals remain exclusions; unavailable reads pause preparation and retain the private criteria, cursor and reviewed rows for continuation. This command creates no provider work. Monitoring is **unchanged**: delivery queues, backlog/worker outcomes, retry/lease policy and fixed telemetry labels are unaffected. MCP and Training contracts are unchanged.
 
 Stopping closes retry authority for provider-confirmed processing failures and releases their private temporary files/quota while preserving the failed result and operation identifiers. Finished retryable batches retain the Stop control, including after Pro lapse. Active/uncertain operations retain their sources; saved archive files are never deleted. Cleanup failures remain resumable through the existing Stop cursor and operation trigger. A later confirmed failure after Stop completes releases its source through the existing retry-enabled delivery projection; open failures keep their retry source. Monitoring is **unchanged**: native admission/projection-trigger error/latency diagnostics and the existing hourly cleanup failure/heartbeat fallback cover these release paths, with no new scheduler, queue outcome, worker retry policy or telemetry label. MCP and Training contracts are unaffected.
+
+### Suunto EnergySense parser support
+
+The adopted Sports Lib 22.0.0 maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
+to Estimated Sustainable Distance plus its source/sampled minimum. Its raw distance unit is assumed to be metres pending
+provider confirmation. Cur and Min remain source observations, EnduranceValid is not an eligibility rule, and absent FIT
+fields are not synthesized. Canonical metric labels and reparse compatibility are described in the
+[reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#pending-energysense-library-candidate) and
+[MCP contract](mcp-server.md#energysense-and-endurance-streams-pending-coordinated-release).
+
+Monitoring review: covered unchanged by the existing import/reparse queue monitoring. This is an offline parser and
+presentation extension: no provider transport, scopes, queue state, retry, scheduler, secret, data-write endpoint,
+alert condition or deployed resource changes. Existing sanitized persistence and provider outcomes remain authoritative.

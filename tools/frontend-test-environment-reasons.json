@@ -51,6 +51,10 @@
     "environment": "angular",
     "reason": "Compiles the shared Material summary shell with projected evidence/details to verify accessible disclosure, owner/scope resets, neutral presentation and single-owner haptic feedback."
   },
+  "src/app/components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the real sentence-only Dashboard rail to verify owner-fenced bounded reads, signal bindings, note visibility, local-day rollover and listener teardown."
+  },
   "src/app/components/tags/tags-page.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."
@@ -63,9 +67,21 @@
     "environment": "angular",
     "reason": "Compiles the comparisons landing route with real Material navigation links and shared header to verify owner-scoped signal rendering, pagination, explicit manager actions, teardown and haptic ownership."
   },
+  "src/app/components/training-load/training-load-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection context and Material dialog providers to exercise reactive forms, component lifecycle, subscription teardown and asynchronous save/reload haptics without opening real overlays."
+  },
+  "src/app/components/training-load/training-load-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
+  },
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
+  },
+  "src/app/services/recorded-history-start.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and the current-user signal to verify bounded owner-only Firestore SDK reads, cancellation and same-UID account replacement fences."
   },
   "src/app/services/timeline-note-comparison-navigation.service.spec.ts": {
     "environment": "angular",
@@ -74,5 +90,9 @@
   "src/app/services/timeline-note-comparison.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the injected comparison read adapter with TestBed to verify shared-query dependencies, bounded requests, account fences and independent source failures."
+  },
+  "src/app/services/training-load.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify injected Firestore, user and Calendar services together, including owner-scoped subscriptions, transactions and shared browser compatibility handling."
   }
 }

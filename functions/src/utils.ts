@@ -1,4 +1,6 @@
 import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
+import { prepareTrainingLoadMetadata } from './training-load/training-load-metadata';
+import { TrainingLoadSourceWrite } from './training-load/training-load-source-write';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
@@ -10,7 +12,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
-import { saveChecksummedStorageFile } from './shared/storage-file-save';
+import { getContentAddressedOriginalPath, saveChecksummedStorageFile } from './shared/storage-file-save';
 import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
@@ -356,7 +358,16 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   }
 
 
+  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareTrainingLoadMetadata(userID, event, async (db, transaction) => {
+    await assertHistoryWrite(transaction);
+    await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+  }));
+  const assertSourceWrite: NonNullable<SetEventWriteOptions['assertWriteAuthorizationInTransaction']> = async (db, transaction) => {
+    await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+    await sourceWrite.assertCurrent(db, transaction);
+  };
   const adapter: FirestoreAdapter = {
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();
@@ -388,7 +399,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
-        writeOptions.assertWriteAuthorizationInTransaction,
+        assertSourceWrite,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -406,19 +417,20 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         `event_original_file_upload:${path}`,
         writeOptions.assertWriteAuthorizationInTransaction,
       );
+      const targetPath = getContentAddressedOriginalPath(path, data);
       if (stagingBucket) {
         // These objects are backend-only: no user ID appears in the path, so
         // they cannot match the Storage rules' user-readable `/users/**` paths.
         const stagingPath = `event-write-staging/${crypto.randomUUID()}`;
-        stagedOriginalFiles.push({ stagingPath, targetPath: path });
+        stagedOriginalFiles.push({ stagingPath, targetPath });
         await saveChecksummedStorageFile(stagingBucket.file(stagingPath), data);
-        return {};
+        return { path: targetPath };
       }
       const bucket = admin.storage().bucket();
-      const file = bucket.file(path);
+      const file = bucket.file(targetPath);
       await saveChecksummedStorageFile(file, data);
       const [metadata] = await file.getMetadata();
-      return { generation: metadata.generation };
+      return { path: targetPath, generation: metadata.generation };
     },
     getBucketName: () => {
       return admin.storage().bucket().name;
@@ -458,7 +470,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       processingMetaData,
       undefined,
       undefined,
-      writeOptions.assertWriteAuthorizationInTransaction,
+      assertSourceWrite,
     );
 
     // Write Metadata (not handled by EventWriter)
@@ -477,7 +489,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       metaData.toJSON(),
       undefined,
       undefined,
-      writeOptions.assertWriteAuthorizationInTransaction,
+      assertSourceWrite,
     );
 
     // Storage cannot join the Firestore transaction. Recheck immediately

@@ -1,5 +1,7 @@
+import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
+import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -8,6 +10,17 @@ import {
     ActivityUtilities,
     DataDistance,
     DataDuration,
+    DataElapsedTime,
+    DataEnergy,
+    DataFTP,
+    DataGender,
+    DataMaxHRSetting,
+    DataMovingTime,
+    DataPause,
+    DataTimerTime,
+    DataTrainingStressScore,
+    DataTrainingStressScoreMethod,
+    DataWeight,
     EventInterface,
     EventUtilities,
 } from '@sports-alliance/sports-lib';
@@ -45,11 +58,15 @@ import {
 } from '../shared/activity-identity-matcher';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
+import { shouldPreserveParsedDistance } from './regeneration-distance';
+import { preserveFreshSourceEventSummary } from './source-event-summary';
+import { ClassifiedReparseSource, NonActivitySourceAssessment, NonActivitySourcesError,
+    classifyRejectedActivitySource, sourceReferenceFingerprint, SPORTS_LIB_PRIMARY_BUCKET } from './non-activity-sources';
 
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
-export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
+export { SPORTS_LIB_PRIMARY_BUCKET } from './non-activity-sources';
 const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 const REPARSE_PRESERVED_EVENT_FIELDS = [
     'name',
@@ -85,6 +102,7 @@ const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
     /^Event .* was not found for user .*$/,
     /^Strict original-file reparse failed\. .*: No activities found in GPX; use importRoutesFromGPX for routes$/,
+    /^Strict original-file reparse failed\. .*: FIT file is not an activity file(?:; |$)/,
     /^Strict original-file reparse failed\. .*: Original file exceeds reparse size limit\./,
     /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
     /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
@@ -121,8 +139,15 @@ class ReparsePersistenceSkippedForDeletedUserError extends Error {
     }
 }
 
+class ReparsePersistenceSkippedForDeletedEventError extends Error {
+    readonly name = 'EventWriteSkippedForDeletedEventError';
+    constructor(uid: string, eventId: string) {
+        super(`Skipping reparse status for missing event ${eventId} of user ${uid}.`);
+    }
+}
+
 export function isReparsePersistenceSkippedForUserDeletionError(error: unknown): boolean {
-    return error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError';
+    return error instanceof Error && ['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'].includes(error.name);
 }
 
 const REPARSE_TRANSACTION_MAX_ATTEMPTS = 3;
@@ -255,6 +280,9 @@ export interface SportsLibReparseJob {
     failureReason?: SportsLibReparseFailureReason;
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
+    skipReason?: string;
+    /** Stable across enqueue retries; advances when reopening a completed source skip. */
+    sourceRetryGeneration?: number;
     supersededAt?: unknown;
     supersededBySportsLibVersion?: string;
     createdAt: unknown;
@@ -265,17 +293,19 @@ export interface SportsLibReparseJob {
 }
 
 export interface ReparseStatusWrite {
+    nonActivitySources?: NonActivitySourceAssessment | FieldValue;
     status: 'skipped' | 'completed' | 'failed';
-    reason?: string;
+    reason?: string | FieldValue;
     targetSportsLibVersion: string;
     checkedAt: unknown;
     processedAt?: unknown;
-    lastError?: string;
+    lastError?: string | FieldValue;
     terminalFailure?: unknown;
     terminalFailureAt?: unknown;
 }
 
 export interface SourceFileMeta {
+    generation?: string;
     path: string;
     bucket?: string;
     startDate?: Date;
@@ -310,6 +340,7 @@ interface ReparseRuntimeBudget {
 }
 
 export interface ReparseExecutionResult {
+    nonActivitySources?: NonActivitySourceAssessment;
     status: 'completed' | 'skipped';
     reason?: string;
     sourceFilesCount: number;
@@ -751,6 +782,7 @@ export function extractSourceFiles(eventDoc: FirestoreEventJSON | Record<string,
         .map(file => ({
             path: file.path,
             bucket: file.bucket,
+            ...(file.generation ? { generation: file.generation } : {}),
             startDate: toDateOrUndefined(file.startDate),
             originalFilename: file.originalFilename,
         }));
@@ -777,6 +809,7 @@ export async function parseFromOriginalFilesStrict(
     const failedFiles: { path: string; reason: string }[] = [];
     const resolvedSourceBuckets: ResolvedSourceBucketInfo[] = [];
     const sourceContentHashes: string[] = [];
+    const inspectedSources: ClassifiedReparseSource[] = [];
     const uid = runtimeBudget?.uid || 'unknown';
     const eventId = runtimeBudget?.eventId || 'unknown';
 
@@ -835,7 +868,22 @@ export async function parseFromOriginalFilesStrict(
                 preparedBytes: fileBytes.byteLength,
                 runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
             });
-            const parsedEvent = await parseActivityFilePayload(fileBytes, sourceFile.path);
+            const inspected: ClassifiedReparseSource = {
+                path: sourceFile.path, bucket: downloadResult.resolvedBucket, referenceBucket: sourceFile.bucket || '', kind: 'activity',
+                sha256: isGzip(sourceFile.path) ? createHash('sha256').update(rawBytes).digest('hex') : sourceContentHash,
+                md5: createHash('md5').update(rawBytes).digest('base64'), generation: '',
+            };
+            inspectedSources.push(inspected);
+            let parsedEvent: EventInterface;
+            try {
+                parsedEvent = await parseActivityFilePayload(fileBytes, sourceFile.path);
+            } catch (error) {
+                const kind = await classifyRejectedActivitySource(fileBytes, sourceFile.path, error);
+                if (!kind) throw error;
+                inspected.kind = kind;
+                logger.info('[sports-lib-reparse] Classified non-activity source.', { uid, eventId, kind, sourceFileIndex });
+                continue;
+            }
             logReparseStageCompleted(uid, eventId, 'parse_source_file', parseStartedAtMs, {
                 ...sourceFileLogContext,
                 preparedBytes: fileBytes.byteLength,
@@ -864,6 +912,21 @@ export async function parseFromOriginalFilesStrict(
     if (failedFiles.length > 0) {
         const details = failedFiles.map(file => `${file.path}: ${file.reason}`).join('; ');
         throw new Error(`Strict original-file reparse failed. ${details}`);
+    }
+
+    if (inspectedSources.some(source => source.kind !== 'activity')) {
+        // Only classified source sets pay for metadata reads. Match the downloaded bytes
+        // before associating the assessment with a live object generation.
+        for (const source of inspectedSources) {
+            assertReparseRuntimeBudget(runtimeBudget, 'verify_source_classification');
+            const [metadata] = await admin.storage().bucket(source.bucket).file(source.path).getMetadata();
+            if (!metadata.generation || metadata.md5Hash !== source.md5) {
+                throw new Error('Original source changed while classifying non-activity files; retry reparse.');
+            }
+            source.generation = `${metadata.generation}`;
+        }
+        throw new NonActivitySourcesError({ schemaVersion: 1,
+            sourceFingerprint: sourceReferenceFingerprint(sourceFiles), sources: inspectedSources });
     }
 
     if (parsedEvents.length === 0) {
@@ -1502,10 +1565,12 @@ async function setReparseDocIfUserActive(
         incomingData: admin.firestore.DocumentData,
         existingData: admin.firestore.DocumentData | null,
     ) => admin.firestore.DocumentData,
+    assertSourceWrite?: TrainingLoadSourceWrite['assertCurrent'],
 ): Promise<void> {
     const db = admin.firestore();
     await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
         await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
+        await assertSourceWrite?.(db, transaction);
         const incomingData = data as admin.firestore.DocumentData;
         let resolvedData = incomingData;
         if (transformExistingData) {
@@ -1519,8 +1584,9 @@ async function setReparseDocIfUserActive(
     }));
 }
 
-function getFirestoreAdapter(uid: string): FirestoreAdapter {
+function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite): FirestoreAdapter {
     return {
+        prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
             const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
@@ -1531,6 +1597,7 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
                 data,
                 undefined,
                 isEventDocument ? preserveReparseEventEditsOnRewrite : undefined,
+                sourceWrite.assertCurrent,
             );
         },
         createBlob: (data: Uint8Array) => Buffer.from(data),
@@ -1540,39 +1607,33 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
 
 async function deleteStaleActivities(
     uid: string,
-    existingActivityDocs: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id'>>,
+    eventId: string,
     newActivityIDs: Set<string>,
+    sourceWrite: TrainingLoadSourceWrite,
 ): Promise<number> {
-    const staleActivityIDs = existingActivityDocs
-        .map(doc => doc.id)
-        .filter(activityID => !newActivityIDs.has(activityID));
-
-    if (staleActivityIDs.length === 0) {
-        return 0;
-    }
-
     const db = admin.firestore();
-    const BATCH_LIMIT = 400;
+    const PAGE_LIMIT = 400;
     let deleted = 0;
-
-    for (let i = 0; i < staleActivityIDs.length; i += BATCH_LIMIT) {
-        const chunk = staleActivityIDs.slice(i, i + BATCH_LIMIT);
+    let afterId: string | undefined;
+    // Refresh membership after writing: the initial parsing snapshot can predate partial writes
+    // from an interrupted attempt. The reservation and query share the deletion transaction.
+    for (;;) {
         const phase = 'sports_lib_reparse_delete_stale_activities';
-        await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
-            await assertReparsePersistenceUserActiveInTransaction(
-                db,
-                transaction,
-                uid,
-                phase,
-            );
-            chunk.forEach(activityID => {
-                transaction.delete(db.doc(`users/${uid}/activities/${activityID}`));
-            });
+        const page = await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
+            await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
+            await sourceWrite.assertCurrent(db, transaction);
+            let query = db.collection(`users/${uid}/activities`).where('eventID', '==', eventId)
+                .orderBy(FieldPath.documentId()).limit(PAGE_LIMIT);
+            if (afterId) query = query.startAfter(afterId);
+            const snapshot = await transaction.get(query);
+            const stale = snapshot.docs.filter(doc => !newActivityIDs.has(doc.id));
+            stale.forEach(doc => transaction.delete(doc.ref));
+            return { deleted: stale.length, count: snapshot.docs.length, afterId: snapshot.docs[snapshot.docs.length - 1]?.id };
         }));
-        deleted += chunk.length;
+        deleted += page.deleted;
+        if (page.count < PAGE_LIMIT) return deleted;
+        afterId = page.afterId;
     }
-
-    return deleted;
 }
 
 async function runReparsePersistencePhase<T>(
@@ -1653,7 +1714,8 @@ export async function persistReparsedEvent(
         parsedEventAny.originalFile = existingEventAny.originalFile;
     }
 
-    const writer = new EventWriter(getFirestoreAdapter(uid), undefined, undefined, getWriterLogAdapter());
+    const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareTrainingLoadMetadata(uid, event));
+    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite), undefined, undefined, getWriterLogAdapter());
     await runReparsePersistencePhase(
         uid,
         eventId,
@@ -1679,6 +1741,8 @@ export async function persistReparsedEvent(
                 admin.firestore().doc(`users/${uid}/events/${eventId}`),
                 mergeMetadata,
                 { merge: true },
+                undefined,
+                sourceWrite.assertCurrent,
             ),
         );
     }
@@ -1702,7 +1766,7 @@ export async function persistReparsedEvent(
             newActivityCount: newActivityIDs.size,
             staleActivityCandidateCount,
         },
-        () => deleteStaleActivities(uid, existingActivityDocs, newActivityIDs),
+        () => deleteStaleActivities(uid, eventId, newActivityIDs, sourceWrite),
         deletedCount => ({ staleActivitiesDeleted: deletedCount }),
     );
 
@@ -1725,6 +1789,8 @@ export async function persistReparsedEvent(
             admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`),
             processingMetaData,
             { merge: true },
+            undefined,
+            sourceWrite.assertCurrent,
         ),
     );
 
@@ -1773,6 +1839,17 @@ export async function writeReparseStatus(
         statusRef,
         payload,
         { merge: true },
+        undefined,
+        async (_db, transaction) => {
+            // Guard every status outcome, including the failure write after a skipped
+            // classification, so no handler can recreate metadata below a deleted event.
+            const event = await transaction.get(admin.firestore().doc(`users/${uid}/events/${eventId}`));
+            if (!event.exists) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+            if (payload.nonActivitySources && 'schemaVersion' in payload.nonActivitySources
+                && sourceReferenceFingerprint(extractSourceFiles(event.data() || {})) !== payload.nonActivitySources.sourceFingerprint) {
+                throw new Error('Original source references changed before classification was saved; retry reparse.');
+            }
+        },
     );
 }
 
@@ -1953,6 +2030,9 @@ export async function reparseEventFromOriginalFiles(
             existingActivityDocsCount: eventAndActivities.activityDocs.length,
         });
         const reparsedEvent = parseResult.finalEvent;
+        const restoreSourceEventSummary = preserveFreshSourceEventSummary(
+            reparsedEvent, parseResult.parsedEvents, autoHealResult.eventData.isMerge === true,
+        );
         reparsedEvent.setID(eventId);
         applyPreservedFields(reparsedEvent, autoHealResult.eventData);
         const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
@@ -1990,16 +2070,54 @@ export async function reparseEventFromOriginalFiles(
                 }
 
                 const previousStats = new Map(activityAny.getStats());
+                const parsedDistance = activityAny.getStat(DataDistance.type);
+                const preserveParsedDistance = shouldPreserveParsedDistance(activityAny, parsedDistance?.getValue());
                 activityAny.clearStats();
+                // These freshly parsed inputs must be present before generation: otherwise
+                // sports-lib can estimate a different FTP or substitute wall-clock duration.
+                // Stream-derived outputs (for example NP and IF) are still regenerated.
+                for (const type of [DataFTP.type, DataDuration.type, DataTimerTime.type,
+                    DataElapsedTime.type, DataMovingTime.type, DataPause.type,
+                    DataEnergy.type, DataWeight.type, DataGender.type, DataMaxHRSetting.type,
+                    // Fresh source endings/minima are observations, not sampled aggregates.
+                    'Stamina', 'Minimum Stamina',
+                    'Estimated Sustainable Distance', 'Minimum Estimated Sustainable Distance']) {
+                    const parsedStat = previousStats.get(type);
+                    if (parsedStat) activityAny.addStat(parsedStat);
+                }
+                // Keep the total selected by the fresh parse, including sports-lib's
+                // source-backed corrections. Even a monotonic counter can be partial
+                // or stalled. Seed this before dependent statistics are regenerated.
+                if (preserveParsedDistance) activityAny.addStat(parsedDistance);
                 ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
                 previousStats.forEach((stat, type) => {
+                    if (type === DataTrainingStressScore.type || type === DataTrainingStressScoreMethod.type) return;
                     if (!activityAny.getStat(type)) {
                         activityAny.addStat(stat);
                     }
                 });
+                // Restore score and provenance together unless recalculation was explicitly
+                // requested. Sports-lib 21.6.1 always preserves an imported stat, so passing
+                // preserveImportedTss=false alone is insufficient; remove both here.
+                for (const type of [DataTrainingStressScore.type, DataTrainingStressScoreMethod.type]) {
+                    activity.removeStat(type);
+                    const parsedStat = previousStats.get(type);
+                    if (parsedStat && activity.parseOptions?.tss?.preserveImportedTss !== false) {
+                        activityAny.addStat(parsedStat);
+                    }
+                }
+                const automatic = ActivityUtilities.evaluateTrainingStressScore(activity).automatic;
+                if (automatic.score !== null && automatic.method !== null) {
+                    activity.addStat(new DataTrainingStressScore(automatic.score));
+                    activity.addStat(new DataTrainingStressScoreMethod(automatic.method));
+                } else {
+                    activity.removeStat(DataTrainingStressScore.type);
+                    activity.removeStat(DataTrainingStressScoreMethod.type);
+                }
             });
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
+        restoreSourceEventSummary();
         // Event regeneration may hydrate source-level name/description values. User edits remain authoritative.
         applyPreservedFields(reparsedEvent, autoHealResult.eventData);
         const transformDurationMs = Date.now() - transformStartedAtMs;
@@ -2073,6 +2191,13 @@ export async function reparseEventFromOriginalFiles(
             staleActivitiesDeleted: persistResult.staleActivitiesDeleted,
         };
     } catch (error) {
+        if (error instanceof NonActivitySourcesError) {
+            logger.info('[sports-lib-reparse] Existing event retained: source reparse skipped.', {
+                uid, eventId, reason: error.reason, sourceFilesCount: error.assessment.sources.length,
+            });
+            return { status: 'skipped', reason: error.reason, nonActivitySources: error.assessment,
+                sourceFilesCount: error.assessment.sources.length, parsedActivitiesCount: 0, staleActivitiesDeleted: 0 };
+        }
         logReparseStageFailed(uid, eventId, stage, startedAtMs, error, {
             mode,
             targetSportsLibVersion,

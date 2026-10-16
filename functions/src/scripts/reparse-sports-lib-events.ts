@@ -1,3 +1,4 @@
+import { hasUnchangedNonActivitySources } from '../reparse/non-activity-sources';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -36,6 +37,7 @@ export interface ScriptSummary {
     parsedEvents: number;
     skippedNoAccess: number;
     skippedNoSourceFiles: number;
+    skippedNonActivitySources: number;
     completed: number;
     failed: number;
 }
@@ -82,7 +84,7 @@ async function writeReparseStatusUnlessUserDeleted(
         return true;
     } catch (error) {
         if (isReparsePersistenceSkippedForUserDeletionError(error)) {
-            logger.info('[sports-lib-reparse-script] Skipping status write because user is missing or deletion is in progress.', {
+            logger.info('[sports-lib-reparse-script] Skipping status write because the event or user is missing or account deletion is in progress.', {
                 uid,
                 eventId,
                 phase,
@@ -284,6 +286,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
         parsedEvents: 0,
         skippedNoAccess: 0,
         skippedNoSourceFiles: 0,
+        skippedNonActivitySources: 0,
         completed: 0,
         failed: 0,
     };
@@ -323,31 +326,45 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             return;
         }
 
-        let progressOutcome: 'completed' | 'skipped_no_source_files' | 'failed' | 'skipped_user_deletion' = 'failed';
-        summary.parsedEvents++;
-
+        let progressOutcome: 'completed' | 'skipped_non_activity_sources' | 'skipped_no_source_files' | 'failed' | 'skipped_user_deletion' = 'failed';
         try {
+            const status = await admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/reparseStatus`).get();
+            if (await hasUnchangedNonActivitySources(status.data(), sourceFiles)) {
+                progressOutcome = 'skipped_non_activity_sources';
+                summary.skippedNonActivitySources++;
+                return;
+            }
+            summary.parsedEvents++;
             const result = await reparseEventFromOriginalFiles(uid, eventId, {
                 mode: 'reimport',
                 targetSportsLibVersion,
                 beforePersist: () => assertUserDeletionAllowed(uid, eventId, 'before_persist'),
             });
-            if (result.status === 'skipped' && result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
-                progressOutcome = 'skipped_no_source_files';
-                summary.skippedNoSourceFiles++;
+            if (result.status === 'skipped') {
+                if (result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
+                    progressOutcome = 'skipped_no_source_files';
+                    summary.skippedNoSourceFiles++;
+                } else {
+                    progressOutcome = 'skipped_non_activity_sources';
+                    summary.skippedNonActivitySources++;
+                }
                 await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'skipped',
-                    reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
+                    reason: result.reason,
+                    nonActivitySources: result.nonActivitySources || admin.firestore.FieldValue.delete(),
+                    lastError: admin.firestore.FieldValue.delete(),
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                     terminalFailure: admin.firestore.FieldValue.delete(),
                     terminalFailureAt: admin.firestore.FieldValue.delete(),
-                }, 'reparse_skipped_no_source_files');
+                }, 'reparse_skipped');
             } else {
                 progressOutcome = 'completed';
                 summary.completed++;
                 await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                     status: 'completed',
+                    reason: admin.firestore.FieldValue.delete(),
+                    nonActivitySources: admin.firestore.FieldValue.delete(),
                     targetSportsLibVersion,
                     checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                     processedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -399,6 +416,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 completed: summary.completed,
                 failed: summary.failed,
                 skippedNoSourceFiles: summary.skippedNoSourceFiles,
+                skippedNonActivitySources: summary.skippedNonActivitySources,
             };
             writeRealtimeProgressLine(progressPayload);
             logger.info('[sports-lib-reparse-script] Progress', progressPayload);

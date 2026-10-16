@@ -20,6 +20,7 @@ import {
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AuthenticatedMcpRequest } from '../mcp/server';
 import { createMcpServer } from '../mcp/server';
+import { PUBLIC_MCP_TOOL_NAMES } from '../mcp/tool-output-schemas';
 import * as contentProposal from './content-proposal';
 
 function createTestServer(options: {
@@ -354,6 +355,40 @@ describe('Assistant MCP session', () => {
     });
   });
 
+  it.each([
+    { mode: 'base' }, { mode: 'precise', precise: true }, { mode: 'tags', tags: true },
+    { mode: 'notes', notes: true }, { mode: 'note changes', notes: true, noteChanges: true },
+    { mode: 'manual', manual: true }, { mode: 'reflections', reflections: true },
+    { mode: 'Training read', plans: true }, { mode: 'Training edits', plans: true, edits: true },
+    { mode: 'Training delivery', plans: true, delivery: true },
+    { mode: 'all Training', plans: true, edits: true, delivery: true },
+  ] satisfies Array<{ mode: string; precise?: boolean; tags?: boolean; notes?: boolean; noteChanges?: boolean;
+    manual?: boolean; reflections?: boolean; plans?: boolean; edits?: boolean; delivery?: boolean }>)(
+    'does not recommend hidden public tools in $mode instructions or descriptions', async (mode) => {
+      const enabled = (key: string) => (mode as Record<string, unknown>)[key] === true;
+      const session = await createAssistantMcpSession('synthetic-owner', 'https://quantified-self.io', undefined,
+        enabled('precise') ? 'precise_activity' : 'coordinate_free', enabled('notes'), enabled('plans'),
+        enabled('edits'), enabled('delivery'), 'synthetic-conversation', enabled('tags'), enabled('noteChanges'),
+        enabled('manual'), enabled('reflections'));
+      try {
+        const names = new Set<string>(session.tools.map(tool => tool.name));
+        const guidance = [session.instructions, ...session.tools.map(tool => tool.description)].join(' ');
+        const referenced = new Set(guidance.match(/\b[a-z]+(?:_[a-z0-9]+)+\b/g));
+        const hidden = [...PUBLIC_MCP_TOOL_NAMES, ...ASSISTANT_MCP_TOOL_NAMES]
+          .filter(name => referenced.has(name) && !names.has(name));
+        expect(hidden).toEqual([]);
+        expect(session.instructions).toContain('model cannot apply changes');
+        expect(session.instructions).toContain('Examples & data access');
+        expect(session.instructions).not.toContain('native approval UI');
+        if (enabled('tags')) expect(session.instructions).toContain('prepare_activity_tag_change');
+        if (enabled('edits') || enabled('delivery')) {
+          expect(session.tools.find(tool => tool.name.startsWith('preview_'))?.description)
+            .toContain('app-owned Apply confirmation');
+        }
+      } finally { await session.close(); }
+    },
+  );
+
   it('resolves the complete curated boundary from the production MCP server', async () => {
     const session = await createAssistantMcpSession(
       'user-1',
@@ -389,6 +424,12 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain('list_routes');
       expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data');
       expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics');
+      expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics_v2');
+      expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data_v2');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_samples_v2');
+      const enduranceSchema = session.tools.find(tool => tool.name === 'get_activity_chart_data_v2')?.inputSchema;
+      expect(enduranceSchema?.properties).not.toHaveProperty('includeLocation');
+      expect(enduranceSchema?.properties).not.toHaveProperty('maxLocationPoints');
       expect(session.tools.map(tool => tool.name)).not.toContain(
         'search_activities_near_location',
       );

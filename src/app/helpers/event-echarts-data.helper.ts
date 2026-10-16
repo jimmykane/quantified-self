@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, resolveSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
 import {
   ActivityInterface,
   ActivityTypeGroups,
@@ -42,7 +43,7 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import type { AppEventColorService } from '../services/color/app.event.color.service';
-import { isEventLapTypeAllowed, normalizeEventLapType } from './event-lap-type.helper';
+import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
   isEventPaceStreamType,
@@ -51,6 +52,7 @@ import {
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+import { getEnduranceMetricLabel, SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
@@ -133,6 +135,7 @@ export interface EventChartIntensityZoneSnapshot {
 export interface EventChartActivitySnapshot {
   id: string;
   activityName: string;
+  metricManufacturer?: string;
   activityType: unknown;
   startTimeMs: number;
   intensityZones: EventChartIntensityZoneSnapshot[];
@@ -321,9 +324,12 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       const streamDataClass = DynamicDataLoader.getDataClassFromDataType(stream.type);
       const displayName = normalizeUnitDerivedTypeLabel(
         stream.type,
-        streamDataClass.displayType || streamDataClass.type
+        streamDataClass.displayType || streamDataClass.type,
+        { manufacturer: activity.creator?.manufacturer, surface: 'stream' }
       );
-      const unit = streamDataClass.unit || '';
+      // Metric distance uses Sports Lib's value-dependent m/Km display. Its axis
+      // includes the unit on each tick, so a fixed '(m)' heading would be misleading.
+      const unit = stream.type === SUSTAINABLE_DISTANCE_TYPE ? '' : streamDataClass.unit || '';
 
       if (!panelsMap.has(stream.type)) {
         panelsMap.set(stream.type, {
@@ -338,6 +344,9 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       }
 
       const panel = panelsMap.get(stream.type) as EventChartPanelModel;
+      if (panel.displayName !== displayName) {
+        panel.displayName = getEnduranceMetricLabel(stream.type, { surface: 'picker' }) ?? panel.displayName;
+      }
       panel.minX = Math.min(panel.minX, pointResult.minX);
       panel.maxX = Math.max(panel.maxX, pointResult.maxX);
       const activityID = activity.getID() || '';
@@ -433,6 +442,7 @@ function snapshotEventChartActivity(
   return {
     id: activity.getID?.() || '',
     activityName: activity.creator?.name || 'Activity',
+    metricManufacturer: typeof activity.creator?.manufacturer === 'string' ? activity.creator.manufacturer : undefined,
     activityType: activity.type,
     startTimeMs: activity.startDate?.getTime?.() ?? Number.NaN,
     intensityZones: (activity.intensityZones || []).map((zone) => ({ ...(zone as unknown as Record<string, unknown>) })),
@@ -509,7 +519,7 @@ function createSnapshotActivity(snapshot: EventChartActivitySnapshot): ActivityI
   return {
     type: snapshot.activityType,
     startDate: new Date(snapshot.startTimeMs),
-    creator: { name: snapshot.activityName },
+    creator: { name: snapshot.activityName, manufacturer: snapshot.metricManufacturer },
     intensityZones: snapshot.intensityZones || [],
     getID: () => snapshot.id,
     getAllStreams: () => streams,
@@ -1037,7 +1047,8 @@ export function buildEventLapMarkers(input: {
     }
 
     laps.forEach((lap, index) => {
-      if (index === laps.length - 1) {
+      const contextLabel = getEventLapContextLabel(activity, lap, input.allActivities);
+      if (!isEventLapEndpointInActivity(activity, lap) || (index === laps.length - 1 && !contextLabel)) {
         return;
       }
 
@@ -1060,8 +1071,8 @@ export function buildEventLapMarkers(input: {
         lapNumber: index + 1,
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
-        tooltipTitle: `Lap ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, activity.type, nominalDistanceDisplay?.lapMeters.get(lap)),
+        tooltipTitle: `${contextLabel || 'Lap'} ${index + 1}`,
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, contextLabel ? 'Other' : activity.type, contextLabel ? undefined : nominalDistanceDisplay?.lapMeters.get(lap)),
       });
     });
   });
@@ -1190,6 +1201,8 @@ function getFilteredStreams(input: {
       }
 
       switch (stream.type) {
+        case SUSTAINABLE_DISTANCE_TYPE:
+          return DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings).includes(stream.type);
         case DataDistance.type:
           return !shouldRemoveDistance;
         case DataDepth.type:
@@ -1500,6 +1513,8 @@ function toSeriesPoints(
     return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
   }
 
+  const preserveEnduranceGaps = ['Stamina', 'Potential Stamina', 'Estimated Sustainable Distance',
+    'Estimated Sustainable Distance in miles'].includes(stream.type);
   const timeValues = getActivityTimeValues(activity, activityCache);
   const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
   const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
@@ -1513,8 +1528,12 @@ function toSeriesPoints(
     const y = shouldTreatAsPace
       ? getRenderablePaceValue(streamValues[index], speedValues, index)
       : streamValues[index];
-    const seconds = timeValues[index];
-    const time = absoluteTimes[index];
+    // Canonical streams use a one-second grid. Preserve an empty position even when
+    // every sensor was absent there, so the chart cannot connect across an endurance gap.
+    // This supplies a null marker only; it never invents a reading or moves an observation.
+    const gap = preserveEnduranceGaps && !Number.isFinite(y) && !Number.isFinite(timeValues[index]);
+    const seconds = gap ? index : timeValues[index];
+    const time = gap ? activity.startDate.getTime() + index * 1000 : absoluteTimes[index];
     if (!Number.isFinite(seconds)) {
       continue;
     }
@@ -1818,7 +1837,9 @@ function buildLapTooltipDetails(
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
-  const duration = lap.getDuration?.();
+  const rejected = getRejectedSwimTiming(lap);
+  const duration = rejected?.timerTime !== undefined ? null : lap.getDuration?.();
+  if (rejected) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
   const durationValue = formatLapDataValue(duration, { compactDuration: true });
   if (durationValue) {
     details.push({ label: 'Duration', value: durationValue });
@@ -1864,7 +1885,9 @@ function buildSwimLengthTooltipDetails(
   const details: EventChartMarkerTooltipDetail[] = [];
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
-  appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
+  const seconds = resolveSwimTiming(swimLength).duration;
+  if (getRejectedSwimTiming(swimLength)) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
+  appendLapDetail(details, 'Duration', seconds === null ? null : new DataDuration(seconds), unitSettings, { compactDuration: true });
   appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength, unitSettings, nominalDistanceDisplayMeters), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
@@ -1955,6 +1978,7 @@ function normalizeDisplayUnitText(value: string): string {
 }
 
 function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
+  if (getRejectedSwimTiming(swimLength)) return null;
   const speedValue = swimLength.avgSpeed?.getValue?.();
   if (typeof speedValue !== 'number' || !Number.isFinite(speedValue) || speedValue <= 0) {
     return null;

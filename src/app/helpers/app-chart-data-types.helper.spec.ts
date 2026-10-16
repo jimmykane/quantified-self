@@ -8,11 +8,19 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   getAppAdvancedChartDataTypes,
+  getChartMetricPickerLabel,
   getAppCanonicalChartDataTypes,
   getAppNonUnitBasedChartDataTypes,
 } from './app-chart-data-types.helper';
 
 describe('app-chart-data-types.helper', () => {
+  it('uses searchable labels without duplicating or renaming saved canonical identifiers', () => {
+    expect(getChartMetricPickerLabel(DataStamina.type)).toBe('Stamina / Suunto EnergySense Endurance');
+    expect(getChartMetricPickerLabel('Estimated Sustainable Distance')).toContain('EnergySense Sustainable Distance');
+    expect(getAppCanonicalChartDataTypes().filter(type => type === DataStamina.type)).toHaveLength(1);
+    expect(getAppCanonicalChartDataTypes()).not.toContain('EnergySense Endurance');
+  });
+
   it('adds stamina stream types to the app chart metric catalog', () => {
     expect(DynamicDataLoader.getDataClassFromDataType(DataStamina.type)).toBeTruthy();
     expect(DynamicDataLoader.getDataClassFromDataType(DataPotentialStamina.type)).toBeTruthy();

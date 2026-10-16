@@ -3,11 +3,19 @@ import {
   DataStamina,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
+import { SUSTAINABLE_DISTANCE_TYPE, getEnduranceMetricLabel } from '@shared/endurance-metrics';
 
 export const APP_CHART_EXTRA_DATA_TYPES: string[] = [
   DataStamina.type,
   DataPotentialStamina.type,
+  // Activate with the coordinated Sports Lib release; published 21.6.14 remains compatible.
+  ...(() => {
+    try { DynamicDataLoader.getDataClassFromDataType(SUSTAINABLE_DISTANCE_TYPE); return [SUSTAINABLE_DISTANCE_TYPE]; }
+    catch { return []; }
+  })(),
 ];
+
+export const getChartMetricPickerLabel = (type: string): string => getEnduranceMetricLabel(type, { surface: 'picker' }) ?? type;
 
 export const getAppBasicChartDataTypes = (): string[] => {
   return [...DynamicDataLoader.basicDataTypes];

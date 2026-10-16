@@ -241,7 +241,8 @@ export class EventsExportFormComponent extends FormsAbstract {
         row.push(`"${display}"`);
       }
       if (this.user.settings.exportToCSVSettings.duration) {
-        row.push(`"${event.getDuration().getDisplayValue()}"`);
+        const duration = resolveUnitAwareDisplayStat(event.getDuration(), this.user.settings.unitSettings);
+        row.push(`"${duration?.text ?? ''}"`);
       }
       if (this.user.settings.exportToCSVSettings.ascent) {
         const stat = event.getStat(DataAscent.type);

@@ -1,0 +1,4 @@
+@if (owner()) {
+  <app-summary-disclosure title="At a glance" summaryId="dashboard-today-changes" [scopeKey]="owner()!"
+    variant="rail" [tone]="briefing().tone" [headline]="briefing().headline" [detailsAvailable]="false" />
+}

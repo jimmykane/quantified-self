@@ -91,16 +91,7 @@ export async function getUserDeletionGuardState(
 ): Promise<UserDeletionGuardState> {
     const { userRef, tombstoneRef } = getUserDeletionRefs(db, uid);
     const [userSnapshot, tombstoneSnapshot] = await db.getAll(userRef, tombstoneRef);
-    const deletionInProgress = isUserDeletionTombstoneActive(
-        tombstoneSnapshot.exists ? tombstoneSnapshot.data() as Record<string, unknown> | undefined : null,
-        nowMs,
-    );
-    const userExists = userSnapshot.exists;
-    return {
-        userExists,
-        deletionInProgress,
-        shouldSkip: !userExists || deletionInProgress,
-    };
+    return deletionGuardStateFromSnapshots(userSnapshot, tombstoneSnapshot, nowMs);
 }
 
 export async function getUserDeletionGuardStateInTransaction(
@@ -114,6 +105,14 @@ export async function getUserDeletionGuardStateInTransaction(
         transaction.get(userRef),
         transaction.get(tombstoneRef),
     ]);
+    return deletionGuardStateFromSnapshots(userSnapshot, tombstoneSnapshot, nowMs);
+}
+
+function deletionGuardStateFromSnapshots(
+    userSnapshot: admin.firestore.DocumentSnapshot,
+    tombstoneSnapshot: admin.firestore.DocumentSnapshot,
+    nowMs: number,
+): UserDeletionGuardState {
     const deletionInProgress = isUserDeletionTombstoneActive(
         tombstoneSnapshot.exists ? tombstoneSnapshot.data() as Record<string, unknown> | undefined : null,
         nowMs,
@@ -124,4 +123,16 @@ export async function getUserDeletionGuardStateInTransaction(
         deletionInProgress,
         shouldSkip: !userExists || deletionInProgress,
     };
+}
+
+/** Batch known source reads with the guard, inside every transaction attempt. */
+export async function getUserDeletionGuardedDocumentsInTransaction(
+    db: admin.firestore.Firestore,
+    transaction: admin.firestore.Transaction,
+    uid: string,
+    refs: readonly admin.firestore.DocumentReference[],
+): Promise<{ guard: UserDeletionGuardState; snapshots: admin.firestore.DocumentSnapshot[] }> {
+    const { userRef, tombstoneRef } = getUserDeletionRefs(db, uid);
+    const [userSnapshot, tombstoneSnapshot, ...snapshots] = await transaction.getAll(userRef, tombstoneRef, ...refs);
+    return { guard: deletionGuardStateFromSnapshots(userSnapshot, tombstoneSnapshot, Date.now()), snapshots };
 }

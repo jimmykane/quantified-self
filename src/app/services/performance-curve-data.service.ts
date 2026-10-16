@@ -240,6 +240,12 @@ export class PerformanceCurveDataService {
     const activitySummaries: PerformanceCurveDurabilityActivitySummary[] = [];
 
     activityDescriptors.forEach((descriptor) => {
+      // Parser-only duration eligibility does not survive saved JSON. Require the
+      // recorded duration consumed by the analyzer, rather than its date fallback.
+      const recordedDuration = descriptor.activity.getDuration?.()?.getValue?.();
+      if (typeof recordedDuration !== 'number' || !Number.isFinite(recordedDuration) || recordedDuration <= 0) {
+        return;
+      }
       const analysis = analyzeActivityDurability(descriptor.activity, { includeTimeline: true });
       const summary = analysis.summary;
       if (!summary) {

@@ -1,51 +1,23 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
-import * as logger from 'firebase-functions/logger';
-import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
-import { HEALTH_METRIC_IDS } from '../../../shared/health';
-import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
-import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
-import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
-import { hasDerivedMetricSourceChange, hasGarminSleepHeartRateSource } from './derived-metrics-source-change';
+import { hasDerivedMetricSourceChange, type DerivedMetricSource } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
 
-function resolveEventTimeMs(event: { time?: unknown }): number | null {
-    const eventTimeIso = `${event?.time || ''}`.trim();
-    if (!eventTimeIso) {
-        return null;
-    }
-    const parsedTimeMs = Date.parse(eventTimeIso);
-    return Number.isFinite(parsedTimeMs) ? parsedTimeMs : null;
-}
-
-function resolveDerivedMetricsSourceId(
+async function dispatchSourceWrite(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
-    source: 'event' | 'activity' | 'sleep' | 'health',
-): string | null {
-    const sourceId = source === 'event'
-        ? event.params?.eventId
-        : source === 'activity'
-            ? event.params?.activityId
-            : source === 'sleep'
-                ? event.params?.sleepSessionId
-                : event.params?.sourceRecordId;
-    return `${sourceId || ''}`.trim() || null;
-}
-
-async function handleDerivedMetricsSourceWrite(
-    event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
-    source: 'event' | 'activity' | 'sleep' | 'health',
+    source: DerivedMetricSource,
 ): Promise<void> {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
         return;
     }
-    if (!isDerivedMetricsUidAllowed(uid)) {
-        return;
-    }
 
+    const before = event.data?.before?.data?.();
+    const after = event.data?.after?.data?.();
+    // Preparation only reserves the import. Owner edits made during it are projected below.
+    if (source === 'training-load' && after?.sourceWritePending &&
+        (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
     // Creates, updates, and deletes can all change the derived comparison.
     const beforeExists = !!event.data?.before?.exists;
     const afterExists = !!event.data?.after?.exists;
@@ -57,75 +29,10 @@ async function handleDerivedMetricsSourceWrite(
     )) {
         return;
     }
-    const sourceId = resolveDerivedMetricsSourceId(event, source);
-
-    // Debounce mutation ingress by uid + short time bucket.
-    // Deterministic Cloud Task naming ensures one pending ingress task per bucket.
-    // The ingress helper schedules execution at bucket-close + short buffer.
-    const eventTimeMs = resolveEventTimeMs(event);
-    const sleepIngressOptions = source === 'sleep'
-        ? {
-            taskScope: 'sleep',
-            metricKinds: [
-                DERIVED_METRIC_KINDS.TrainingBuildComparison,
-                DERIVED_METRIC_KINDS.TrainingReadiness,
-            ],
-            incrementEventMutationVersion: false,
-        } as const
-        : undefined;
-    const healthMetricIds = source === 'health'
-        ? new Set([event.data?.before?.data(), event.data?.after?.data()].flatMap((data) => {
-            const metricIds = (data as { metricIds?: unknown } | undefined)?.metricIds;
-            return Array.isArray(metricIds) ? metricIds.filter(value => typeof value === 'string') : [];
-        }))
-        : null;
-    const healthMetricKinds = healthMetricIds
-        ? [
-            ...(healthMetricIds.has(HEALTH_METRIC_IDS.BodyWeight) ? [DERIVED_METRIC_KINDS.BodyWeightTrend] : []),
-            ...(healthMetricIds.has(HEALTH_METRIC_IDS.HeartRateVariability) ? [
-                DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingReadiness,
-            ] : []),
-            ...(!healthMetricIds.has(HEALTH_METRIC_IDS.HeartRateVariability)
-                && [event.data?.before?.data(), event.data?.after?.data()].some(hasGarminSleepHeartRateSource)
-                ? [DERIVED_METRIC_KINDS.TrainingReadiness] : []),
-            ...(healthMetricIds.has(HEALTH_METRIC_IDS.Vo2Max) ? [DERIVED_METRIC_KINDS.TrainingCapacity] : []),
-        ]
-        : [];
-    if (source === 'health' && healthMetricKinds.length === 0) {
-        return;
-    }
-    const deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
-    if (deletionGuard.shouldSkip) {
-        logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
-            uid, source, sourceId,
-            userExists: deletionGuard.userExists,
-            deletionInProgress: deletionGuard.deletionInProgress,
-        });
-        return;
-    }
-    const targetedIngressOptions = sleepIngressOptions || (source === 'health'
-        ? {
-            // A deterministic task may coalesce only identical invalidation sets.
-            // Otherwise a Weight write can suppress a same-bucket VO2 write (or vice versa).
-            taskScope: `health-${healthMetricKinds.join('-')}`,
-            metricKinds: healthMetricKinds,
-            incrementEventMutationVersion: false,
-        } as const
-        : undefined);
-    const queued = targetedIngressOptions
-        ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs ?? undefined, targetedIngressOptions)
-        : (Number.isFinite(eventTimeMs)
-            ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs as number)
-            : await enqueueDerivedMetricsIngressTask(uid));
-
-    logger.info('[derived-metrics] Source write enqueued derived metrics ingress', {
-        uid,
-        source,
-        sourceId,
-        beforeExists,
-        afterExists,
-        queued,
-    });
+    // No-op deliveries must not load Sports Lib, cache builders or Cloud Tasks.
+    // Import failures propagate to the trigger's existing retry policy.
+    const { handleDerivedMetricsSourceWrite } = await import('./derived-metrics-source-handler');
+    await handleDerivedMetricsSourceWrite(event, source);
 }
 
 export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
@@ -135,7 +42,7 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     maxInstances: 50,
     concurrency: 1,
     retry: true,
-}, event => handleDerivedMetricsSourceWrite(event, 'event'));
+}, event => dispatchSourceWrite(event, 'event'));
 
 export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
@@ -144,7 +51,7 @@ export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
     maxInstances: 50,
     concurrency: 1,
     retry: true,
-}, event => handleDerivedMetricsSourceWrite(event, 'activity'));
+}, event => dispatchSourceWrite(event, 'activity'));
 
 export const onDashboardDerivedMetricsSleepWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
@@ -153,7 +60,7 @@ export const onDashboardDerivedMetricsSleepWrite = onDocumentWritten({
     maxInstances: 50,
     concurrency: 1,
     retry: true,
-}, event => handleDerivedMetricsSourceWrite(event, 'sleep'));
+}, event => dispatchSourceWrite(event, 'sleep'));
 
 export const onDashboardDerivedMetricsHealthWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
@@ -162,4 +69,13 @@ export const onDashboardDerivedMetricsHealthWrite = onDocumentWritten({
     maxInstances: 50,
     concurrency: 1,
     retry: true,
-}, event => handleDerivedMetricsSourceWrite(event, 'health'));
+}, event => dispatchSourceWrite(event, 'health'));
+
+export const onTrainingLoadMetadataWrite = onDocumentWritten({
+    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
+    document: 'users/{uid}/events/{eventId}/metaData/trainingLoad',
+    memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
+    maxInstances: 50,
+    concurrency: 1,
+    retry: true,
+}, event => dispatchSourceWrite(event, 'training-load'));

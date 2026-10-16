@@ -274,3 +274,13 @@ requests into independently reviewed proposals. The existing independent plannin
 or the QS Assistant's prepare-only model and app-owned Apply/Dismiss, remain required. Never adapt workouts automatically,
 send phases to a provider, infer new delivery consent, or bypass a missing capability with another mutation.
 An older catalog may need separate backend release and refresh; stored text and analytical conclusions never authorize writes.
+
+## Endurance estimates
+
+Discover the advertised catalog and additive endurance-capable chart/sample tools rather than guessing fields.
+Suunto EnergySense Endurance is the canonical Stamina percentage; EnergySense Sustainable Distance is a separate
+estimated distance in metres. Bare “EnergySense” needs clarification between those dimensions. Keep Potential Stamina
+separate. Sustainable distance is neither distance travelled nor distance remaining to a route target. Source ending
+summaries and the final sampled reading can differ; preserve the reported minimum, zeros, null gaps and rebounds.
+Never sum or blend these estimates across activities or devices, infer a missing FIT stream, or interpret them as
+Training load or medical evidence. Missing original-file data cannot be recovered by a different query.

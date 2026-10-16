@@ -1,4 +1,5 @@
 import type { DashboardChartTileViewModel } from './dashboard-tile-view-model.helper';
+import { dashboardAcwrComparison } from './dashboard-derived-metrics.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
@@ -199,16 +200,16 @@ export function resolveDashboardKpiSparklineStyle(input: DashboardKpiContext, fa
   }
 
   if (input.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE) {
-    const acwrRatio = input.acwr?.ratio ?? null;
+    const comparison = dashboardAcwrComparison(input.acwr?.ratio);
     // Training-risk zones: <0.8 too low stimulus, >1.3 spike risk.
-    if (Number.isFinite(acwrRatio as number) && (acwrRatio as number) > 1.3) {
+    if (comparison === 'higher') {
       return {
         lineColor: negativeColor,
         areaColor: negativeColor,
         areaOpacity: 0.14,
       };
     }
-    if (Number.isFinite(acwrRatio as number) && (acwrRatio as number) < 0.8) {
+    if (comparison === 'lower') {
       return {
         lineColor: resolveDashboardKpiThemeColor('--mat-sys-tertiary', '#8854d0'),
         areaColor: resolveDashboardKpiThemeColor('--mat-sys-tertiary', '#8854d0'),

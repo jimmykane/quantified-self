@@ -1,7 +1,8 @@
 export type EventTrainingClassification = 'standard' | 'benchmark';
+type EventClassificationSource = { mergeType?: unknown; isMerge?: unknown };
 
 export function classifyEventForTrainingMetrics(
-    eventData: Record<string, unknown> | null | undefined
+    eventData: EventClassificationSource | null | undefined
 ): EventTrainingClassification {
     if (!eventData) {
         return 'standard';
@@ -27,14 +28,14 @@ export function classifyEventForTrainingMetrics(
 }
 
 export function isBenchmarkEventForTrainingMetrics(
-    eventData: Record<string, unknown> | null | undefined
+    eventData: EventClassificationSource | null | undefined
 ): boolean {
     return isBenchmarkEvent(eventData);
 }
 
 /** Shared persistence-level benchmark classification for non-Training boundaries. */
 export function isBenchmarkEvent(
-    eventData: Record<string, unknown> | null | undefined
+    eventData: EventClassificationSource | null | undefined
 ): boolean {
     return classifyEventForTrainingMetrics(eventData) === 'benchmark';
 }

@@ -128,6 +128,23 @@ describe('Timeline note comparison page', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(fixture.nativeElement.querySelector('#comparison-method').hidden).toBe(false);
     expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('#comparison-method').textContent).toContain('not the latest 14 days');
+    expect(fixture.nativeElement.textContent).toContain('You do not need to end it to compare');
+  });
+  it('explains a note older than stored history, without treating coverage as eligible or changing dates', async () => {
+    notes.get.mockResolvedValueOnce({ ...note, startDate: '2026-04-13' });
+    comparisons.load.mockImplementationOnce(async (_uid, selected, days) => ({ window: noteComparisonWindow(selected, days, now),
+      series: [], complete: { sleep_duration: true, heart_rate_variability: true, resting_heart_rate: true }, notices: [],
+      historyStarts: [{ resource: 'sleep', firstDate: '2026-09-12', unavailable: false },
+        { resource: 'health', firstDate: null, unavailable: true }] }));
+    const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);
+    const copy = fixture.nativeElement.querySelector('.comparison-availability').textContent;
+    expect(copy).toContain('after this comparison period'); expect(copy).toContain('Sep');
+    expect(copy).toContain('stored history could not be checked');
+    expect(copy).toContain('not every metric or every day');
+    expect(fixture.nativeElement.querySelector('.comparison-availability a').getAttribute('href')).toBe('/services');
+    expect(fixture.componentInstance.window().anchor).toBe('2026-04-13');
+    expect(fixture.componentInstance.rows().every(row => row.difference === null)).toBe(true);
   });
   it('clears private content and rejects old responses when the owner changes', async () => {
     const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);

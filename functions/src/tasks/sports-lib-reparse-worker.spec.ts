@@ -1,11 +1,14 @@
+import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
+import { Timestamp } from 'firebase-admin/firestore';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
     const capturedTaskOptions: unknown[] = [];
+    const sourceMetadata = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
-        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+        error instanceof Error && ['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'].includes(error.name));
     const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
         || /^Event .* was not found for user .*$/.test(errorMessage)
@@ -59,6 +62,7 @@ const hoisted = vi.hoisted(() => {
 
     return {
         capturedTaskOptions,
+        sourceMetadata,
         reparseEventFromOriginalFiles,
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
@@ -109,6 +113,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     isSportsLibReparseDurationHeavy: hoisted.isSportsLibReparseDurationHeavy,
     isSportsLibReparseTooHeavyForAutomaticReparse: hoisted.isSportsLibReparseTooHeavyForAutomaticReparse,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
+    extractSourceFiles: (data: { originalFiles?: unknown[] }) => data.originalFiles || [],
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
     writeReparseStatus: hoisted.writeReparseStatus,
@@ -138,10 +143,11 @@ vi.mock('firebase-admin', () => {
         doc: hoisted.doc,
         recursiveDelete: hoisted.recursiveDelete,
     }));
-    return { firestore: firestoreFn };
+    return { firestore: firestoreFn, storage: () => ({ bucket: () => ({ file: () => ({ getMetadata: hoisted.sourceMetadata }) }) }) };
 });
 
-vi.mock('firebase-admin/firestore', () => ({
+vi.mock('firebase-admin/firestore', async importOriginal => ({
+    ...await importOriginal<typeof import('firebase-admin/firestore')>(),
     FieldValue: {
         serverTimestamp: hoisted.serverTimestamp,
         delete: hoisted.deleteField,
@@ -494,6 +500,15 @@ describe('processSportsLibReparseTask', () => {
             heavyReason: 'duration_gte_24h',
             eventDurationMs: 33 * 60 * 60 * 1000,
         }), { merge: true });
+    });
+
+    it('preserves the source replacement generation when routing to the heavy worker', async () => {
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'pending', attemptCount: 1, sourceRetryGeneration: 2, eventDurationMs: 25 * 60 * 60 * 1000,
+            targetSportsLibVersion: '9.0.99' }) });
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1', { taskNameSuffix: 'source-2' });
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
     });
 
     it('should mark duration-heavy jobs failed when the heavy task is not created', async () => {
@@ -862,6 +877,109 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'completed',
         }), { merge: true });
+    });
+
+    it.each(['MONITORING_SOURCE', 'ROUTE_SOURCE', 'NON_ACTIVITY_SOURCE', 'MIXED_SOURCES_REQUIRING_REVIEW'])(
+        'acknowledges %s without a failed job and persists the private classification', async reason => {
+            hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({
+                uid: 'u1', eventId: 'e1', status: 'pending', attemptCount: 0, targetSportsLibVersion: '9.0.99',
+            }) });
+            const nonActivitySources = { schemaVersion: 1, sourceFingerprint: 'fingerprint', sources: [] };
+            hoisted.reparseEventFromOriginalFiles.mockResolvedValue({ status: 'skipped', reason, nonActivitySources,
+                sourceFilesCount: 1, parsedActivitiesCount: 0, staleActivitiesDeleted: 0 });
+            await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+            expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+                status: 'skipped', reason, nonActivitySources, lastError: 'DELETE_FIELD', terminalFailure: 'DELETE_FIELD',
+            }));
+            expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', skipReason: reason }), { merge: true });
+            expect(hoisted.jobSet.mock.calls.some(([payload]) => payload.status === 'failed')).toBe(false);
+        });
+
+    it.each(['normal', 'heavy'])('recovers a committed skip after interruption on the %s worker', async tier => {
+        const sources = [{ path: 'original.fit' }];
+        const status = { status: 'skipped', reason: 'MONITORING_SOURCE', nonActivitySources: {
+            schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources),
+            sources: [{ path: 'original.fit', bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'monitoring' }],
+        } };
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'processing', processingTier: tier, attemptCount: 1, targetSportsLibVersion: '9.0.99' }) });
+        hoisted.eventDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ originalFiles: sources }) })
+            .mockResolvedValueOnce({ exists: true, data: () => status });
+        hoisted.sourceMetadata.mockResolvedValue([{ generation: '1', md5Hash: 'checksum' }]);
+        await ((tier === 'heavy' ? processSportsLibReparseHeavyTask : processSportsLibReparseTask) as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', skipReason: 'MONITORING_SOURCE' }), { merge: true });
+        expect(hoisted.jobSet.mock.calls.some(([payload]) => payload.status === 'failed')).toBe(false);
+    });
+
+    it.each(['normal', 'heavy'])('retries a metadata outage during committed skip recovery on the %s worker', async tier => {
+        const sources = [{ path: 'original.fit' }];
+        const status = { status: 'skipped', reason: 'MONITORING_SOURCE', nonActivitySources: {
+            schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources),
+            sources: [{ path: 'original.fit', bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'monitoring' }],
+        } };
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'processing', processingTier: tier, attemptCount: 1, targetSportsLibVersion: '9.0.99' }) });
+        hoisted.eventDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ originalFiles: sources }) })
+            .mockResolvedValueOnce({ exists: true, data: () => status });
+        hoisted.sourceMetadata.mockRejectedValue({ code: 503 });
+        await expect(((tier === 'heavy' ? processSportsLibReparseHeavyTask : processSportsLibReparseTask) as any)(
+            { data: { jobId: 'job-1' } })).rejects.toEqual({ code: 503 });
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
+    it.each(['normal', 'heavy'])('finishes its committed skip even when the original was replaced before retry (%s)', async tier => {
+        const sources = [{ path: 'original.fit' }];
+        const status = { status: 'skipped', reason: 'ROUTE_SOURCE', targetSportsLibVersion: '9.0.99',
+            checkedAt: new Timestamp(100, 2), nonActivitySources: {
+                schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources),
+                sources: [{ path: 'original.fit', bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'route' }],
+            } };
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'processing', processingTier: tier, attemptCount: 1, targetSportsLibVersion: '9.0.99',
+            updatedAt: new Timestamp(100, 1) }) });
+        hoisted.eventDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ originalFiles: [{ path: 'replacement.fit' }] }) })
+            .mockResolvedValueOnce({ exists: true, data: () => status });
+        await ((tier === 'heavy' ? processSportsLibReparseHeavyTask : processSportsLibReparseTask) as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', skipReason: 'ROUTE_SOURCE' }), { merge: true });
+        expect(hoisted.sourceMetadata).not.toHaveBeenCalled();
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+    });
+
+    it.each(['older_attempt', 'different_target'])('does not bypass the heavy interruption guard for a skip from %s', async mismatch => {
+        const status = { status: 'skipped', reason: 'ROUTE_SOURCE',
+            targetSportsLibVersion: mismatch === 'different_target' ? '9.0.98' : '9.0.99',
+            checkedAt: new Timestamp(100, mismatch === 'older_attempt' ? 1 : 3), nonActivitySources: {
+                schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint([{ path: 'original.fit' }]),
+                sources: [{ path: 'original.fit', bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'route' }],
+            } };
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'processing', processingTier: 'heavy', attemptCount: 1, targetSportsLibVersion: '9.0.99',
+            updatedAt: new Timestamp(100, 2) }) });
+        hoisted.eventDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ originalFiles: [{ path: 'replacement.fit' }] }) })
+            .mockResolvedValueOnce({ exists: true, data: () => status });
+        await (processSportsLibReparseHeavyTask as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed', reason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+        }));
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+    });
+
+    it('does not write failure metadata after the event disappears during skip persistence', async () => {
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ uid: 'u1', eventId: 'e1',
+            status: 'pending', attemptCount: 0, targetSportsLibVersion: '9.0.99' }) });
+        hoisted.reparseEventFromOriginalFiles.mockResolvedValue({ status: 'skipped', reason: 'MONITORING_SOURCE',
+            sourceFilesCount: 1, parsedActivitiesCount: 0, staleActivitiesDeleted: 0 });
+        const missingEvent = new Error('Event deleted'); missingEvent.name = 'EventWriteSkippedForDeletedEventError';
+        hoisted.writeReparseStatus.mockRejectedValueOnce(missingEvent);
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledTimes(1);
+        expect(hoisted.recursiveDelete).toHaveBeenCalled();
+        expect(hoisted.jobSet.mock.calls.some(([payload]) => payload.status === 'failed')).toBe(false);
     });
 
     it('should mark failed and rethrow on errors', async () => {

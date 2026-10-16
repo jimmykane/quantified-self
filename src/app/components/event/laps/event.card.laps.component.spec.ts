@@ -152,6 +152,20 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
     });
 
+    it('explains rejected lap timing while retaining lap distance and identity', () => {
+        const lap = { ...createRenderableLap(LapTypes.Manual), getDuration: () => new DataDuration(4000000),
+            getDistance: () => new DataDistance(25), timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } } as unknown as LapInterface;
+        component.selectedActivities = [{ ...createActivity([lap]), type: 'Swimming' } as ActivityInterface];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const row = component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.lap === lap)!;
+        expect(row[DataDuration.type]).toBe('');
+        expect(row.timingExplanation).toContain('Recorded timing exceeds');
+        const explanation = fixture.nativeElement.querySelector('mat-icon[aria-label^="Recorded timing exceeds"]');
+        expect(explanation.getAttribute('aria-hidden')).toBe('false');
+        expect(explanation.getAttribute('tabindex')).toBe('0');
+    });
+
     it('expands only recorded lengths, retains disclosure and selection across units, and labels rest rows', () => {
         const laps = [createRenderableLap(LapTypes.Manual), createRenderableLap(LapTypes.Manual)];
         const activity = { ...createActivity(laps), type: 'Swimming', getSwimLengths: () => [
@@ -416,6 +430,57 @@ describe('EventCardLapsComponent', () => {
         expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).toContain(DataPowerAvg.type);
         await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type]));
         expect(group.selectedMetricTypes).toEqual([DataJumpHangTimeMax.type, DataDuration.type, DataHeartRateMax.type, DataPowerAvg.type]);
+    });
+
+    it.each([
+        { distanceUnits: DistanceUnits.Kilometers, distance: '1.20 Km' },
+        { distanceUnits: DistanceUnits.Miles, distance: '0.75 mi' },
+    ])('labels a shared multisport lap once, with generic $distanceUnits display and no sport average', ({ distanceUnits, distance }) => {
+        const lap = { lapId: 1, startDate: 0, endDate: 450_000, startIndex: null, endIndex: null,
+            type: LapTypes.Manual, stats: { [DataDuration.type]: 450, [DataDistance.type]: 1200,
+                [DataSpeedAvg.type]: 1200 / 450 } };
+        const first = createHydratedActivity([lap]);
+        const last = createHydratedActivity([lap]);
+        first.setID('first'); last.setID('last');
+        first.endDate = new Date(300_000); first.type = ActivityTypes.Swimming;
+        last.startDate = new Date(300_000); last.type = ActivityTypes.Running;
+        component.selectedActivities = [first, last];
+        component.event = { getActivities: () => [first, last] } as EventInterface;
+        component.unitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const tables = component.lapTableGroups.flatMap(g => g.tables);
+        expect(tables).toHaveLength(1);
+        const rows = tables[0].dataSource.data;
+        expect(rows).toHaveLength(1);
+        expect(rows[0][DataDistance.type]).toBe(distance);
+        expect(rows[0].contextLabel).toBe('Multisport lap');
+        expect(fixture.nativeElement.textContent).toContain('Multisport lap');
+        expect(fixture.nativeElement.querySelector('.table-container.lap-context-table')).not.toBeNull();
+        expect(first.getLaps()).toHaveLength(1);
+    });
+
+    it('does not describe a cross-sport lap using only its ending swim lengths', () => {
+        const lap = { lapId: 1, startDate: 0, endDate: 450_000, startIndex: null, endIndex: null,
+            type: LapTypes.Manual, stats: { [DataDuration.type]: 450, [DataDistance.type]: 1200 } };
+        const first = createHydratedActivity([]), last = createHydratedActivity([lap]);
+        first.setID('first'); last.setID('last');
+        first.type = ActivityTypes.Running; first.endDate = new Date(300_000);
+        last.type = ActivityTypes.Swimming; last.startDate = new Date(300_000);
+        vi.spyOn(last, 'getSwimLengths').mockReturnValue([
+            { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle',
+                startDate: 300_000, endDate: 325_000 } as never,
+        ]);
+        component.selectedActivities = [first, last];
+        component.event = { getActivities: () => [first, last] } as EventInterface;
+        component.unitSettings = getDefaultUserUnitSettings();
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const row = component.lapTableGroups.flatMap(g => g.tables)[0].dataSource.data[0];
+        expect(row.contextLabel).toBe('Multisport lap');
+        expect(row[EVENT_LAP_STROKE_COLUMN]).toBe('');
+        expect(row[EVENT_LAP_SWOLF_COLUMN]).toBe('');
+        expect(row.hasLengths).toBe(false);
     });
 
     it('should create', () => {

@@ -279,6 +279,8 @@ const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
 ];
 
 const PHYSIOLOGICAL_STAMINA_TYPE_STRINGS: string[] = [
+  'Estimated Sustainable Distance',
+  'Minimum Estimated Sustainable Distance',
   DataStamina.type,
   DataStaminaAvg.type,
   DataStaminaMin.type,

@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import { describe, expect, it } from 'vitest';
 import {
   ActivityInterface,
@@ -36,6 +37,18 @@ describe('event-swim-length.helper', () => {
     swolf: 39,
     calories: 4,
   };
+
+  it('retains allowlisted timing validity and keeps missing distinct from zero and elapsed fallback', () => {
+    const timingValidity = { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000, private: 'discard' };
+    const length = normalizeSwimLength({ ...rawSwimLength, timerTime: null, timingValidity })!;
+    expect(getRejectedSwimTiming(length)).toEqual({ version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 });
+    expect(resolveSwimTiming(length)).toEqual({ timerTime: null, elapsedTime: 25, duration: null });
+    expect(resolveSwimTiming({ elapsedTime: 25, timerTime: 0 }).duration).toBe(0);
+    expect(resolveSwimTiming({ elapsedTime: 25, timerTime: null }).duration).toBe(25);
+    expect(resolveSwimTiming({ elapsedTime: 25, timerTime: -1 }).duration).toBeNull();
+    expect(getRejectedSwimTiming({ timingValidity: { ...timingValidity, version: 2 } })).toBeUndefined();
+    expect(getRejectedSwimTiming({ timingValidity: { ...timingValidity, timerTime: Infinity } })).toBeUndefined();
+  });
 
   it('normalizes valid swim length JSON', () => {
     const swimLength = normalizeSwimLength(rawSwimLength);

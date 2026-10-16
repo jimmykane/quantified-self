@@ -1,9 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
+// training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
+const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('./training-load/training-load-source-write', () => ({
+    TrainingLoadSourceWrite: class {
+        assertCurrent = sourceWriteGuard.assertCurrent;
+        constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
+    },
+}));
 import * as logger from 'firebase-functions/logger';
 import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
+import { getContentAddressedOriginalPath } from './shared/storage-file-save';
+import { withHistoryExecution } from './connection-history/context';
+import * as trainingLoadMetadata from './training-load/training-load-metadata';
+import type { HistoryExecution } from './connection-history/execution';
+import type { firestore } from 'firebase-admin';
 
 type SetEventParameters = Parameters<typeof setEvent>;
 
@@ -400,6 +414,56 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEvent', () => {
+        it.each(['prepare', 'finalize'] as const)('blocks Training metadata %s when history-import authority changes', async phase => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };
+            const metaData = { serviceName: 'GARMINAPI', toJSON: () => ({}) };
+            const failure = new Error('History import was superseded');
+            const inTransaction = vi.fn().mockResolvedValue(undefined);
+            const additionalAuthorization = vi.fn().mockResolvedValue(undefined);
+            const db = hoisted.firestore() as unknown as firestore.Firestore;
+            const prepareTransaction = {} as firestore.Transaction;
+            const finalizeTransaction = {} as firestore.Transaction;
+            const committedMetadata = vi.fn();
+            const execution: HistoryExecution = {
+                runId: 'history-run', cooldownStartedAtMs: 0, requiredDocumentFieldValues: [],
+                tokenPath: 'tokens/test', providerUserId: 'provider-test',
+                beforeRequest: async () => undefined, onQueued: () => undefined, inTransaction,
+            };
+            const prepare = vi.spyOn(trainingLoadMetadata, 'prepareTrainingLoadMetadata')
+                .mockImplementationOnce(async (_uid, _event, authorize) => {
+                    if (phase === 'prepare') inTransaction.mockRejectedValueOnce(failure);
+                    await authorize?.(db, prepareTransaction);
+                    return async () => {
+                        if (phase === 'finalize') inTransaction.mockRejectedValueOnce(failure);
+                        await authorize?.(db, finalizeTransaction);
+                        committedMetadata();
+                    };
+                });
+            writeAllEventDataMock.mockImplementationOnce(async () => {
+                const [adapter] = eventWriterConstructorMock.mock.calls.at(-1)!;
+                const finalize = await adapter.prepareTrainingLoad(event);
+                await finalize();
+                return mockSavedOriginalFiles;
+            });
+            try {
+                await expect(withHistoryExecution(execution, () => setEvent(
+                    'user-1', 'event-1', event as unknown as SetEventParameters[2], metaData,
+                    undefined, undefined, undefined, undefined,
+                    { assertWriteAuthorizationInTransaction: additionalAuthorization },
+                ))).rejects.toBe(failure);
+                expect(inTransaction.mock.calls.at(-1)?.[0]).toBe(phase === 'prepare' ? prepareTransaction : finalizeTransaction);
+                expect(committedMetadata).not.toHaveBeenCalled();
+                expect(hoisted.transactionSet).not.toHaveBeenCalled();
+                if (phase === 'finalize') {
+                    expect(additionalAuthorization.mock.calls.some(([database, transaction]) => database === db && transaction === prepareTransaction)).toBe(true);
+                    expect(additionalAuthorization.mock.calls.some(([, transaction]) => transaction === finalizeTransaction)).toBe(false);
+                }
+            } finally {
+                prepare.mockRestore();
+            }
+        });
+
         it('does not write event data or original files when subscription verification is unavailable', async () => {
             hoisted.getUser.mockRejectedValue(Object.assign(new Error('Auth network failure'), { code: 'app/network-error' }));
             const event = { setID: vi.fn(), getActivities: () => [] };
@@ -503,20 +567,66 @@ describe('utils higher-level helpers', () => {
                 startDate: new Date(),
             };
             const path = 'users/user-1/events/event-1/original.fit';
+            const retainedPath = getContentAddressedOriginalPath(path, originalFile.data);
             writeAllEventDataMock.mockImplementationOnce(async () => {
                 const [, storageAdapter] = eventWriterConstructorMock.mock.calls.at(-1);
                 await expect(storageAdapter.uploadFile(path, originalFile.data))
-                    .resolves.toEqual({ generation: '1' });
+                    .resolves.toEqual({ path: retainedPath, generation: '1' });
                 return mockSavedOriginalFiles;
             });
 
             await setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], metaData, originalFile);
 
-            expect(hoisted.bucketSave).toHaveBeenCalledWith(path, originalFile.data, {
+            expect(hoisted.bucketSave).toHaveBeenCalledWith(retainedPath, originalFile.data, {
                 validation: 'crc32c',
                 metadata: { crc32c: '4waSgw==' },
             });
             expect(hoisted.bucketCopy).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('keeps the newer original readable when an older upload finishes last (staged: %s)', async staged => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };
+            const metaData = { serviceName: 'WAHOOAPI', toJSON: () => ({ meta: true }) };
+            const objects = new Map<string, Buffer>();
+            let releaseOlder!: () => void;
+            let olderStarted!: () => void;
+            const started = new Promise<void>(resolve => { olderStarted = resolve; });
+            const blocked = new Promise<void>(resolve => { releaseOlder = resolve; });
+            const finishUpload = async (path: string, bytes: Buffer) => {
+                if (bytes.toString() === 'older source') { olderStarted(); await blocked; }
+                objects.set(path, bytes);
+            };
+            hoisted.bucketSave.mockImplementation(async (path: string, bytes: Buffer) => {
+                if (staged) objects.set(path, bytes);
+                else await finishUpload(path, bytes);
+            });
+            hoisted.bucketCopy.mockImplementation(async (source: string, target: { path: string }) => {
+                await finishUpload(target.path, objects.get(source)!);
+            });
+            const path = 'users/user-1/events/event-1/original.fit';
+            writeAllEventDataMock.mockImplementation(async (_user, _event, original) => {
+                const [, storage] = eventWriterConstructorMock.mock.calls.at(-1)!;
+                const result = await storage.uploadFile(path, original.data);
+                return [{ path: result.path ?? path }];
+            });
+            const upload = (source: string) => setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], metaData,
+                { data: Buffer.from(source), extension: 'fit', startDate: new Date() }, undefined, undefined, undefined,
+                { stageOriginalFilesUntilEventWrite: staged });
+            const older = upload('older source');
+            await started;
+            try {
+                const newer = await upload('newer source');
+                releaseOlder();
+                await older;
+                expect(objects.get(newer.savedOriginalFiles[0].path)?.toString()).toBe('newer source');
+            } finally {
+                releaseOlder();
+                await older;
+                hoisted.bucketSave.mockReset();
+                hoisted.bucketCopy.mockReset();
+                writeAllEventDataMock.mockResolvedValue(mockSavedOriginalFiles);
+            }
         });
 
         it('promotes a staged original file only after all guarded writes succeed', async () => {
@@ -566,7 +676,7 @@ describe('utils higher-level helpers', () => {
             });
             expect(hoisted.bucketCopy).toHaveBeenCalledWith(
                 stagingPath,
-                expect.objectContaining({ path: 'users/user-1/events/event-1/original.fit' }),
+                expect.objectContaining({ path: getContentAddressedOriginalPath('users/user-1/events/event-1/original.fit', originalFile.data) }),
             );
             expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
         });

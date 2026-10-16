@@ -41,6 +41,18 @@ describe('help.content', () => {
     expect(content).toContain('the history chart stays visible either way');
     expect(content).toContain('neutral rail does not classify a numerical change as good/bad');
   });
+  it('explains ongoing notes, fixed after-windows and missing historical evidence without asking users to end or move notes', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Ongoing notes can be compared without ending them.**', 'Ending a note does not move those dates',
+      '**first** 7, 14 or 28 days', '**No eligible readings for these dates**', 'failed checks are shown as unavailable',
+      "Keep the note's real start date", 'cannot create history the provider no longer supplies']) expect(content).toContain(phrase);
+  });
+  it('separates requested import dates, stored first dates and previously reported Sleep-only provider cutoffs', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Requested range** from **Stored history**', 'not complete or gap-free coverage',
+      '**Refresh stored dates**', 'without starting an import', '**Last reported Garmin Sleep history cutoff**',
+      'never applied to Health']) expect(content).toContain(phrase);
+  });
   it('explains saved Suunto route import scope without enabling outbound directions', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('Suunto also includes existing saved routes');
@@ -54,6 +66,95 @@ describe('help.content', () => {
       'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
+  });
+  it('explains unavailable pool timing without losing rests or inventing replacements', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(copy).toContain('Valid elapsed time is not substituted for rejected active time');
+    expect(copy).toContain('Valid long rests and multisport laps are preserved');
+    expect(copy).toContain('Its distance, strokes and rest label remain');
+  });
+  it('explains source parser corrections without promising calibration or historical deletion', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('pace-based load needs a threshold belonging to that sport');
+    expect(copy).toContain('An unassigned whole-workout speed threshold is not copied across different sports');
+    expect(copy).toContain('COROS GPX files can supply recorded heart-rate readings');
+    expect(copy).toContain('Readings alone do not supply the resting, threshold and maximum HR settings');
+    expect(copy).toContain('Daily monitoring FIT files are not workouts');
+    expect(copy).toContain('Completed workout summaries, including Wahoo files without sensor readings, remain supported');
+    expect(copy).toContain('when the file contains a recorded workout session');
+    expect(copy).toContain('reports a failure and keeps the existing saved activity');
+    expect(copy).toContain('does not automatically remove it or import Health data');
+    expect(copy).toContain('complete pool lengths and a complete recorded distance counter or an independent session total agree');
+    expect(copy).toContain('that distance is counted once');
+    expect(copy).toContain('Missing or conflicting evidence is not used to guess a correction');
+  });
+  it('distinguishes rejected calculations from missing inputs and explains importer metadata corrections', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('have the required file inputs but still fail to produce a valid TSS');
+    expect(copy).toContain('distinguishes this from missing inputs');
+    expect(copy).toContain('does not change the scoring formulas or accepted score range');
+    expect(copy).toContain('Saved individual activity names are retained');
+    expect(copy).toContain('without treating the GPX format version as a device manufacturer');
+    expect(copy).toContain('An unrecognized TCX sport is shown as **Unknown Sport**');
+    expect(copy).toContain('requires reimporting the original file');
+  });
+  it('explains single-lap pool imports and retained boundary rests', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Pool imports support swims recorded as one lap');
+    expect(copy).toContain('Rest lengths add no generated distance');
+    expect(copy).toContain('ambiguous length ownership is not guessed');
+    expect(copy).toContain("Readings calculated from pool lengths stay within that swim's recorded times");
+  });
+  it('explains source distance preservation during reimport', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('keeps the positive distance selected when the original file is parsed');
+    expect(copy).toContain('Distance readings can stop early, begin late or reset');
+    expect(copy).toContain('Those readings do not replace the parsed total');
+    expect(copy).toContain('Missing or zero totals can still be calculated from available measurements');
+    expect(copy).toContain('This also applies to pool swims');
+    expect(copy).toContain('does not copy an older saved distance or guess totals by adding counter segments');
+  });
+  it('distinguishes measured zero power from missing sensor evidence', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Valid recorded zero-power windows can produce zero power-based TSS');
+    expect(copy).toContain('A zero summary or missing sensor readings alone cannot establish zero load');
+    expect(copy).toContain('Missing power readings do not count as recorded zero power');
+    expect(copy).toContain('calculated power load falls back to another eligible method or stays unavailable');
+  });
+  it('explains recorded timer recovery and the original-file boundary for historical corrections', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Recorded Suunto pauses and resumes are used in load calculations');
+    expect(copy).toContain('consistent, unambiguous timer timeline');
+    expect(copy).toContain('a recorded positive timer summary remains authoritative');
+    expect(copy).toContain('refreshing Training alone cannot recover readings or pauses discarded during an earlier import');
+    expect(copy).toContain('Your saved load preferences and overrides are retained');
+  });
+  it('explains running pace coverage, recorded pool HR and confirmed multisport pauses', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Running pace TSS uses the energy cost of hills, recorded zero speed and complete 30-second windows');
+    expect(copy).toContain('insufficient usable pace data falls back to another eligible method');
+    expect(copy).toContain('Pool swims keep recorded heart-rate readings instead of replacing them with lap averages');
+    expect(copy).toContain('missing or conflicting timing is not used to guess a pause');
+  });
+  it('explains HR pauses and independent power calibration without promising historical rewrites', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Calculated HR TSS excludes explicit timer pauses');
+    expect(copy).toContain('Without recorded start/stop events, pauses cannot be located from total duration alone');
+    expect(copy).toContain('Power-based TSS needs independent FTP recorded in the file');
+    expect(copy).toContain('another eligible method is used or load stays unavailable');
+    expect(copy).toContain('File-imported scores remain unchanged');
+    expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
+  });
+  it('explains swimming threshold requirements, file-only fallbacks and imported-score preservation', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Pool and open-water swimming need a usable swim threshold for pace-based TSS');
+    expect(copy).toContain("The workout's average pace is never used as its own threshold");
+    expect(copy).toContain('other eligible methods, including calibrated HR or a calorie/MET estimate');
+    expect(copy).toContain('If none has the required file inputs, load stays unavailable');
+    expect(copy).toContain('File-imported TSS, including zero, still takes precedence');
+    expect(copy).toContain('Complete, valid HR settings recorded for the session');
+    expect(copy).toContain('Missing or invalid session settings are not guessed');
+    expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
   });
   it('explains a busy activity-history request for all four providers without claiming success or failure', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
@@ -71,10 +172,17 @@ describe('help.content', () => {
       expect(copy).toContain(phrase);
     }
   });
+  it('explains copied merge load controls and the retained original workouts', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('The combined modeled load sums included activities once');
+    expect(copy).toContain('Your original workouts remain unchanged');
+    expect(copy).toContain('A whole-workout exclusion applies to its copied legs');
+    expect(copy).toContain('Exclusion keeps its history and volume');
+  });
   it('explains Training history columns separately from unavailable history and forecasts', () => {
     const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(training).toContain('**Load metric history**');
-    expect(training).toContain('Monotony history uses recorded daily TSS');
+    expect(training).toContain('Monotony history uses modeled daily TSS, including your Training load preferences and overrides');
     expect(training).toContain('not Strain values');
     expect(training).toContain('**Plans** in the Training header');
     expect(training).toContain('dashed no-additional-load scenario');
@@ -212,13 +320,22 @@ describe('help.content', () => {
       'creates no opening lap', 'resets the displayed average early', 'including HR-only strength Guides',
       'do not prove target adherence', 'including rest/recovery and every repeat', '**Guide complete**',
       'without adding workout time or stopping activity recording', '**your watch settings**',
-      'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
+      'No out-of-target alerts are added', 'approximately 20 seconds',
       'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',
       '**Follow distance countdown**', '**Press lap when ready**', "does not follow your watch's unit settings automatically",
       '**Follow time countdown** rather than rounding or omitting seconds',
       'past and completed copies stay unchanged', 'not proof of watch receipt, sensor readings, alerts or workout completion']) {
       expect(content).toContain(phrase);
     }
+  });
+  it('explains default native timed-Rest countdown alerts without promising a custom sound pattern', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Timed Rest countdown alerts**', 'included by default', 'including swimming and strength set rests',
+      'no extra QS toggle', "Suunto's native standard countdown", 'watch controls the beep/vibration pattern',
+      'long beep at zero is not guaranteed', 'Quiet/tones-off behavior still needs a watch check',
+      'Manual or distance-ended Rest, active Recovery, Work, warm-up and cool-down do not gain countdown alerts',
+      'QS does not insert extra steps', 'independently of the countdown alert']) expect(content).toContain(phrase);
+    expect(content).not.toContain('or extra alarm sequence');
   });
   it('distinguishes authored Suunto targets, measured swimming readings and unsupported ZoneSense', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -260,7 +377,7 @@ describe('help.content', () => {
       'Each repeat set has its own count', 'very large Guides keep their existing step structure without counters or Next hints',
       'retain the previous layout when the new labels cannot fit safely', 'Your targets and instructions are never removed',
       'not freshly reset averages or previous-effort statistics', 'not a previous-interval summary',
-      'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
+      'Rowing and strength screen layouts are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
   });
   it('explains the app-only Suunto Guide preview without promising new watch behavior', () => {
@@ -487,6 +604,11 @@ describe('help.content', () => {
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
     expect(health).toContain('Dashboard **At a glance** is always sentence-only');
+    expect(health).toContain('**Daily context in At a glance:**');
+    expect(health).toContain('Weekly plan progress uses exact stored activity links');
+    expect(health).toContain('looks ahead seven calendar days');
+    expect(health).toContain('Partial reads never become a claim that no workouts or notes exist');
+    expect(health).toContain('respect **Show on charts and calendar**');
     expect(health).toContain('no expand button or repeated metric breakdown');
     expect(health).toContain('including **Mixed** and **Recover** days');
     expect(health).toContain('existing **Today** card keeps the scores, charts and supporting context');
@@ -1450,10 +1572,22 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable rather than becoming zero');
   });
 
+  it('explains the active-duration requirement for event-detail durability after reload', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('valid, positive active **Duration**');
+    expect(gettingStartedSection?.content).toContain('reopening the workout does not calculate or reuse a durability result');
+    expect(gettingStartedSection?.content).toContain('Zero active time cannot support this long-session comparison');
+    expect(gettingStartedSection?.content).toContain('does not change your saved Training load or Training history');
+  });
+
   it('should document event stamina metrics', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event stamina metrics');
+    expect(gettingStartedSection?.content).toContain('**EnergySense Endurance**');
+    expect(gettingStartedSection?.content).toContain('**EnergySense Sustainable Distance**');
+    expect(gettingStartedSection?.content).toContain('source ending summary can differ');
     expect(gettingStartedSection?.content).toContain('**Stamina** and **Potential Stamina**');
     expect(gettingStartedSection?.content).toContain('Detailed Statistics');
     expect(gettingStartedSection?.content).toContain('event summary metric tabs');

@@ -7,7 +7,8 @@ import { serializeSuuntoGuideJsonV1, serializeSuuntoStrengthGuideV1, serializeSu
   serializeSuuntoStrengthGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
   serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery,
   serializeSuuntoStrengthGuideV4ForRecovery, serializeSuuntoStrengthGuideV7ForRecovery,
-  serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery, serializeSuuntoGuideV11ForRecovery, serializeSuuntoGuideV12ForRecovery, serializeSuuntoSwimmingGuideV14, serializeSuuntoSwimmingGuideV15 } from '../../providers/suunto-guide.serializer';
+  serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery, serializeSuuntoGuideV11ForRecovery, serializeSuuntoGuideV12ForRecovery, serializeSuuntoSwimmingGuideV14, serializeSuuntoSwimmingGuideV15, serializeSuuntoRestAlertGuideV16 } from '../../providers/suunto-guide.serializer';
+import { addSuuntoRestCountdownAlerts, hasSuuntoTimedRest } from '../../providers/suunto-rest-alerts';
 import { isSuuntoSwimmingSport } from '../../providers/suunto-swimming-presentation';
 import { normalizeSuuntoSwimmingGuideSettings, type SuuntoSwimmingGuideSettings } from '../../../../../shared/suunto-swimming-guide-settings';
 import { hasSuuntoRestPresentation } from '../../providers/suunto-rest-presentation';
@@ -16,9 +17,9 @@ import { ProviderWorkoutMappingError } from '../../providers/provider-mapping';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import type { DeliveryAssessment, DeliveryOperation } from '../contracts';
 
-// Swimming field allocation uses v15; other sports retain v13 app descriptions.
-// Historical mappings stay frozen for exact recovery before a same-ID update.
-export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v15';
+// Only timed Rest opts into v16. Other payloads and all historical attempts stay frozen.
+export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v16';
+const SWIM_FIELDS_MAPPING_VERSION = 'suunto-guides-v15';
 const SWIM_PREFERENCES_MAPPING_VERSION = 'suunto-guides-v14';
 const PREVIEW_MAPPING_VERSION = 'suunto-guides-v13';
 const REST_MAPPING_VERSION = 'suunto-guides-v12';
@@ -51,11 +52,25 @@ export function guideMapping(workout: ScheduledWorkoutV1, destination: string, o
   swimmingSettings?: SuuntoSwimmingGuideSettings, generation = 0) {
   return mapGuide(workout, destination, owner, strength, currentVersion(workout), weightUnits, unitSettings, swimmingSettings, generation);
 }
-const currentVersion = (workout: ScheduledWorkoutV1) => isSuuntoSwimmingSport(workout.structure.sport) ? SUUNTO_MAPPING_VERSION : PREVIEW_MAPPING_VERSION;
+const currentVersion = (workout: ScheduledWorkoutV1) => hasSuuntoTimedRest(workout.structure) ? SUUNTO_MAPPING_VERSION
+  : isSuuntoSwimmingSport(workout.structure.sport) ? SWIM_FIELDS_MAPPING_VERSION : PREVIEW_MAPPING_VERSION;
 function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: string,
   strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits,
   unitSettings?: UserUnitSettingsInterface, swimmingSettings?: SuuntoSwimmingGuideSettings, generation = 0): ReturnType<typeof serializeSuuntoGuideJsonV1> {
-  if (version === SUUNTO_MAPPING_VERSION || version === SWIM_PREFERENCES_MAPPING_VERSION) {
+  if (version === SUUNTO_MAPPING_VERSION) {
+    const settings = normalizeUserUnitSettings({ ...unitSettings, ...(weightUnits ? { weightUnits } : {}) });
+    // Keep the existing complete-companion validation and weight presentation.
+    const result = workout.structure.sport === ActivityTypes.StrengthTraining
+      ? mapGuide(workout, destination, owner, strength, PREVIEW_MAPPING_VERSION, weightUnits, unitSettings, swimmingSettings, generation)
+      : serializeSuuntoRestAlertGuideV16(workout.structure, { name: workout.title, owner: validateGuideOwner(owner),
+        url: 'https://quantified-self.io/training/plans', localDate: workout.localDate, sourceWorkoutId: workout.id,
+        externalId: guideExternalId(destination, workout.id, generation), allowDegraded: true }, swimmingSettings, settings);
+    const artifact = workout.structure.sport === ActivityTypes.StrengthTraining
+      ? { ...result.artifact, steps: addSuuntoRestCountdownAlerts(result.artifact.steps) } : result.artifact;
+    return { ...result, artifact: withSuuntoGuideDescription(artifact,
+      suuntoGuideDescription(workout.structure, workout.title, settings, strength)) };
+  }
+  if (version === SWIM_FIELDS_MAPPING_VERSION || version === SWIM_PREFERENCES_MAPPING_VERSION) {
     if (!isSuuntoSwimmingSport(workout.structure.sport)) throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{
       severity: 'unsupported', code: 'unsupported_sport', path: '$.sport', message: 'Swimming presentation requires a swimming recipe.',
     }]);
@@ -107,6 +122,8 @@ export function assessSuuntoGuide(workout: ScheduledWorkoutV1, destination: stri
   if (result.level === 'degraded' && result.requiresApproval !== false) {
     const candidates = LEGACY_MAPPING_VERSIONS.filter(version => version !== result.mappingVersion).map(version =>
       inspectGuide(workout, destination, zone, owner, strength, version, undefined, undefined, undefined, generation));
+    if (version === SUUNTO_MAPPING_VERSION) candidates.push(inspectGuide(workout, destination, zone, owner, strength,
+      PREVIEW_MAPPING_VERSION, weightUnits, unitSettings, undefined, generation));
     // At most the originally approved and most recent proved unit snapshots.
     // Recompute full payload/loss identities; never trust a unit-only public claim.
     for (const units of approvalUnitSettings?.slice(0, 2) ?? []) {
@@ -121,8 +138,10 @@ export function assessSuuntoGuide(workout: ScheduledWorkoutV1, destination: stri
     if (isSuuntoSwimmingSport(workout.structure.sport)) {
       for (const preferences of [swimmingSettings, ...(approvalSwimmingSettings?.slice(0, 2) ?? [])]) {
         for (const units of [unitSettings, ...(approvalUnitSettings?.slice(0, 2) ?? [])]) {
-          candidates.push(inspectGuide(workout, destination, zone, owner, strength, SWIM_PREFERENCES_MAPPING_VERSION,
-            weightUnits, units, preferences, generation));
+          for (const prior of [SWIM_FIELDS_MAPPING_VERSION, SWIM_PREFERENCES_MAPPING_VERSION]) {
+            candidates.push(inspectGuide(workout, destination, zone, owner, strength, prior,
+              weightUnits, units, preferences, generation));
+          }
         }
       }
     }
@@ -204,6 +223,11 @@ export function assessSuuntoGuideV14ForRecovery(workout: ScheduledWorkoutV1, des
   return inspectGuide(workout, destination, zone, owner, undefined, SWIM_PREFERENCES_MAPPING_VERSION,
     undefined, unitSettings, swimmingSettings).assessment;
 }
+export function assessSuuntoGuideV15ForRecovery(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
+  unitSettings?: UserUnitSettingsInterface, swimmingSettings?: SuuntoSwimmingGuideSettings): DeliveryAssessment {
+  return inspectGuide(workout, destination, zone, owner, undefined, SWIM_FIELDS_MAPPING_VERSION,
+    undefined, unitSettings, swimmingSettings).assessment;
+}
 
 function digestBase(destination: string, zone: string, owner: string,
   strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits) {
@@ -247,7 +271,7 @@ export function guidePayloadForRecovery(operation: DeliveryOperation, owner: str
  * infer a version from the current adapter when the operation predates it. */
 export function guideMappingForRecovery(operation: DeliveryOperation, owner: string) {
   if (!operation.workout || operation.kind !== 'upsert') return null;
-  const versions: string[] = [SUUNTO_MAPPING_VERSION, SWIM_PREFERENCES_MAPPING_VERSION, STRENGTH_MAPPING_VERSION, ...LEGACY_MAPPING_VERSIONS];
+  const versions: string[] = [SUUNTO_MAPPING_VERSION, SWIM_FIELDS_MAPPING_VERSION, SWIM_PREFERENCES_MAPPING_VERSION, STRENGTH_MAPPING_VERSION, ...LEGACY_MAPPING_VERSIONS];
   if (operation.workout.structure.sport === ActivityTypes.Swimming) versions.unshift(POOL_SCREEN_MAPPING_VERSION);
   if ([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(operation.workout.structure.sport)) versions.unshift(SWIM_MAPPING_VERSION);
   for (const version of versions) {

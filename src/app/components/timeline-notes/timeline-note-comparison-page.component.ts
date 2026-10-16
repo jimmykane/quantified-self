@@ -1,7 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, PLATFORM_ID, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
@@ -31,7 +31,7 @@ import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component'
 @Component({
   selector: 'app-timeline-note-comparison-page', standalone: true,
   imports: [MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatIconModule, MatProgressBarModule,
-    MatSelectModule, AppChartSharedModule, PageHeaderComponent, NoteComparisonSummaryComponent, HealthMetricSeriesChartComponent],
+    MatSelectModule, RouterLink, AppChartSharedModule, PageHeaderComponent, NoteComparisonSummaryComponent, HealthMetricSeriesChartComponent],
   templateUrl: './timeline-note-comparison-page.component.html', styleUrl: './timeline-note-comparison-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -73,6 +73,11 @@ export class TimelineNoteComparisonPageComponent {
     return window ? { before: `${comparisonDateLabel(window.before.startDate)} – ${comparisonDateLabel(window.before.endDate)}`,
       after: `${comparisonDateLabel(window.after.startDate)} – ${comparisonDateLabel(window.after.endDate)}` } : null;
   });
+  readonly historyStarts = computed(() => (this.evidence()?.historyStarts || []).map(start => ({ ...start,
+    label: start.resource === 'sleep' ? 'Sleep sessions' : 'Health records',
+    dateLabel: start.firstDate ? comparisonDateLabel(start.firstDate) : null,
+    outsideWindow: !!start.firstDate && start.firstDate > this.window()!.after.endDate,
+  })));
   readonly rows = computed(() => {
     const evidence = this.evidence();
     const pending = this.loading(), failed = !!this.error();

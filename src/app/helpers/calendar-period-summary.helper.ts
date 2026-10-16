@@ -122,7 +122,7 @@ export function buildCalendarPeriodSummary(input: {
   const recordedMetrics = [
     { label: 'Duration', type: DataDuration.type },
     { label: 'Distance', type: DataDistance.type },
-    { label: 'Training load', type: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE },
+    { label: 'Recorded TSS', type: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE },
   ].map(({ label, type }) => {
     let sum = 0;
     let sources = 0;

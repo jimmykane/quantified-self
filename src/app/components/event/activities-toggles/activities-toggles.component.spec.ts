@@ -10,7 +10,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppEventService } from '../../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../../services/logger.service';
-import { DataDistance, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDistance, DataDuration, DistanceUnits, EventImporterJSON, FileType, Privacy } from '@sports-alliance/sports-lib';
 
 const createActivity = (id: string, creatorName: string, serialNumber: string, swInfo = ''): any => ({
   getID: () => id,
@@ -132,6 +132,36 @@ describe('ActivitiesTogglesComponent', () => {
 
     return { event, a1, a2 };
   };
+
+  it('renders real activities with missing, zero and measured duration without inventing time from dates', () => {
+    const event = EventImporterJSON.getEventFromJSON({
+      name: 'Timing controls', startDate: 0, endDate: 3600000, srcFileType: FileType.FIT,
+      description: null, isMerge: false, privacy: Privacy.Private, stats: {}, activities: [],
+    });
+    const activities = [undefined, 0, 600].map((seconds, index) => {
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: null, startDate: 0, endDate: 3600000, type: ActivityTypes.Running,
+        creator: { name: 'Synthetic', devices: [] }, powerMeter: false, trainer: false,
+        stats: {}, streams: [], laps: [], intensityZones: [], events: [],
+      });
+      activity.setID(`timing-${index}`);
+      if (seconds !== undefined) activity.setDuration(new DataDuration(seconds));
+      return activity;
+    });
+    event.addActivities(activities);
+    fixture.componentRef.setInput('event', event);
+    fixture.componentRef.setInput('selectedActivities', activities);
+    fixture.componentRef.setInput('isOwner', false);
+    fixture.componentRef.setInput('user', user);
+
+    expect(() => fixture.detectChanges()).not.toThrow();
+    const rows = component.activityDisplayRows();
+    for (const [index, seconds] of [undefined, 0, 600].entries()) {
+      const row = rows.find(value => value.trackKey === `timing-${index}`);
+      expect(row?.duration).toBe(seconds === undefined ? '' : new DataDuration(seconds).getDisplayValue());
+    }
+    expect(activities[0].getDuration()).toBeUndefined();
+  });
 
   it('renders edit button only for owner when device chips are shown', () => {
     setupInputs(true);

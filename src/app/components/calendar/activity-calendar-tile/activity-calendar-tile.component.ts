@@ -121,16 +121,6 @@ export class ActivityCalendarTileComponent {
     this.stateChange.emit({ view: this.mode(), anchor: formatActivityCalendarDateParam(this.anchorDate()), date: this.selectedDateKey() });
   });
   readonly user = input<User | null | undefined>(null);
-  private readonly trainingImpactSource = computed(() => {
-    const uid = this.user()?.uid;
-    return uid
-      ? this.trainingImpact.watch(uid)
-      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
-  });
-  readonly trainingImpactState = toSignal(
-    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
-    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
-  );
   readonly hasTrainingPlanningUIAccess = computed(() => {
     const viewerUid = this.users.user()?.uid;
     return !!viewerUid && this.user()?.uid === viewerUid;
@@ -235,6 +225,16 @@ export class ActivityCalendarTileComponent {
   readonly selectedDayActivities = computed(() => ({
     day: this.selectedDay()!, status: this.eventState().status,
   }));
+  private readonly trainingImpactSource = computed(() => {
+    const uid = this.user()?.uid;
+    return uid
+      ? this.trainingImpact.watch(uid, this.selectedDay()?.events ?? [])
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+  readonly trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
   readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
   readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
   readonly selectedDayData = computed<CalendarDayDetailsData | null>(() => {
