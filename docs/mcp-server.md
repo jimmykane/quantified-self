@@ -803,6 +803,12 @@ tool or response field still requires the digest-bound lifecycle below. Every su
 Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See
 `docs/assistant.md` for the exact internal boundary and maintenance checklist.
 
+Built-in instruction variants name only its consented tag/location capabilities and describe Training preparation
+followed by app-owned confirmation, not external apply tools. Preview descriptions use the same distinction. The
+Assistant's per-generation catalog/read-first guard remains authoritative, and rejected calls log only recognized
+catalog names, fixed reasons and bounded counters. External instructions, schemas, scopes and approval are unchanged;
+this correction requires no registered-app rescan or bundled-plugin rebuild.
+
 ## Public endpoints
 
 Hosting routes these paths to `mcpApi`:

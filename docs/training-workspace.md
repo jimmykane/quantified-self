@@ -235,6 +235,12 @@ This private intent hint grants no authority and does not replace source verific
 limited to the names advertised for that exact model response. A successful first read cannot retroactively authorize
 an unadvertised preview in the same parallel response, and a preview-only correction cannot call other tools.
 
+First-party Training guidance and preview descriptions do not direct Gemini to external apply tools. Tool-specific
+guidance follows the current generation's catalog, with the same read-first gate, focused-preview selection, six-call
+budget and mandatory app Apply. Safe rejection/budget diagnostics distinguish an unknown name, a tool outside the turn
+and a temporarily unadvertised tool without retaining model arguments or user text. No planning read/write schema,
+consent, provider action, quota policy, public MCP digest or bundled guidance changes; no planning coverage is deferred.
+
 ### Plan activation and optional sync next steps
 
 Shared MCP/Assistant write guidance and the bundled Training workflow offer one next choice after confirmed plan creation

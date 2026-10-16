@@ -486,7 +486,12 @@ export async function createAssistantMcpSession(
       return tool ? [{
         name: tool.name as AssistantMcpToolName,
         title: tool.title || tool.name,
-        description: tool.description || tool.title || tool.name,
+        // The public preview describes native MCP approval. In this adapter the
+        // same proposal is confirmed by the user in QS, never by a model tool.
+        description: (tool.description || tool.title || tool.name).replace(
+          /\bapply_(?:training_changes|saved_workout_change)\b/g,
+          'app-owned Apply confirmation in Quantified Self (not a model tool)',
+        ),
         inputSchema: projectAssistantGeminiSchema(name, projectAssistantInputSchema(
           name,
           tool.inputSchema as AssistantMcpToolDefinition['inputSchema'],

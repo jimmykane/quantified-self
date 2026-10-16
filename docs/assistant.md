@@ -69,6 +69,13 @@ registration, scope checks, input schemas, output validation, and data projectio
 must fail closed if any required allowlisted tool disappears. Authenticated app links use only an allowlisted production
 or Beta caller origin (or loopback while running the Functions emulator), with the production origin as a safe fallback.
 
+First-party server instructions and preview descriptions use the app-owned review/Apply workflow, never public MCP
+write-tool names. Tag guidance follows the independent tag choice; nearby-activity guidance follows precise-location
+access, and route-location guidance remains excluded. Each model generation receives its exact callable catalog and
+remaining six-call allowance. Tool-specific Training guidance follows that generation's available tools, including
+the read-first gate and the narrower preview-only correction. Unadvertised calls still fail closed, including a preview
+bundled with the first schedule read; instructions and a successful parallel read never expand execution authority.
+
 The callable surface consists of:
 
 - `assistantChat`: validates the prompt, client-generated request ID, IANA timezone, and conversation-bound activity-location access mode; reserves quota while it
@@ -676,6 +683,19 @@ unknown keys, union contents, stacks and nested causes are never logged. SDK cli
 snapshot, not the original exception. These are diagnostics only: severity, retry behavior, Training/content authority,
 grounding, public MCP schemas and app review/Apply remain unchanged. No registered-app refresh, plugin sync or Help
 change is required; deployment of `assistantChat` still needs separate approval.
+
+Rejected model calls also retain `toolRejectionReason`: `unknown_tool`, `not_in_turn_catalog` or `not_advertised`.
+Only exact names from the existing Assistant/public MCP catalogs can enter `toolName`; arbitrary model strings become
+`unknown`, not raw or hashed text. `modelGeneration` is one-based, `requestedToolCount` describes the current response,
+and `toolCallCount` counts model-requested calls examined by the loop, including rejected tool selections, not successful
+executions. At the continuation limit the pending response has not entered that loop; its count is separate.
+Budget failures identify `initial_calls`, `cumulative_calls`, `continuation_turns` or `execution_calls` through
+`toolBudgetKind`, with fixed stage and count/limit fields. Execution counts cover the outer runtime's admitted calls;
+its deterministic daily-context limit remains 18, distinct from the six model-selected calls and six continuations.
+Retry and final failure use the same sanitized diagnostics. No prompt, arguments, model output, unknown tool name or
+identity is retained. These changes do not raise budgets, change quota charging/retries, broaden permissions, or alter
+the public MCP contract, bundled plugin or app Help. A model may still request an invalid tool; these diagnostics
+identify that case rather than claiming instruction alignment guarantees model compliance.
 
 TTL policy deployment is an explicit infrastructure step. The local helper includes `assistantConversations`, but code
 deployment alone does not enable or update the production TTL policy.

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { z } from 'zod';
-import { createAssistantRuntime } from './runtime';
+import { createAssistantRuntime, generateAssistantModelAnswer } from './runtime';
+import { assistantGenkit } from './model';
 import { encodeOpaqueValue } from '../mcp/data.service';
 import {
   AssistantConversationStoreError,
@@ -129,6 +130,40 @@ const context = {
 };
 
 describe('Assistant callable', () => {
+  it.each(['apply_training_changes', 'private-user@example.test/tool-payload'])(
+    'logs rejected model calls on both attempts without raw model data: %s', async requested => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const logError = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValue({
+        toolRequests: [{ toolRequest: { name: requested, input: { secret: 'private-value' } } }], messages: [],
+      } as never);
+      const dynamicTool = vi.spyOn(assistantGenkit, 'dynamicTool').mockReturnValue({} as never);
+      try {
+        const { dependencies, store } = createDependencies();
+        const execute = vi.fn();
+        dependencies.answer = async input => {
+          const result = await generateAssistantModelAnswer({ ...input, currentTime: '2026-10-16T10:00:00Z',
+            mcpInstructions: 'Use current data.', tools: [{ name: 'get_daily_report', description: 'Read current data.',
+              inputJsonSchema: { type: 'object' }, execute }], workflow: null });
+          return { answer: result.answer, evidence: [], toolNames: [], visuals: [] };
+        };
+        await expect(runAssistantChat({ requestId: REQUEST_ID, message: 'private-prompt', timeZone: 'UTC' }, context, dependencies))
+          .rejects.toMatchObject({ code: 'unavailable' });
+        const fields = { errorReason: 'unavailable_model_tool',
+          toolName: requested === 'apply_training_changes' ? requested : 'unknown',
+          toolFailureStage: 'model_tool_selection',
+          toolRejectionReason: requested === 'apply_training_changes' ? 'not_in_turn_catalog' : 'unknown_tool',
+          modelGeneration: 1, requestedToolCount: 1, toolCallCount: 1, toolCallLimit: 6 };
+        expect(warn).toHaveBeenCalledWith('[Assistant] Retrying grounded response generation.', expect.objectContaining(fields));
+        expect(logError).toHaveBeenCalledWith('[Assistant] Grounded response generation failed.', expect.objectContaining(fields));
+        expect(JSON.stringify([...warn.mock.calls, ...logError.mock.calls])).not.toMatch(/private|secret|user-1|conversation-1/);
+        expect(generate).toHaveBeenCalledTimes(2);
+        expect(execute).not.toHaveBeenCalled();
+        expect(store.completeTurn).not.toHaveBeenCalled();
+      } finally { warn.mockRestore(); logError.mockRestore(); generate.mockRestore(); dynamicTool.mockRestore(); }
+    },
+  );
+
   it('logs bounded cause diagnostics on retry and final failure without private request/schema data', async () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const logError = vi.spyOn(logger, 'error').mockImplementation(() => undefined);

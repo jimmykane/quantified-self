@@ -1416,7 +1416,7 @@ describe('Assistant runtime', () => {
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('copy-workout change in preview_training_changes');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Never infer a Send action or plan-sync opt-in');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v3 for full non-strength instructions');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v3_change for one non-strength recipe edit');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Use a focused full-recipe preview only when advertised');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'do not silently limit the trend to a recent year',
     );
@@ -2159,7 +2159,7 @@ describe('Assistant runtime', () => {
       inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
     const dynamicTool = vi.spyOn(assistantGenkit, 'dynamicTool');
     const advertised: string[][] = [];
-    vi.spyOn(assistantGenkit, 'generate').mockImplementationOnce(async () => {
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockImplementationOnce(async () => {
       advertised.push(dynamicTool.mock.calls.map(call => call[0].name));
       dynamicTool.mockClear();
       return { toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [] } as never;
@@ -2173,6 +2173,14 @@ describe('Assistant runtime', () => {
       tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() });
     expect(advertised[0]).toEqual([read.name]);
     expect(advertised[1]).toEqual(unlocked ? [read.name, preview.name] : [read.name]);
+    const systems = generate.mock.calls.map(call => call[0].system as string);
+    expect(systems[0]).not.toMatch(/\bpreview_[a-z_]+\b/);
+    expect(systems[1].match(/\bpreview_[a-z_]+\b/g) ?? [])
+      .toEqual(unlocked ? expect.arrayContaining([preview.name]) : []);
+    expect(systems.join(' ')).not.toContain('preview_saved_workout_v2_change');
+    expect(systems.join(' ')).not.toContain('preview_garmin_workout_replacement');
+    expect(systems[1]).toContain('Remaining model-selected tool calls: 5 of 6');
+    expect(systems[1].includes('Read the current Training schedule first.')).toBe(!unlocked);
     expect(preview.execute).not.toHaveBeenCalled();
   });
 
@@ -2189,6 +2197,58 @@ describe('Assistant runtime', () => {
       tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).rejects.toThrow('unavailable tool');
     expect(preview.execute).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['query_timeline_notes', 'query_timeline_notes', 'not_in_turn_catalog'],
+    ['apply_training_changes', 'apply_training_changes', 'not_in_turn_catalog'],
+    ['private-user@example.test/tool-arguments', null, 'unknown_tool'],
+    ['preview_training_changes', 'preview_training_changes', 'not_advertised'],
+  ] as const)('classifies a rejected model call safely: %s', async (requested, knownName, reason) => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare a review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: requested, input: { privateArgument: 'private-payload' } } }], messages: [],
+    } as never);
+    const error = await generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'private-prompt', history: [], mcpInstructions: 'Use current data.', tools: [read, preview],
+      workflow: null, onBillableAttempt: vi.fn() }).catch(error => error);
+    expect(getAssistantRuntimeErrorReason(error)).toBe('unavailable_model_tool');
+    expect(getAssistantRuntimeErrorToolName(error)).toBe(knownName);
+    expect(getAssistantRuntimeToolFailureDiagnostic(error)).toEqual({
+      toolFailureStage: 'model_tool_selection', toolRejectionReason: reason, modelGeneration: 1,
+      requestedToolCount: 1, toolCallCount: 1, toolCallLimit: 6,
+    });
+    expect(JSON.stringify(error)).not.toMatch(/private|payload|Argument/);
+    expect(read.execute).not.toHaveBeenCalled();
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(['initial_calls', 'cumulative_calls', 'continuation_turns'] as const)(
+    'identifies the unchanged model budget boundary: %s', async kind => {
+      const read: AssistantRuntimeTool = { name: 'get_daily_report', description: 'Read current data.',
+        inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ ready: true }) };
+      const request = { toolRequest: { name: read.name, input: {} } };
+      let generations = 0;
+      vi.spyOn(assistantGenkit, 'generate').mockImplementation(async () => {
+        generations += 1;
+        const count = kind === 'initial_calls' ? 7 : kind === 'cumulative_calls' && generations === 1 ? 6 : 1;
+        return { toolRequests: Array.from({ length: count }, () => request), messages: [] } as never;
+      });
+      const error = await generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+        prompt: 'Read current data.', history: [], mcpInstructions: 'Use current data.', tools: [read],
+        workflow: null, onBillableAttempt: vi.fn() }).catch(error => error);
+      expect(getAssistantRuntimeErrorReason(error)).toBe('tool_budget_exceeded');
+      expect(getAssistantRuntimeToolFailureDiagnostic(error)).toEqual({
+        toolFailureStage: 'model_tool_budget', toolBudgetKind: kind,
+        modelGeneration: kind === 'initial_calls' ? 1 : kind === 'cumulative_calls' ? 2 : 7,
+        requestedToolCount: kind === 'initial_calls' ? 7 : 1,
+        toolCallCount: kind === 'continuation_turns' ? 6 : 7, toolCallLimit: 6,
+      });
+      expect(read.execute).toHaveBeenCalledTimes(kind === 'initial_calls' ? 0 : 6);
+    },
+  );
 
   it('rejects an unadvertised preview bundled with the first schedule read', async () => {
     const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
@@ -3680,13 +3740,18 @@ describe('Assistant runtime', () => {
       },
     });
 
-    await expect(runtime.answer({
+    const error = await runtime.answer({
       uid: 'user-1',
       appBaseUrl: 'https://quantified-self.io',
       prompt: 'Use too many tools.',
       timeZone: 'UTC',
       history: [],
-    })).rejects.toThrow('budget was exceeded');
+    }).catch(error => error);
+    expect(error.message).toContain('budget was exceeded');
+    expect(getAssistantRuntimeToolFailureDiagnostic(error)).toEqual({
+      toolFailureStage: 'tool_execution_budget', toolBudgetKind: 'execution_calls',
+      toolCallCount: 6, toolCallLimit: 6,
+    });
     expect(close).toHaveBeenCalledOnce();
   });
 
