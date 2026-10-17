@@ -397,11 +397,38 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             after: { exists: true, data: () => ({ controls: { leg: { override: 0 } } }) },
         } });
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, expect.any(Number), expect.objectContaining({
-            incrementEventMutationVersion: true, taskScope: 'training-load',
+            incrementEventMutationVersion: true, taskScope: 'training-load', immediate: true,
             metricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr,
                 DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison]),
         }));
     });
+    it.each([
+        [{ controls: { leg: { override: 0 } } }, { controls: {} }],
+        [{ excluded: false }, { excluded: true }],
+        [{ excluded: true }, { excluded: false }],
+        [{ resetUnmatched: false }, { resetUnmatched: true }],
+        [{ sourceWritePending: true, controls: {} }, { sourceWritePending: true, controls: { leg: { included: false } } }],
+    ])('gives control resets/exclusion and edits during imports priority', async (before, after) => {
+        await (onTrainingLoadMetadataWrite as unknown as (event: unknown) => Promise<void>)({ params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: true, data: () => before }, after: { exists: true, data: () => after },
+        } });
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, expect.any(Number),
+            expect.objectContaining({ taskScope: 'training-load', immediate: true }));
+    });
+
+    it.each([
+        [{ controls: { leg: { override: 0 } }, sourceRevision: 1 },
+            { controls: { leg: { override: 0 } }, sourceRevision: 1, sourceWritePending: true }, 0],
+        [{ controls: { old: { override: 0 } }, sourceRevision: 1, sourceWritePending: true },
+            { controls: { new: { override: 0 } }, sourceRevision: 2, sourceWritePending: false }, 1],
+    ])('does not give import preparation or finalization priority', async (before, after, count) => {
+        await (onTrainingLoadMetadataWrite as unknown as (event: unknown) => Promise<void>)({ params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: true, data: () => before }, after: { exists: true, data: () => after },
+        } });
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(count as number);
+        expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls[0]?.[3]?.immediate).not.toBe(true);
+    });
+
     it('enqueues a debounced ingress task for valid event writes', async () => {
         await (onDashboardDerivedMetricsEventWrite as any)({
             params: { uid: 'user-1', eventId: 'event-1' },

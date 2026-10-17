@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -130,8 +131,16 @@ export async function handleDerivedMetricsSourceWrite(
     }
     const completedSourceWrite = source === 'training-load' && after?.sourceRevision !== undefined &&
         after.sourceRevision !== before?.sourceRevision;
+    // Import preparation/finalization also writes metadata. Only actual owner-control
+    // changes get priority; candidate refreshes must keep bulk reparse batching.
+    const loadControlsChanged = source === 'training-load' && !completedSourceWrite && (
+        !isDeepStrictEqual(before?.controls ?? {}, after?.controls ?? {})
+        || (before?.excluded === true) !== (after?.excluded === true)
+        || (before?.resetUnmatched === true) !== (after?.resetUnmatched === true)
+    );
     const loadIngressOptions = source === 'training-load' && !completedSourceWrite ? {
         taskScope: 'training-load',
+        ...(loadControlsChanged ? { immediate: true } : {}),
         metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr, DERIVED_METRIC_KINDS.RampRate,
             DERIVED_METRIC_KINDS.MonotonyStrain, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d,
             DERIVED_METRIC_KINDS.FreshnessForecast, DERIVED_METRIC_KINDS.TrainingSummary,

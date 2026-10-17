@@ -2,10 +2,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LOCALE_ID } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatTooltip } from '@angular/material/tooltip';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { Platform } from '@angular/cdk/platform';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTrainingLoadPoints, resolveTrainingLoadDayImpact } from '@shared/training-load';
 import type { TrainingDayImpactView, TrainingSessionImpactView } from '../../helpers/training-impact.helper';
@@ -20,6 +23,7 @@ describe('TrainingImpactComponent', () => {
     TestBed.configureTestingModule({
       imports: [TrainingImpactComponent, NoopAnimationsModule],
       providers: [
+        { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: AppHapticsService, useValue: haptics },
         { provide: AppWindowService, useValue: { windowRef: { matchMedia: () => ({ matches: true }) } } },
       ],
@@ -63,18 +67,18 @@ describe('TrainingImpactComponent', () => {
     expect(text).toContain('not measured physiological adaptation');
   });
 
-  it('distinguishes the workout contribution from one plain-language day result in event details', () => {
+  it('shows only three short metrics and moves the full breakdown into the event disclosure', () => {
     const fixture = render(session(), 'strip');
     const element = fixture.nativeElement as HTMLElement;
-    const values = Array.from(element.querySelectorAll('.training-impact-metrics strong')).map(value => value.textContent);
+    const values = Array.from(element.querySelectorAll('.training-impact-session-metrics strong')).map(value => value.textContent);
     const button = element.querySelector('button')!;
     expect(element.querySelector('.training-impact--strip')).toBeTruthy();
-    expect(values).toEqual(['+2', '+12', '−10', '84']);
-    expect(element.querySelector('header')?.textContent).toContain('This workout’s contribution');
+    expect(values).toEqual(['84', '+2', '+2']);
+    expect(Array.from(element.querySelectorAll('.training-impact-session-metrics span')).map(label => label.textContent))
+      .toEqual(['TSS', 'Workout CTL', 'Day CTL']);
+    expect(element.querySelector('header')?.textContent).not.toContain('This workout’s contribution');
     expect(element.querySelector('.training-impact-metrics')?.getAttribute('aria-label')).toBe('This workout’s contribution');
-    expect(element.querySelector('.training-impact-result')?.textContent).toContain('Day result');
-    expect(element.querySelector('.training-impact-result')?.textContent).toContain('Fitness load increased by 2 CTL');
-    expect(element.querySelector('.training-impact-result')?.textContent).toContain('Includes all training counted for that day.');
+    expect(element.querySelector('.training-impact-result')).toBeNull();
     expect(element.querySelector('.training-impact-outcomes')).toBeNull();
     expect(element.textContent).not.toContain('Helped push the day above maintenance');
     expect(element.textContent).not.toContain('Training-day outcome');
@@ -87,6 +91,11 @@ describe('TrainingImpactComponent', () => {
     expect(details.getAttribute('role')).toBe('region');
     expect(details.getAttribute('aria-labelledby')).toBe(button.id);
     expect(details.hidden).toBe(true);
+    expect(details.querySelectorAll('.training-impact-metrics strong')).toHaveLength(4);
+    expect(details.textContent).toContain('Fitness load increased by 2 CTL');
+    expect(details.textContent).toContain('Fatigue load (ATL)');
+    expect(details.textContent).toContain('Freshness (Form)');
+    expect(details.textContent).toContain('all training counted for that day');
     expect(details.textContent).toContain('this workout’s 84 modeled TSS');
     expect(details.textContent).toContain('fixed daily cutoff');
     expect(details.textContent).toContain('not measured physiological adaptation');
@@ -97,6 +106,7 @@ describe('TrainingImpactComponent', () => {
     expect(element.querySelector('.training-impact-disclaimer')).toBeNull();
     expect(element.textContent).not.toContain('About this estimate');
     expect(haptics.selection).not.toHaveBeenCalled();
+    exportTrainingImpactQa(fixture, 'collapsed');
   });
 
   it('opens and closes calculation details with one feedback per click and silent initialization', () => {
@@ -104,15 +114,14 @@ describe('TrainingImpactComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     const button = element.querySelector('button')!;
     const details = element.querySelector('.training-impact-calculation') as HTMLElement;
-    const contributions = element.querySelector('.training-impact-metrics')?.textContent;
-    const dayResult = element.querySelector('.training-impact-result-context')?.textContent;
+    const contributions = element.querySelector('.training-impact-session-metrics')?.textContent;
     expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(details.hidden).toBe(false);
+    exportTrainingImpactQa(fixture, 'expanded');
     expect(haptics.selection).toHaveBeenCalledOnce();
-    expect(element.querySelector('.training-impact-metrics')?.textContent).toBe(contributions);
-    expect(element.querySelector('.training-impact-result-context')?.textContent).toBe(dayResult);
+    expect(element.querySelector('.training-impact-session-metrics')?.textContent).toBe(contributions);
     button.click(); fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(details.hidden).toBe(true);
@@ -146,22 +155,16 @@ describe('TrainingImpactComponent', () => {
   });
 
   it.each([
-    [1.98, 'Fitness load increased by 1.98 CTL'],
-    [-1.98, 'Fitness load decreased by 1.98 CTL'],
-    [0, 'Fitness load stayed steady'],
-    [-0, 'Fitness load stayed steady'],
-    [Number.EPSILON, 'Fitness load stayed steady'],
-    [-Number.EPSILON, 'Fitness load stayed steady'],
-    [0.0049, 'Fitness load stayed steady'],
-    [-0.0049, 'Fitness load stayed steady'],
+    [1.98, '+1.98'], [-1.98, '−1.98'], [0, '0'], [-0, '0'],
+    [Number.EPSILON, '0'], [-Number.EPSILON, '0'], [0.0049, '0'], [-0.0049, '0'],
   ])('renders the net day change %s without confusing it with the workout contribution', (change, expected) => {
     const view = session();
     view.impact!.day = { ...view.impact!.day, ctlChange: change as number };
     const element = render(view, 'strip').nativeElement as HTMLElement;
-    expect(element.querySelector('.training-impact-result-line')?.textContent).toContain(expected);
-    expect(element.querySelector('.training-impact-metrics')?.textContent).toContain('+2');
-    expect(element.querySelector('.training-impact-result-line')?.textContent).not.toContain('+0');
-    expect(element.querySelector('.training-impact-result-line')?.textContent).not.toContain('−0');
+    expect(element.querySelector('.training-impact-session-metrics > div:last-child strong')?.textContent).toBe(expected);
+    expect(element.querySelector('.training-impact-session-metrics > div:nth-child(2) strong')?.textContent).toBe('+2');
+    expect(element.querySelector('.training-impact-session-metrics > div:last-child')?.getAttribute('aria-label'))
+      .toContain('Whole-day net fitness load change');
   });
 
   it('uses the display locale for both contribution values and the day result', () => {
@@ -171,6 +174,8 @@ describe('TrainingImpactComponent', () => {
     view.impact!.day = { ...view.impact!.day, ctlChange: 1.98 };
     const element = render(view, 'strip').nativeElement as HTMLElement;
     expect(element.querySelector('.training-impact-metrics')?.textContent).toContain('+4,69');
+    expect(element.querySelector('.training-impact-session-metrics')?.textContent).toContain('+4,69');
+    expect(element.querySelector('.training-impact-session-metrics')?.textContent).toContain('+1,98');
     expect(element.querySelector('.training-impact-result-line')?.textContent).toContain('increased by 1,98 CTL');
   });
 
@@ -182,11 +187,20 @@ describe('TrainingImpactComponent', () => {
       role: 'no-load', day: { ...view.impact!.day, ctlChange: -1.98, outcome: 'declined' },
     };
     const element = render(view, 'strip').nativeElement as HTMLElement;
-    expect(Array.from(element.querySelectorAll('.training-impact-metrics strong')).map(value => value.textContent))
-      .toEqual(['0', '0', '0', '0']);
+    expect(Array.from(element.querySelectorAll('.training-impact-session-metrics strong')).map(value => value.textContent))
+      .toEqual(['0', '0', '−1.98']);
     expect(element.querySelector('.training-impact-result-line')?.textContent).toContain('decreased by 1.98 CTL');
     expect(element.querySelector('.training-impact-calculation')?.textContent).toContain('this workout’s 0 modeled TSS');
   });
+
+  it.each([null, { distanceUnits: DistanceUnits.Miles, weightUnits: WeightUnits.Pounds }])('uses canonical one-decimal modeled TSS without changing with unit preferences %#', settings => {
+      const view = session();
+      view.impact!.trainingStressScore = 76.34;
+      const fixture = render(view, 'strip');
+      fixture.componentRef.setInput('unitSettings', settings);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.training-impact-session-metrics strong').textContent).toBe('76.3');
+    });
 
   it('retains the disclosure on same-event refresh but resets it on event, day, or availability changes', () => {
     const fixture = render(session(), 'strip');
@@ -320,3 +334,21 @@ describe('TrainingImpactComponent', () => {
     expect(outcomeLines[1].textContent).toContain('Jan 2, 2026');
   });
 });
+
+/** Optional snapshots of the actual rendered component for local phone/desktop theme QA. */
+function exportTrainingImpactQa(fixture: ComponentFixture<TrainingImpactComponent>, name: string): void {
+  const directory = process.env.TRAINING_IMPACT_QA_DIR;
+  if (!directory) return;
+  const styles = Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('');
+  const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
+  const componentStyles = sass.compileString('app-training-impact {' + readFileSync(resolve(process.cwd(),
+    'src/app/components/training-impact/training-impact.component.scss'), 'utf8')
+    .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css;
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Training impact preview</title>'
+    + '<link rel="stylesheet" href="styles.css">' + styles + '<style>' + componentStyles + '</style></head><body class="app-hydrated">'
+    + '<main class="qs-workspace-page"><app-training-impact class="training-impact-host--strip">'
+    + fixture.nativeElement.innerHTML + '</app-training-impact></main></body></html>';
+  writeFileSync(join(directory, `${name}.html`), html);
+  writeFileSync(join(directory, `${name}-dark.html`), html.replace('class="app-hydrated"', 'class="app-hydrated dark-theme"'));
+}

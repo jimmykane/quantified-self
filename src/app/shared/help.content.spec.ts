@@ -14,6 +14,15 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains bounded bulk Training refreshes without promising instant edit results', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(copy).toContain('background rebuild may wait up to two minutes');
+    expect(copy).toContain('plus normal sync, queue and calculation time');
+    expect(copy).toContain('All changes are retained');
+    expect(copy).toContain('Training load edits and benchmark changes receive priority');
+    expect(copy).toContain('wait for any calculation already running');
+    expect(copy).toContain('Opening Training again does not speed up');
+  });
   it('explains the flat Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     expect(copy).toContain("app navigation's **Training & health** section");
@@ -1310,7 +1319,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**This workout’s contribution**');
     expect(trainingSection?.content).toContain('**Day result**');
     expect(trainingSection?.content).toContain('includes all training counted for that day, not only this workout');
-    expect(trainingSection?.content).toContain('**info icon** beside the day result');
+    expect(trainingSection?.content).toContain('**TSS**, **Workout CTL**, and **Day CTL**');
+    expect(trainingSection?.content).toContain('**info icon** beside the heading');
+    expect(trainingSection?.content).toContain('including Fatigue (ATL) and Form');
     expect(trainingSection?.content).toContain('**How Training impact is calculated**');
     expect(trainingSection?.content).toContain('You can scroll normally over the icon on a phone');
     expect(trainingSection?.content).toContain('fixed daily cutoff, which may differ from local midnight');

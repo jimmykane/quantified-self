@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enqueueDerivedMetricsIngressTask, enqueueDerivedMetricsTask } from './cloud-tasks';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
@@ -29,6 +29,8 @@ describe('derived metrics task dispatch', () => {
         vi.clearAllMocks();
         hoisted.mockTaskQueue.enqueue.mockResolvedValue(undefined);
     });
+
+    afterEach(() => vi.useRealTimers());
 
     it('uses the derived metrics worker queue with the direct worker payload', async () => {
         await expect(enqueueDerivedMetricsTask('user/with spaces', 7.8)).resolves.toBe(true);
@@ -93,6 +95,53 @@ describe('derived metrics task dispatch', () => {
                 scheduleTime: new Date(1_712_000_042_000),
             },
         );
+    });
+
+    it('keeps owner priority separate from background tasks in the same scope and bucket', async () => {
+        const options = { taskScope: 'training-load', metricKinds: [DERIVED_METRIC_KINDS.Form] };
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, options);
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, { ...options, immediate: true });
+        const [background, priority] = hoisted.mockTaskQueue.enqueue.mock.calls;
+        expect(background[0]).not.toHaveProperty('immediate');
+        expect(priority[0]).toMatchObject({ immediate: true, metricKinds: [DERIVED_METRIC_KINDS.Form] });
+        expect(priority[1].id).toBe(`${background[1].id}-immediate`);
+        expect(priority[1].scheduleTime).toEqual(background[1].scheduleTime);
+    });
+
+    it('schedules a worker after the remaining batching interval', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_712_000_015_125);
+        await enqueueDerivedMetricsTask('user-1', 7, 90);
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith({ uid: 'user-1', generation: 7 },
+            { id: 'derived-metrics-user-1-7', scheduleTime: new Date(1_712_000_106_000) });
+    });
+
+    it('keeps the worker deadline fixed across slow transient enqueue attempts', async () => {
+        vi.useFakeTimers();
+        const nowMs = 1_712_000_015_000;
+        vi.setSystemTime(nowMs);
+        hoisted.mockTaskQueue.enqueue
+            .mockImplementationOnce(async () => {
+                vi.setSystemTime(nowMs + 20_000);
+                throw Object.assign(new Error('Unavailable'), { code: 14 });
+            })
+            .mockImplementationOnce(async () => {
+                vi.setSystemTime(nowMs + 40_000);
+                throw Object.assign(new Error('Unavailable'), { code: 'functions/unavailable' });
+            });
+
+        const enqueued = expect(enqueueDerivedMetricsTask('user-1', 7, 90)).resolves.toBe(true);
+        await vi.runAllTimersAsync();
+        await enqueued;
+
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledTimes(3);
+        for (const [payload, options] of hoisted.mockTaskQueue.enqueue.mock.calls) {
+            expect(payload).toEqual({ uid: 'user-1', generation: 7 });
+            expect(options).toEqual({
+                id: 'derived-metrics-user-1-7',
+                scheduleTime: new Date(nowMs + 90_000),
+            });
+        }
     });
 
     it('rejects invalid ingress scopes and empty targeted metric lists before dispatch', async () => {

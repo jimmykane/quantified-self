@@ -58,7 +58,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
     const processingStart = Date.now();
     const startResult = await startDerivedMetricsProcessing(uid, Math.floor(generation));
     if (!startResult) {
-        logger.info('[derived-metrics] Skipping task because coordinator generation no longer matches.', {
+        logger.info('[derived-metrics] Skipping build because coordinator did not grant a processing claim.', {
             uid,
             generation,
         });

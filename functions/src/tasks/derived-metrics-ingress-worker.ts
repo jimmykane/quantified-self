@@ -10,6 +10,7 @@ interface DerivedMetricsIngressTaskPayload {
     bucketStartEpochSec?: number;
     metricKinds?: unknown;
     incrementEventMutationVersion?: unknown;
+    immediate?: unknown;
 }
 
 export const processDerivedMetricsIngressTask = onTaskDispatched({
@@ -44,8 +45,14 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
             || kind === DERIVED_METRIC_KINDS.TrainingReadiness);
     const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, {
         incrementEventMutationVersion,
+        background: payload.immediate !== true,
         ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
+    // A generation means the dirty write committed but task creation failed.
+    // Deletion/rollout skips have no generation and must still be acknowledged.
+    if (!queueResult.accepted && queueResult.generation !== null) {
+        throw new Error('derived_metrics_ingress_enqueue_failed');
+    }
     logger.info('[derived-metrics-ingress] Processed ingress task.', {
         uid,
         bucketStartEpochSec: payload.bucketStartEpochSec ?? null,

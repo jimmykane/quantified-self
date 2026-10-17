@@ -823,6 +823,11 @@ export async function enqueueDerivedMetricsTask(
     const safeGeneration = Number.isFinite(generation) ? Math.max(0, Math.floor(generation)) : 0;
     const taskId = `derived-metrics-${safeUid}-${safeGeneration}`;
     const payload = { uid, generation: safeGeneration };
+    // The Admin SDK resolves relative delays on each enqueue attempt. Anchor a
+    // batched build once so transient failures cannot restart its waiting period.
+    const scheduleAtEpochSeconds = Number.isFinite(scheduleDelaySeconds)
+        ? Math.ceil((Date.now() + Math.max(1, scheduleDelaySeconds as number) * 1000) / 1000)
+        : undefined;
 
     return enqueueTaskWithRetry({
         projectId,
@@ -831,6 +836,7 @@ export async function enqueueDerivedMetricsTask(
         taskId,
         payload,
         scheduleDelaySeconds,
+        scheduleAtEpochSeconds,
         alreadyExistsLogMessage: `[DerivedMetricsDispatcher] Task already exists for ${uid} generation ${safeGeneration}, skipping`,
         failedLogPrefix: `[DerivedMetricsDispatcher] Failed to enqueue derived metrics task for ${uid} generation ${safeGeneration}:`,
     });
@@ -848,6 +854,7 @@ export async function enqueueDerivedMetricsIngressTask(
         taskScope?: string;
         metricKinds?: readonly DerivedMetricKind[];
         incrementEventMutationVersion?: boolean;
+        immediate?: boolean;
     },
 ): Promise<boolean> {
     const {
@@ -888,12 +895,15 @@ export async function enqueueDerivedMetricsIngressTask(
     const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
         ? computedScheduleEpochSec
         : (currentEpochSeconds + effectiveScheduleDelaySeconds);
-    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}`;
+    // Priority cannot share a task name with background ingress: an earlier task
+    // would otherwise discard the later priority payload as an already-existing ID.
+    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}${options?.immediate === true ? '-immediate' : ''}`;
     const payload = {
         uid,
         bucketStartEpochSec,
         ...(hasTargetedMetricKinds ? { metricKinds } : {}),
         ...(options?.incrementEventMutationVersion === false ? { incrementEventMutationVersion: false } : {}),
+        ...(options?.immediate === true ? { immediate: true } : {}),
     };
 
     return enqueueTaskWithRetry({
