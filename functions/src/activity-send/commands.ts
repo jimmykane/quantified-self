@@ -4,6 +4,7 @@ import * as admin from 'firebase-admin';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { ActivitySendCommand, ACTIVITY_SEND_PROVIDERS, ACTIVITY_SEND_LIMITS, ActivitySendRow, isActivitySendProvider } from '../../../shared/activity-send';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE, enqueueActivitySyncTask } from '../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -16,6 +17,7 @@ import { describeSavedFIT, operationRef, batchRef, guardedSendTransaction, provi
 import { sendIdentifier, projectSendQueue } from './policy';
 
 const SOURCES = [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI, 'manualUpload'] as const;
+const SAVED_PREVIEW_PAGE_BUDGET_MS = 20_000;
 export async function runSendCommand(uid: string, request: ActivitySendCommand) {
   if (!request || request.version !== 1) throw new HttpsError('invalid-argument', 'Unsupported send version.');
   const id = sendIdentifier(request.batchId);
@@ -133,6 +135,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
 }
 
 async function prepareSaved(uid: string, draft: SendOperation, request: Extract<ActivitySendCommand, { action: 'prepare' }>) {
+  const startedAt = Date.now();
   const hasSelection = request.eventIds !== undefined || request.startDate !== undefined || request.endDate !== undefined || request.sources !== undefined;
   if (!hasSelection) {
     if (!draft.savedSelection) throw new HttpsError('failed-precondition', 'Preview a saved selection before continuing.');
@@ -166,17 +169,27 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
   });
   const events = admin.firestore().collection('users').doc(uid).collection('events');
   let snapshots: admin.firestore.DocumentSnapshot[];
-  let nextCursor: string | null = null;
+  let hasMore = false;
   if (request.eventIds) {
-    snapshots = await admin.firestore().getAll(...[...new Set(request.eventIds)].map(eventId => events.doc(sendIdentifier(eventId))));
+    const remaining = request.eventIds.filter(eventId => !draft.lastEventId || eventId > draft.lastEventId);
+    const page = remaining.slice(0, ACTIVITY_SEND_LIMITS.page);
+    snapshots = page.length ? await admin.firestore().getAll(...page.map(eventId => events.doc(eventId))) : [];
+    hasMore = remaining.length > page.length;
   } else {
     const from = Date.parse(request.startDate || ''); const to = Date.parse(request.endDate || '');
     let query = events.where('startDate', '>=', from).where('startDate', '<=', to).orderBy('startDate').orderBy(FieldPath.documentId()).limit(ACTIVITY_SEND_LIMITS.page);
     if (draft.lastEventId) query = query.startAfter(draft.lastStartDate, draft.lastEventId);
     snapshots = (await query.get()).docs;
-    if (snapshots.length === ACTIVITY_SEND_LIMITS.page) nextCursor = createHash('sha256').update(`${draft.id}:${snapshots[snapshots.length - 1].id}`).digest('hex');
+    hasMore = snapshots.length === ACTIVITY_SEND_LIMITS.page;
   }
+  try { logger.info('[ActivitySend] Saved preview page started.', { provider: draft.provider, sourceCount: sources.length, pageCount: snapshots.length }); } catch { /* Diagnostics cannot change preparation. */ }
+  let checked = 0;
+  let lastChecked: admin.firestore.DocumentSnapshot | undefined;
   for (const event of snapshots) {
+    // Yield between recordings, never abandon a Storage read or transaction in flight.
+    // The cursor moves only after the checked rows are durable, including exclusions.
+    if (checked && Date.now() - startedAt >= SAVED_PREVIEW_PAGE_BUDGET_MS) break;
+    checked++; lastChecked = event;
     let added = false;
     if ((await operationRef(uid, draft.id).collection('rows').doc(event.id).get()).exists) continue; // Resume an interrupted page without downloading already reviewed originals.
     for (const source of event.exists ? sources : []) {
@@ -222,14 +235,20 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
       tx.set(ref, current); tx.set(batchRef(uid, draft.id), publicBatch(current));
     });
   }
+  hasMore = hasMore || checked < snapshots.length;
+  const nextCursor = hasMore && lastChecked ? createHash('sha256').update(`${draft.id}:${lastChecked.id}`).digest('hex') : null;
   await guardedSendTransaction(uid, async tx => {
     const ref = operationRef(uid, draft.id); const current = (await tx.get(ref)).data() as SendOperation;
     if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft changed.');
     if ((current.nextCursor || null) !== (request.cursor || null)) return; // Another copy of this page already advanced.
     current.selectionKey = signature; current.previousCursor = request.cursor || null; current.nextCursor = nextCursor;
-    if (!request.eventIds && snapshots.length) { current.lastEventId = snapshots[snapshots.length - 1].id; current.lastStartDate = Number(snapshots[snapshots.length - 1].data()?.startDate); }
+    if (lastChecked) {
+      current.lastEventId = lastChecked.id;
+      if (!request.eventIds) current.lastStartDate = Number(lastChecked.data()?.startDate);
+    }
     tx.set(ref, current);
   });
+  try { logger.info('[ActivitySend] Saved preview page checked.', { provider: draft.provider, sourceCount: sources.length, checkedCount: checked, hasNextPage: !!nextCursor, elapsedMs: Math.max(0, Date.now() - startedAt) }); } catch { /* Diagnostics cannot change preparation. */ }
 }
 
 export const activitySendCommand = onCall({ region: 'europe-west2', cors: ALLOWED_CORS_ORIGINS, memory: '512MiB', timeoutSeconds: 120, maxInstances: 10 }, async request => {

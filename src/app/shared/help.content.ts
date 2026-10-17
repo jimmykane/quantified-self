@@ -1271,6 +1271,8 @@ For Garmin, Suunto, COROS, and Wahoo, **Import already running** means an existi
 
 If opening a new draft fails, reopen it from **Recent sends** and choose your recordings again. If you switch destinations, sources or sends during preparation, reopen the original draft to continue. Confirmed sends keep running in the background.
 
+Previewing does not send activities. Draft counts show **checked**, **ready**, and **excluded** recordings, not successful deliveries. Saved previews check small groups and continue while the page stays open. If checking times out, use **Continue saved-activity preview** on the same draft; completed checks are retained. Choose **Uploaded to QS** for FIT files you imported yourself, even if you recorded them on a Garmin device. **Garmin API** selects recordings imported through the Garmin connection, not every recording made by a Garmin device.
+
 After the provider confirms processing failed, **Stop unsent activities** is also available on a finished batch. Stopping closes retries and removes that temporary copy, freeing its storage allowance. If an accepted upload fails after you stop the batch, its temporary copy is removed when that failure is confirmed. Your failure result stays visible.
 
 Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent. Accepted uploads keep their existing status checks; unknown acceptance never triggers an automatic replacement upload.
