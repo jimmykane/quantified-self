@@ -4701,12 +4701,12 @@ Hockey, Team Sport, Water Sport and Diving never imply a specific subtype; Grind
 name while Indoor Grinding remains General fitness. No provider profile, planned-workout alias, public recipe bridge
 entry or new sport-specific calculation is introduced.
 
-The 28 unpublished names join only the recorded-analysis bridge: 124 recorded-only additions plus the unchanged 29
-future recipe names, totaling 153 bridged canonical values (149 context memberships and four aggregate exclusions).
-Both dependency trees now use published Sports Lib 22.0.0; the expanded sport catalog remains separately unreleased. JSON activity hydration and
-exact power fits for unpublished names require that release; installed/candidate tests retain the input labels and
-verify separate fits once available. These additions join the same unreleased schema-22 snapshot/workout rebuild and
-planned activity reparse after release. The 284-sport catalog audit changes exactly these 50 Training classifications;
+The 28 names that were unpublished at this batch's approval join only the recorded-analysis bridge: 124 recorded-only
+additions plus the unchanged 29 future recipe names, totaling 153 bridged canonical values (149 context memberships
+and four aggregate exclusions). Both dependency trees now install published Sports Lib 23.0.0, making those names
+available to JSON activity hydration and exact power fits. Installed-package tests verify retained labels and separate
+fits. These additions join the same schema-22 snapshot/workout rebuild preparation; activity reparse still requires
+separate approval after deployment. The 284-sport catalog audit changes exactly these 50 Training classifications;
 234 other rows and every recorded-upload/route mapping remain unchanged. The final approval below assigns 37 of the remaining 46 types to their own contexts and deliberately retains nine
 broad labels in Other training. Public MCP summary/build projections remain Running/Cycling/Swimming; explanation folds all three
 new families into Other, drops private contexts and labels, and retains existing scopes, schemas and pending digest.
@@ -4737,9 +4737,10 @@ MCP impact: the registered Running/Cycling/Swimming-plus-Other projections, metr
 boundary and pending digest stay unchanged. Summary/build projection discards the four new private families and their
 contexts; Explanation folds their complete saved load/composition into Other. Negative leakage and recipe enum/runtime
 coverage verify this with installed and candidate catalogs. No plan/workout capability or provider transport changes;
-no plugin rebuild or registered-contract promotion is needed. Both app and Functions use published Sports Lib 22.0.0.
-Sports Lib PR #144's coordinated catalog release must use a unique version newer than 22.0.0 before adoption. No deployment or production reparse is
-performed by these source changes.
+no plugin rebuild or registered-contract promotion is needed for those recorded-analysis classifications. Both app
+and Functions now install published Sports Lib 23.0.0; its complete 284-type catalog is available to the existing
+readers and recipe schemas. The pending MCP digest is refreshed for package adoption. No deployment or production
+reparse is performed by these source changes.
 
 The grouping decisions are app-owned recommendations informed by [Polar's sport profiles](https://support.polar.com/au-en/polar-flow-sport-profiles),
 [Garmin's offshore grinding mode](https://www8.garmin.com/manuals/webhelp/GUID-BC69665A-98C5-4953-BD19-F5EB5A26A4D0/EN-US/GUID-6DAD75FF-9AEA-49AC-ADBE-E7EC37B9A0B5.html),
@@ -4779,15 +4780,21 @@ refinement edges never imply Chores ↔ Meditation or arbitrary Training-family 
 sport names are unchanged by these read-only matches. The shared reparse carryover matcher also gains these matches;
 its separate single-remaining fallback remains opt-in and is never enabled for read consumers.
 
-This compatibility preparation does not upgrade or publish Sports Lib. Before writing new canonical types, release
-Sports Lib under a unique version and align root and Functions pins in the upgrade PR. Ship compatible frontend readers
-before backend writes, and account for stale browser sessions: an old JSON reader cannot hydrate enum values absent
-from its installed catalog. Keep historical canonical names accepted, and verify split activity/event JSON round trips
-with the released package. No production reparse or data migration is authorized by this preparation.
+Root and Functions now pin the same published Sports Lib 23.0.0 artifact with FIT Parser 6.2.2. All 284 canonical names
+and 18 activity groups are available to native JSON readers, selectors and the prepared Training registry. Split
+event/activity round trips retain exact sport names and imported TSS. Existing parser options remain in use.
 
-Root and Functions now pin published Sports Lib 22.0.0 with FIT Parser 6.2.2. Existing parser options remain in use.
-Installing these dependencies does not rewrite stored Training evidence. Historical source corrections still use the
-authorized original-file reparse lifecycle and normal derived refresh. The
+Deployment still requires compatible frontend readers before backend writes introduce the new names. Already-open
+22.0.0 browser sessions cannot hydrate enum values absent from their installed catalog; the current update prompt is
+optional, so publishing a frontend alone does not establish that those sessions upgraded. Stale-client handling and
+the existing schema-22 builder/frontend ordering remain separate rollout requirements. This dependency adoption adds
+no update-enforcement mechanism and authorizes no deployment, production reparse or data migration.
+
+Automatic TSS for Walking, Indoor Walking, Nordic Walking, Speed Walking, Hiking and Trekking uses eligible power
+with an independent threshold before calibrated HR and MET. Explicit supported HR/MET preferences retain priority;
+valid nonnegative imported scores, including zero, remain preserved. Refresh affected calculated evidence through the
+normal source-backed regeneration and derived-refresh lifecycle. Installing these dependencies does not rewrite stored
+Training evidence. Historical source corrections still use the authorized original-file reparse lifecycle. The
 [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#energysense-support-in-sports-lib-2200)
 records the current dependency and rollout boundary.
 
@@ -6353,8 +6360,9 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions pin published Sports Lib 22.0.0 with FIT Parser 6.2.2 and matching package integrity.
-The separate activity-catalog expansion remains unadopted; both consumers retain 131 canonical sports.
+Root and Functions now pin published Sports Lib 23.0.0 with FIT Parser 6.2.2 and matching package integrity.
+Both consumers recognize the expanded 284-type catalog. The earlier 22.0.0 integration and its historical verification
+remain recorded here; package adoption does not deploy either consumer or start a production reparse.
 
 #### Earlier published dependency verification
 
@@ -7688,11 +7696,12 @@ the new-schema frontend. Cached old snapshots rebuild through the existing ensur
 the app does not relabel an old policy-1 fit as policy 2. Registered MCP policy-1 behavior remains available through the
 private exact-type sidecar. Source validation does not deploy either component or reparse production files.
 
-The later provider-catalog package upgrade has a separate reader-first boundary. Publish a unique verified Sports Lib
-version, align root and Functions dependency artifacts, and ship compatible frontend canonical-JSON readers before
-Functions starts emitting the new provider-specific names. That upgrade can retain the already-deployed schema-22
+The provider-catalog package upgrade now installs published Sports Lib 23.0.0 in root and Functions with matching
+dependency artifacts. Its deployment has a separate reader-first boundary: ship compatible frontend canonical-JSON
+readers and handle stale clients before Functions starts emitting the new provider-specific names. The optional
+frontend Reload prompt does not guarantee all running clients upgraded. That upgrade can retain the already-deployed schema-22
 builders. A later separately authorized source-backed activity reparse can restore specific names where originals
-retain the evidence. Package adoption, deployment and reparse are separate actions; this change performs none of them.
+retain the evidence. Package adoption is included in this PR; deployment and reparse remain separately authorized actions.
 
 For a later library upgrade that also changes Training-derived contracts, make canonical reader compatibility available
 first, then coordinate builder and new-schema frontend activation:
@@ -7887,12 +7896,12 @@ derived schema, planning or provider-delivery capability, write path, provider t
 change is introduced. This is classification work, with no Training planning surface change or MCP deferral. Current
 Help remains accurate because supported activities use the installed dynamic catalog.
 
-Adopt the library in the application and Functions together. Their installed Sports Lib `22.0.0` catalog still contains
-131 types. The expanded 284-type candidate remains unadopted and needs a unique release version newer than 22.0.0. A separately approved targeted
+At that earlier preparation stage, the application and Functions retained Sports Lib 22.0.0's 131-type catalog.
+The coordinated adoption above now installs the published 284-type Sports Lib 23.0.0 catalog. A separately approved targeted
 source-backed reparse can correct identified historical Generic, Racquet Ball, or Diving classifications when the source
 retains enough detail. Regenerate affected event summaries, activity-type aggregates, applicable durability evidence,
 and Training snapshots through the existing ingress. A collapsed broad label cannot recover missing detail. Saved
-routes need no reparse; no global reparse, package adoption, or deployment was run. The Sports Lib importing guide owns
+routes need no reparse for that activity-classification batch; no global reparse or deployment was run. The Sports Lib importing guide owns
 the detailed aliases, profile precedence, and FIT parent guards.
 
 The next approved Garmin profile-name batch adds 20 aliases for existing canonical types: Bike Indoor, Bike Tour,
@@ -7957,8 +7966,8 @@ projections, consent, scopes, mutations, planning/delivery capabilities, writes,
 changes. Existing dynamic catalogs handle the added canonical values; no MCP deferral is needed. Help's supported-activity
 section remains accurate because it uses the installed dynamic catalog and recorded-data semantics.
 
-Adopt Sports Lib in the application and Functions together before persisting these classifications; both currently
-retain their installed 131-type catalog. A separately approved targeted source-backed reparse requires the retained
+This earlier batch prepared both consumers against their then-installed 131-type catalog; the coordinated 23.0.0
+adoption above now supplies all 284 canonical names. A separately approved targeted source-backed reparse requires the retained
 specific provider identifier/profile or original file. Regenerate affected event summaries, activity-type aggregates,
 applicable durability evidence, and Training snapshots through existing ingress. Saved routes need no reparse. No
 package adoption, publication, source reparse, deployment, or production-data mutation was run for this batch.
@@ -7988,7 +7997,7 @@ FIT. FIT Parser decoding work belongs to the separate agent; no parser changes a
 Follow-up review prevents a known provider profile from replacing an unrelated FIT parent through a general alias;
 compatible broad-parent refinements and explicit parent/profile composites retain their existing behavior. Shared Polar
 profile spellings retain all documented FIT contexts. The isolated route and route-file JSON correction is included in
-Sports Lib 21.6.14; the catalog/profile additions remain on the separate unreleased branch. Route serialization omits
+Sports Lib 21.6.14; the catalog/profile additions subsequently shipped in the adopted 23.0.0 release. Route serialization omits
 non-finite scalar exports, restoration skips legacy null/non-finite values, and existing child-route aggregation applies
 when no valid file summaries remain. Finite zero, partial-summary precedence and geometry validation remain intact.
 This JSON correction needs no saved-route source reparse; the separate GPX manufacturer correction does. Training formulas, the public MCP contract and the

@@ -7,6 +7,33 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.0.0 provider sport catalog adoption
+
+Root and Functions install the same published Sports Lib 23.0.0 artifact; FIT Parser remains 6.2.2. Both JSON readers
+recognize all 284 canonical sports and 18 groups. Runtime version detection and the activity/route reparse target
+follow the installed 23.0.0 package, retaining strict target-mismatch checks. No scanner setting is changed or enabled.
+
+Before separately approved backend deployment introduces new sport names, release compatible frontend readers and
+handle already-open older clients. The current optional Reload prompt does not enforce that upgrade. Keep the
+Training guide's existing schema-22 builder/frontend ordering separate from this canonical-reader boundary.
+
+Historical activity corrections require an original file or specific provider identifier/profile that retains the
+distinction. Existing broad JSON alone cannot recover it. Use the existing targeted reparse lifecycle, strict leg
+identity carryover and sanitized writer; preserve user controls, benchmark reports and valid imported TSS. Regenerate
+affected summaries, activity-type aggregates and Training evidence through the normal lifecycle. Automatic Walking,
+Indoor Walking, Nordic Walking, Speed Walking, Hiking and Trekking calculations now prefer eligible independently
+calibrated power before HR and MET; preserved imported scores remain unchanged.
+
+FIT routes now retain Road Running, Road/Track/Gravel Cycling, Cyclocross, Indoor Walking and Skate Skiing through their
+standard sport/sub-sport pairs. Reimport retained FIT courses containing those pairs to recover precise names when
+needed. Previously exported courses without a subtype require re-export from a retained specific route; a broad label
+alone cannot recover the detail. GPX/native JSON routes retaining the exact name need no classification migration.
+
+Dependency adoption performs no deployment, source download, production reparse or direct data write. Existing queue,
+retry, deletion, worker-budget and persistence safeguards remain in force. See the
+[Training compatibility notes](../../../docs/training-workspace.md#preserved-provider-sport-names-and-historical-compatibility)
+for classification, saved-load and consumer rollout policy.
+
 ### EnergySense support in Sports Lib 22.0.0
 
 <a id="pending-energysense-library-candidate"></a>
@@ -16,7 +43,8 @@ stat. The new Estimated Sustainable Distance and Minimum Estimated Sustainable D
 original JSON/SML reparse to persist historical source observations. Chart hydration can read those observations on
 demand without storing streams. FIT-only originals cannot recreate fields they never recorded.
 
-Root and Functions now pin published Sports Lib 22.0.0 with FIT Parser 6.2.2. Use only the existing authorized
+These observations were introduced in Sports Lib 22.0.0 and remain supported by the current 23.0.0 pins with FIT
+Parser 6.2.2. Use only the existing authorized
 original-file reparse lifecycle to update historical observations. Regeneration seeds freshly parsed Stamina/endurance endings and minima before deriving missing
 statistics; it never carries stale persisted observations over the new parse. Preserve source zero, per-leg identity,
 source-minimum precedence, sanitized writes and latest user edits/Training controls. Repeat reparse is idempotent and
@@ -47,7 +75,7 @@ pool HR dropout boundaries, multi-track TCX timing and evidence-backed FIT sessi
 are missing. Pool-length dates and generated readings stay within their owning swim/lap and applicable timer interval;
 recorded streams remain intact. The isolated native event/activity/lap JSON correction safely skips legacy null or
 non-finite scalar summaries and omits non-finite summary exports, retaining finite zero, imported scores and raw stream
-gaps. It does not adopt the separate unreleased activity catalog described below.
+gaps. That earlier release did not adopt the expanded activity catalog subsequently included in 23.0.0 below.
 
 JSON reads need no original-file reparse. Apply historical parser and timing corrections only through the authorized
 original-file lifecycle and existing derived refresh, including QS's parsed-distance preservation described below.
@@ -110,19 +138,22 @@ precedence and geometry validation remain intact. This read compatibility needs 
 GPX creator provenance separately requires source evidence. Package adoption does not deploy QS, enable scanners,
 start a production campaign or authorize direct data edits.
 
-### Unreleased provider-profile and catalog corrections
+### Provider-profile and catalog corrections included in Sports Lib 23.0.0
 
-The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
+<a id="unreleased-provider-profile-and-catalog-corrections"></a>
+
+Sports Lib 23.0.0 corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
 English `Breathwork` or French `Ex. respiration` profile. It adds 14 Polar FIT display aliases and honors explicit Polar
 Cross-trainer and Stretching profiles on their documented broad pairs. Australian Football, Korfball and Netball are
-separate Team/Racket types, bringing the full unreleased catalog to 284. Unnamed generic records remain broad; no numeric
+separate Team/Racket types within the full published 284-type catalog. Unnamed generic records remain broad; no numeric
 sport IDs or undocumented API tokens are assigned to the three new types.
 
 Known profiles cannot replace an unrelated FIT parent through a standalone alias fallback. Existing compatible broad
 parents and explicit parent/profile composites retain their refinements. Shared profile names retain every documented
 FIT context, including Polar Open water swimming on Swimming/Generic and Swimming/Backcountry.
 
-Adopt the same released Sports Lib version in the application and Functions before persisting these classifications.
+The application and Functions now install the same published 23.0.0 package. Compatible frontend rollout must still
+precede backend writes of the new classifications and account for stale browser sessions.
 Retained original files or specific saved provider profiles are required to correct historical broad labels through the
 existing targeted reparse lifecycle. Regenerate affected event summaries, activity-type aggregates, applicable
 existing durability evidence and Training snapshots through normal sanitized ingress. Saved routes need no source reparse.
@@ -132,8 +163,8 @@ legacy null/non-finite scalar stats; finite zero/negative values, provider TSS a
 gaps remain intact. Summary exports omit non-finite scalar numbers while runtime zero-speed pace can remain infinite.
 This compatibility read does not require an original file or a reparse.
 Any explicitly requested persistence rewrite must still use the existing sanitized writer, never direct Firestore edits.
-The isolated route and route-file JSON correction is included in 21.6.14 as described above. Catalog/profile additions
-remain separate and unreleased; adopting the JSON subset does not adopt those classifications.
+The isolated route and route-file JSON correction shipped in 21.6.14 as described above. The current 23.0.0 adoption
+also supplies the complete catalog/profile additions; the earlier JSON subset did not adopt those classifications.
 Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
 or the deprecated preservation flag. QS's explicit internal regeneration removal is documented separately below.
 
@@ -143,13 +174,13 @@ coverage, plus recorded-activity and route destination metadata mappings. See th
 [Training compatibility notes](../../../docs/training-workspace.md#preserved-provider-sport-names-and-historical-compatibility)
 and [provider boundary tables](../../../docs/provider-integration-guide.md#refined-sport-names-at-recorded-activity-and-route-boundaries).
 Those changes retain queue lifecycles and sanitized write paths; dynamic activity discovery uses existing fields.
-Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
-the separate catalog/profile correction remains unadopted. It does not deploy, enable scanners, start reparsing or change
+Help follows the installed dynamic catalog, and both packages now recognize all 284 types. This adoption does not
+deploy, enable scanners, start reparsing or change
 FIT Parser source.
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-The coordinated root and Functions dependency is published Sports Lib 22.0.0, with FIT Parser 6.2.2. It retains the file-calibrated
+The coordinated root and Functions dependency is published Sports Lib 23.0.0, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power
@@ -241,11 +272,12 @@ negative pauses. Independent timer/header evidence may recover contradictory dur
 and duration-dependent load/durability remain unavailable. Ambiguous leg windows cannot borrow whole-workout timing. Native JSON
 preserves missing values but not private source evidence. After coordinated package adoption, historical correction
 requires original-file reparse, the same parsed instances through candidate preparation, strict identity/control
-reconciliation and ordinary derived refresh. Root and Functions use the same published 22.0.0 package.
+reconciliation and ordinary derived refresh. Root and Functions now use the same published 23.0.0 package, retaining that correction.
 Source evidence remains private; this introduces no metric/schema/MCP change or production campaign.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
-Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
+Indoor Walking, Nordic Walking, Speed Walking, Hiking and Trekking skip running pace; Automatic first considers
+usable power with an independent FTP before HR and MET. HR requires file-supplied resting, threshold and
 maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
 Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
 

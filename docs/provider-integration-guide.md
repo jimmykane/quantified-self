@@ -8,11 +8,11 @@ Keep it current in the same change whenever a provider is added, removed, rename
 
 Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions; [Suunto 24/7 Health integration](suunto-integration.md) records its metric mapping, bounded pulls, webhooks, lifecycle fencing, production-wide polling, and rollback switch; [Garmin Health integration](garmin-integration.md) records its Health API 1.2.4 family mapping, Ping/Pull trust boundary, callback credential handling, lifecycle fencing, production-wide availability, rollback switch, and Summary Resender procedure.
 
-The local unreleased Sports Lib profile corrections refine Garmin Breathwork and Polar explicit sport names, including
+The adopted Sports Lib 23.0.0 profile corrections refine Garmin Breathwork and Polar explicit sport names, including
 three distinct Team/Racket types (Australian Football, Korfball and Netball). They change normalized activity
 classification and JSON compatibility without changing provider transport, permissions, delivery, disconnect or queue
 lifecycle. The current provider matrix therefore stays unchanged. Follow the
-[coordinated adoption and historical reparse decision](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
+[coordinated adoption and historical reparse decision](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#sports-lib-2300-provider-sport-catalog-adoption)
 before using these types in production. Official mapping names are tested with synthetic FIT; downloaded recordings
 remain temporary because redistribution rights were not established. The app's Help uses the installed activity catalog.
 
@@ -1901,7 +1901,7 @@ Stopping closes retry authority for provider-confirmed processing failures and r
 
 ### Suunto EnergySense parser support
 
-The adopted Sports Lib 22.0.0 maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
+Sports Lib 23.0.0 retains the mapping introduced in 22.0.0 from Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
 to Estimated Sustainable Distance plus its source/sampled minimum. Its raw distance unit is assumed to be metres pending
 provider confirmation. Cur and Min remain source observations, EnduranceValid is not an eligibility rule, and absent FIT
 fields are not synthesized. Canonical metric labels and reparse compatibility are described in the

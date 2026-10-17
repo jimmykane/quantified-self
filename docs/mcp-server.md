@@ -414,6 +414,9 @@ support for every catalog sport: existing local compatibility assessment and map
 baseline contains no Training recipe tools, so these enum additions belong to the existing pending metadata transition;
 they do not alter a registered tool, mutation kind, grant, consent or provider action. Update the exact pending contract
 digest after integration and use the existing explicit deployment/client-refresh lifecycle.
+Root and Functions now install the same published Sports Lib 23.0.0 artifact, so the expanded 284-type catalog is
+available to the existing exact-sport discovery and recipe schemas. The updated pending digest records that adoption;
+the registered baseline/history and deployed client registrations remain unchanged. No new tool or permission is added.
 Core planned-workout preview inputs use local JSON Schema definitions for repeated recipe fields and proposal variants.
 The focused create registration generates draft-07 references directly; it must not also embed pre-generated
 2020-12 definitions. Both its schedule-only and delivery-enabled descriptors retain the exact finite sport vocabulary
@@ -2876,7 +2879,7 @@ chats. Detailed samples remain excluded from its tool allowlist. Activity and cr
 the two EnergySense dimensions and discovers runtime capabilities. No scopes, mutations, consent defaults, Firestore
 rules, Training planning/derived formulas, indexes, provider queue lifecycle or monitoring resources change.
 
-Root and Functions now pin published 22.0.0 in both manifests and lockfiles. The app still gates its new distance
+Root and Functions now pin published 23.0.0, retaining the 22.0.0 EnergySense support, in both manifests and lockfiles. The app still gates its new distance
 chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
 release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
 promotion, real-profile plugin install or historical reparse is performed by this implementation.
