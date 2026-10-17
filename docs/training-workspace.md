@@ -4806,6 +4806,17 @@ snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
 
+The `ensureDerivedMetrics` callable logs one `[derived-metrics] ensureDerivedMetrics request rejected.` warning for
+an application `HttpsError`, with only fixed `stage`, `errorCode`, and `reason` labels. Authentication and App Check
+rejections happen before data access. `app_check_unverified` means no verified App Check context reached the handler;
+use the SDK's verification log on the same trace to distinguish a missing token from an invalid token. Neither log
+establishes why the browser failed to supply a valid token or identifies the Firebase user. Existing execution/trace
+correlation supplies request linkage without logging user IDs, headers, tokens, payloads, error messages, or details.
+Successful calls add no log. Unexpected errors retain Firebase's existing error logging, and diagnostic failures never
+replace the original exception. Framework rejections before the handler retain the SDK's own diagnostics.
+This observability-only change preserves responses, Auth/App Check enforcement, freshness decisions and queue behavior;
+it adds no Firestore operations or Function invocations. App help, MCP reads/contracts and planning coverage are unchanged.
+
 `processDerivedMetricsIngressTask` runs with 512 MiB of memory and a 120-second timeout to provide headroom above
 the previous 256 MiB limit. It marks requested metric kinds dirty and queues a generation; it does not perform
 full-history builds. Its retry policy and default per-instance concurrency remain unchanged.

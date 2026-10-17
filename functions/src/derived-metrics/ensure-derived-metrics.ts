@@ -1,5 +1,6 @@
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
@@ -448,16 +449,38 @@ export const ensureDerivedMetrics = onCall({
     memory: '512MiB',
     maxInstances: 100,
 }, async (request): Promise<EnsureDerivedMetricsResponse> => {
-    if (!request.auth?.uid) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    let stage: 'authentication' | 'app_check' | 'metric_selection' | 'freshness_check' = 'authentication';
+    try {
+        if (!request.auth?.uid) {
+            throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+        }
+
+        stage = 'app_check';
+        enforceAppCheck(request);
+
+        stage = 'metric_selection';
+        const uid = request.auth.uid;
+        const payload = (request.data || {}) as EnsureDerivedMetricsRequest;
+        const metricKinds = normalizeDerivedMetricKinds(payload.metricKinds);
+        stage = 'freshness_check';
+        return await ensureDerivedMetricsForUser(uid, metricKinds);
+    } catch (error) {
+        // Firebase logs unexpected errors itself, but sends HttpsError responses silently.
+        // Use fixed labels only; the SDK supplies execution/trace correlation automatically.
+        if (error instanceof HttpsError) {
+            try {
+                logger.warn('[derived-metrics] ensureDerivedMetrics request rejected.', {
+                    stage,
+                    errorCode: error.code,
+                    reason: stage === 'authentication' ? 'authentication_required'
+                        : stage === 'app_check' ? 'app_check_unverified' : 'request_rejected',
+                });
+            } catch {
+                // Diagnostics must never change the original rejection or security decision.
+            }
+        }
+        throw error;
     }
-
-    enforceAppCheck(request);
-
-    const uid = request.auth.uid;
-    const payload = (request.data || {}) as EnsureDerivedMetricsRequest;
-    const metricKinds = normalizeDerivedMetricKinds(payload.metricKinds);
-    return ensureDerivedMetricsForUser(uid, metricKinds);
 });
 
 export function resolveDerivedMetricSnapshotPayloadValidity(
