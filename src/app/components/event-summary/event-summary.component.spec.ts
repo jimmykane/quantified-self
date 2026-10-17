@@ -329,7 +329,15 @@ describe('EventSummaryComponent', () => {
             expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledWith(expect.objectContaining({
                 event: component.event,
                 user: component.user,
+                hydrateStreamsForGeneration: true,
                 initialSelection: component.selectedActivities,
+            }));
+        });
+
+        it('loads all recorded streams when starting a benchmark from the summary dialog', () => {
+            component.openBenchmarkDialog();
+            expect(mockBenchmarkFlowService.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+                event: component.event, hydrateStreamsForGeneration: true,
             }));
         });
 

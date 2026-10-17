@@ -21,11 +21,10 @@ export function preserveBenchmarkMetadataOnReparse(
     identity: BenchmarkReparseIdentity,
 ): Record<string, unknown> {
     const result = { ...incoming };
-    if (existing.mergeType === 'benchmark' || existing.benchmarkResults || existing.benchmarkResult) {
-        const revision = Number.isSafeInteger(existing.benchmarkSourceRevision) && Number(existing.benchmarkSourceRevision) >= 0
-            ? Number(existing.benchmarkSourceRevision) : 0;
-        result.benchmarkSourceRevision = revision + 1;
-    }
+    // Any workout may acquire its first report while reparse is in progress.
+    const revision = Number.isSafeInteger(existing.benchmarkSourceRevision) && Number(existing.benchmarkSourceRevision) >= 0
+        ? Number(existing.benchmarkSourceRevision) : 0;
+    result.benchmarkSourceRevision = revision + 1;
     for (const field of COMPARISON_FIELDS) {
         if (Object.prototype.hasOwnProperty.call(existing, field)) result[field] = existing[field];
     }

@@ -53,9 +53,9 @@ describe('benchmark reparse preservation', () => {
         expect(Object.getPrototypeOf(result.benchmarkResults)).toBeNull();
     });
 
-    it('leaves regular events alone', () => {
+    it('guards a first benchmark generation on a regular workout during reparse', () => {
         expect(preserveBenchmarkMetadataOnReparse({ name: 'Fresh parse' }, { name: 'Edited' }, identity))
-            .toEqual({ name: 'Fresh parse' });
+            .toEqual({ name: 'Fresh parse', benchmarkSourceRevision: 1 });
     });
 
     it('advances the source revision even when a comparison has no saved reports yet', () => {

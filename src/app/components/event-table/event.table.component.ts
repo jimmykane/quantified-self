@@ -429,6 +429,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (result) {
       this.benchmarkFlow.openBenchmarkReport({
         event: appEvent,
+        hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
         user: this.user,
         result,
@@ -437,6 +438,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } else {
       this.benchmarkFlow.openBenchmarkSelectionDialog({
         event: appEvent,
+        hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
         user: this.user,
         initialSelection

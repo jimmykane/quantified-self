@@ -224,6 +224,7 @@ export class EventSummaryComponent implements OnChanges {
     const targetEventID = targetEvent.getID();
     await this.benchmarkFlow.openBenchmarkEntry({
       event: targetEvent,
+      hydrateStreamsForGeneration: true,
       user: this.user,
       initialSelection: this.selectedActivities,
       onResult: (result) => {
@@ -240,6 +241,7 @@ export class EventSummaryComponent implements OnChanges {
     const targetEventID = targetEvent.getID();
     this.benchmarkFlow.openBenchmarkSelectionDialog({
       event: targetEvent,
+      hydrateStreamsForGeneration: true,
       user: this.user,
       initialSelection: this.selectedActivities,
       onResult: (result) => {

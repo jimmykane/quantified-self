@@ -6,7 +6,8 @@ group does not establish whether that recording has GPS or any other sensor.
 
 ## Generation and measurement availability
 
-Saved comparison generation loads the selected activities and all streams before calculation. A failed download,
+Saved comparison generation loads the selected activities and all streams before calculation, including when opened
+from the event list or summary. A failed download,
 missing activity or changed activity ID stops generation without replacing the previous report. **Retry** reloads
 the current activities and opens selection again. No report is saved without usable shared sensor or GPS samples.
 Sensor metrics require at least two finite paired samples. GPS comparisons require valid paired coordinates.
@@ -35,10 +36,16 @@ to assign distinct source activity keys before the combined-event stamping pass.
 Other valid source keys and the existing combined-source scheme are retained. Indistinguishable activities inside one
 file or duplicate identical file content remain ambiguous; reparse does not invent their identities.
 
-Each comparison rewrite advances the server-owned `benchmarkSourceRevision`. Report saves use an owner-scoped
+Every original-file event rewrite advances the server-owned `benchmarkSourceRevision`, including workouts with no
+previous reports. This also guards the first benchmark generated while an ordinary workout is being reparsed.
+Report saves use an owner-scoped
 Firestore transaction that checks the source revision captured during stream loading and merges the latest saved
 pair map. A concurrent reparse rejects an older generation attempt and offers reload/retry. This adds no backend
 endpoint or provider calls. Firestore Rules protect the revision from owner edits.
+
+Live event details include benchmark metadata in their update fingerprint, so report and source-revision changes
+reach the UI even when activity IDs and statistics stay the same. Transactional saves return sanitized reports with
+normalized timestamps and retain the newest report date across all pairs, regardless of which save finishes last.
 
 ## Verification and boundaries
 

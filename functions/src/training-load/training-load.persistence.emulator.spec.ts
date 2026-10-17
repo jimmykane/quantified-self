@@ -60,6 +60,26 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const promise = new Promise<void>(resolve => { release = resolve; });
     return { promise, release };
   }
+  it('advances the benchmark save guard before an ordinary workout has its first report', async () => {
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup();
+    const ordinaryWorkout = () => {
+      const event = workout();
+      event.addActivity(workout('second-leg', Date.UTC(2026, 0, 2, 1)).getFirstActivity());
+      return event;
+    };
+    await source(uid, ordinaryWorkout());
+    const ref = db.doc(`users/${uid}/events/workout`);
+    for (const revision of [1, 2]) {
+      const legs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+      await persistReparsedEvent(uid, 'workout', ordinaryWorkout(), (await ref.get()).data()!, legs.docs, SPORTS_LIB_VERSION);
+      const saved = (await ref.get()).data()!;
+      expect(saved.benchmarkSourceRevision).toBe(revision);
+      expect(saved).not.toHaveProperty('benchmarkResults');
+      expect(saved).not.toHaveProperty('hasBenchmark');
+    }
+  });
+
   it('preserves benchmark reports and remaps participants through repeated real writer reparses', async () => {
     const { DataDuration } = await import('@sports-alliance/sports-lib');
     const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');

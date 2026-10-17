@@ -1433,6 +1433,53 @@ describe('AppEventService', () => {
         expect(result).toBe(true);
     });
 
+    it('emits live metadata-only benchmark updates even when Sports Lib JSON and activities stay the same', async () => {
+        const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        mocks.getEventFromJSON.mockImplementation(json => actual.EventImporterJSON.getEventFromJSON(json));
+        const snapshots$ = new Subject<Record<string, unknown>>();
+        (docData as Mock).mockReturnValue(snapshots$.asObservable());
+        (collectionData as Mock).mockReturnValue(of([]));
+        const base = { name: 'Comparison', startDate: Date.UTC(2026, 0, 1), endDate: Date.UTC(2026, 0, 1) + 1000,
+            srcFileType: actual.FileType.FIT, privacy: actual.Privacy.Private, stats: {}, activities: [] };
+        const report = { referenceId: 'ref', testId: 'test', timestamp: new Date(0), metrics: { gnss: null, streamMetrics: {} } };
+        const emissions: any[] = [];
+        const subscription = service.getEventDetailsLive({ uid: 'u1' } as any, 'e1').subscribe(event => emissions.push(event));
+        snapshots$.next({ ...base, benchmarkResults: { pair: report }, benchmarkSourceRevision: 0 });
+        snapshots$.next({ ...base, benchmarkResults: { pair: { ...report, requiresRegeneration: true } }, benchmarkSourceRevision: 1 });
+        snapshots$.next({ ...base, benchmarkResults: { pair: { ...report, requiresRegeneration: true } }, benchmarkSourceRevision: 2 });
+        snapshots$.next({ ...base, benchmarkResults: { pair: { ...report, requiresRegeneration: true } }, benchmarkSourceRevision: 2 });
+        expect(emissions.map(event => event?.benchmarkSourceRevision)).toEqual([0, 1, 2]);
+        expect(emissions[1].benchmarkResults.pair.requiresRegeneration).toBe(true);
+        subscription.unsubscribe();
+    });
+
+    it('keeps the latest report date monotonic when another pair finishes saving later', async () => {
+        const newer = { referenceId: 'other-ref', testId: 'other-test', timestamp: { toDate: () => new Date(4000) } };
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkResults: { other: newer } }) }), update: vi.fn(),
+        }));
+        const saved = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', {
+            referenceId: 'ref', testId: 'test', timestamp: new Date(1000), metrics: { gnss: null, streamMetrics: {} },
+        });
+        expect(saved.benchmarkLatestAt).toEqual(new Date(4000));
+    });
+
+    it('normalizes timestamps on retained pairs before returning a saved report map to the UI', async () => {
+        const timestamp = { toDate: () => new Date(2000) };
+        const previous = { referenceId: 'other-ref', testId: 'other-test', timestamp,
+            metrics: { gnss: null, streamMetrics: {} },
+            qualityIssues: [{ type: 'dropout', streamType: 'HeartRate', severity: 'warning', timestamp }] };
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkResults: { other: previous } }) }), update: vi.fn(),
+        }));
+        const saved = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', {
+            referenceId: 'ref', testId: 'test', timestamp: new Date(1000), metrics: { gnss: null, streamMetrics: {} },
+        });
+        expect(saved.benchmarkResults.other.timestamp).toEqual(new Date(2000));
+        expect(saved.benchmarkResults.other.qualityIssues?.[0].timestamp).toEqual(new Date(2000));
+        expect(previous.timestamp).toBe(timestamp);
+    });
+
     it('saves benchmark results transactionally while retaining other pairs and stripping streams', async () => {
         const oldResult = { referenceId: 'other-ref', testId: 'other-test', timestamp: new Date(0) };
         const report = { referenceId: 'ref', testId: 'test', referenceName: ' Device A ', testName: 'Device B', timestamp: new Date(1),
@@ -1442,7 +1489,8 @@ describe('AppEventService', () => {
             get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkSourceRevision: 2, benchmarkResults: { other: oldResult } }) }), update,
         }));
         const result = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', report, 2);
-        expect(result.benchmarkResults).toMatchObject({ other: oldResult, ref_test: report });
+        expect(result.benchmarkResults).toMatchObject({ other: oldResult, ref_test: { ...report, nested: {} } });
+        expect(hasStreamsKey(result)).toBe(false);
         expect(result.benchmarkDevices).toEqual(['device a', 'device b']);
         expect(hasStreamsKey(update.mock.calls[0][1])).toBe(false);
         expect(update.mock.calls[0][1]).not.toHaveProperty('benchmarkSourceRevision');

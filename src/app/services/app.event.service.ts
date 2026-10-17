@@ -419,6 +419,14 @@ export class AppEventService implements OnDestroy {
       eventID: typeof eventAny?.getID === 'function' ? eventAny.getID() : null,
       event: eventSnapshot,
       tags: Array.isArray(event.tags) ? event.tags : event.benchmarkReviewTags,
+      benchmark: {
+        results: event.benchmarkResults,
+        legacyResult: event.benchmarkResult,
+        sourceRevision: event.benchmarkSourceRevision,
+        hasBenchmark: event.hasBenchmark,
+        devices: event.benchmarkDevices,
+        latestAt: event.benchmarkLatestAt,
+      },
       activities: activitySnapshots,
     });
   }
@@ -967,9 +975,17 @@ export class AppEventService implements OnDestroy {
           .filter((name): name is string => typeof name === 'string' && !!name.trim())
           .map(name => name.trim().replace(/\s+/g, ' ').toLowerCase()),
       ))];
-      const patch = { benchmarkResults, hasBenchmark: true, benchmarkDevices, benchmarkLatestAt: result.timestamp };
-      transaction.update(eventRef, sanitizeEventFirestoreWritePayload(patch));
-      return patch;
+      const benchmarkLatestAt = Object.values(benchmarkResults).reduce((latest, report) => {
+        const timestamp = this.fileService.toDate(report.timestamp);
+        return timestamp && Number.isFinite(timestamp.getTime()) && timestamp.getTime() > latest.getTime()
+          ? timestamp : latest;
+      }, result.timestamp);
+      const patch = sanitizeEventFirestoreWritePayload({ benchmarkResults, hasBenchmark: true, benchmarkDevices, benchmarkLatestAt });
+      transaction.update(eventRef, patch);
+      // Firestore returns Timestamp objects for retained pairs; normalize before caching them in the UI.
+      const hydrated = {} as AppEventInterface;
+      this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(hydrated, patch);
+      return { ...patch, benchmarkResults: hydrated.benchmarkResults! };
     });
   }
 

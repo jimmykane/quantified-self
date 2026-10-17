@@ -1742,7 +1742,7 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
         expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/u1/events/e1' }),
-            { probe: true },
+            { probe: true, benchmarkSourceRevision: 1 },
             undefined,
         );
     });
@@ -1806,6 +1806,7 @@ describe('sports-lib-reparse.service', () => {
                 tags: ['Latest'],
                 stats: { 'Recovery Time': 46_140 },
                 diagnostics: { keep: true },
+                benchmarkSourceRevision: 1,
             },
             undefined,
         );
