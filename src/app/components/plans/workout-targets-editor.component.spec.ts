@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
 import { ActivityTypes, SpeedUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1 } from '@shared/planned-workout';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { createManualWorkoutEditorTarget, manualEditorTargetToWorkout, workoutTargetToManualEditor, type ManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
 import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
@@ -29,6 +30,15 @@ describe('WorkoutTargetsEditorComponent', () => {
     const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
     return { fixture, child, host: fixture.componentInstance, settle };
   }
+
+  it.each([...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, ...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1])('offers cadence and the correct default speed presentation for %s', async sport => {
+      const { child, host, settle } = await render();
+      host.sport = sport; await settle();
+      child.add(); await settle();
+      expect(child.rows()[0].kinds.map(kind => kind.value)).toContain('cadence');
+      child.select(0, 'kind', 'speed'); await settle();
+      expect(host.targets()[0].presentation).toBe((MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 as readonly ActivityTypes[]).includes(sport) ? 'speed' : 'pace');
+    });
 
   it('adds two unique targets, rejects duplicates, reorders and removes with one haptic per accepted action', async () => {
     const { fixture, child, host, settle } = await render();

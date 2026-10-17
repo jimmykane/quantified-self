@@ -1627,6 +1627,42 @@ describe('Firestore Security Rules', () => {
                     benchmarkStatus: 'complete'
                 }));
             });
+
+            it('denies owner changes to the server-owned benchmark source revision', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Comparison', privacy: 'private', benchmarkSourceRevision: 2,
+                    });
+                });
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({ benchmarkSourceRevision: 1 }));
+                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).update({ hasBenchmark: true }));
+            });
+
+            it('blocks benchmark writes during source replacement while retaining ordinary owner edits', async () => {
+                const { deleteField } = await import('firebase/firestore');
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Comparison', privacy: 'private', benchmarkSourceRevision: 2, benchmarkSourceWritePending: true,
+                    });
+                });
+                const ref = db.doc(`users/${userId}/events/${eventId}`);
+                await assertFails(ref.update({ benchmarkSourceWritePending: false }));
+                await assertFails(ref.update({ benchmarkSourceWritePending: deleteField() }));
+                for (const patch of [{ benchmarkResults: { pair: {} } }, { benchmarkResult: {} }, { hasBenchmark: true },
+                    { benchmarkDevices: ['device'] }, { benchmarkLatestAt: new Date() }]) {
+                    await assertFails(ref.update(patch));
+                }
+                await assertSucceeds(ref.update({ name: 'Edited while reparsing', tags: ['firmware'] }));
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).update({
+                        benchmarkSourceRevision: 3, benchmarkSourceWritePending: false,
+                    });
+                });
+                await assertSucceeds(ref.update({ benchmarkResults: { pair: {} }, hasBenchmark: true }));
+                await assertFails(ref.update({ benchmarkSourceWritePending: true }));
+            });
         });
 
         describe('Routes (users/{uid}/routes/{routeId})', () => {

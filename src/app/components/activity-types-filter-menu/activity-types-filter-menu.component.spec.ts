@@ -1,7 +1,9 @@
 import { SimpleChange } from '@angular/core';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypesFilterMenuComponent } from './activity-types-filter-menu.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { CompatibleTrainingActivityTypes } from '@shared/activity-type-compatibility';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -70,6 +72,29 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(component.selectedActivityTypes).toEqual([]);
   });
 
+  it('retains an already-selected catalog bridge as a removable exact choice', () => {
+    const selection = vi.fn();
+    const component = new ActivityTypesFilterMenuComponent({ selection } as unknown as AppHapticsService);
+    const emit = vi.spyOn(component.selectedActivityTypesChange, 'emit');
+    const savedType = CompatibleTrainingActivityTypes.RoadRunning;
+    component.selectedActivityTypes = [savedType];
+    component.availableActivityTypes = [];
+    component.ngOnChanges({ selectedActivityTypes: new SimpleChange([], [savedType], true) });
+
+    expect(component.selectedActivityTypes).toEqual([savedType]);
+    expect(component.activityTypeOptions).toEqual([expect.objectContaining({ value: savedType, selected: true })]);
+    expect(component.activityFamilyOptions).toEqual([]);
+    expect(emit).not.toHaveBeenCalled();
+    expect(selection).not.toHaveBeenCalled();
+
+    component.onActivityTypeToggle(savedType, true);
+    expect(emit).not.toHaveBeenCalled();
+    component.onActivityTypeToggle(savedType, false);
+    expect(emit).toHaveBeenCalledExactlyOnceWith([]);
+    expect(selection).toHaveBeenCalledTimes(1);
+    expect(component.activityTypeOptions).toEqual([]);
+  });
+
   it('emits toggled activity filters and updates local menu state', () => {
     const component = new ActivityTypesFilterMenuComponent();
     const emittedActivityTypes: ActivityTypes[][] = [];
@@ -121,6 +146,35 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(emittedActivityTypes).toEqual([]);
     expect(component.selectedActivityTypes).toEqual([ActivityTypes.Running]);
     expect(component.activityFilterLabel).toBe('1 activity filter');
+  });
+
+  it('selects a contextual family, exposes partial selection and owns selection feedback', () => {
+    const selection = vi.fn();
+    const component = new ActivityTypesFilterMenuComponent({ selection } as unknown as AppHapticsService);
+    component.selectedActivityTypes = [ActivityTypes.Running, ActivityTypes.Yoga];
+    component.availableActivityTypes = [ActivityTypes.Running, ActivityTypes.Treadmill];
+    component.ngOnChanges({ selectedActivityTypes: new SimpleChange([], component.selectedActivityTypes, true) });
+    expect(selection).not.toHaveBeenCalled();
+    const family = component.activityFamilyOptions[0];
+    expect(family.partial).toBe(true);
+    component.onActivityFamilyToggle(family);
+    expect(component.selectedActivityTypes).toEqual([ActivityTypes.Running, ActivityTypes.Yoga, ActivityTypes.Treadmill]);
+    expect(selection).toHaveBeenCalledTimes(1);
+    component.onActivityTypeToggle(ActivityTypes.Treadmill, true);
+    expect(selection).toHaveBeenCalledTimes(1);
+    component.onActivityFamilyToggle(component.activityFamilyOptions[0]);
+    expect(component.selectedActivityTypes).toEqual([ActivityTypes.Yoga]);
+    expect(selection).toHaveBeenCalledTimes(2);
+    component.disabled = true;
+    component.onActivityFamilyToggle(family);
+    component.clearActivityTypes();
+    expect(selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders partial family choices as accessible mixed checkboxes', () => {
+    const template = readFileSync(join(process.cwd(), 'src/app/components/activity-types-filter-menu/activity-types-filter-menu.component.html'), 'utf8');
+    expect(template).toContain("[attr.aria-checked]=\"family.partial ? 'mixed' : family.selected\"");
+    expect(template).toContain('onActivityFamilyToggle(family)');
   });
 
   it('keeps the trigger accessible without a hover-created tooltip overlay', () => {

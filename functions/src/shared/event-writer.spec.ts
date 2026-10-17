@@ -445,7 +445,7 @@ describe('EventWriter', () => {
             );
         });
 
-        it('should log warn when no storage adapter is provided', async () => {
+        it('should log info when no storage adapter is provided', async () => {
             const writerWithoutStorage = new EventWriter(adapter, undefined, undefined, mockLogger);
             const originalFile = {
                 data: Buffer.from('test'),
@@ -455,11 +455,22 @@ describe('EventWriter', () => {
 
             await writerWithoutStorage.writeAllEventData('user-1', eventMock, originalFile);
 
-            expect(mockLogger.warn).toHaveBeenCalledWith(
+            expect(mockLogger.info).toHaveBeenCalledWith(
                 expect.stringContaining('Skipping file upload'),
                 expect.any(String),
                 expect.any(Boolean)
             );
+            expect(mockLogger.warn).not.toHaveBeenCalled();
+        });
+
+        it.each([true, false])('logs skipped uploads at info when no new files are supplied (storage adapter: %s)', async hasStorageAdapter => {
+            const writerWithoutFiles = new EventWriter(adapter, hasStorageAdapter ? storageAdapter : undefined, undefined, mockLogger);
+
+            await writerWithoutFiles.writeAllEventData('user-1', eventMock);
+
+            expect(mockLogger.info).toHaveBeenCalledWith('Skipping file upload.', 'storageAdapter:', hasStorageAdapter);
+            expect(mockLogger.warn).not.toHaveBeenCalled();
+            expect(storageAdapter.uploadFile).not.toHaveBeenCalled();
         });
 
         it('should log error when write fails', async () => {
@@ -477,9 +488,10 @@ describe('EventWriter', () => {
             expect(mockLogger.error).toHaveBeenCalled();
         });
 
-        it('should rethrow account-deletion write aborts without wrapping them', async () => {
+        it.each(['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'])(
+            'should rethrow deletion write aborts without wrapping them (%s)', async name => {
             const deletionSkipError = Object.assign(new Error('deleted'), {
-                name: 'EventWriteSkippedForDeletedUserError',
+                name,
             });
             const failingAdapter: FirestoreAdapter = {
                 setDoc: vi.fn().mockRejectedValue(deletionSkipError),

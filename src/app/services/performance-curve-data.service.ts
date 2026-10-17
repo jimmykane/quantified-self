@@ -17,6 +17,8 @@ import {
   type PowerCurvePoint as SharedPowerCurvePoint,
 } from '@shared/power-curve';
 
+import { resolveTrainingSportContextFromActivityType } from '@shared/training-disciplines';
+
 const DEFAULT_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600];
 const MIN_VALID_CADENCE = 35;
 const MIN_VALID_POWER = 20;
@@ -240,6 +242,10 @@ export class PerformanceCurveDataService {
     const activitySummaries: PerformanceCurveDurabilityActivitySummary[] = [];
 
     activityDescriptors.forEach((descriptor) => {
+      const durabilityPolicy = resolveTrainingSportContextFromActivityType(descriptor.activity.type)?.durabilityPolicy;
+      if (!durabilityPolicy || durabilityPolicy === 'omit') {
+        return;
+      }
       // Parser-only duration eligibility does not survive saved JSON. Require the
       // recorded duration consumed by the analyzer, rather than its date fallback.
       const recordedDuration = descriptor.activity.getDuration?.()?.getValue?.();
@@ -248,7 +254,8 @@ export class PerformanceCurveDataService {
       }
       const analysis = analyzeActivityDurability(descriptor.activity, { includeTimeline: true });
       const summary = analysis.summary;
-      if (!summary) {
+      if (!summary || (durabilityPolicy === 'unsupported-context'
+        && (summary.eligibility.eligible || summary.eligibility.reason !== 'unsupported-context'))) {
         return;
       }
       activitySummaries.push({
@@ -261,6 +268,10 @@ export class PerformanceCurveDataService {
           summary.eligibility.comparisonSegments,
         ),
       });
+
+      if (durabilityPolicy === 'unsupported-context') {
+        return;
+      }
 
       const points: PerformanceCurveDurabilityPoint[] = analysis.timeline.map(point => ({
         duration: point.elapsedSeconds,

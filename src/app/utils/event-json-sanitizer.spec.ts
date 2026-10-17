@@ -3,6 +3,10 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { EventJSONSanitizer } from './event-json-sanitizer';
 import {
     ActivityTypes,
+    ActivityTypesHelper,
+    DataTrainingStressScore,
+    DataTrainingStressScoreMethod,
+    TrainingStressScoreMethod,
     DynamicDataLoader,
     EventImporterJSON,
     LapTypes,
@@ -51,6 +55,33 @@ describe('EventJSONSanitizer', () => {
             throw new Error(`Class type of '${type}' is not in the store`);
         };
     };
+
+    it('keeps every installed canonical name and imported TSS through sanitized split-activity JSON round trips', () => {
+        ActivityTypesHelper.getActivityTypesAsUniqueArray().forEach(type => {
+            [0, 42.375].forEach(tss => {
+                const json = {
+                    name: 'Synthetic round trip', startDate: 0, endDate: 3_600_000, type,
+                    powerMeter: false, trainer: false,
+                    stats: {
+                        [DataTrainingStressScore.type]: tss,
+                        [DataTrainingStressScoreMethod.type]: TrainingStressScoreMethod.IMPORTED,
+                    },
+                    streams: [], laps: [], creator: { name: 'test', devices: [] },
+                    intensityZones: [], events: [],
+                };
+                const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(
+                    JSON.parse(JSON.stringify(json)),
+                );
+                expect(unknownTypes).toEqual([]);
+                expect(issues).toEqual([]);
+                const reconstructed = EventImporterJSON.getActivityFromJSON(sanitizedJson);
+                const roundTrip = EventImporterJSON.getActivityFromJSON(JSON.parse(JSON.stringify(reconstructed.toJSON())));
+                expect(roundTrip.type).toBe(type);
+                expect(roundTrip.getStat(DataTrainingStressScore.type)?.getValue()).toBe(tss);
+                expect(roundTrip.getStat(DataTrainingStressScoreMethod.type)?.getValue()).toBe(TrainingStressScoreMethod.IMPORTED);
+            });
+        });
+    });
 
     it('should remove unknown types from Event stats', () => {
         setupMock();

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "ca97affc570f4007730455213815706eca68c8ba6798f104d80eda918958b0c1",
+  "candidateSha256": "3fe3218f997b9f31b5cab5a8a42e0f4bcb95a13193a3c96b7213ff2d762a0ce2",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve replacement, prescription analysis, reflections, phases, source/recipe checks, title recovery, HR-retarget previews and activation/sync guidance. Add bounded v2 endurance reads with percent/metre units and EnergySense guidance. Explain scope-gated QS-calculated Garmin sleep HR. Keep RPE in Edit details and existing phase authority. Frozen schemas, scopes and Apply grants unchanged. Release, exact rescan and bundled sync remain separate.",
+  "summary": "Adopt Sports Lib 23.0.0's 284-type catalog in existing exact sport enums, retaining strict validation and 16 KiB focused previews for both grants. Preserve replacement, prescription analysis, reflections, phases, recipe checks, title recovery, HR previews, sync guidance, v2 endurance, EnergySense and Garmin sleep HR. Registered schemas/history, scopes, Apply grants and phase authority stay unchanged; RPE stays in Edit details. Deployment, rescan and bundled sync remain separate.",
   "rescanRequired": true
 }

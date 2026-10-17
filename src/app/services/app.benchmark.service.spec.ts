@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppBenchmarkService, BenchmarkNoOverlapError } from './app.benchmark.service';
+import { AppBenchmarkService, BenchmarkNoOverlapError, BenchmarkNoSharedDataError } from './app.benchmark.service';
 import { ActivityInterface, DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { webcrypto } from 'node:crypto';
@@ -179,8 +179,8 @@ describe('AppBenchmarkService', () => {
                 getID: () => 'longAct',
                 startDate,
                 endDate,
-                getAllStreams: () => [],
-                getStreamData: () => [],
+                getAllStreams: () => [{ type: 'HeartRate' }],
+                getStreamData: () => [100, 110, 120],
                 getDateIndex: () => 0,
             } as unknown as ActivityInterface;
 
@@ -188,6 +188,43 @@ describe('AppBenchmarkService', () => {
 
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Iteration 1000'));
             consoleSpy.mockRestore();
+        });
+    });
+
+    describe('measurement availability', () => {
+        const activity = (streams: Record<string, (number | null)[]>, id = 'ref') => ({
+            getID: () => id,
+            startDate: new Date('2026-10-01T10:00:00Z'),
+            endDate: new Date('2026-10-01T10:00:03Z'),
+            getAllStreams: () => Object.keys(streams).map(type => ({ type })),
+            getStreamData: (type: string) => streams[type] ?? [],
+            getDateIndex: (date: Date) => (date.getTime() - Date.parse('2026-10-01T10:00:00Z')) / 1000,
+        }) as unknown as ActivityInterface;
+
+        it('keeps heart-rate-only comparisons and marks GPS unavailable', async () => {
+            const result = await service.generateBenchmark(activity({ HeartRate: [100, 110, 120, 130] }),
+                activity({ HeartRate: [101, 111, 121, 131] }, 'test'));
+            expect(result.metrics.gnss).toBeNull();
+            expect(result.metrics.streamMetrics.HeartRate.meanAbsoluteError).toBe(1);
+        });
+
+        it.each([
+            [{}, {}],
+            [{ HeartRate: [null, null, null] }, { HeartRate: [100, 110, 120] }],
+            [{ HeartRate: [100, null, null] }, { HeartRate: [100, 110, 120] }],
+            [{ Latitude: [40, 41], Longitude: [] }, { Latitude: [40, 41], Longitude: [20, 21] }],
+            [{ Latitude: [NaN, Infinity, 100], Longitude: [20, 21, 22] }, { Latitude: [40, 41, 42], Longitude: [20, 21, 22] }],
+        ])('rejects empty, insufficient or invalid paired measurements: %j', async (a, b) => {
+            await expect(service.generateBenchmark(activity(a), activity(b, 'test')))
+                .rejects.toBeInstanceOf(BenchmarkNoSharedDataError);
+        });
+
+        it('ignores nonfinite samples and stores undefined correlation as null', async () => {
+            const result = await service.generateBenchmark(activity({ HeartRate: [100, 100, NaN, Infinity] }),
+                activity({ HeartRate: [101, 101, 102, 103] }, 'test'));
+            expect(result.metrics.streamMetrics.HeartRate.meanAbsoluteError).toBe(1);
+            expect(result.metrics.streamMetrics.HeartRate.pearsonCorrelation).toBeNull();
+            expect(result.metrics.gnss).toBeNull();
         });
     });
 
@@ -390,8 +427,8 @@ describe('AppBenchmarkService', () => {
                 creator: { name: 'Garmin Forerunner 265' },
                 startDate,
                 endDate,
-                getAllStreams: () => [],
-                getStreamData: () => [],
+                getAllStreams: () => [{ type: 'HeartRate' }],
+                getStreamData: () => [100, 110, 120],
                 getDateIndex: () => 0,
             } as unknown as ActivityInterface;
 
@@ -400,8 +437,8 @@ describe('AppBenchmarkService', () => {
                 creator: { name: 'COROS PACE 3' },
                 startDate,
                 endDate,
-                getAllStreams: () => [],
-                getStreamData: () => [],
+                getAllStreams: () => [{ type: 'HeartRate' }],
+                getStreamData: () => [100, 110, 120],
                 getDateIndex: () => 0,
             } as unknown as ActivityInterface;
 
@@ -419,8 +456,8 @@ describe('AppBenchmarkService', () => {
                 getID: () => 'act',
                 startDate,
                 endDate,
-                getAllStreams: () => [],
-                getStreamData: () => [],
+                getAllStreams: () => [{ type: 'HeartRate' }],
+                getStreamData: () => [100, 110, 120],
                 getDateIndex: () => 0,
             } as unknown as ActivityInterface;
 
@@ -560,7 +597,7 @@ describe('AppBenchmarkService', () => {
             expect(result.metrics.streamMetrics['HeartRate']).toBeDefined();
         });
 
-        it('should handle activities with no common streams', async () => {
+        it('rejects activities with no common streams', async () => {
             const startDate = new Date('2023-01-01T10:00:00Z');
             const endDate = new Date('2023-01-01T10:00:02Z');
 
@@ -582,9 +619,7 @@ describe('AppBenchmarkService', () => {
                 getDateIndex: () => 0,
             } as unknown as ActivityInterface;
 
-            const result = await service.generateBenchmark(actA, actB);
-
-            expect(Object.keys(result.metrics.streamMetrics).length).toBe(0);
+            await expect(service.generateBenchmark(actA, actB)).rejects.toBeInstanceOf(BenchmarkNoSharedDataError);
         });
     });
 

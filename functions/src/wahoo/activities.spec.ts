@@ -411,6 +411,23 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['Road Cycling', 0], ['Vertical Running', 4], ['Indoor Walking', 6],
+    ['E-Enduro MTB', 64], ['LES MILLS RPM', 12], ['AMRAP', 43],
+  ])('uses the approved Wahoo correction for a direct %s upload', async (sport, id) => {
+    mocks.recordActivitySyncOutboundFingerprint.mockResolvedValueOnce({
+      exactFingerprintId: 'exact-v1-refined', fingerprintIds: ['exact-v1-refined'],
+      operationId: 'operation-refined', activityTypes: [sport],
+    });
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-refined', status: 'pending' },
+    });
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' }, app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).resolves.toMatchObject({ status: 'pending', expectedWorkoutTypeId: id });
+  });
+
   it('maps multiple direct FIT activity types to Wahoo MULTISPORT', async () => {
     mocks.recordActivitySyncOutboundFingerprint.mockResolvedValueOnce({
       exactFingerprintId: 'exact-v1-multisport',

@@ -1,4 +1,5 @@
 import { getRejectedSwimTiming, resolveSwimTiming } from '../../../shared/swim-timing';
+import { getTrainingSportDefinition, type TrainingSportId } from '../../../shared/training-disciplines';
 import { runMcpWorkoutReflection } from './workout-reflections.service';
 import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
@@ -153,6 +154,7 @@ import {
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
+import { projectTrainingPowerSystemsPolicy1 } from './training-power-systems-compatibility';
 import {
   PUBLIC_TRAINING_DISCIPLINES,
   TRAINING_DISCIPLINES,
@@ -255,6 +257,7 @@ import {
 const MAX_EVENT_QUERY_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
 const MAX_EVENT_QUERY_DOCUMENTS = 2000;
 const EVENT_QUERY_PAGE_SIZE = 25;
+const MAX_EXPLICIT_ACTIVITY_TYPES = 20;
 const MAX_EVENT_QUERY_STATS_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_QUERY_STAT_ENTRIES = 20_000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
@@ -2621,7 +2624,7 @@ function buildMeasurementPoints(
 }
 
 function resolveActivityTypes(activityTypes: readonly string[] | undefined): ActivityTypes[] {
-  if ((activityTypes || []).length > 20) {
+  if ((activityTypes || []).length > MAX_EXPLICIT_ACTIVITY_TYPES) {
     throw new McpDataError(
       'invalid_request',
       'At most 20 activity types can be requested.',
@@ -2642,6 +2645,22 @@ function resolveCanonicalActivityTypes(
   return [
     ...new Set(resolveActivityTypes(activityTypes).map(String)),
   ].sort();
+}
+
+/** Internal workflow family, applied once inside the ordinary bounded scan. */
+function resolveWorkflowActivityTypes(
+  explicitTypes: readonly string[] | undefined,
+  discipline?: TrainingSportId,
+): ActivityTypes[] {
+  // Keep the explicit input validation even for internal callers.
+  const explicit = resolveActivityTypes(explicitTypes);
+  if (!discipline) return [...new Set(explicit)];
+  const types = getTrainingSportDefinition(discipline)?.contexts.flatMap(context => context.activityTypes) ?? [];
+  const canonical = [...new Set(types.flatMap(type => ActivityTypesHelper.resolveActivityType(type) || []))];
+  if (!canonical.length) {
+    throw new McpDataError('invalid_request', 'The workflow activity family has no supported canonical sports.');
+  }
+  return canonical;
 }
 
 function resolveRankingActivityTypes(
@@ -2676,12 +2695,6 @@ function resolveRankingActivityTypes(
       ...groupActivityTypes,
     ]),
   ].sort();
-  if (combined.length > 20) {
-    throw new McpDataError(
-      'invalid_request',
-      'At most 20 activity types can be requested after activity-group expansion.',
-    );
-  }
   return combined;
 }
 
@@ -2696,12 +2709,12 @@ function normalizeRouteSearch(search: string | undefined): string | null {
   return normalized || null;
 }
 
-function resolveRouteListQuery(input: ListRoutesInput): {
+function resolveRouteListQuery(input: ListRoutesInput, discipline?: TrainingSportId): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedRouteListQuery;
 } {
   const query: ResolvedRouteListQuery = {
-    activityTypes: resolveCanonicalActivityTypes(input.activityTypes),
+    activityTypes: resolveWorkflowActivityTypes(input.activityTypes, discipline).map(String).sort(),
     search: normalizeRouteSearch(input.search),
   };
   return {
@@ -3170,11 +3183,12 @@ function resolveMetricSelectors(
 async function querySelectedMetrics(
   dependencies: McpDataServiceDependencies,
   input: QueryMetricsInput,
+  discipline?: TrainingSportId,
 ) {
   validateBoundedRange(input.startTimeMs, input.endTimeMs);
   const timeZone = requireTimeZone(input.timeZone);
   const selectors = resolveMetricSelectors(input.metrics);
-  const activityTypes = resolveActivityTypes(input.activityTypes);
+  const activityTypes = resolveWorkflowActivityTypes(input.activityTypes, discipline);
   const metricTypes = [...new Set(
     selectors.map(selector => selector.metric.type),
   )];
@@ -3600,6 +3614,7 @@ function projectFormForMcp(payload: unknown): unknown {
 export function projectDerivedMetricPayloadForMcp(
   metricKind: DerivedMetricKind,
   payload: unknown,
+  legacyPowerSystemsPolicy1?: unknown,
 ): unknown {
   try {
     switch (metricKind) {
@@ -3637,6 +3652,8 @@ export function projectDerivedMetricPayloadForMcp(
         return projectTrainingDurabilityForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingCapacity:
         return projectTrainingCapacityForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingPowerSystems:
+        return projectTrainingPowerSystemsPolicy1(payload, legacyPowerSystemsPolicy1, redactDerivedPayload);
       case DERIVED_METRIC_KINDS.BodyWeightTrend:
         return projectBodyWeightTrendForMcp(payload);
       default:
@@ -3661,23 +3678,24 @@ const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingCapacity,
+  DERIVED_METRIC_KINDS.TrainingPowerSystems,
   DERIVED_METRIC_KINDS.BodyWeightTrend,
 ]);
 
-function parseMcpTrainingMetricPayload(metricKind: DerivedMetricKind, payload: unknown): unknown | null {
+function parseMcpTrainingMetricPayload(metricKind: DerivedMetricKind, payload: unknown, legacyPowerSystemsPolicy1?: unknown): unknown | null {
   if (!hasCurrentIntensityPolicy(metricKind, payload) || payload === null || payload === undefined) {
     return null;
   }
   const projectedPayload = MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)
-    ? projectDerivedMetricPayloadForMcp(metricKind, payload)
+    ? projectDerivedMetricPayloadForMcp(metricKind, payload, legacyPowerSystemsPolicy1)
     : payload;
   const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind]
     .safeParse(redactDerivedPayload(projectedPayload));
   return parsed.success ? parsed.data : null;
 }
 
-export function isMcpTrainingMetricPayloadReadable(metricKind: DerivedMetricKind, payload: unknown): boolean {
-  return parseMcpTrainingMetricPayload(metricKind, payload) !== null;
+export function isMcpTrainingMetricPayloadReadable(metricKind: DerivedMetricKind, payload: unknown, legacyPowerSystemsPolicy1?: unknown): boolean {
+  return parseMcpTrainingMetricPayload(metricKind, payload, legacyPowerSystemsPolicy1) !== null;
 }
 
 export function redactDerivedPayload(
@@ -5901,59 +5919,71 @@ async function fetchBoundedActivityRankingDocuments(
   metricType: string,
 ): Promise<RawDocument[]> {
   const documents: RawDocument[] = [];
-  let cursor: unknown;
   let cumulativeBytes = 0;
+  const activityTypes = input.activityTypes || [];
+  // The public list stays bounded at 20; a catalog group can be larger. Query
+  // disjoint type batches with one cumulative budget instead of clipping the
+  // family or falling back to scanning unrelated history. Date-range queries
+  // already scan the bounded range and apply the complete sport filter below.
+  const typeBatches: readonly string[][] = input.startTimeMs === undefined && activityTypes.length > MAX_EXPLICIT_ACTIVITY_TYPES
+    ? Array.from({ length: Math.ceil(activityTypes.length / MAX_EXPLICIT_ACTIVITY_TYPES) }, (_, index) => (
+      activityTypes.slice(index * MAX_EXPLICIT_ACTIVITY_TYPES, (index + 1) * MAX_EXPLICIT_ACTIVITY_TYPES)
+    ))
+    : [[...activityTypes]];
 
-  while (documents.length <= MAX_ACTIVITY_RANKING_DOCUMENTS) {
-    const pageLimit = Math.min(
-      ACTIVITY_RANKING_PAGE_SIZE,
-      MAX_ACTIVITY_RANKING_DOCUMENTS + 1 - documents.length,
-    );
-    const page = await dependencies.fetchActivityRankingDocuments(
-      input.uid,
-      input.startTimeMs,
-      input.endTimeMs,
-      metricType,
-      input.activityTypes || [],
-      pageLimit,
-      cursor,
-    );
-    if (page.length > pageLimit) {
-      throw new McpDataError(
-        'query_too_large',
-        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
+  for (const typeBatch of typeBatches) {
+    let cursor: unknown;
+    while (documents.length <= MAX_ACTIVITY_RANKING_DOCUMENTS) {
+      const pageLimit = Math.min(
+        ACTIVITY_RANKING_PAGE_SIZE,
+        MAX_ACTIVITY_RANKING_DOCUMENTS + 1 - documents.length,
       );
-    }
-    for (const document of page) {
-      cumulativeBytes += measureJsonBytes(
-        document.data,
-        'The ranking query contains activity data that cannot be processed safely.',
+      const page = await dependencies.fetchActivityRankingDocuments(
+        input.uid,
+        input.startTimeMs,
+        input.endTimeMs,
+        metricType,
+        typeBatch,
+        pageLimit,
+        cursor,
       );
-      if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
-        throw new McpDataError(
-          'query_too_large',
-          'The ranking query contains too much activity metric data. Narrow the requested period or activity set.',
-        );
-      }
-      documents.push({
-        id: document.id,
-        data: document.data,
-      });
-      if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
+      if (page.length > pageLimit) {
         throw new McpDataError(
           'query_too_large',
           `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
         );
       }
-    }
-    if (page.length < pageLimit) {
-      return documents;
-    }
-    cursor = page[page.length - 1]?.cursor;
-    if (cursor === undefined) {
-      throw new Error(
-        'The MCP activity ranking page did not provide a pagination cursor.',
-      );
+      for (const document of page) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The ranking query contains activity data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The ranking query contains too much activity metric data. Narrow the requested period or activity set.',
+          );
+        }
+        documents.push({
+          id: document.id,
+          data: document.data,
+        });
+        if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
+          throw new McpDataError(
+            'query_too_large',
+            `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
+          );
+        }
+      }
+      if (page.length < pageLimit) {
+        break;
+      }
+      cursor = page[page.length - 1]?.cursor;
+      if (cursor === undefined) {
+        throw new Error(
+          'The MCP activity ranking page did not provide a pagination cursor.',
+        );
+      }
     }
   }
   return documents;
@@ -5963,13 +5993,8 @@ async function rankActivitiesByMetric(
   dependencies: McpDataServiceDependencies,
   input: RankActivitiesByMetricInput,
 ) {
-  const { query } = resolveActivityListQuery(dependencies, {
-    ...input,
-    activityTypes: resolveRankingActivityTypes(
-      input.activityTypes,
-      input.activityGroup,
-    ),
-  });
+  const { query } = resolveActivityListQuery(dependencies, input);
+  query.activityTypes = resolveRankingActivityTypes(input.activityTypes, input.activityGroup);
   const metric = resolveSportsLibNumericMetric(input.metric);
   if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
     throw new McpDataError(
@@ -6470,14 +6495,14 @@ export function createMcpDataService(
       return result;
     },
 
-    async queryMetric(input: QueryMetricInput) {
+    async queryMetric(input: QueryMetricInput, discipline?: TrainingSportId) {
       const result = await querySelectedMetrics(dependencies, {
         ...input,
         metrics: [{
           metric: input.metric,
           aggregation: input.aggregation,
         }],
-      });
+      }, discipline);
       return result.results[0];
     },
 
@@ -6831,7 +6856,7 @@ export function createMcpDataService(
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
-      const safePayload = parseMcpTrainingMetricPayload(metricKind, snapshot.payload);
+      const safePayload = parseMcpTrainingMetricPayload(metricKind, snapshot.payload, snapshot.legacyPowerSystemsPolicy1);
       if (safePayload === null) {
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
@@ -7552,11 +7577,11 @@ export function createMcpDataService(
       return getActivityChartData(dependencies, input);
     },
 
-    async listRoutes(input: ListRoutesInput) {
+    async listRoutes(input: ListRoutesInput, discipline?: TrainingSportId) {
       const {
         cursor,
         query,
-      } = resolveRouteListQuery(input);
+      } = resolveRouteListQuery(input, discipline);
       const limit = Math.min(
         MAX_ROUTE_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),

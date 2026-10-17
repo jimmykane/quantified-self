@@ -5,7 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
@@ -133,6 +133,18 @@ describe('EventSearchComponent', () => {
     expect(searchSpy).toHaveBeenCalledTimes(1);
     expect(component.selectedDateRange).toBe(DateRanges.lastWeek);
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts activity filter changes without duplicating the selector feedback', async () => {
+    const { component, hapticsService } = createComponent();
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    const activityTypes = [ActivityTypes.Running];
+
+    await component.onActivityTypesChange(activityTypes);
+
+    expect(component.selectedActivityTypes).toEqual(activityTypes);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
   });
 
   it('should expose one flattened shortcut group for table toolbar layout', () => {

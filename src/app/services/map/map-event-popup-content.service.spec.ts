@@ -142,4 +142,15 @@ describe('MapEventPopupContentService', () => {
       { value: '--', label: '' },
     ]);
   });
+  it('omits the automatic speed metric from climbing map popups without reading or changing its raw stat', () => {
+    const getStat = vi.fn(() => ({ getType: () => DataSpeedAvg.type, getDisplayValue: () => '2', getDisplayUnit: () => 'km/h' }));
+    const event = {
+      getActivityTypesAsArray: () => [ActivityTypes.RockClimbing],
+      getActivityTypesAsString: () => 'Rock Climbing',
+      getStat,
+    } as unknown as EventInterface;
+    expect(service.buildFromEvent(event).metrics).toHaveLength(2);
+    expect(getStat).not.toHaveBeenCalledWith(DataSpeedAvg.type);
+  });
+
 });

@@ -12,6 +12,7 @@ import {
 import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
+import type { AssistantPromptWorkflow } from '../../../shared/assistant.prompts';
 import { assistantRecoveryDurationSeconds, type AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 import {
   ASSISTANT_CONTENT_PROPOSAL_TOOLS,
@@ -408,6 +409,7 @@ export async function createAssistantMcpSession(
   timelineNoteChangesEnabled = false,
   measurementChangesEnabled = false,
   reflectionChangesEnabled = false,
+  activityDisciplines?: AssistantPromptWorkflow['activityDisciplineOverrides'],
 ): Promise<AssistantMcpSession> {
   if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled) && !conversationId) {
     throw new Error('Assistant content changes require a current conversation.');
@@ -461,6 +463,7 @@ export async function createAssistantMcpSession(
       ...(trainingDeliveryEnabled ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
     ],
     ...(conversationId ? { assistantConversationId: conversationId } : {}),
+    ...(activityDisciplines ? { assistantActivityDisciplines: activityDisciplines } : {}),
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = dependencies.createServer(auth, publicBaseUrl);

@@ -206,6 +206,19 @@ describe('event lap table columns helper', () => {
     expect(isEventLapSportFamily(null)).toBe(false);
   });
 
+  it.each(['Climbing', 'Rock Climbing', 'Indoor Climbing', 'Bouldering', 'Floor Climbing'])('hides default effort columns for %s while retaining explicit layouts', sport => {
+      expect(getSelectedEventLapMetricTypes(null, 'other', [sport])).not.toContain(DataSpeedAvg.type);
+      const custom = [DataSpeedAvg.type, DataPaceAvg.type, DataGradeAdjustedPaceAvg.type];
+      expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { other: custom } }, 'other', [sport])).toEqual(custom);
+      expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { other: [] } }, 'other', [sport])).toEqual([]);
+    });
+
+  it('retains default effort for another sport sharing the Other lap family', () => {
+    expect(getDefaultEventLapMetricTypes('other', ['Climbing', 'Hiking'])).toContain(DataSpeedAvg.type);
+    expect(getDefaultEventLapMetricTypes('other', ['Hiking'])).toContain(DataSpeedAvg.type);
+    expect(getDefaultEventLapMetricTypes('running', ['Running'])).toContain(DataPaceAvg.type);
+  });
+
   it('offers stroke as a selectable column while respecting existing saved swim layouts', () => {
     expect(getEventLapMetricOptionGroups().flatMap(group => group.metrics))
       .toContainEqual({ type: EVENT_LAP_STROKE_COLUMN, label: 'Stroke' });

@@ -9,6 +9,8 @@ import {
 export const BENCHMARK_REVIEW_TAG_LIMIT = EVENT_TAG_LIMIT;
 export const BENCHMARK_REVIEW_TAG_MAX_LENGTH = EVENT_TAG_MAX_LENGTH;
 
+export type BenchmarkGrade = 'excellent' | 'good' | 'fair' | 'poor' | 'unavailable';
+
 export interface BenchmarkAtAGlanceItem {
   key: string;
   label: string;
@@ -42,7 +44,9 @@ export function buildBenchmarkReviewerSummary(
 
   const normalizedTags = normalizeBenchmarkReviewTags(tags);
   const pairLabel = formatBenchmarkPair(result);
-  const overallLabel = `${formatGradeLabel(resolveOverallGrade(result))} agreement`;
+  const grade = resolveBenchmarkOverallGrade(result);
+  const overallLabel = result.requiresRegeneration ? 'Regeneration required'
+    : grade === 'unavailable' ? 'No comparable grade' : `${formatGradeLabel(grade)} agreement`;
   const gnss = result.metrics?.gnss;
   const streamMetrics = result.metrics?.streamMetrics || {};
   const heartRate = resolveBenchmarkStreamMetrics(streamMetrics, DataHeartRate.type, ['HeartRate', 'Heart Rate', 'Average Heart Rate']);
@@ -61,8 +65,8 @@ export function buildBenchmarkReviewerSummary(
     {
       key: 'gnss',
       label: 'GNSS',
-      value: `CEP50 ${formatNumber(gnss?.cep50, 'm', 1)}`,
-      detail: `RMSE ${formatNumber(gnss?.rmse, 'm', 1)} · MAE ${formatNumber(gnss?.meanAbsoluteError, 'm', 1)}`,
+      value: gnss ? `CEP50 ${formatNumber(gnss.cep50, 'm', 1)}` : 'No shared GPS data',
+      detail: gnss ? `RMSE ${formatNumber(gnss.rmse, 'm', 1)} · MAE ${formatNumber(gnss.meanAbsoluteError, 'm', 1)}` : undefined,
     },
     {
       key: 'heart-rate',
@@ -95,7 +99,8 @@ export function buildBenchmarkReviewerSummary(
   const lines = [
     `Pair: ${pairLabel}`,
     `Overall: ${overallLabel}`,
-    `GNSS: CEP50 ${formatNumber(gnss?.cep50, 'm', 1)}, RMSE ${formatNumber(gnss?.rmse, 'm', 1)}, MAE ${formatNumber(gnss?.meanAbsoluteError, 'm', 1)}`,
+    result.requiresRegeneration ? 'Status: Previous report retained after reprocessing. Regenerate to compare the current recordings.' : '',
+    gnss ? `GNSS: CEP50 ${formatNumber(gnss.cep50, 'm', 1)}, RMSE ${formatNumber(gnss.rmse, 'm', 1)}, MAE ${formatNumber(gnss.meanAbsoluteError, 'm', 1)}` : 'GNSS: No shared GPS data',
     `HR: MD ${formatNumber(heartRateMeanDeviation, 'bpm', 0, true)}, MAE ${formatNumber(heartRate?.meanAbsoluteError, 'bpm', 0)}, correlation ${formatCorrelation(heartRate?.pearsonCorrelation)}`,
     `Alt: MD ${formatNumber(altitudeMeanDeviation, 'm', 1, true)}, MAE ${formatNumber(altitude?.meanAbsoluteError, 'm', 1)}, correlation ${formatCorrelation(altitude?.pearsonCorrelation)}`,
     `Quality: ${qualityIssueCount === 0 ? 'No issues' : `${qualityIssueCount} issue${qualityIssueCount === 1 ? '' : 's'}`}${result.timeOffsetSeconds === undefined ? '' : `, offset ${result.timeOffsetSeconds}s`}`,
@@ -176,55 +181,35 @@ function formatCorrelation(value: unknown): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function resolveOverallGrade(result: BenchmarkResult): 'excellent' | 'good' | 'fair' | 'poor' {
+export function resolveBenchmarkOverallGrade(result: BenchmarkResult, statGrade?: BenchmarkGrade | null): BenchmarkGrade {
+  if (result.requiresRegeneration) return 'unavailable';
   const scoreMap = { excellent: 3, good: 2, fair: 1, poor: 0 };
   const grades = [
-    resolveGnssGrade(result.metrics?.gnss?.cep50),
-    ...Object.values(result.metrics?.streamMetrics || {}).map(metrics => resolveCorrelationGrade(metrics.pearsonCorrelation)),
-  ];
+    resolveBenchmarkGnssGrade(result.metrics?.gnss?.cep50),
+    ...Object.values(result.metrics?.streamMetrics || {}).map(metrics => resolveBenchmarkCorrelationGrade(metrics.pearsonCorrelation)),
+    statGrade,
+  ].filter((grade): grade is Exclude<BenchmarkGrade, 'unavailable'> => !!grade && grade !== 'unavailable');
+  if (!grades.length) return 'unavailable';
   const average = grades.reduce((total, grade) => total + scoreMap[grade], 0) / grades.length;
-
-  if (average >= 2.5) {
-    return 'excellent';
-  }
-  if (average >= 1.5) {
-    return 'good';
-  }
-  if (average >= 0.5) {
-    return 'fair';
-  }
+  if (average >= 2.5) return 'excellent';
+  if (average >= 1.5) return 'good';
+  if (average >= 0.5) return 'fair';
   return 'poor';
 }
 
-function resolveGnssGrade(cep50: unknown): 'excellent' | 'good' | 'fair' | 'poor' {
-  if (typeof cep50 !== 'number' || !Number.isFinite(cep50)) {
-    return 'poor';
-  }
-  if (cep50 <= 2) {
-    return 'excellent';
-  }
-  if (cep50 <= 5) {
-    return 'good';
-  }
-  if (cep50 <= 10) {
-    return 'fair';
-  }
+export function resolveBenchmarkGnssGrade(cep50: unknown): BenchmarkGrade {
+  if (typeof cep50 !== 'number' || !Number.isFinite(cep50)) return 'unavailable';
+  if (cep50 <= 2) return 'excellent';
+  if (cep50 <= 5) return 'good';
+  if (cep50 <= 10) return 'fair';
   return 'poor';
 }
 
-function resolveCorrelationGrade(correlation: unknown): 'excellent' | 'good' | 'fair' | 'poor' {
-  if (typeof correlation !== 'number' || !Number.isFinite(correlation)) {
-    return 'poor';
-  }
-  if (correlation >= 0.98) {
-    return 'excellent';
-  }
-  if (correlation >= 0.95) {
-    return 'good';
-  }
-  if (correlation >= 0.90) {
-    return 'fair';
-  }
+export function resolveBenchmarkCorrelationGrade(correlation: unknown): BenchmarkGrade {
+  if (typeof correlation !== 'number' || !Number.isFinite(correlation)) return 'unavailable';
+  if (correlation >= 0.98) return 'excellent';
+  if (correlation >= 0.95) return 'good';
+  if (correlation >= 0.90) return 'fair';
   return 'poor';
 }
 

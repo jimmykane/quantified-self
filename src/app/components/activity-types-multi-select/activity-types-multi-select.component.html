@@ -3,17 +3,24 @@
   <input type="text" [placeholder]="placeholder" [attr.aria-label]="label" matInput
     [matAutocomplete]="auto" [formControl]="activityTypesControl">
   @if (selectedActivityTypes.length) {
-  <button matSuffix mat-icon-button aria-label="Clear" (click)="clearSelection()">
+  <button matSuffix mat-icon-button aria-label="Clear" [disabled]="disabled" (click)="clearSelection()">
     <mat-icon>close</mat-icon>
   </button>
   }
 </mat-form-field>
 
+<div class="activity-family-shortcuts" role="group" aria-label="Activity families">
+  @for (family of activityFamilyOptions; track family.id) {
+  <mat-checkbox [checked]="family.selected" [indeterminate]="family.partial" [disabled]="disabled"
+    (change)="toggleFamily(family, $event.checked)">{{ family.label }}</mat-checkbox>
+  }
+</div>
+
 <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayFn">
   @for (activityType of filteredActivityTypes | async; track activityType) {
   <mat-option [value]="selectedActivityTypesSelectionModel">
     <div (click)="optionClicked($event, activityType)">
-      <mat-checkbox [checked]="activityType.selected" (change)="toggleSelection(activityType)"
+      <mat-checkbox [checked]="activityType.selected" [disabled]="disabled" (change)="toggleSelection(activityType)"
         (click)="$event.stopPropagation()">
         {{ activityType.activityType }}
       </mat-checkbox>

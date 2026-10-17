@@ -15,6 +15,42 @@ Existing timed Strength remains Gym/indoor with type 42, instruction-only loads 
 interval format documents only Biking/Running; Cloud catalog IDs do not establish interval-player support.
 Adding these mappings authorizes neither deployment nor account-side sends.
 
+## Recorded-activity sport profiles
+
+Recorded activity uploads use `shared/wahoo-activity-types.ts`, independently of Training's Plan profiles.
+The expanded Sports Lib names reuse these approved, existing Workout types:
+
+| QS sport names | Wahoo Workout type |
+| --- | --- |
+| Road / Track / Ultra / Crosscountry Running; Obstacle Racing | Running (`1`) |
+| Vertical Running | Trail Running (`4`) |
+| Indoor Track Running | Treadmill (`5`) |
+| Road / Gravel / Track / Recumbent Cycling; Cyclocross; BMX; Kickbiking | Biking (`0`) |
+| E-Mountain Biking; E-Enduro MTB | E-Biking (`64`) |
+| Mountain Bike Orienteering | Mountain Biking (`13`) |
+| Indoor Hand Cycle | Hand Cycle (`70`) |
+| LES MILLS RPM / SPRINT / THE TRIP | Indoor Biking (`12`) |
+| Speed Walking; Indoor Walking | Walking (`6`) |
+| Classic Crosscountry Skiing; Skate Skiing | Crosscountry Skiing (`30`) |
+| AMRAP; EMOM; Tabata | Cardio Class (`43`) |
+| Brick Training; Pool Triathlon; Offroad Triathlon; Offroad Duathlon | Multisport (`62`) |
+
+QS retains the source sport. Nordic Walking still uses native type `8`; virtual profiles and all other existing
+mappings retain their IDs. Unmapped sports, including LES MILLS BODYPUMP, retain Wahoo inference. Multiple distinct
+canonical sports retain the existing Multisport behavior. Automatic and direct activity uploads share this resolver;
+queued operations persist their type choice before I/O and resume it unchanged. This does not replay or correct
+historical provider copies.
+
+Route delivery has a separate family field: BMX, LES MILLS RPM / SPRINT / THE TRIP, Enduro MTB and E-Enduro MTB use
+Cycling (`0`); Obstacle Racing uses Running (`1`). Vertical Running retains Running (`1`). These are family mappings,
+not recorded Workout IDs or planned-workout profiles. Offroad Triathlon and Offroad Duathlon explicitly use Other
+(`31`) before keyword matching, preventing the road substring from selecting Cycling. Motorcycling retains Biking
+(`0`), matching its [documented Wahoo family](https://cloud-api.wahooligan.com/#workout-types). QS route sport names
+and retained files remain intact.
+
+Monitoring coverage is **unchanged**. Existing Wahoo recorded-activity and route worker/outcome labels cover these
+metadata aliases; no queue, retry, lease, lifecycle, telemetry dimension or alert threshold changes.
+
 ## Supported scope
 
 - OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, `plans_read`, `plans_write`, and `offline_data`. Existing users need explicit reconnect for the new Training grants; ordinary imports/routes do not require them.

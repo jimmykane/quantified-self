@@ -60,6 +60,151 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const promise = new Promise<void>(resolve => { release = resolve; });
     return { promise, release };
   }
+  it('advances the benchmark save guard before an ordinary workout has its first report', async () => {
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup();
+    const ordinaryWorkout = () => {
+      const event = workout();
+      event.addActivity(workout('second-leg', Date.UTC(2026, 0, 2, 1)).getFirstActivity());
+      return event;
+    };
+    await source(uid, ordinaryWorkout());
+    const ref = db.doc(`users/${uid}/events/workout`);
+    for (const revision of [1, 2]) {
+      const legs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+      await persistReparsedEvent(uid, 'workout', ordinaryWorkout(), (await ref.get()).data()!, legs.docs, SPORTS_LIB_VERSION);
+      const saved = (await ref.get()).data()!;
+      expect(saved.benchmarkSourceRevision).toBe(revision);
+      expect(saved).not.toHaveProperty('benchmarkResults');
+      expect(saved).not.toHaveProperty('hasBenchmark');
+    }
+  });
+
+  it('preserves benchmark reports and remaps participants through repeated real writer reparses', async () => {
+    const { DataDuration } = await import('@sports-alliance/sports-lib');
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup();
+    const comparison = (suffix: string) => {
+      const event = workout(`ref-${suffix}`);
+      event.addActivity(workout(`test-${suffix}`, Date.UTC(2026, 0, 2, 1)).getFirstActivity());
+      event.isMerge = true;
+      (event as EventInterface & { mergeType: string }).mergeType = 'benchmark';
+      event.getActivities().forEach((activity, index) => {
+        activity.addStat(new DataDuration(3600));
+        activity.addStat(new DataDistance(1000 + index * 1000));
+      });
+      return event;
+    };
+    await source(uid, comparison('old'));
+    const ref = db.doc(`users/${uid}/events/workout`);
+    await ref.update({ mergeType: 'benchmark', toolSource: 'tools/compare', comparisonTitle: 'Saved comparison',
+      hasBenchmark: true, tags: ['firmware'], benchmarkResults: { 'ref-old_test-old': {
+        referenceId: 'ref-old', testId: 'test-old', timestamp: new Date(0),
+        metrics: { gnss: null, streamMetrics: {} },
+      } } });
+    const oldLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    await persistReparsedEvent(uid, 'workout', comparison('new'), (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
+    const first = (await ref.get()).data()!;
+    expect(first).toMatchObject({ comparisonTitle: 'Saved comparison', tags: ['firmware'], mergeType: 'benchmark', benchmarkSourceRevision: 1 });
+    expect(first.benchmarkResults['ref-new_test-new']).toMatchObject({ referenceId: 'ref-new', testId: 'test-new',
+      requiresRegeneration: true, activityLinksResolved: true, metrics: { gnss: null } });
+    const newLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    expect(newLegs.docs.map(doc => doc.id).sort()).toEqual(['ref-new', 'test-new']);
+    await persistReparsedEvent(uid, 'workout', comparison('new'), first, newLegs.docs, SPORTS_LIB_VERSION);
+    const second = (await ref.get()).data()!;
+    expect(second.benchmarkResults).toEqual(first.benchmarkResults);
+    expect(second.benchmarkSourceRevision).toBe(2);
+  });
+
+  it.each(['activity-write', 'stale-cleanup'])(
+    'holds benchmark generation until the complete source is stable: %s', async phase => {
+      const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+      const uid = setup(); await source(uid, workout('old'));
+      const ref = db.doc(`users/${uid}/events/workout`);
+      const oldLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+      const parsed = workout('new-first');
+      parsed.addActivity(workout('new-second', Date.UTC(2026, 0, 2, 1)).getFirstActivity());
+      const paused = gate(); const resume = gate();
+      const write = EventWriter.prototype.writeAllEventData;
+      const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
+        const adapter = (this as unknown as { adapter: FirestoreAdapter }).adapter;
+        const setDoc = adapter.setDoc;
+        adapter.setDoc = async (path, data) => {
+          if (phase === 'activity-write' && path[2] === 'activities' && path[3] === 'new-second') await resume.promise;
+          await setDoc(path, data);
+          if (phase === 'activity-write' && path[2] === 'events') paused.release();
+        };
+        const result = await write.apply(this, args);
+        if (phase === 'stale-cleanup') { paused.release(); await resume.promise; }
+        return result;
+      });
+      const rewriting = persistReparsedEvent(uid, 'workout', parsed, (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
+      const outcome = rewriting.then(value => ({ value }), error => ({ error }));
+      try {
+        await Promise.race([paused.promise, outcome.then(result => { throw new Error(`Reparse finished without pausing: ${JSON.stringify(result)}`); })]);
+        const partial = (await ref.get()).data()!;
+        expect(partial).toMatchObject({ benchmarkSourceRevision: 0, benchmarkSourceWritePending: true });
+        expect((await db.doc(`users/${uid}/activities/old`).get()).exists).toBe(true);
+        expect((await db.doc(`users/${uid}/activities/new-second`).get()).exists).toBe(phase === 'stale-cleanup');
+        resume.release();
+        await rewriting;
+        const complete = (await ref.get()).data()!;
+        expect(complete).toMatchObject({ benchmarkSourceRevision: 1, benchmarkSourceWritePending: false });
+        // A preview hydrated at either partial stage must fail the completed revision check too.
+        expect(complete.benchmarkSourceRevision).not.toBe(partial.benchmarkSourceRevision);
+        const current = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+        expect(current.docs.map(doc => doc.id).sort()).toEqual(['new-first', 'new-second']);
+      } finally { resume.release(); await outcome; spy.mockRestore(); }
+    });
+
+  it('keeps failed source writes blocked until a successful reparse retry completes', async () => {
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup(); await source(uid, workout('old'));
+    const ref = db.doc(`users/${uid}/events/workout`);
+    const oldLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const write = EventWriter.prototype.writeAllEventData;
+    const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
+      await write.apply(this, args);
+      throw new Error('Interrupted before stale cleanup');
+    });
+    try {
+      await expect(persistReparsedEvent(uid, 'workout', workout('new'), (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION))
+        .rejects.toThrow('Interrupted before stale cleanup');
+      expect((await ref.get()).data()).toMatchObject({ benchmarkSourceRevision: 0, benchmarkSourceWritePending: true });
+    } finally { spy.mockRestore(); }
+    const partialLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    await persistReparsedEvent(uid, 'workout', workout('new'), (await ref.get()).data()!, partialLegs.docs, SPORTS_LIB_VERSION);
+    expect((await ref.get()).data()).toMatchObject({ benchmarkSourceRevision: 1, benchmarkSourceWritePending: false });
+    expect((await db.doc(`users/${uid}/activities/old`).get()).exists).toBe(false);
+  });
+
+  it('keeps processing eligible for retry when the atomic source completion fails', async () => {
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup(); await source(uid, workout());
+    const ref = db.doc(`users/${uid}/events/workout`);
+    const legs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const runTransaction = db.runTransaction.bind(db);
+    const spy = vi.spyOn(db, 'runTransaction').mockImplementation(update => runTransaction(async transaction => {
+      const set = transaction.set.bind(transaction);
+      const setSpy = vi.spyOn(transaction, 'set').mockImplementation((target, data, options) => {
+        if (target.path === ref.path && data.benchmarkSourceWritePending === false) {
+          throw new Error('Source completion interrupted');
+        }
+        return set(target, data, options!);
+      });
+      try { return await update(transaction); } finally { setSpy.mockRestore(); }
+    }));
+    try {
+      await expect(persistReparsedEvent(uid, 'workout', workout(), (await ref.get()).data()!, legs.docs, SPORTS_LIB_VERSION))
+        .rejects.toThrow('Source completion interrupted');
+      expect((await ref.get()).data()).toMatchObject({ benchmarkSourceRevision: 0, benchmarkSourceWritePending: true });
+      expect((await ref.collection('metaData').doc('processing').get()).exists).toBe(false);
+    } finally { spy.mockRestore(); }
+    await persistReparsedEvent(uid, 'workout', workout(), (await ref.get()).data()!, legs.docs, SPORTS_LIB_VERSION);
+    expect((await ref.get()).data()).toMatchObject({ benchmarkSourceRevision: 1, benchmarkSourceWritePending: false });
+    expect((await ref.collection('metaData').doc('processing').get()).data()?.sportsLibVersion).toBe(SPORTS_LIB_VERSION);
+  });
+
   it.each(['unchanged', 'replaced', 'event-deleted', 'user-deleted'])(
     'guards non-activity reparse classification in a real transaction: %s', async lifecycle => {
       const uid = setup(); await source(uid, workout());
@@ -98,7 +243,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
   });
 
   it.each(['events', 'activities'])('blocks a superseded reparse from overwriting newer %s documents', async collection => {
-    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    const uid = setup(); await source(uid, workout());
     const paused = gate(); const resume = gate();
     const write = EventWriter.prototype.writeAllEventData;
     const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
@@ -129,7 +274,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     } finally { resume.release(); await result; spy.mockRestore(); }
   });
   it('blocks stale reparse cleanup from deleting a leg restored by a newer import', async () => {
-    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    const uid = setup(); await source(uid, workout());
     const paused = gate(); const resume = gate();
     const write = EventWriter.prototype.writeAllEventData;
     const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
@@ -503,7 +648,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const ref = db.doc(metadataPath(uid));
     const first = (await ref.get()).data() as TrainingLoadMetadata;
     expect(first.legs!.leg).toMatchObject({ policy: { revision: 1, method: 'HR', included: true },
-      evaluations: { automatic: { score: 9, method: 'MET' }, hr: { score: 9, reasons: ['missing-hr-calibration'] } } });
+      evaluations: { automatic: { score: 9, method: 'MET' }, hr: { score: 9, reasons: ['missing-hr-calibration', 'missing-power-inputs'] } } });
     await finish();
     expect((await ref.get()).data()).toEqual(first);
     await ref.update({ controls: { leg: { override: 0 } }, revision: first.revision + 1 });

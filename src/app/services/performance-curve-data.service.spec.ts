@@ -5,9 +5,15 @@ import {
   DataDuration,
   DataHeartRate,
   DataPower,
+  analyzeActivityDurability,
 } from '@sports-alliance/sports-lib';
 
 import { PerformanceCurveDataService } from './performance-curve-data.service';
+
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+  return { ...actual, analyzeActivityDurability: vi.fn(actual.analyzeActivityDurability) };
+});
 
 const POWER_CURVE_TYPE = 'PowerCurve';
 
@@ -247,6 +253,41 @@ describe('PerformanceCurveDataService', () => {
       'Power Meter (2)',
       'Power Meter (3)',
     ]);
+  });
+
+  it.each(['BMX', 'Kickbiking', 'Obstacle Racing'])('omits specialist durability analysis for %s', (type) => {
+    vi.mocked(analyzeActivityDurability).mockClear();
+    const activity = createActivity({ id: 'excluded', type });
+    expect(service.buildDurabilitySeriesWithMarkerSource([activity])).toEqual({
+      renderSeries: [], markerSourceSeries: [], activitySummaries: [],
+    });
+    expect(analyzeActivityDurability).not.toHaveBeenCalled();
+  });
+
+  it.each(['Enduro MTB', 'E-Enduro MTB', 'Downhill Cycling'])('rejects legacy eligible %s evidence and preserves explicit exclusion', (type) => {
+    const activity = createActivity({ id: 'gravity', type, durationSeconds: 3600 });
+    const ordinary = createActivity({ id: 'ordinary', type: 'Cycling', durationSeconds: 3600, streams: {
+      [DataPower.type]: Array.from({ length: 3600 }, () => 220),
+      [DataHeartRate.type]: Array.from({ length: 3600 }, () => 130),
+    } });
+    const analyzed = analyzeActivityDurability(ordinary, { includeTimeline: true });
+    const legacy = { ...analyzed, summary: { ...analyzed.summary!,
+      eligibility: { ...analyzed.summary!.eligibility, eligible: true, reason: null },
+    } };
+    vi.mocked(analyzeActivityDurability).mockReturnValueOnce(legacy);
+    expect(service.buildDurabilitySeriesWithMarkerSource([activity])).toEqual({
+      renderSeries: [], markerSourceSeries: [], activitySummaries: [],
+    });
+    const explicit = { ...legacy, summary: { ...legacy.summary!,
+      eligibility: { ...legacy.summary!.eligibility, eligible: false, reason: 'unsupported-context' as const },
+      evidence: null,
+    } };
+    vi.mocked(analyzeActivityDurability).mockReturnValueOnce(explicit);
+    const result = service.buildDurabilitySeriesWithMarkerSource([activity]);
+    expect(result.activitySummaries).toHaveLength(1);
+    expect(result.activitySummaries[0].summary.eligibility.reason).toBe('unsupported-context');
+    expect(result.renderSeries).toHaveLength(0);
+    expect(result.markerSourceSeries).toHaveLength(0);
   });
 
   it('should build durability series and filter invalid points', () => {

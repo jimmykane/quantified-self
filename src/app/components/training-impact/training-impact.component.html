@@ -19,7 +19,9 @@
     [class.training-impact--session]="isSessionStrip()"
     [attr.aria-label]="title()" [attr.aria-busy]="impact().availability === 'updating'">
     <header>
-      <span class="training-impact-icon" aria-hidden="true"><mat-icon>monitoring</mat-icon></span>
+      @if (!isSessionStrip()) {
+        <span class="training-impact-icon" aria-hidden="true"><mat-icon>monitoring</mat-icon></span>
+      }
       <div>
         <h3>{{ title() }}</h3>
         @if (!isSessionStrip() && impact().headline) { <strong>{{ impact().headline }}</strong> }
@@ -33,6 +35,9 @@
           (click)="toggleCalculation()">
           <mat-icon aria-hidden="true">info_outline</mat-icon>
         </button>
+      }
+      @if (isSessionStrip()) {
+        <mat-divider class="training-impact-heading-divider" aria-hidden="true"></mat-divider>
       }
     </header>
 

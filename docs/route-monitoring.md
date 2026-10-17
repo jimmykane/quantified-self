@@ -26,6 +26,12 @@ No entitlement, provider support, transport, revision, lease, scheduling, retry,
 TTL, disconnect, or deletion behavior changes. There is no new scheduler or unbounded
 scanner; the bounded observations run on the existing outbound dispatcher.
 
+The expanded sport-name route aliases keep the existing Garmin, Wahoo and COROS delivery workers and fixed
+destination/outcome labels. Sport names are not monitoring dimensions. Coverage is **unchanged** for backlog age,
+dispatch/processing failures, newly committed DLQ/reconciliation and unavailable observations; no alert changes or
+production apply are needed for these metadata mappings. The exact Garmin motor/mountaineering/combined-sport
+and Wahoo offroad combined-sport overrides use the same metadata boundary and monitoring labels.
+
 ## Connection-history route coverage
 
 Suunto connection-history route children reuse `routeSyncQueue` and `processRouteSyncTask`, with the existing

@@ -23,6 +23,9 @@ import {
   DataDuration,
   DataSpeed,
   DataSpeedAvg,
+  DataPaceAvg,
+  DataPaceAvgMinutesPerMile,
+  PaceUnits,
   DataSwimPace,
   DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
@@ -286,4 +289,31 @@ describe('EventsExportFormComponent', () => {
     expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
     speedGetValueSpy.mockRestore();
   });
+  it.each(['Running', 'Trail Running', 'Treadmill', 'Indoor Running', 'Virtual Running', 'Road Running', 'Indoor Track Running', 'Vertical Running', 'Track Running', 'Ultra Running', 'Crosscountry Running', 'Obstacle Racing'])('exports the selected average pace for %s', async activityType => {
+    component.user.settings.unitSettings = { paceUnits: [PaceUnits.MinutesPerKilometer] } as any;
+    component.exportFromGroup.get('averagePace')?.setValue(true);
+    component.events = [{
+      getStat: (type: string) => type === DataActivityTypes.type ? new DataActivityTypes([activityType as ActivityTypes])
+        : type === DataPaceAvg.type ? new DataPaceAvg(300) : null,
+      getID: () => 'pace-event',
+    } as any];
+    await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const csv = await readBlobText(mockFileService.downloadFile.mock.calls[0][0]);
+    expect(csv).toContain('5:00');
+  });
+
+  it('exports running pace in the requested mile units through Sports Lib', async () => {
+    component.user.settings.unitSettings = { paceUnits: [PaceUnits.MinutesPerMile] } as any;
+    component.exportFromGroup.get('averagePace')?.setValue(true);
+    component.events = [{
+      getStat: (type: string) => type === DataActivityTypes.type ? new DataActivityTypes(['Road Running' as ActivityTypes])
+        : type === DataSpeedAvg.type ? new DataSpeedAvg(1000 / 300) : null,
+      getID: () => 'pace-miles-event',
+    } as any];
+    await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const csv = await readBlobText(mockFileService.downloadFile.mock.calls[0][0]);
+    expect(csv).toContain('8:02');
+    expect(csv).toContain(new DataPaceAvgMinutesPerMile(300).getDisplayUnit());
+  });
+
 });

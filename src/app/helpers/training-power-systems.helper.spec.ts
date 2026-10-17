@@ -1,4 +1,7 @@
+import { APPROVED_REMAINING_SPORT_CASES, APPROVED_OTHER_TRAINING_NAMES } from '@shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
+import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
 import type {
   DerivedTrainingPowerSystemsComponentStatus,
   DerivedTrainingPowerSystemsReason,
@@ -145,7 +148,7 @@ function payload(activityTypes = [entry('Rowing'), entry('Cycling')]) {
   return {
     dayBoundary: 'UTC',
     asOfDayMs,
-    policyVersion: 1,
+    policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
     windowDays: 42,
     historyDays: 84,
     cadence: 'workout-date',
@@ -166,6 +169,80 @@ describe('training-power-systems.helper', () => {
       wPrime: { value: 18_500 },
       maximumPower: { value: 1_200 },
     });
+  });
+
+  it('preserves generic and road labels alongside newly supported Training sports', () => {
+    const types = ['Cycling', 'Road Cycling', 'Running', 'Road Running', 'Track Running',
+      'Ultra Running', 'Crosscountry Running', 'Recumbent Cycling', 'Indoor Hand Cycle',
+      'E-Mountain Biking', 'Mountain Bike Orienteering', 'E-Enduro MTB', 'BMX',
+      'Kickbiking', 'Obstacle Racing'];
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload(types.map(type => entry(type))));
+    expect(normalized?.activityTypes.map(item => item.activityType)).toEqual([...types].sort());
+    normalized?.activityTypes.forEach(item => expect(item.current.activityType).toBe(item.activityType));
+    const grouped = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    expect(grouped.bySport.running).toHaveLength(6);
+    expect(grouped.bySport.cycling).toHaveLength(9);
+    expect(grouped.other).toHaveLength(0);
+    expect(resolveTrainingPowerSystemsMetricPayload({ ...payload(), policyVersion: 1 })).toBeNull();
+  });
+
+  it('groups all six wheelchair types without pooling their exact power entries', () => {
+    const types = ['Wheel Chair', 'Wheelchair Push Walk', 'Wheelchair Push Run',
+      'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run', 'Wheelchair Racing'];
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(6);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    expect(groups.bySport.wheelchair.map(item => item.activityType)).toEqual([...types].sort());
+    expect(groups.other).toHaveLength(0);
+  });
+
+  it('keeps the next 50 exact power entries in their approved groups after JSON reload', () => {
+    const types = APPROVED_WATER_TEAM_SPORT_CASES.map(item => item.name);
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(50);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    const sports = [...new Set(APPROVED_WATER_TEAM_SPORT_CASES.map(item => item.sport))];
+    sports.forEach(sport => {
+      const names = APPROVED_WATER_TEAM_SPORT_CASES.filter(item => item.sport === sport).map(item => item.name);
+      expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
+    });
+    expect(groups.other).toEqual([]);
+  });
+
+  it('retains all 46 final exact power histories through JSON and the approved navigation groups', () => {
+    const types = [...APPROVED_REMAINING_SPORT_CASES.map(item => item.name), ...APPROVED_OTHER_TRAINING_NAMES];
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(46);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    ['performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities', 'team-sports'].forEach(sport => {
+      const names = APPROVED_REMAINING_SPORT_CASES.filter(item => item.sport === sport).map(item => item.name);
+      expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
+    });
+    expect(groups.other.map(item => item.activityType)).toEqual([
+      'Breathwork', 'Meditation', ...APPROVED_OTHER_TRAINING_NAMES,
+    ].sort());
+  });
+
+  it('groups all 50 approved exact power entries without pooling sports after JSON reload', () => {
+    const expected = {
+      'walking-hiking': ['Snowshoeing'],
+      'climbing-mountaineering': ['Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing', 'Via Ferrata', 'Mountaineering'],
+      'mountain-snow': ['Ski Touring', 'Ski Mountaineering', 'Backcountry Skiing', 'Backcountry Snowboarding', 'Splitboarding', 'Alpine Skiing', 'Snowboarding', 'Telemark Skiing'],
+      'skating': ['Inline Skating', 'Skating', 'Ice Skating', 'Skateboarding'],
+      'combat-martial-arts': ['Boxing', 'Combat', 'Judo', 'Kickboxing', 'Mixed Martial Arts', 'Taekwondo'],
+      'dance': ['Ballet Dancing', 'Ballroom Dancing', 'Dancing', 'Jazz Dancing', 'Latin Dancing', 'Modern Dancing', 'Show Dancing', 'Street Dancing'],
+      'team-sports': ['Basketball', 'Wheelchair Basketball', 'Football', 'Soccer', 'Volleyball', 'Beach Volleyball'],
+      'racket-sports': ['Badminton', 'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport', 'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis'],
+
+    };
+    const types = Object.values(expected).flat();
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(50);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    Object.entries(expected).forEach(([sport, names]) => {
+      expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
+    });
+    expect(groups.other).toEqual([]);
   });
 
   it('groups registered exact types by sport and preserves unmatched types as Other', () => {

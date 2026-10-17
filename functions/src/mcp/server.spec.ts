@@ -5,8 +5,12 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 import * as logger from 'firebase-functions/logger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { RefinedTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
+import { TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY, TRAINING_WRITE_INPUTS } from './training-plans.schemas';
 import { McpDataError } from './data.service';
 import {
   McpBearerAuthenticationError,
@@ -1026,11 +1030,12 @@ describe('MCP HTTP scope enforcement', () => {
     expect(deliveryInstructionsOnly).not.toContain('preview_create_planned_workout');
   });
 
-  it('advertises one focused workout-create contract without the batch operation union', async () => {
+  it.each([false, true])('advertises one focused workout-create contract within its catalog budget (delivery: %s)', async canDeliver => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
       uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
-      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+        ...(canDeliver ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : [])],
     }, 'https://quantified-self.io');
     const client = new Client({ name: 'focused-workout-contract-client', version: '1.0.0' });
     try {
@@ -1042,12 +1047,45 @@ describe('MCP HTTP scope enforcement', () => {
         'expectedScheduleRevision', 'localDate', 'title', 'structure',
       ]);
       expect(tool?.inputSchema.properties).toHaveProperty('planRef');
-      expect(tool?.inputSchema.properties).not.toHaveProperty('delivery');
+      expect(Object.hasOwn(tool!.inputSchema.properties!, 'delivery')).toBe(canDeliver);
       expect(tool?.inputSchema.properties).not.toHaveProperty('kind');
       expect(tool?.inputSchema.properties).not.toHaveProperty('localKey');
       expect(tool?.inputSchema.properties).not.toHaveProperty('changes');
       expect(JSON.stringify(tool?.inputSchema)).not.toContain('client-owned-key');
-      expect(Buffer.byteLength(JSON.stringify(tool), 'utf8')).toBeLessThan(12 * 1024);
+      // The expanded finite sport catalog is retained in both permission variants.
+      expect(Buffer.byteLength(JSON.stringify(tool), 'utf8')).toBeLessThan(16 * 1024);
+      expect(tool?.inputSchema.$schema).toBe('http://json-schema.org/draft-07/schema#');
+      expect(tool?.inputSchema).not.toHaveProperty('$defs');
+
+      const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+      const sports = [...new Set([...actual.ActivityTypesHelper.getActivityTypesAsUniqueArray(),
+        ...Object.values(RefinedTrainingActivityTypes)])].filter(sport => sport !== 'Unknown Sport');
+      const ajv = new Ajv({ strict: false });
+      addFormats(ajv);
+      const validate = ajv.compile(tool!.inputSchema);
+      const runtimeSchema = canDeliver ? TRAINING_WRITE_INPUTS.preview_create_planned_workout
+        : TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY;
+      const request = {
+        expectedScheduleRevision: 1, localDate: '2026-10-17', title: 'Workout',
+        structure: { version: 1, sport: 'Running', nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+          ending: { kind: 'time', seconds: 60 }, targets: [] }] },
+        ...(canDeliver ? { delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } } : {}),
+      };
+      for (const sport of sports) {
+        const input = { ...request, structure: { ...request.structure, sport } };
+        expect(validate(input), sport).toBe(true);
+        expect(runtimeSchema.safeParse(input).success, sport).toBe(true);
+      }
+      for (const input of [
+        { ...request, structure: { ...request.structure, sport: 'Unknown Sport' } },
+        { ...request, structure: { ...request.structure, sport: 'Running unknown provider alias' } },
+        { ...request, providerId: 'private-provider-field' },
+        { ...request, structure: { ...request.structure, providerId: 'private-provider-field' } },
+        ...(!canDeliver ? [{ ...request, delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } }] : []),
+      ]) {
+        expect(validate(input)).toBe(false);
+        expect(runtimeSchema.safeParse(input).success).toBe(false);
+      }
     } finally {
       await client.close();
       await server.close();
@@ -1069,6 +1107,8 @@ describe('MCP HTTP scope enforcement', () => {
       expect(tool?.inputSchema.properties).toHaveProperty('delivery');
       expect(JSON.stringify(tool?.inputSchema.properties?.delivery)).toContain('all_connected');
       expect(JSON.stringify(tool?.inputSchema.properties?.delivery)).toContain('timeZone');
+      expect(tool?.inputSchema.$schema).toBe('http://json-schema.org/draft-07/schema#');
+      expect(tool?.inputSchema).not.toHaveProperty('$defs');
     } finally {
       await client.close();
       await server.close();

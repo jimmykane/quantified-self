@@ -8,17 +8,51 @@ Keep it current in the same change whenever a provider is added, removed, rename
 
 Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions; [Suunto 24/7 Health integration](suunto-integration.md) records its metric mapping, bounded pulls, webhooks, lifecycle fencing, production-wide polling, and rollback switch; [Garmin Health integration](garmin-integration.md) records its Health API 1.2.4 family mapping, Ping/Pull trust boundary, callback credential handling, lifecycle fencing, production-wide availability, rollback switch, and Summary Resender procedure.
 
-The local unreleased Sports Lib profile corrections refine Garmin Breathwork and Polar explicit sport names, including
+The adopted Sports Lib 23.0.0 profile corrections refine Garmin Breathwork and Polar explicit sport names, including
 three distinct Team/Racket types (Australian Football, Korfball and Netball). They change normalized activity
 classification and JSON compatibility without changing provider transport, permissions, delivery, disconnect or queue
 lifecycle. The current provider matrix therefore stays unchanged. Follow the
-[coordinated adoption and historical reparse decision](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
+[coordinated adoption and historical reparse decision](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#sports-lib-2300-provider-sport-catalog-adoption)
 before using these types in production. Official mapping names are tested with synthetic FIT; downloaded recordings
 remain temporary because redistribution rights were not established. The app's Help uses the installed activity catalog.
 
 Follow-up review keeps recognized profiles within compatible FIT parents, preserves existing broad-parent refinements,
 and retains every documented context for shared profile names. Route and route-file JSON now apply the same invalid
 scalar summary policy as activities. These corrections retain the existing provider and queue contracts.
+
+### Refined sport names at recorded-activity and route boundaries
+
+QS keeps the source sport name. Recorded-activity correction and route delivery have their own explicit approvals,
+separate from planned-workout aliases. `shared/wahoo-activity-types.ts` adds 32 approved recorded-activity aliases to
+existing Wahoo Workout types. The complete table is in [Wahoo recorded-activity profiles](wahoo-integration.md#recorded-activity-sport-profiles).
+Unmapped types keep Wahoo inference; native Nordic Walking, virtual and other existing mappings retain their IDs.
+A queued upload persists its chosen type before provider I/O and reuses it on resume; a new table does not rewrite
+already accepted uploads or authorize a historical correction job.
+
+`shared/route-sport-aliases.ts` covers the separately approved route folds:
+
+| QS route sport | Garmin course profile | COROS route type | Wahoo route family |
+| --- | --- | --- | --- |
+| BMX; LES MILLS RPM / SPRINT / THE TRIP | Road Cycling | Bike | Cycling |
+| Obstacle Racing | Running | Running | Running |
+| Vertical Running | Trail Running | Running | Running |
+| Enduro MTB; E-Enduro MTB | Mountain Biking | Bike | Cycling |
+
+Exact provider-specific route overrides also precede legacy keyword heuristics. Garmin sends Motorcycling,
+Motorcycle Enduro, Hard Enduro, Ski Mountaineering, Offroad Duathlon and Offroad Triathlon as `OTHER`, and
+Mountaineering as `HIKING`. Wahoo sends Offroad Duathlon and Offroad Triathlon as Other family `31`. These choices
+prevent unrelated names containing cycling, enduro, mountain or road from selecting a cycling profile. Wahoo
+Motorcycling keeps the documented Biking family; COROS route fallbacks are unchanged. Brick Training, Pool Triathlon,
+Offroad Triathlon and Offroad Duathlon use the existing Wahoo recorded-activity Multisport type `62`, independently
+of route families and planned workouts.
+
+These aliases select metadata only at the destination boundary. Original files, QS sport names, provider identity,
+echo receipts, permissions, account guards, revisions, leases, retries and queue terminal states retain their existing
+contracts. No FIT bytes or encoding logic changes. Monitoring coverage is **unchanged**: the recorded-activity and route
+bundles filter existing destination/worker/outcome labels, independently of sport names. Existing backlog-age,
+dispatch/processing failure, new DLQ/reconciliation and unavailable-observation policies cover these same workers.
+See [activity delivery monitoring](activity-delivery-monitoring.md) and [route monitoring](route-monitoring.md).
+Local tests do not establish provider/device acceptance or activate production configuration.
 
 ## 1. Define the product contract before writing code
 
@@ -299,7 +333,28 @@ Every provider retains Pro, explicit consent, connection authority, provider con
 permission checks. Legacy connections must reconnect rather than have permission inferred. See the
 [Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for live availability and consent.
 #655 no longer requires code rollback work for this live rollout; normal Stop/disconnect/deletion controls and the
-source-controlled availability decisions are unchanged. Provider status is:
+source-controlled availability decisions are unchanged.
+
+The manual editor additionally preserves the 31 approved Running, Cycling and Walking/Hiking subtype names,
+for 45 endurance choices in total. `shared/planned-workout-sport-aliases.ts` is the explicit outbound alias registry;
+the complete table and editor rules live in [Training sport names and provider profiles](training-workspace.md#sport-names-and-provider-profiles).
+An alias uses an existing tested delivery profile and its existing prescription limits. It establishes no native
+provider support for the newly offered QS name. QS retains the exact recipe sport through saved recipes, copies,
+JSON reloads and history; serializers select the provider profile only at their boundary. Every actual sport fold
+is disclosed through the existing mapping review and bound to the authored content, date and destination.
+Changed or unsupported recipes retain an existing provider copy until a supported replacement is approved.
+The 21 previously verified Wahoo profiles keep their payload behavior; walking aliases retain timed, untargeted
+steps. COROS walking aliases remain unsupported and COROS delivery stays disabled. Classic/Skate Skiing and
+AMRAP/EMOM/Tabata/BODYPUMP have no approved outbound mapping. Recorded-activity uploads use their independent
+mapping contract; this planning table does not widen that contract.
+
+Monitoring coverage decision for this alias extension: **unchanged**. The existing Training monitoring bundle
+(`tools/training-monitoring/definitions.mjs`) already selects Garmin, Wahoo and Suunto delivery outcome/failure
+labels, due queue age, dispatch failures and unknown health samples. Aliases keep the same adapters, dispatchers,
+leases, revisions, retry policies, terminal states and low-cardinality provider labels. COROS remains excluded
+from active-provider alert conditions while delivery is disabled. Existing approval-required/unsupported states
+remain user-action states rather than provider-failure pages. No production monitoring configuration is applied
+as part of the local compatibility work.
 
 The v1 manual editor also accepts exact Walking, Hiking, Rowing, and Indoor Rowing sports. Suunto's catalog maps them
 to Guide activity IDs `0`, `11`, `15`, and `57` respectively; `0` is a valid activity ID, never a missing value.
@@ -1846,7 +1901,7 @@ Stopping closes retry authority for provider-confirmed processing failures and r
 
 ### Suunto EnergySense parser support
 
-The adopted Sports Lib 22.0.0 maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
+Sports Lib 23.0.0 retains the mapping introduced in 22.0.0 from Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
 to Estimated Sustainable Distance plus its source/sampled minimum. Its raw distance unit is assumed to be metres pending
 provider confirmation. Cur and Min remain source observations, EnduranceValid is not an eligibility rule, and absent FIT
 fields are not synthesized. Canonical metric labels and reparse compatibility are described in the

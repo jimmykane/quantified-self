@@ -3,6 +3,7 @@
     "src/app/components/shared/compact-row/compact-row.styles.spec.ts",
     "src/app/helpers/activity-calendar-volume.helper.spec.ts",
     "src/app/helpers/activity-calendar.helper.spec.ts",
+    "src/app/helpers/activity-type-family-filter.helper.spec.ts",
     "src/app/helpers/activity-type-group.metadata.helper.spec.ts",
     "src/app/helpers/admin-dashboard-history.helper.spec.ts",
     "src/app/helpers/admin-history-axis.helper.spec.ts",
@@ -16,6 +17,7 @@
     "src/app/helpers/assistant-reflection-review.helper.spec.ts",
     "src/app/helpers/assistant-training-deletion-review.helper.spec.ts",
     "src/app/helpers/assistant-workout-review.helper.spec.ts",
+    "src/app/helpers/benchmark-review.helper.spec.ts",
     "src/app/helpers/calendar-day-story.helper.spec.ts",
     "src/app/helpers/calendar-period-summary.helper.spec.ts",
     "src/app/helpers/calendar-read-error.helper.spec.ts",
@@ -180,6 +182,7 @@
     "src/app/helpers/workout-time-input.helper.spec.ts",
     "src/app/services/history-import-state.service.spec.ts",
     "src/app/shared/help.content.spec.ts",
+    "src/app/shared/training-disciplines.shared.spec.ts",
     "src/app/utils/app.user.utilities.spec.ts"
   ],
   "dom": [

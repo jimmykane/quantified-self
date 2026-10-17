@@ -3,9 +3,12 @@ import {
   ActivityTypesHelper,
   DataAscent,
   DataDescent,
+  DataEffortPace,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
   DataPaceAvg,
+  DataSpeed,
+  DataPace,
   DataSpeedAvg,
   DataSwimPaceAvg,
 } from '@sports-alliance/sports-lib';
@@ -84,6 +87,24 @@ const resolveActivityTypeInput = (
   return ActivityTypes.Other;
 };
 
+const LEGACY_HIDDEN_SPEED_SUMMARY_TYPES = new Set<ActivityTypes>([
+    ActivityTypes.Climbing, ActivityTypes.RockClimbing, ActivityTypes['Indoor Climbing'],
+    ActivityTypes.Bouldering, ActivityTypes.FloorClimbing,
+  ]);
+
+/** Applies the library's display hint only to automatic summaries, never stored data. */
+export function shouldHideDefaultSpeedSummary(activityTypes: readonly unknown[]): boolean {
+  const hiddenHint = (ActivityTypesHelper as typeof ActivityTypesHelper & {
+    hiddenDisplayDataTypesToUseForActivityType?: (type: ActivityTypes) => string[];
+  }).hiddenDisplayDataTypesToUseForActivityType;
+
+  return activityTypes.length > 0 && activityTypes.every(value => {
+    const type = resolveActivityTypeInput(value as ActivityTypes);
+    const hidden = hiddenHint?.call(ActivityTypesHelper, type);
+    return hidden ? hidden.includes(DataSpeed.type) || hidden.includes(DataPace.type) : LEGACY_HIDDEN_SPEED_SUMMARY_TYPES.has(type);
+  });
+}
+
 export const resolvePreferredSpeedDerivedAverageTypesForActivity = (
   activityTypeInput: ActivityTypes | string | number | null | undefined
 ): string[] => {
@@ -150,8 +171,9 @@ export const getDefaultSummaryStatTypes = (
     .from(configuredDescentExclusionKeys)
     .some((activityType) => normalizedActivityTypeLookupKeys.has(activityType));
 
+  const hideDefaultSpeed = shouldHideDefaultSpeedSummary(normalizedActivityTypes);
   const speedDerivedAverageTypes = normalizedActivityTypes.reduce((speedMetricsAccu: string[], activityType: ActivityTypes) => {
-    const metrics = resolvePreferredSpeedDerivedAverageTypesForActivity(activityType);
+    const metrics = shouldHideDefaultSpeedSummary([activityType]) ? [] : resolvePreferredSpeedDerivedAverageTypesForActivity(activityType);
     return [...new Set([...speedMetricsAccu, ...(metrics || [])]).values()];
   }, [] as string[]);
 
@@ -165,6 +187,7 @@ export const getDefaultSummaryStatTypes = (
   const shouldExcludeTerrainSummary = AppEventUtilities.shouldExcludeTerrainSummary(normalizedActivityTypes);
 
   return EVENT_SUMMARY_DEFAULT_STAT_TYPES.reduce((statsAccu: string[], statType: string) => {
+    if (hideDefaultSpeed && statType === DataEffortPace.type) return statsAccu;
     if (statType === DataAscent.type) {
       if (
         AppEventUtilities.shouldExcludeAscent(normalizedActivityTypes)
@@ -191,6 +214,7 @@ export const getDefaultSummaryStatTypes = (
       return statsAccu;
     }
     if (statType === DataSpeedAvg.type) {
+      if (hideDefaultSpeed) return statsAccu;
       const activityAwareGradeAdjustedTypes: string[] = [
         ...(hasSpeedActivity ? EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES : []),
         ...(hasPaceActivity ? EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES : []),

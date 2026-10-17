@@ -150,6 +150,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     // need to stay lightweight; route parsing/export remains real.
     ...actual,
     ActivityTypes: {
+        // Canonical registry coverage must follow the installed or candidate catalog.
+        ...actual.ActivityTypes,
         Cycling: 'Cycling',
         Biking: 'Cycling',
         EBiking: 'E-Biking',

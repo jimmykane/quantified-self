@@ -465,6 +465,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       ...getSelectedEventLapMetricTypes(
         this.canCustomize ? this.eventDetailsSettings : undefined,
         family,
+        [activityType],
       ),
     ];
   }
@@ -529,7 +530,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
 
-    const currentMetricTypes = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
+    const currentMetricTypes = getSelectedEventLapMetricTypes(
+      this.eventDetailsSettings, sportFamily, this.getLapColumnFamilyActivityTypes(sportFamily),
+    );
     const selectedMetricTypes = new Set(currentMetricTypes);
     event.options.forEach((option) => {
       if (typeof option.value !== 'string') {
@@ -696,6 +699,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.changeDetectorRef.markForCheck();
   }
 
+  private getLapColumnFamilyActivityTypes(family: AppEventLapSportFamily): unknown[] {
+    return (this.selectedActivities || [])
+      .filter(activity => resolveEventLapSportFamily(activity.type) === family && getVisibleEventLaps(activity).length > 0)
+      .map(activity => activity.type);
+  }
+
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.selectedActivities.forEach((activity) => {
@@ -719,6 +728,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const selectedMetricTypes = getSelectedEventLapMetricTypes(
         this.eventDetailsSettings,
         family,
+        this.getLapColumnFamilyActivityTypes(family),
       );
       const picker = getEventLapColumnPickerOptions([...metricGroups, ...additionalMetricGroups], selectedMetricTypes);
       const availableMetricGroups = getEventLapColumnPickerOptions(metricGroups, selectedMetricTypes).availableMetricGroups;

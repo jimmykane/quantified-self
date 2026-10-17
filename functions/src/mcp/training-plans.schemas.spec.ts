@@ -1,6 +1,10 @@
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
-import { describe, expect, it } from 'vitest';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import Ajv2020 from 'ajv/dist/2020';
+import addFormats from 'ajv-formats';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { RefinedTrainingActivityTypes, RefinedRecordedActivityTypes } from '../../../shared/activity-type-compatibility';
 import {
   WORKOUT_ENDING_KINDS,
   WORKOUT_STEP_PURPOSES,
@@ -21,6 +25,10 @@ import {
   TRAINING_WRITE_OUTPUTS,
   TRAINING_ASSISTANT_PREVIEW_OUTPUT,
 } from './training-plans.schemas';
+
+// Exercise canonical names and unknown-placeholder rejection with the real
+// installed catalog, rather than the global suite's abbreviated enum mock.
+vi.unmock('@sports-alliance/sports-lib');
 
 const recipe = (ending: WorkoutEndingV1, targets: WorkoutTargetV1[] = []): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running,
   nodes: [{ kind: 'step', id: 'step-1', purpose: 'work', ending, targets, note: '夜の練習 🏃\nPrivate context' }] });
@@ -536,5 +544,94 @@ describe('strict additive workout prescription analysis', () => {
     const analysis = analyzeWorkoutStructureV1(recipe({ kind: 'distance', meters: 1000 }, [target]));
     expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse({ source: 'saved', reference: 'opaque', revision: 1,
       scheduleRevision: null, libraryRevision: 1, sport: ActivityTypes.Running, analysis, displaySummary: 'Estimated' }).analysis).toEqual(analysis);
+  });
+});
+
+
+describe('canonical sport compatibility for pending Training recipes', () => {
+  it.each(Object.values(RefinedRecordedActivityTypes))(
+    'keeps recorded-only %s outside future recipe enums until catalog adoption', sport => {
+      const installed = ActivityTypesHelper.getActivityTypesAsUniqueArray().includes(sport);
+      const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+      for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA]) {
+        expect(schema.safeParse(structure).success).toBe(installed);
+        const advertised = z.toJSONSchema(schema, { target: 'draft-2020-12', io: 'input' });
+        expect(advertised.properties?.sport?.enum?.includes(sport)).toBe(installed);
+      }
+    });
+
+  const canonicalSports = [...new Set([
+    ...ActivityTypesHelper.getActivityTypesAsUniqueArray(),
+    ...Object.values(RefinedTrainingActivityTypes),
+  ])].filter(sport => sport !== 'Unknown Sport');
+
+  it('advertises a reused exact finite sport enum accepted by JSON Schema clients', () => {
+    const schema = z.toJSONSchema(TRAINING_WRITE_INPUTS.preview_training_changes, {
+      target: 'draft-2020-12', io: 'input',
+    });
+    const vocabularies = Object.values(schema.$defs ?? {}).filter(definition =>
+      typeof definition === 'object' && definition !== null && 'enum' in definition
+      && Array.isArray(definition.enum) && definition.enum.includes(ActivityTypes.Running));
+    expect(vocabularies).toHaveLength(1);
+    const vocabulary = vocabularies[0];
+    expect(vocabulary).toMatchObject({ type: 'string', enum: expect.arrayContaining(canonicalSports) });
+    expect(vocabulary).toMatchObject({ enum: expect.not.arrayContaining(['Unknown Sport']) });
+    const ajv = new Ajv2020({ strict: false });
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    for (const sport of canonicalSports) {
+      const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+      const request = { expectedScheduleRevision: 1, changes: [{ kind: 'create-workout', localKey: 'workout',
+        title: 'Workout', plan: null, localDate: '2026-09-18', structure }] };
+      expect(validate(JSON.parse(JSON.stringify(request))), `${sport}: ${JSON.stringify(validate.errors)}`).toBe(true);
+      expect(validate({ ...request, changes: [{ ...request.changes[0], structure: { ...structure,
+        sport: `${sport} Unknown provider alias` } }] })).toBe(false);
+      expect(validate({ ...request, changes: [{ ...request.changes[0], structure: { ...structure,
+        sport: 'Unknown Sport' } }] })).toBe(false);
+      expect(validate({ ...request, changes: [{ ...request.changes[0], structure: { ...structure,
+        providerProfile: 'PRIVATE' } }] })).toBe(false);
+    }
+  });
+
+  it.each(canonicalSports)('keeps %s unchanged through scheduled/saved public JSON reads and approved write schemas', sport => {
+    const structure: WorkoutStructureV1 = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+    const serialized = JSON.parse(JSON.stringify(structure));
+    expectPublicReadWriteRoundTrip(structure);
+    const scheduled = { scheduleRevision: 3, workout: {
+      workoutRef: 'opaque-workout', planRef: null, title: 'Workout', localDate: '2026-09-18',
+      lifecycle: 'planned', revision: 2, createdAtMs: 1, updatedAtMs: 2,
+      structure: serialized, displaySteps: [],
+    } };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_planned_workout_v2, TRAINING_READ_OUTPUTS.get_planned_workout_v3]) {
+      expect(schema.parse(scheduled).workout.structure).toEqual(structure);
+      expect(schema.safeParse({ ...scheduled, workout: { ...scheduled.workout, providerWorkoutId: 'PRIVATE' } }).success).toBe(false);
+    }
+    const saved = { libraryRevision: 3, savedWorkout: {
+      savedWorkoutRef: 'opaque-saved', title: 'Workout', status: 'active', revision: 2,
+      createdAtMs: 1, updatedAtMs: 2, structure: serialized,
+    } };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_saved_workout, TRAINING_READ_OUTPUTS.get_saved_workout_v2]) {
+      expect(schema.parse(saved).savedWorkout.structure).toEqual(structure);
+      expect(schema.safeParse({ ...saved, savedWorkout: { ...saved.savedWorkout, sourceActivityKey: 'PRIVATE' } }).success).toBe(false);
+    }
+    const change = { kind: 'create-workout', localKey: 'workout', plan: null,
+      localDate: '2026-09-18', title: 'Workout', structure: serialized };
+    expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.parse({ expectedScheduleRevision: 3, change }).change)
+      .toMatchObject({ structure });
+    const libraryChange = { kind: 'create', title: 'Workout', structure: serialized };
+    expect(TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change.parse({ expectedScheduleRevision: 3,
+      expectedLibraryRevision: 3, change: libraryChange }).change).toMatchObject({ structure });
+    const analysis = { source: 'saved', reference: 'opaque-saved', revision: 2, scheduleRevision: null,
+      libraryRevision: 3, sport, analysis: analyzeWorkoutStructureV1(structure), displaySummary: '60 seconds' };
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse(JSON.parse(JSON.stringify(analysis)))).toEqual(analysis);
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.safeParse({ ...analysis, providerId: 'PRIVATE' }).success).toBe(false);
+  });
+
+  it.each(['Unknown Sport', 'Unknown provider sport', 'road running', '', 42, null])('rejects unapproved or noncanonical public sport %j', sport => {
+    const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+    for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA]) {
+      expect(schema.safeParse(structure).success).toBe(false);
+      expect(schema.safeParse({ ...structure, sport: ActivityTypes.Running, providerProfile: 'PRIVATE' }).success).toBe(false);
+    }
   });
 });
