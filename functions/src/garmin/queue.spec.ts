@@ -923,6 +923,49 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     { processed: true }, { firebaseUserID: 'replacement-owner' }, { userID: 'replacement-provider' },
                     { dateCreated: 5678 }, { queueRevision: 'replacement-revision' },
                 ]) expect(isCurrent({ ...queueItem, ...replacement })).toBe(false);
+                for (const refresh of [
+                    { callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=file-id&token=fresh' },
+                    { token: 'fresh-pull-token' }, { userAccessToken: 'fresh-access-token' },
+                    { activityFileType: 'GPX' }, { startTimeInSeconds: 67890 },
+                ]) expect(() => isCurrent({ ...queueItem, ...refresh })).toThrow('Garmin queue payload changed during disconnect check.');
+            });
+
+            it('does not close a duplicate webhook payload refreshed while reading disconnect state', async () => {
+                const current = { ...queueItem };
+                mockGetServiceConnectionMeta.mockImplementationOnce(async () => {
+                    current.callbackURL = `${current.callbackURL}-fresh`;
+                    return disconnectedMeta;
+                });
+                mockUpdateQueueItemIfUserActive.mockImplementationOnce(async ({ isCurrent }) =>
+                    isCurrent(current) ? 'updated' : 'not_current');
+
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toThrow('Garmin queue payload changed during disconnect check.');
+
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', expect.anything());
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+                // The same Cloud Task can retry the still-dispatched row, now
+                // with the refreshed payload and its owner's available credential.
+                mockGet.mockResolvedValue({
+                    size: 1,
+                    docs: [{ ref: { parent: { parent: { id: firebaseUserID } } }, data: () => ({}) }],
+                });
+                await expect(processGarminAPIActivityQueueItem(current)).resolves.toBe('PROCESSED');
+                expect(mockRequestGet).toHaveBeenCalledWith(expect.objectContaining({ url: current.callbackURL }));
+                expect(mockSetEvent).toHaveBeenCalledOnce();
+            });
+
+            it('captures the attempted payload before asynchronous disconnect reads', async () => {
+                mockGetServiceConnectionMeta.mockImplementationOnce(async () => {
+                    queueItem.callbackURL = `${queueItem.callbackURL}-fresh`;
+                    return disconnectedMeta;
+                });
+                mockUpdateQueueItemIfUserActive.mockImplementationOnce(async ({ isCurrent }) =>
+                    isCurrent(queueItem) ? 'updated' : 'not_current');
+
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toThrow('Garmin queue payload changed during disconnect check.');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
             });
 
             it.each(['not_current', 'skipped_deleted_user'])('does not claim a committed skip after %s', async result => {

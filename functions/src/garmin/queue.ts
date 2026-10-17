@@ -161,6 +161,7 @@ async function skipDisconnectedGarminQueueItem(
   queueItem: GarminAPIActivityQueueItemInterface,
   firebaseUserID: string,
 ): Promise<QueueResult.Processed | null> {
+  const expected = { ...queueItem };
   const meta = await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI);
   // Missing credentials alone are not proof of a completed disconnect. Require
   // the cleared lifecycle AND a confirmed empty server-owned account projection.
@@ -169,7 +170,7 @@ async function skipDisconnectedGarminQueueItem(
     || typeof meta.connectionAccountsRevisionKey !== 'string' || !meta.connectionAccountsRevisionKey.trim()
     || !Array.isArray(meta.connectionAccounts) || meta.connectionAccounts.length !== 0) return null;
 
-  if (!queueItem.ref) throw new Error('Missing Garmin queue document reference.');
+  if (!expected.ref) throw new Error('Missing Garmin queue document reference.');
   const completion = {
     processed: true,
     processedAt: Date.now(),
@@ -178,23 +179,37 @@ async function skipDisconnectedGarminQueueItem(
     callbackURL: FieldValue.delete(),
   };
   const result = await updateQueueItemIfUserActive({
-    queueItemDocument: queueItem.ref,
-    queueItemId: queueItem.id,
+    queueItemDocument: expected.ref,
+    queueItemId: expected.id,
     userID: firebaseUserID,
     phase: 'garmin_disconnected_import',
     logPrefix: 'GarminWorkoutQueue',
     actionDescription: 'disconnected import skip',
     updateData: completion,
     cleanupOnDeletedUser: false,
-    isCurrent: current => current.processed !== true
-      && current.firebaseUserID === firebaseUserID
-      && current.userID === queueItem.userID
-      && current.dateCreated === queueItem.dateCreated
-      && current.queueRevision === queueItem.queueRevision,
+    // Duplicate Garmin webhooks refresh these fields without advancing the
+    // creation time or revision; an older disconnect observation must not close them.
+    isCurrent: current => {
+      if (current.processed === true
+        || current.firebaseUserID !== firebaseUserID
+        || current.userID !== expected.userID
+        || current.dateCreated !== expected.dateCreated
+        || current.queueRevision !== expected.queueRevision) return false;
+      if (current.callbackURL !== expected.callbackURL
+        || current.token !== expected.token
+        || current.userAccessToken !== expected.userAccessToken
+        || current.activityFileType !== expected.activityFileType
+        || current.startTimeInSeconds !== expected.startTimeInSeconds) {
+        // Keep the existing Cloud Task alive: this row still has its dispatch
+        // marker, so acknowledging it would strand the refreshed payload.
+        throw new Error('Garmin queue payload changed during disconnect check.');
+      }
+      return true;
+    },
   });
   if (result === QueueItemUserGuardedUpdateResult.Updated) {
-    recordImportCompletion(queueItem.ref.parent.id, completion);
-    logger.info('[GarminWorkoutQueue] Import skipped after disconnect.', { queueItemId: queueItem.id, reason: 'service_disconnected' });
+    recordImportCompletion(expected.ref.parent.id, completion);
+    logger.info('[GarminWorkoutQueue] Import skipped after disconnect.', { queueItemId: expected.id, reason: 'service_disconnected' });
   }
   return QueueResult.Processed;
 }

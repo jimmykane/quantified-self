@@ -121,7 +121,11 @@ lifecycle with a nonempty generation and an explicit, revisioned empty `connecti
 disconnect completion. The worker then commits `processed=true`, `resultStatus=skipped` and
 `skippedReason=service_disconnected`, removes the callback URL, and logs INFO with the opaque queue ID. Completion
 rechecks user deletion and the original queue identity transactionally; removed, completed or replaced rows are not
-written. Unknown/legacy metadata and connected, reconnect-required or disconnect-pending states retain the existing
+written. The guard also compares the captured download credentials, callback URL, file type and start timestamp:
+duplicate Garmin webhooks can refresh those fields without changing the creation time or queue revision.
+If only that payload changed, the current attempt fails retryably so Cloud Tasks rereads it; acknowledging the
+still-dispatched row would otherwise leave it unprocessed outside the dispatcher's undispatched-only query.
+Unknown/legacy metadata and connected, reconnect-required or disconnect-pending states retain the existing
 `NO_TOKEN_FOUND` warning/DLQ behavior. Firestore failures remain retryable. Closed skips do not reopen on reconnect;
 this classification does not replay or delete historical failed jobs. It uses existing import-skip monitoring and
 requires no new index, metric, frontend or MCP change. An approved rollout needs only `processWorkoutTask`;
