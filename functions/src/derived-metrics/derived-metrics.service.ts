@@ -5988,6 +5988,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             updatedAtMs: nowMs,
             pendingImmediate: shouldEnqueue ? false : pendingImmediate,
             ...(shouldResetLifecycleFields ? {
+                retryFromGeneration: null,
                 startedAtMs: null,
                 completedAtMs: null,
                 lastError: null,
@@ -6053,8 +6054,10 @@ export async function startDerivedMetricsProcessing(
 ): Promise<StartDerivedMetricsProcessingResult | null> {
     const coordinatorRef = getCoordinatorDocRef(uid);
     let startedResult: StartDerivedMetricsProcessingResult | null = null;
+    const followUpRetry = { generation: null as number | null, notBeforeMs: 0 };
 
     await admin.firestore().runTransaction(async (transaction) => {
+        followUpRetry.generation = null;
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             startedResult = null;
@@ -6065,6 +6068,16 @@ export async function startDerivedMetricsProcessing(
         const coordinator = parseCoordinator(rawCoordinatorData);
         if (coordinator.generation !== generation) {
             startedResult = null;
+            // Completion may commit a successor before task creation fails (or
+            // the caller times out). The predecessor's retry can dispatch only
+            // that unclaimed successor, without rebuilding or advancing revisions.
+            if (coordinator.generation === generation + 1
+                && rawCoordinatorData?.retryFromGeneration === generation
+                && (coordinator.status === 'queued' || coordinator.status === 'failed')
+                && !await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'follow-up enqueue retry', { generation })) {
+                followUpRetry.generation = coordinator.generation;
+                followUpRetry.notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+            }
             return;
         }
 
@@ -6132,6 +6145,7 @@ export async function startDerivedMetricsProcessing(
             status: 'processing',
             dirtyMetricKinds: [],
             processingMetricKinds: dirtyMetricKinds,
+            retryFromGeneration: null,
             pendingImmediate: false,
             buildNotBeforeMs: null,
             startedAtMs: claimedAtMs,
@@ -6147,6 +6161,15 @@ export async function startDerivedMetricsProcessing(
         };
     });
 
+    if (followUpRetry.generation !== null) {
+        try {
+            await queueDerivedMetricsTask(uid, followUpRetry.generation, followUpRetry.notBeforeMs);
+        } catch (error) {
+            await markDerivedMetricsEnqueueFailed(uid, followUpRetry.generation, error,
+                'follow-up retry enqueue failure', 'enqueue_follow_up_retry_failed');
+            throw error;
+        }
+    }
     return startedResult;
 }
 
@@ -6190,6 +6213,7 @@ export async function completeDerivedMetricsProcessing(
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
+                retryFromGeneration: generation,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
                 processingMetricKinds: [],
                 pendingImmediate: false,
@@ -6247,6 +6271,7 @@ export async function completeDerivedMetricsProcessing(
                 'follow-up enqueue failure write',
                 'enqueue_follow_up_failed',
             );
+            throw error;
         }
     }
 
@@ -6345,6 +6370,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
+                retryFromGeneration: generation,
                 dirtyMetricKinds: retainedDirtyMetricKinds,
                 processingMetricKinds: [],
                 pendingImmediate: false,
@@ -6431,6 +6457,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                 'write-block follow-up enqueue failure',
                 'enqueue_write_block_follow_up_failed',
             );
+            throw error;
         }
     }
 

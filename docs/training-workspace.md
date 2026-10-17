@@ -4783,12 +4783,22 @@ subsequent changes merge dirty kinds and advance source revisions without postpo
 than two minutes needs no additional delay. Different accounts remain independent. Claim timestamps are sampled
 after transactional reads on every attempt, so waiting for concurrent writes does not consume the next build's interval.
 
-`buildNotBeforeMs` and `pendingImmediate` are private coordinator fields, not metric payload fields. The existing
-`startedAtMs` supplies the previous build start while idle; legacy/malformed/future start times fall back to prompt
-execution. No new collection, scanner, scheduler, transaction read, index or public API is added. The existing Cloud
-Tasks worker uses an absolute delivery time and deterministic generation ID for delayed builds. Enqueue retries retain
-that delivery time rather than restarting the delay after each transient failure. Ordinary enqueue/worker failures and stuck-job
-recovery remain prompt under the existing retry policy and 10-minute queued / 15-minute processing limits.
+`buildNotBeforeMs`, `pendingImmediate` and `retryFromGeneration` are private coordinator fields, not metric payload
+fields. The existing `startedAtMs` supplies the previous build start while idle; legacy/malformed/future start times fall back to prompt
+execution. No new collection, scanner, scheduler, index or public API is added. Ordinary successful paths retain their
+existing read count. The Cloud Tasks worker uses an absolute delivery time and deterministic generation ID for delayed
+builds. Enqueue retries retain
+that delivery time rather than restarting the delay after each transient failure. Worker retries and stuck-job recovery
+use the existing retry policy and 10-minute queued / 15-minute processing limits.
+
+Exhausted task-creation attempts must reject the calling ingress/worker task so Cloud Tasks can redeliver it. Intentional
+deletion/rollout skips and successfully coalesced ingress still acknowledge normally. Completion and write-block recovery
+save `retryFromGeneration` with the queued successor. If the caller fails or times out after that transaction, its retry
+can enqueue that exact, still-unclaimed successor at the saved deadline. It cannot publish snapshots, advance source
+revisions, or repair unrelated work. Claiming or replacing the successor clears the marker; deletion checks and
+generation fencing remain mandatory. This adds no reads/writes on ordinary successful paths beyond the field in the
+existing coordinator write, and uses no repair scanner or additional queue. Recovery remains bounded by the existing
+Cloud Tasks retry budget; a sustained outage can still require the normal freshness/Retry repair after exhaustion.
 
 Actual Training-load control changes (including zero overrides, exclusion and reset) and benchmark selection changes
 retain priority. A control ingress has a distinct deterministic task name from background ingress, so a same-bucket
@@ -4812,9 +4822,12 @@ while the final ready snapshot includes all fourteen mutation revisions. This is
 production cost reduction. It also covers concurrent arrivals, delayed enqueue failure after priority promotion,
 automatic/MCP freshness requests, completion/write-block follow-ups, stale tasks and account deletion.
 Focused unit regressions additionally cover slow enqueue retries and claims delayed by transaction contention.
+Emulator regressions cover ingress enqueue failure, repeated completion/write-block handoff failures, predecessor
+redelivery without another source write, and handoff fencing after deletion, priority promotion or a successor claim.
 
 Monitoring impact: **unchanged** queue names, native depth/delay metrics, retry limits, memory, concurrency and Admin
-queue coverage. An intentionally future task is scheduled work, not overdue backlog. The new identity-free
+queue coverage. Failed task creation now rejects instead of reporting a successful acknowledgement; HTTP success is
+still separate from a committed snapshot. An intentionally future task is scheduled work, not overdue backlog. The identity-free
 `Scheduled batched rebuild` log records generation and delay seconds for diagnosis; do not use generation as a metric
 label. End-to-end derived ingress/publication alert coverage remains **deferred** to existing
 [#831](https://github.com/jimmykane/quantified-self/issues/831), including dirty-generation age and stale-task exclusions.

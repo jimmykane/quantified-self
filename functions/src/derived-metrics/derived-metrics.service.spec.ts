@@ -4355,6 +4355,7 @@ describe('startDerivedMetricsProcessing', () => {
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
         mockTransactionDeletionGuardDefaults();
+        hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
                 get: hoisted.transactionGet,
@@ -4365,6 +4366,49 @@ describe('startDerivedMetricsProcessing', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it.each(['queued', 'failed'])('retries only its own unclaimed follow-up enqueue (%s)', async status => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17, 10));
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status, generation: 43, retryFromGeneration: 42, buildNotBeforeMs: Date.now() + 90_000,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 90);
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { status: 'processing', generation: 43, retryFromGeneration: 42 },
+        { status: 'idle', generation: 43, retryFromGeneration: 42 },
+        { status: 'failed', generation: 43, retryFromGeneration: 41 },
+        { status: 'queued', generation: 44, retryFromGeneration: 42 },
+        { status: 'failed', generation: 43 },
+    ])('does not let stale tasks repair unrelated or already claimed work: %j', async coordinator => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => coordinator });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it('discards the follow-up enqueue decision from an aborted transaction', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        hoisted.transactionGet
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'queued', generation: 43, retryFromGeneration: 42 }) })
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'processing', generation: 43 }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction);
+            await callback(transaction);
+        });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
     it('anchors the build start to the successful claim after transaction contention', async () => {

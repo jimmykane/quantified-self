@@ -153,4 +153,25 @@ describe('processDerivedMetricsIngressTask', () => {
             },
         })).rejects.toThrow('transient_ingress_failure');
     });
+
+    it('retries a failed rebuild enqueue instead of acknowledging the invalidation', async () => {
+        hoisted.markDerivedMetricsDirtyAndMaybeQueue.mockResolvedValueOnce({
+            accepted: false, queued: false, generation: 12, metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        await expect((processDerivedMetricsIngressTask as unknown as (request: unknown) => Promise<void>)({
+            data: { uid: 'user-1' },
+        })).rejects.toThrow('derived_metrics_ingress_enqueue_failed');
+    });
+
+    it.each([
+        { accepted: false, queued: false, generation: null }, // Deletion or rollout skip.
+        { accepted: true, queued: false, generation: 12 }, // Coalesced with existing work.
+    ])('acknowledges intentional skips and coalesced work: %j', async result => {
+        hoisted.markDerivedMetricsDirtyAndMaybeQueue.mockResolvedValueOnce({
+            ...result, metricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        await expect((processDerivedMetricsIngressTask as unknown as (request: unknown) => Promise<void>)({
+            data: { uid: 'user-1' },
+        })).resolves.toBeUndefined();
+    });
 });
