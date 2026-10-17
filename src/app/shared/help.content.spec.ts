@@ -195,7 +195,8 @@ describe('help.content', () => {
     expect(training).toContain('**Load metric history**');
     expect(training).toContain('Monotony history uses modeled daily TSS, including your Training load preferences and overrides');
     expect(training).toContain('not Strain values');
-    expect(training).toContain('**Plans** in the Training header');
+    expect(training).toContain('**Plans** in the app navigation');
+    expect(training).not.toContain('**Plans** in the Training header');
     expect(training).toContain('dashed no-additional-load scenario');
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(dashboard).toContain('**history columns**');

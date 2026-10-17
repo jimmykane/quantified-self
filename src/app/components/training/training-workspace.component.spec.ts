@@ -7,7 +7,6 @@ import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
-import { provideRouter, Router, RouterLink } from '@angular/router';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
@@ -229,10 +228,9 @@ describe('TrainingWorkspaceComponent', () => {
     const haptics = { selection: vi.fn() };
 
     await configureFixtureTestingModule({
-      imports: [RouterLink, MatButtonModule],
+      imports: [MatButtonModule],
       declarations: [TrainingWorkspaceComponent, HapticTapDirective],
       providers: [
-        provideRouter([]),
         { provide: AppHapticsService, useValue: haptics },
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -254,16 +252,12 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-feedback-action')).toBeNull();
     expect(element.querySelector('.training-calendar-action')).toBeNull();
     expect(element.querySelector('.training-dashboard-action')).toBeNull();
-    const plansAction = element.querySelector<HTMLAnchorElement>('.qs-page-header__actions .training-plans-action');
-    expect(plansAction?.getAttribute('href')).toBe('/training/plans');
-    expect(plansAction?.textContent).toContain('Plans');
-    expect(plansAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('event_note');
+    expect(element.querySelector('.training-plans-action')).toBeNull();
+    expect(element.querySelector('a[href="/training/plans"]')).toBeNull();
+    expect(element.querySelector('.training-page-actions')).toBeNull();
+    expect(element.querySelector('.qs-page-header__actions')?.children).toHaveLength(0);
     expect(element.querySelector('.training-derived-metrics-retry')).toBeNull();
     expect(haptics.selection).not.toHaveBeenCalled();
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
-    plansAction?.click();
-    expect(navigate).toHaveBeenCalledOnce();
-    expect(haptics.selection).toHaveBeenCalledOnce();
     expect(element.querySelector('app-timeline-notes-workspace')?.hasAttribute('hidden')).toBe(true);
     expect(element.querySelector('app-page-header app-timeline-notes-workspace')).toBeNull();
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
@@ -3062,7 +3056,9 @@ describe('TrainingWorkspaceComponent', () => {
       .toContain('Derived metrics update failed');
     expect(statusToggle.querySelector('mat-icon')?.classList).not.toContain('training-update-spinning');
     expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
-    expect(retryButton.parentElement?.querySelector('.training-plans-action')).toBeTruthy();
+    expect(retryButton.parentElement?.classList).toContain('training-page-actions');
+    expect(retryButton.parentElement?.querySelectorAll('button')).toHaveLength(1);
+    expect(retryButton.parentElement?.querySelector('.training-plans-action')).toBeNull();
     retryButton.click();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
       { uid: 'user-1' },
@@ -3074,6 +3070,7 @@ describe('TrainingWorkspaceComponent', () => {
     derivedState$.next(createRouteReadyDerivedState());
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.training-update-toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-page-actions')).toBeNull();
     expect(fixture.componentInstance.derivedMetricsStatusExpanded()).toBe(false);
     expect(haptics.selection).toHaveBeenCalledTimes(3);
     fixture.componentInstance.toggleDerivedMetricsStatusDetails();
