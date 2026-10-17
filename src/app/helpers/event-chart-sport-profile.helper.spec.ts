@@ -54,6 +54,15 @@ describe('event chart sport profiles', () => {
     ['EMOM', 'fitness'],
     ['Tabata', 'fitness'],
     ['LES MILLS BODYPUMP', 'fitness'],
+    ['Virtual Rowing', 'indoor-rowing'],
+    ['Indoor Hand Cycle', 'indoor-cycling'],
+    ['Indoor Wheelchair Push Walk', 'indoor-cycling'],
+    ['Indoor Wheelchair Push Run', 'indoor-cycling'],
+    ['Classic Roller Skiing', 'cross-country-skiing'],
+    ['Skate Roller Skiing', 'cross-country-skiing'],
+    ['Ski Mountaineering', 'ski-touring'],
+    ['Sail Racing', 'sailing'],
+    ['Sailing Expedition', 'sailing'],
   ])('keeps %s named while reusing the compatible chart profile', (name, profileID) => {
     const resolution = resolveEventChartSportProfile([name]);
     expect(resolution.canonicalActivityTypes).toEqual([name]);
@@ -75,6 +84,28 @@ describe('event chart sport profiles', () => {
     expect(resolveEventChartSportProfile(['Cycling', 'Road Cycling']).profileID).toBe('cycling');
     expect(resolveEventChartSportProfile(['Indoor Walking']).candidateFamilies).not.toContain('altitude');
   });
+
+  it('automatically recommends virtual-rowing speed and the library-owned rate stream', () => {
+    const rateType = ActivityTypesHelper.usesStrokeRate('Virtual Rowing' as ActivityTypes)
+      ? DataStrokeRate.type : DataCadence.type;
+    const dataTypes = [DataHeartRate.type, DataSpeed.type, rateType];
+    const recommendations = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile(['Virtual Rowing']),
+      panels: dataTypes.map(dataType => ({ dataType })),
+      globallyAllowedDataTypes: dataTypes,
+    });
+    expect(recommendations.automaticDataTypes).toEqual(dataTypes);
+  });
+
+  it.each(['Indoor Hand Cycle', 'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run'])(
+    'omits outdoor terrain from the automatic %s profile', name => {
+      const profile = resolveEventChartSportProfile([name]);
+      expect(profile.candidateFamilies).not.toContain('altitude');
+      expect(profile.candidateFamilies).not.toContain('vertical-speed');
+      expect(profile.candidateFamilies).toContain('power');
+      expect(profile.label).toBe(name);
+    },
+  );
 
   it.each([
     [ActivityTypes.Running, 'running', ['heart-rate', 'pace', 'power']],
