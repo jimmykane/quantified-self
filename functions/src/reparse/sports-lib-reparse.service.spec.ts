@@ -10,6 +10,7 @@ vi.mock('../training-load/training-load-source-write', () => ({
 }));
 import { createHash } from 'node:crypto';
 import { FitEncoder, FitBaseType } from 'fit-file-parser/encoder';
+import { DataDistance, DataDuration } from '@sports-alliance/sports-lib';
 import { sourceReferenceFingerprint } from './non-activity-sources';
 import { gzipSync } from 'node:zlib';
 import {
@@ -1027,6 +1028,46 @@ describe('sports-lib-reparse.service', () => {
         expect(result.assignments.size).toBe(2);
         expect(activityOne.creator.name).toBe('old1');
         expect(activityTwo.creator.name).toBe('old2');
+    });
+
+    it.each([true, false])('carries edits across renamed multisport legs only with matching source hashes (%s)', async (sameSource) => {
+        const makeActivity = (type: string, startMs: number, name: string) => ({
+            sourceActivityKey: undefined as string | undefined,
+            creator: { name },
+            startDate: new Date(startMs),
+            endDate: new Date(startMs + 1_800_000),
+            type,
+            getStat: (statType: string) => statType === DataDuration.type
+                ? { getValue: () => 1800 }
+                : statType === DataDistance.type ? { getValue: () => 5000 } : null,
+        });
+        const startMs = Date.parse('2026-07-01T08:00:00.000Z');
+        const oldActivities = [
+            makeActivity('Hiking', startMs, 'saved-first'),
+            makeActivity('Backcountry Skiing', startMs + 3_600_000, 'saved-second'),
+        ];
+        const parsedActivities = [
+            makeActivity('Ski Touring', startMs + 3_600_000, 'parsed-second'),
+            makeActivity('Trekking', startMs, 'parsed-first'),
+        ];
+        const parsedEvent = { getActivities: () => parsedActivities } as any;
+        await assignReimportActivityIds({ getActivities: () => oldActivities } as any, 'event', {
+            combinedSourceContentHash: 'a'.repeat(64),
+        });
+        await assignReimportActivityIds(parsedEvent, 'event', {
+            combinedSourceContentHash: (sameSource ? 'a' : 'd').repeat(64),
+        });
+        expect(oldActivities[0].sourceActivityKey).not.toBe(parsedActivities[1].sourceActivityKey);
+        expect(oldActivities[1].sourceActivityKey).not.toBe(parsedActivities[0].sourceActivityKey);
+        const parsedKeys = parsedActivities.map(activity => activity.sourceActivityKey);
+        const result = resolveActivityEditCarryover(parsedEvent, oldActivities.map((activity, index) => ({
+            id: `old-${index}`,
+            data: () => ({ ...activity, stats: { [DataDuration.type]: 1800, [DataDistance.type]: 5000 } }),
+        })) as any);
+        expect([...result.assignments].sort()).toEqual(sameSource ? [[0, 1], [1, 0]] : []);
+        expect(parsedActivities.map(activity => activity.creator.name)).toEqual(sameSource
+            ? ['saved-second', 'saved-first'] : ['parsed-second', 'parsed-first']);
+        expect(parsedActivities.map(activity => activity.sourceActivityKey)).toEqual(parsedKeys);
     });
 
     it.each(['Unknown', 'Unknown Device', ' UNKNOWN   DEVICE '])(

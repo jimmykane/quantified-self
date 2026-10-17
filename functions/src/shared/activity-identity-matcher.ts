@@ -216,6 +216,21 @@ function refinementSignature(activity: ActivityIdentityLike): string | null {
   return [startMs, endMs, duration, finiteRoundedStat(activity, DataDistance.type) ?? 'na'].join('|');
 }
 
+function compatibleRefinementSourceKeys(previous: ActivityIdentityLike, parsed: ActivityIdentityLike): boolean {
+  const previousKey = sourceKey(previous);
+  const parsedKey = sourceKey(parsed);
+  if (!previousKey || !parsedKey || previousKey === parsedKey) {
+    return true;
+  }
+  // Generated keys contain source-content SHA : activity-fingerprint SHA : occurrence.
+  // Renaming a sport changes its fingerprint without changing the source bytes.
+  const generatedKey = /^([a-f0-9]{64}):[a-f0-9]{64}:[0-9]+$/i;
+  const previousSourceHash = generatedKey.exec(previousKey)?.[1];
+  const parsedSourceHash = generatedKey.exec(parsedKey)?.[1];
+  return Boolean(previousSourceHash && parsedSourceHash
+    && previousSourceHash.toLowerCase() === parsedSourceHash.toLowerCase());
+}
+
 function assignUniqueImportRefinements(
   existing: readonly ActivityIdentityLike[],
   parsed: readonly ActivityIdentityLike[],
@@ -238,9 +253,7 @@ function assignUniqueImportRefinements(
     }
     const matches = (existingBySignature.get(key) || []).filter(existingIndex => {
       const previous = existing[existingIndex];
-      const previousSourceKey = sourceKey(previous);
-      const parsedSourceKey = sourceKey(activity);
-      return !(previousSourceKey && parsedSourceKey && previousSourceKey !== parsedSourceKey)
+      return compatibleRefinementSourceKeys(previous, activity)
         && compatibleImportTypes.has(`${normalizedType(previous.type)}|${normalizedType(activity.type)}`);
     });
     if (matches.length === 1) {

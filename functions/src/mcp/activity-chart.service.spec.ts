@@ -145,8 +145,11 @@ describe('MCP on-demand activity charts', () => {
     // Synthetic parser result: no binary fixtures or decoding changes.
     parsed.getActivities()[0].type = newType as ActivityTypes;
     parsed.getActivities()[0].addStat(new DataDuration(2));
+    const sourceHash = 'a'.repeat(64);
+    Object.assign(parsed.getActivities()[0], { sourceActivityKey: `${sourceHash}:${'c'.repeat(64)}:0` });
     const oldIdentity = {
       ...persistedIdentity(startDate, 3, oldType as ActivityTypes),
+      sourceActivityKey: `${sourceHash}:${'b'.repeat(64)}:0`,
       getStat: (type: string) => type === DataDuration.type ? new DataDuration(2) : null,
     };
     const result = await getActivityChartDataFromSources({

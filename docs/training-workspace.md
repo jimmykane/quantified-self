@@ -4771,7 +4771,9 @@ Original-file chart/sample reads also retain historical identities across all 53
 verified by the corpus, including Hiking ↔ Trekking, Backcountry Skiing ↔ Ski Touring, Cycling ↔ Road Cycling and
 Running ↔ Track Running. The exact allowlist lives in `HISTORICAL_IMPORT_TYPE_REFINEMENTS`. After existing
 exact matching, this fallback requires matching start/end timestamps, finite rounded duration, equal rounded distance
-or missing distance on both sides, and uniqueness on both sides. Conflicting source keys block this fallback. Separate
+or missing distance on both sides, and uniqueness on both sides. Equal source keys remain compatible; different generated
+SHA:SHA:occurrence keys are compatible only when their source-content SHA-256 prefixes match. That prefix represents
+the combined source set for merged originals. Different source hashes and conflicting arbitrary keys block this fallback. Separate
 refinement edges never imply Chores ↔ Meditation or arbitrary Training-family identity equivalence. Persisted IDs and
 sport names are unchanged by these read-only matches. The shared reparse carryover matcher also gains these matches;
 its separate single-remaining fallback remains opt-in and is never enabled for read consumers.

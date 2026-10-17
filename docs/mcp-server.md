@@ -1936,7 +1936,10 @@ identity matcher tries source key and then progressively narrower unique identit
 After exact matching, the 53 direct import-name refinements verified by the corpus can match historical activities
 with equal start/end, finite rounded duration, equal rounded distance (or no distance on both sides), compatible source keys, and a unique
 candidate in each direction. It never treats arbitrary sports in a Training family as the same identity or enables the
-reparse-only single-remaining fallback. See [preserved provider names and historical compatibility](training-workspace.md#preserved-provider-sport-names-and-historical-compatibility).
+reparse-only single-remaining fallback. Different generated source keys are compatible only when both have the complete
+SHA:SHA:occurrence shape and the same source-content SHA-256 prefix; renamed sports can change the activity fingerprint.
+Different source hashes and conflicting arbitrary keys stay unmatched by the refinement rule. See
+[preserved provider names and historical compatibility](training-workspace.md#preserved-provider-sport-names-and-historical-compatibility).
 The original persisted identity and public tools, scopes, schemas and budgets remain unchanged.
 
 This path never calls reparse persistence, metadata auto-healing, ID assignment, regeneration, event/activity writers,

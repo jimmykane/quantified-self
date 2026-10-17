@@ -36,6 +36,13 @@ describe('activity identity matcher', () => {
       .toEqual([[0, 0]]);
     expect(oldActivity.type).toBe(oldType);
     expect(parsedActivity.type).toBe(newType);
+
+    const sourceHash = 'a'.repeat(64);
+    const keyedOld = { ...oldActivity, sourceActivityKey: `${sourceHash}:${'b'.repeat(64)}:0` };
+    const keyedParsed = { ...parsedActivity, sourceActivityKey: `${sourceHash}:${'c'.repeat(64)}:0` };
+    for (const [existing, parsed] of [[keyedOld, keyedParsed], [keyedParsed, keyedOld]]) {
+      expect([...resolveActivityIdentityAssignments([existing], [parsed]).assignments]).toEqual([[0, 0]]);
+    }
   });
 
   it('matches renamed legs in a reordered multisport event', () => {
@@ -91,6 +98,42 @@ describe('activity identity matcher', () => {
     expect(resolveActivityIdentityAssignments([generic], [chores, meditation]).assignments.size).toBe(0);
     expect(resolveActivityIdentityAssignments([generic, generic], [chores]).assignments.size).toBe(0);
     expect(resolveActivityIdentityAssignments([chores], [meditation]).assignments.size).toBe(0);
+  });
+
+  it('rejects different source hashes, malformed generated keys and unapproved type pairs', () => {
+    const sourceHash = 'a'.repeat(64);
+    const oldKey = `${sourceHash}:${'b'.repeat(64)}:0`;
+    const newKey = `${sourceHash}:${'c'.repeat(64)}:0`;
+    const original = { ...identity(oldKey, 1_000), type: 'Hiking' };
+    const refined = { ...identity(newKey, 1_000), type: 'Trekking' };
+    for (const sourceActivityKey of [
+      `${'d'.repeat(64)}:${'c'.repeat(64)}:0`,
+      `${sourceHash}:${'c'.repeat(64)}`,
+      `${newKey}:extra`,
+      `${sourceHash}:${'g'.repeat(64)}:0`,
+      'arbitrary-source-key',
+    ]) {
+      expect(resolveActivityIdentityAssignments([original], [{ ...refined, sourceActivityKey }]).assignments.size).toBe(0);
+    }
+    expect(resolveActivityIdentityAssignments(
+      [{ ...original, type: 'Road Cycling' }], [{ ...refined, type: 'Gravel Cycling' }],
+    ).assignments.size).toBe(0);
+  });
+
+  it('retains time, duration, distance and ambiguity guards for matching generated source hashes', () => {
+    const sourceHash = 'a'.repeat(64);
+    const original = { ...identity(`${sourceHash}:${'b'.repeat(64)}:0`, 1_000), type: 'Hiking' };
+    const refined = { ...identity(`${sourceHash}:${'c'.repeat(64)}:0`, 1_000), type: 'Trekking' };
+    for (const candidate of [
+      { ...refined, startDate: 2_000 },
+      { ...refined, endDate: 4_000_000 },
+      { ...identity(refined.sourceActivityKey, 1_000, 1_800), type: 'Trekking', endDate: original.endDate },
+      { ...identity(refined.sourceActivityKey, 1_000, 3_600, 12_000), type: 'Trekking' },
+    ]) {
+      expect(resolveActivityIdentityAssignments([original], [candidate]).assignments.size).toBe(0);
+    }
+    expect(resolveActivityIdentityAssignments([original, original], [refined]).assignments.size).toBe(0);
+    expect(resolveActivityIdentityAssignments([original], [refined, refined]).assignments.size).toBe(0);
   });
 
   it('prefers unique source keys before otherwise ambiguous signatures', () => {
