@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "9aed6a5a7ae36d9ea55b689df0a068c2e0d05015c267eb0ede5eb78d8d1183ea",
+  "candidateSha256": "9d424fdcb4ed62d53ea59b0ffb3a0e7c98138ae30e5b1e1f0b6ee7554e958f23",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve replacement, prescription analysis, reflections, phases, source/recipe checks, title recovery, HR-retarget previews and activation/sync guidance. Retain bounded v2 endurance reads, EnergySense and scope-gated QS-calculated Garmin sleep HR. Add exact installed/approved sport enums and local recipes within existing budgets. Frozen schemas, scopes, Apply grants and phase authority remain unchanged; RPE stays in Edit details. Release, exact rescan and bundled sync remain separate.",
+  "summary": "Preserve replacement, prescription analysis, reflections, phases, recipe checks, title recovery, HR previews and sync guidance. Retain v2 endurance reads, EnergySense and scope-gated Garmin sleep HR. Keep exact installed/approved sport enums; remove duplicate focused-create definitions within 16 KiB for both grants. Frozen schemas, scopes, Apply grants and phase authority stay unchanged; RPE stays in Edit details. Release, rescan and bundled sync remain separate.",
   "rescanRequired": true
 }

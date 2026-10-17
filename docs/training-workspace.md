@@ -310,8 +310,9 @@ ten-minute invalid-call cooldown. The server completes blocked calls as ordinary
 with bounded issue codes and safe schema paths; it emits neither a JSON-RPC protocol error nor `Retry-After`, while
 correctly formed previews remain available immediately. Only the first cooldown transition is logged. This prevents an MCP
 host from turning a schema failure into a transport retry loop. Repeated recipe components are advertised through
-draft-07 references to keep the complete strict recipe inside the existing Training write-metadata budget; runtime Zod
-validation and the public recipe coverage gate remain identical.
+draft-07 references, without a second embedded 2020-12 definition set. Both schedule-only and delivery-enabled focused
+create descriptors have a 16 KiB budget that retains the complete sport catalog. Runtime Zod validation, recipe
+semantics and read projections remain identical; this metadata-only correction adds no Training capability or consent.
 
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self

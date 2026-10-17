@@ -415,8 +415,11 @@ baseline contains no Training recipe tools, so these enum additions belong to th
 they do not alter a registered tool, mutation kind, grant, consent or provider action. Update the exact pending contract
 digest after integration and use the existing explicit deployment/client-refresh lifecycle.
 Core planned-workout preview inputs use local JSON Schema definitions for repeated recipe fields and proposal variants.
-They retain the same exact finite sport vocabulary and strict validation while keeping discovery within the existing
-family byte budgets, including the expanded catalog.
+The focused create registration generates draft-07 references directly; it must not also embed pre-generated
+2020-12 definitions. Both its schedule-only and delivery-enabled descriptors retain the exact finite sport vocabulary
+and strict runtime validation within a 16 KiB per-tool budget, including the expanded catalog. This metadata repair
+changes no recipe semantics, read projection, permission or provider action. The pending digest requires the usual
+separately approved release and registered-client refresh; the registered baseline and history remain intact.
 
 The subsequently approved fitness/mobility, endurance, aquatic and wheelchair Training classifications affect recorded analysis only. The compatibility
 bridge keeps its 124 recorded-only names separate from the original 29 approved future public recipe names. The installed

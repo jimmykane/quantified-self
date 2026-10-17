@@ -441,6 +441,8 @@ export const TRAINING_WRITE_INPUTS = {
     expectedScheduleRevision: count, expectedWorkoutRevision: count.positive() }),
   preview_training_deletion: z.strictObject({ expectedScheduleRevision: count,
     change: TRAINING_DELETION_CHANGE_SCHEMA }),
+  // Registration generates draft-07 references directly; pre-generated 2020-12
+  // metadata would duplicate the focused tool's definitions.
   preview_create_planned_workout: z.strictObject({
     ...focusedWorkoutPreviewInput,
     delivery: z.strictObject({
@@ -479,9 +481,6 @@ function withReusableRecipeDefinitions<T extends z.ZodType>(schema: T): T {
   // schema reuses local definitions instead of repeating complete recipes.
   return schema.meta(definition);
 }
-TRAINING_WRITE_INPUTS.preview_create_planned_workout = withReusableRecipeDefinitions(
-  TRAINING_WRITE_INPUTS.preview_create_planned_workout,
-);
 TRAINING_WRITE_INPUTS.preview_training_changes = withReusableRecipeDefinitions(
   TRAINING_WRITE_INPUTS.preview_training_changes,
 );
