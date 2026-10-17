@@ -1515,7 +1515,7 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockTransactionDelete).toHaveBeenCalledTimes(400);
         expect(hoisted.mockTransactionDelete).not.toHaveBeenCalledWith(firstPage[0].ref);
         expect(hoisted.mockTransactionDelete).not.toHaveBeenCalledWith({ path: 'users/u1/activities/last-current' });
-        expect(sourceWriteGuard.assertCurrent).toHaveBeenCalledTimes(3); // Both cleanup pages and processing metadata.
+        expect(sourceWriteGuard.assertCurrent).toHaveBeenCalledTimes(3); // Both cleanup pages and atomic source completion.
     });
 
     it('does not delete a former child that no longer belongs to this event', async () => {
@@ -1742,7 +1742,7 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
         expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/u1/events/e1' }),
-            { probe: true, benchmarkSourceRevision: 1 },
+            { probe: true, benchmarkSourceRevision: 0, benchmarkSourceWritePending: true },
             undefined,
         );
     });
@@ -1806,7 +1806,8 @@ describe('sports-lib-reparse.service', () => {
                 tags: ['Latest'],
                 stats: { 'Recovery Time': 46_140 },
                 diagnostics: { keep: true },
-                benchmarkSourceRevision: 1,
+                benchmarkSourceRevision: 0,
+                benchmarkSourceWritePending: true,
             },
             undefined,
         );

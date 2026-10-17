@@ -488,9 +488,10 @@ describe('EventWriter', () => {
             expect(mockLogger.error).toHaveBeenCalled();
         });
 
-        it('should rethrow account-deletion write aborts without wrapping them', async () => {
+        it.each(['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'])(
+            'should rethrow deletion write aborts without wrapping them (%s)', async name => {
             const deletionSkipError = Object.assign(new Error('deleted'), {
-                name: 'EventWriteSkippedForDeletedUserError',
+                name,
             });
             const failingAdapter: FirestoreAdapter = {
                 setDoc: vi.fn().mockRejectedValue(deletionSkipError),

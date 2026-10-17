@@ -92,12 +92,14 @@ describe('BenchmarkEventAdapter', () => {
     const event = {} as AppEventInterface;
     const raw = {
       benchmarkSourceRevision: 3,
+      benchmarkSourceWritePending: true,
       benchmarkResults: { pair: makeResult({ metrics: { gnss: null, streamMetrics: {} },
         requiresRegeneration: true, activityLinksResolved: false }) },
     };
     const roundtrip = JSON.parse(JSON.stringify(raw));
     adapter.applyBenchmarkFieldsFromFirestore(event, roundtrip);
     expect(event.benchmarkSourceRevision).toBe(3);
+    expect(event.benchmarkSourceWritePending).toBe(true);
     expect(event.benchmarkResults?.pair.metrics.gnss).toBeNull();
     expect(event.benchmarkResults?.pair.requiresRegeneration).toBe(true);
     expect(event.benchmarkResults?.pair.activityLinksResolved).toBe(false);

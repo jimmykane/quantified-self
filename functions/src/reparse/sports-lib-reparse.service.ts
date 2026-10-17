@@ -60,7 +60,7 @@ import { getActivityCreatorNameCarryover } from '../../../shared/activity-creato
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { shouldPreserveParsedDistance } from './regeneration-distance';
 import { preserveFreshSourceEventSummary } from './source-event-summary';
-import { BenchmarkReparseIdentity, preserveBenchmarkMetadataOnReparse } from './benchmark-preservation';
+import { BenchmarkReparseIdentity, completeBenchmarkSourceWrite, preserveBenchmarkMetadataOnReparse } from './benchmark-preservation';
 import { ClassifiedReparseSource, NonActivitySourceAssessment, NonActivitySourcesError,
     classifyRejectedActivitySource, sourceReferenceFingerprint, SPORTS_LIB_PRIMARY_BUCKET } from './non-activity-sources';
 
@@ -1605,9 +1605,55 @@ async function setReparseDocIfUserActive(
     }));
 }
 
+async function beginBenchmarkSourceWrite(
+    uid: string,
+    eventId: string,
+    sourceWrite: TrainingLoadSourceWrite,
+): Promise<void> {
+    await setReparseDocIfUserActive(
+        uid,
+        'sports_lib_reparse_benchmark_begin',
+        admin.firestore().doc(`users/${uid}/events/${eventId}`),
+        {},
+        { merge: true },
+        (_incoming, existing) => {
+            if (!existing) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+            return sanitizeEventFirestoreWritePayload({ benchmarkSourceWritePending: true });
+        },
+        sourceWrite.assertCurrent,
+    );
+}
+
+async function completeReparsedSource(
+    uid: string,
+    eventId: string,
+    sourceWrite: TrainingLoadSourceWrite,
+    processingMetaData: ProcessingMetaData,
+): Promise<void> {
+    const db = admin.firestore();
+    const phase = 'sports_lib_reparse_processing_metadata';
+    await runReparseFirestoreTransactionWithRetry(uid, phase, () => db.runTransaction(async transaction => {
+        await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
+        await sourceWrite.assertCurrent(db, transaction);
+        const eventRef = db.doc(`users/${uid}/events/${eventId}`);
+        const snapshot = await transaction.get(eventRef);
+        if (!snapshot.exists) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+        const patch = completeBenchmarkSourceWrite(snapshot.data() || {});
+        if (Object.keys(patch).length) {
+            transaction.set(eventRef, sanitizeEventFirestoreWritePayload(patch), { merge: true });
+        }
+        // A retry must never see the target version while the source barrier is still pending.
+        transaction.set(db.doc(`users/${uid}/events/${eventId}/metaData/processing`), processingMetaData, { merge: true });
+    }));
+}
+
 function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite, identity: BenchmarkReparseIdentity): FirestoreAdapter {
     return {
-        prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
+        prepareTrainingLoad: async event => {
+            const finish = await sourceWrite.prepareTrainingLoad(event);
+            await beginBenchmarkSourceWrite(uid, event.getID()!, sourceWrite);
+            return finish;
+        },
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
             const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
@@ -1815,15 +1861,7 @@ export async function persistReparsedEvent(
         {
             targetSportsLibVersion,
         },
-        () => setReparseDocIfUserActive(
-            uid,
-            'sports_lib_reparse_processing_metadata',
-            admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`),
-            processingMetaData,
-            { merge: true },
-            undefined,
-            sourceWrite.assertCurrent,
-        ),
+        () => completeReparsedSource(uid, eventId, sourceWrite, processingMetaData),
     );
 
     return { staleActivitiesDeleted };

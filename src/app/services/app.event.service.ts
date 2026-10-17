@@ -106,6 +106,7 @@ const SERVER_OWNED_EVENT_UPDATE_FIELDS = [
   'comparisonTitle',
   'benchmarkStatus',
   'benchmarkSourceRevision',
+  'benchmarkSourceWritePending',
   'privacy',
 ] as const;
 
@@ -346,6 +347,7 @@ export class AppEventService implements OnDestroy {
     }
 
     clonedEvent.benchmarkSourceRevision = event.benchmarkSourceRevision;
+    clonedEvent.benchmarkSourceWritePending = event.benchmarkSourceWritePending;
 
     // Preserve benchmark fields needed by event details UI.
     if (event.benchmarkResults) {
@@ -423,6 +425,7 @@ export class AppEventService implements OnDestroy {
         results: event.benchmarkResults,
         legacyResult: event.benchmarkResult,
         sourceRevision: event.benchmarkSourceRevision,
+        sourceWritePending: event.benchmarkSourceWritePending,
         hasBenchmark: event.hasBenchmark,
         devices: event.benchmarkDevices,
         latestAt: event.benchmarkLatestAt,
@@ -962,7 +965,8 @@ export class AppEventService implements OnDestroy {
       const snapshot = await transaction.get(eventRef);
       if (!snapshot.exists()) throw new BenchmarkSourceChangedError();
       const current = snapshot.data();
-      if ((current['benchmarkSourceRevision'] ?? 0) !== expectedSourceRevision) throw new BenchmarkSourceChangedError();
+      if (current['benchmarkSourceWritePending'] === true
+        || (current['benchmarkSourceRevision'] ?? 0) !== expectedSourceRevision) throw new BenchmarkSourceChangedError();
       const legacy = current['benchmarkResult'] as BenchmarkResult | undefined;
       const previousResults = Object.keys(current['benchmarkResults'] || {}).length ? current['benchmarkResults'] : (legacy
         ? { [getBenchmarkPairKey(legacy.referenceId, legacy.testId)]: legacy } : {});

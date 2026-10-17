@@ -9,6 +9,14 @@ Target version source of truth:
 
 ### Sports Lib 23.0.0 provider sport catalog adoption
 
+Benchmark source writes now set a server-owned pending barrier before activity persistence. The existing source
+reservation and deletion guards protect it until all activity writes, stale-child deletion and processing metadata
+finish; only then does the completed source revision advance. Failed attempts retain the barrier until normal reparse
+retry succeeds. Deploy compatible frontend guards and Firestore Rules before this backend lifecycle; no backfill or
+manual flag clearing is required. See the [benchmark contract](../../../docs/benchmark-comparisons.md#original-file-reparse).
+Monitoring is unchanged: the existing reparse persistence-phase diagnostics and queue outcomes include completion
+failures; queue names, dispatch, retry limits, terminal states and monitoring resources are unchanged.
+
 Root and Functions install the same published Sports Lib 23.0.0 artifact; FIT Parser remains 6.2.2. Both JSON readers
 recognize all 284 canonical sports and 18 groups. Runtime version detection and the activity/route reparse target
 follow the installed 23.0.0 package, retaining strict target-mismatch checks. No scanner setting is changed or enabled.

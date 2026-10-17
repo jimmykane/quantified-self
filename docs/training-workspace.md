@@ -4784,6 +4784,12 @@ Root and Functions now pin the same published Sports Lib 23.0.0 artifact with FI
 and 18 activity groups are available to native JSON readers, selectors and the prepared Training registry. Split
 event/activity round trips retain exact sport names and imported TSS. Existing parser options remain in use.
 
+Original-file benchmark reprocessing holds a server-owned pending barrier across all activity writes and stale-child
+cleanup, then publishes the next completed source revision. Benchmark saves reject both in-progress rewrites and
+previews loaded before completion; failed attempts stay blocked until a successful source retry. This preserves the
+existing Training exclusions and changes no Training calculation, planning capability or MCP projection. The detailed
+[benchmark persistence contract](benchmark-comparisons.md#original-file-reparse) remains authoritative.
+
 Deployment still requires compatible frontend readers before backend writes introduce the new names. Already-open
 22.0.0 browser sessions cannot hydrate enum values absent from their installed catalog; the current update prompt is
 optional, so publishing a frontend alone does not establish that those sessions upgraded. Stale-client handling and

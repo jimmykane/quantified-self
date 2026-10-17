@@ -34,6 +34,8 @@ export interface AppEventInterface extends EventInterface {
     benchmarkLatestAt?: Date;
     /** Server-owned reparse generation used to reject reports computed from older recordings. */
     benchmarkSourceRevision?: number;
+    /** Server-owned barrier covering reparse activity writes and stale-activity cleanup. */
+    benchmarkSourceWritePending?: boolean;
     /** Merge classification for merged or benchmark comparison events. */
     mergeType?: 'benchmark' | 'multi' | string;
     /** Product/tool route that created this event when applicable. */

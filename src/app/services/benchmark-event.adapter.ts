@@ -67,6 +67,9 @@ export class BenchmarkEventAdapter {
     if (Number.isSafeInteger(rawData.benchmarkSourceRevision) && rawData.benchmarkSourceRevision >= 0) {
       event.benchmarkSourceRevision = rawData.benchmarkSourceRevision;
     }
+    if (typeof rawData.benchmarkSourceWritePending === 'boolean') {
+      event.benchmarkSourceWritePending = rawData.benchmarkSourceWritePending;
+    }
 
     if (rawData.benchmarkResults) {
       event.benchmarkResults = {};
