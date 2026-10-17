@@ -1,6 +1,6 @@
 import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, SpeedUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import type { WorkoutStepV1, WorkoutStructureV1 } from '@shared/planned-workout';
+import { MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1, type WorkoutStepV1, type WorkoutStructureV1 } from '@shared/planned-workout';
 import { buildWorkoutProfile, formatWorkoutProfileAxis, WORKOUT_PROFILE_EXPANSION_BUDGET } from './workout-profile.helper';
 import { buildWorkoutProfileChartOption } from './workout-profile-chart.helper';
 
@@ -8,6 +8,14 @@ const step = (id: string, seconds = 60): WorkoutStepV1 => ({ kind: 'step', id, p
 const recipe = (nodes: WorkoutStructureV1['nodes'], sport = ActivityTypes.Running): WorkoutStructureV1 => ({ version: 1, sport, nodes });
 
 describe('workout profile presentation', () => {
+  it.each([...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, ...MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1])('prioritizes available power for %s without changing the recipe', sport => {
+      const structure = recipe([{ ...step('power-and-hr'), targets: [
+        { kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 145 },
+        { kind: 'power', mode: 'absolute', minimumWatts: 180, maximumWatts: 220 },
+      ] }], sport);
+      expect(buildWorkoutProfile(structure).metrics).toEqual(['power', 'heart-rate']);
+      expect(structure.nodes[0]).toMatchObject({ targets: [{ kind: 'heart-rate' }, { kind: 'power' }] });
+    });
   it.each([
     { sport: ActivityTypes.Running, order: ['pace', 'heart-rate', 'power', 'cadence', 'speed'] },
     { sport: ActivityTypes.Swimming, order: ['pace', 'heart-rate', 'power', 'cadence', 'speed'] },

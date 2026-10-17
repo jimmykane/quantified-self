@@ -1,3 +1,5 @@
+import { APPROVED_REMAINING_SPORT_CASES } from '@shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
 import { ComponentFixture, TestBed, type TestModuleMetadata } from '@angular/core/testing';
@@ -5,7 +7,6 @@ import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
-import { provideRouter, Router, RouterLink } from '@angular/router';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
@@ -17,6 +18,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
 import type {
   DerivedTrainingDurabilityMetricPayload,
   TrainingBuildBenchmarkSelection,
@@ -226,10 +228,9 @@ describe('TrainingWorkspaceComponent', () => {
     const haptics = { selection: vi.fn() };
 
     await configureFixtureTestingModule({
-      imports: [RouterLink, MatButtonModule],
+      imports: [MatButtonModule],
       declarations: [TrainingWorkspaceComponent, HapticTapDirective],
       providers: [
-        provideRouter([]),
         { provide: AppHapticsService, useValue: haptics },
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -251,16 +252,12 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-feedback-action')).toBeNull();
     expect(element.querySelector('.training-calendar-action')).toBeNull();
     expect(element.querySelector('.training-dashboard-action')).toBeNull();
-    const plansAction = element.querySelector<HTMLAnchorElement>('.qs-page-header__actions .training-plans-action');
-    expect(plansAction?.getAttribute('href')).toBe('/training/plans');
-    expect(plansAction?.textContent).toContain('Plans');
-    expect(plansAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('event_note');
+    expect(element.querySelector('.training-plans-action')).toBeNull();
+    expect(element.querySelector('a[href="/training/plans"]')).toBeNull();
+    expect(element.querySelector('.training-page-actions')).toBeNull();
+    expect(element.querySelector('.qs-page-header__actions')?.children).toHaveLength(0);
     expect(element.querySelector('.training-derived-metrics-retry')).toBeNull();
     expect(haptics.selection).not.toHaveBeenCalled();
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
-    plansAction?.click();
-    expect(navigate).toHaveBeenCalledOnce();
-    expect(haptics.selection).toHaveBeenCalledOnce();
     expect(element.querySelector('app-timeline-notes-workspace')?.hasAttribute('hidden')).toBe(true);
     expect(element.querySelector('app-page-header app-timeline-notes-workspace')).toBeNull();
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
@@ -329,7 +326,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling or other training workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training, climbing & mountaineering, mountain snow sports, skating, combat & martial arts, dance, team sports, racket sports, precision sports, water sports, diving, performance sports, outdoor adventures, aerial sports, motorized activities or other training workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
@@ -1345,7 +1342,7 @@ describe('TrainingWorkspaceComponent', () => {
       trainingPowerSystems: {
         dayBoundary: 'UTC',
         asOfDayMs,
-        policyVersion: 1,
+        policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
         windowDays: 42,
         historyDays: 84,
         cadence: 'workout-date',
@@ -1709,7 +1706,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.sportShortcuts).toEqual(['running']);
     expect(component.visibleDisciplines).toEqual([
       'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-      'fitness-gym', 'paddling', 'other-training',
+      'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities', 'other-training',
     ]);
 
     component.openTrainingSportVisibilityDialog();
@@ -1898,6 +1895,7 @@ describe('TrainingWorkspaceComponent', () => {
         baselineWindowDays: 84,
         disciplines: [
           { discipline: 'fitness-gym', current28d: window(1), baseline28d: window(0) },
+          { discipline: 'wheelchair', current28d: window(0), baseline28d: window(1) },
           { discipline: 'other-training', current28d: window(0), baseline28d: window(0) },
         ],
       } as any,
@@ -1906,6 +1904,9 @@ describe('TrainingWorkspaceComponent', () => {
     (component as any).refreshTrainingSportVisibility();
 
     expect(component.trainingDestinationOptions.map(option => option.id)).toContain('fitness-gym');
+    expect(component.trainingDestinationOptions.find(option => option.id === 'wheelchair')).toMatchObject({
+      label: 'Wheelchair Training', materialIcon: 'accessible_forward',
+    });
     expect(component.trainingDestinationOptions.map(option => option.id)).not.toContain('other-training');
   });
 
@@ -2611,7 +2612,7 @@ describe('TrainingWorkspaceComponent', () => {
       metrics: [{ metric: 'elapsed-time', value: 7_200, sourceActivityCount: 2 }],
     }], [], 'strength', true)).toEqual([expect.objectContaining({
       context: 'strength',
-      metrics: [expect.objectContaining({ metric: 'elapsed-time', currentText: '2h 00m' })],
+      metrics: [expect.objectContaining({ metric: 'elapsed-time', currentText: '02h 00m' })],
     })]);
     const durabilityContext = {
       contextKey: 'pool:25:freestyle', scope: 'pool-swimming', outputSource: 'pool-length-speed',
@@ -2686,6 +2687,129 @@ describe('TrainingWorkspaceComponent', () => {
     });
     expect((component as any).formatTrainingBuildRange(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 2)))
       .toBe(`${rangeFormatter.format(new Date(Date.UTC(2026, 0, 1)))} – ${rangeFormatter.format(new Date(Date.UTC(2026, 0, 2)))}`);
+  });
+
+  it('presents canonical stair climbing ascent under metric and miles settings with its recorded-zone policy', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any, {} as any, {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any, { markForCheck: vi.fn() } as any,
+    );
+    const contexts = [{ context: 'stair-climbing', profile: 'general', activityCount: 1, metrics: [
+      { metric: 'elapsed-time', value: 1_800, sourceActivityCount: 1 },
+      { metric: 'ascent', value: 120, sourceActivityCount: 1 },
+    ] }];
+    expect((component as any).areObservedTrainingContextsVolumeOnly(contexts, 'intensityPolicy')).toBe(false);
+    expect((component as any).buildTrainingContextMetricViews(contexts, [], 'fitness-gym', true)).toEqual([
+      expect.objectContaining({ context: 'stair-climbing', label: 'Stair Climbing', metrics: [
+        expect.objectContaining({ metric: 'elapsed-time', currentText: '30m', referenceText: '--' }),
+        expect.objectContaining({ metric: 'ascent', currentText: '120 m', referenceText: '--' }),
+      ] }),
+    ]);
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect((component as any).buildTrainingContextMetricViews(contexts, [], 'fitness-gym', true)[0].metrics[1].currentText)
+      .toBe('120 m');
+    expect((component as any).buildTrainingContextMetricViews([{ ...contexts[0], metrics: [contexts[0].metrics[0]] }], [], 'fitness-gym', true))
+      .toEqual([expect.objectContaining({ label: 'Stair Climbing', metrics: [
+        expect.objectContaining({ metric: 'elapsed-time', currentText: '30m' }),
+      ] })]);
+    expect((component as any).buildTrainingContextMetricViews([{ ...contexts[0], metrics: [] }], [], 'fitness-gym', true))
+      .toEqual([]);
+  });
+
+  it('presents both approved 50-sport context batches with separate canonical labels, durations and unit-aware recorded metrics', () => {
+    const component = new TrainingWorkspaceComponent({} as any, {} as any, {} as any,
+      { appTheme: () => AppThemes.Normal } as any, { open: vi.fn() } as any, { markForCheck: vi.fn() } as any);
+    const expected = [
+      { sport: 'walking-hiking', name: 'Snowshoeing', context: 'snowshoeing', profile: 'vertical-endurance', zones: true },
+      { sport: 'climbing-mountaineering', name: 'Bouldering', context: 'bouldering', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Climbing', context: 'climbing', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Rock Climbing', context: 'rock-climbing', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Indoor Climbing', context: 'indoor-climbing', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Via Ferrata', context: 'via-ferrata', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Mountaineering', context: 'mountaineering', profile: 'vertical-endurance', zones: true },
+      { sport: 'mountain-snow', name: 'Ski Touring', context: 'ski-touring', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Ski Mountaineering', context: 'ski-mountaineering', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Backcountry Skiing', context: 'backcountry-skiing', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Backcountry Snowboarding', context: 'backcountry-snowboarding', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Splitboarding', context: 'splitboarding', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Alpine Skiing', context: 'alpine-skiing', profile: 'gravity', zones: false },
+      { sport: 'mountain-snow', name: 'Snowboarding', context: 'snowboarding', profile: 'gravity', zones: false },
+      { sport: 'mountain-snow', name: 'Telemark Skiing', context: 'telemark-skiing', profile: 'gravity', zones: false },
+      { sport: 'skating', name: 'Inline Skating', context: 'inline-skating', profile: 'endurance', zones: true },
+      { sport: 'skating', name: 'Skating', context: 'skating', profile: 'general', zones: false },
+      { sport: 'skating', name: 'Ice Skating', context: 'ice-skating', profile: 'general', zones: false },
+      { sport: 'skating', name: 'Skateboarding', context: 'skateboarding', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Boxing', context: 'boxing', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Combat', context: 'combat', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Judo', context: 'judo', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Kickboxing', context: 'kickboxing', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Mixed Martial Arts', context: 'mixed-martial-arts', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Taekwondo', context: 'taekwondo', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Ballet Dancing', context: 'ballet-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Ballroom Dancing', context: 'ballroom-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Dancing', context: 'dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Jazz Dancing', context: 'jazz-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Latin Dancing', context: 'latin-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Modern Dancing', context: 'modern-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Show Dancing', context: 'show-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Street Dancing', context: 'street-dancing', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Basketball', context: 'basketball', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Wheelchair Basketball', context: 'wheelchair-basketball', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Football', context: 'football', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Soccer', context: 'soccer', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Volleyball', context: 'volleyball', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Beach Volleyball', context: 'beach-volleyball', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Badminton', context: 'badminton', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Beach Tennis', context: 'beach-tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Padel', context: 'padel', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Pickleball', context: 'pickleball', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Platform Tennis', context: 'platform-tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Racket Sport', context: 'racket-sport', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Racquet Ball', context: 'racquet-ball', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Squash', context: 'squash', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Table Tennis', context: 'table-tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Tennis', context: 'tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Wheelchair Tennis', context: 'wheelchair-tennis', profile: 'general', zones: false },
+      ...APPROVED_WATER_TEAM_SPORT_CASES,
+      ...APPROVED_REMAINING_SPORT_CASES,
+
+    ];
+    for (const item of expected) {
+      expect((component as any).formatTrainingProfileMetric('elapsed-time', 0, item.sport)).toBe('0s');
+      const contexts = [{ context: item.context, profile: item.profile, activityCount: 1,
+        metrics: [{ metric: 'elapsed-time', value: 1_800, sourceActivityCount: 1 }] }];
+      const zeroContexts = [{ ...contexts[0], metrics: [{ metric: 'elapsed-time', value: 0, sourceActivityCount: 1 }] }];
+      expect((component as any).buildTrainingContextMetricViews(zeroContexts, [], item.sport, true)[0]?.metrics)
+        .toContainEqual(expect.objectContaining({ metric: 'elapsed-time', currentText: '0s', referenceText: '--' }));
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts: zeroContexts }, { contexts: [] }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '0s', benchmarkText: '--' }));
+      expect((component as any).areObservedTrainingContextsVolumeOnly(contexts, 'intensityPolicy')).toBe(!item.zones);
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts }, { contexts: [] }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '30m', benchmarkText: '--' }));
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts: [] }, { contexts }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '--', benchmarkText: '30m' }));
+      expect((component as any).buildTrainingContextMetricViews(contexts, [], item.sport, true)).toEqual([
+        expect.objectContaining({ context: item.context, label: item.name, metrics: [
+          expect.objectContaining({ metric: 'elapsed-time', currentText: '30m', referenceText: '--' }),
+        ] }),
+      ]);
+    }
+    const contexts = [{ context: 'snowshoeing', profile: 'vertical-endurance', activityCount: 1, metrics: [
+      { metric: 'distance', value: 1_609.344, sourceActivityCount: 1 },
+      { metric: 'ascent', value: 120, sourceActivityCount: 1 },
+    ] }];
+    const metricRows = (component as any).buildTrainingContextMetricViews(contexts, [], 'walking-hiking', true)[0].metrics;
+    expect(metricRows.find(row => row.metric === 'distance').currentText).toBe('1.61 Km');
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const milesRows = (component as any).buildTrainingContextMetricViews(contexts, [], 'walking-hiking', true)[0].metrics;
+    expect(milesRows.find(row => row.metric === 'distance').currentText).toBe('1.00 mi');
+    expect(milesRows.find(row => row.metric === 'ascent').currentText).toBe('120 m');
+    expect((component as any).formatTrainingProfileMetric('elapsed-time', 0, 'dance')).toBe('0s');
+    expect((component as any).formatTrainingProfileMetric('descent-time', 0, 'mountain-snow')).toBe('0s');
+    expect((component as any).formatTrainingProfileMetric('elapsed-time', undefined, 'dance')).toBe('--');
+    expect((component as any).formatTrainingProfileMetricDelta('elapsed-time', 120, 0, 'dance')).toBe('+02m');
+    expect((component as any).formatTrainingProfileMetric('elapsed-time', 90_000, 'dance')).toBe('1d 01h 00m');
   });
 
   it('keeps build sleep comparison compact until details are requested', async () => {
@@ -2932,7 +3056,9 @@ describe('TrainingWorkspaceComponent', () => {
       .toContain('Derived metrics update failed');
     expect(statusToggle.querySelector('mat-icon')?.classList).not.toContain('training-update-spinning');
     expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
-    expect(retryButton.parentElement?.querySelector('.training-plans-action')).toBeTruthy();
+    expect(retryButton.parentElement?.classList).toContain('training-page-actions');
+    expect(retryButton.parentElement?.querySelectorAll('button')).toHaveLength(1);
+    expect(retryButton.parentElement?.querySelector('.training-plans-action')).toBeNull();
     retryButton.click();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
       { uid: 'user-1' },
@@ -2944,6 +3070,7 @@ describe('TrainingWorkspaceComponent', () => {
     derivedState$.next(createRouteReadyDerivedState());
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.training-update-toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-page-actions')).toBeNull();
     expect(fixture.componentInstance.derivedMetricsStatusExpanded()).toBe(false);
     expect(haptics.selection).toHaveBeenCalledTimes(3);
     fixture.componentInstance.toggleDerivedMetricsStatusDetails();

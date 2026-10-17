@@ -55,8 +55,10 @@ describe('TrainingImpactComponent', () => {
   }
 
   it('renders exact contribution labels, values, outcome, and disclaimer', () => {
-    const text = render(session()).nativeElement.textContent;
+    const fixture = render(session());
+    const text = fixture.nativeElement.textContent;
     expect(text).toContain('Training impact');
+    expect(fixture.nativeElement.querySelector('.training-impact-icon')).not.toBeNull();
     expect(text).toContain('Fitness load (CTL)');
     expect(text).toContain('+2');
     expect(text).toContain('Fatigue load (ATL)');
@@ -73,6 +75,9 @@ describe('TrainingImpactComponent', () => {
     const values = Array.from(element.querySelectorAll('.training-impact-session-metrics strong')).map(value => value.textContent);
     const button = element.querySelector('button')!;
     expect(element.querySelector('.training-impact--strip')).toBeTruthy();
+    expect(element.querySelector('header .training-impact-icon')).toBeNull();
+    expect(element.querySelector('header mat-divider.training-impact-heading-divider')?.getAttribute('aria-hidden')).toBe('true');
+    expect(element.querySelectorAll('header mat-icon')).toHaveLength(1);
     expect(values).toEqual(['84', '+2', '+2']);
     expect(Array.from(element.querySelectorAll('.training-impact-session-metrics span')).map(label => label.textContent))
       .toEqual(['TSS', 'Workout CTL', 'Day CTL']);

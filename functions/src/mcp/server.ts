@@ -1,4 +1,5 @@
 import { MCP_ACTIVITY_CHART_METRICS, resolveMetric } from './activity-stream.service';
+import type { AssistantPromptWorkflow } from '../../../shared/assistant.prompts';
 import { MCP_WORKOUT_REFLECTION_INPUTS, type McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { activitySampleResultBytes, MCP_ACTIVITY_SAMPLES_LIMITS } from './activity-samples.service';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -372,6 +373,8 @@ export interface AuthenticatedMcpRequest {
   grantId?: string;
   /** Internal-only first-party authority; never populated from bearer authentication. */
   assistantConversationId?: string;
+  /** Server-bound workflow selectors; never read from bearer auth or tool input. */
+  assistantActivityDisciplines?: AssistantPromptWorkflow['activityDisciplineOverrides'];
   scopes: McpOAuthScope[];
 }
 
@@ -934,6 +937,8 @@ export function createMcpServer(
   dataService: ReturnType<typeof createMcpDataService> = defaultDataService,
   preparationService: typeof prepareDerivedMetricsForUser = prepareDerivedMetricsForUser,
 ): McpServer {
+  const assistantActivityDisciplines = auth.clientId === 'https://quantified-self.io/internal/assistant'
+    ? auth.assistantActivityDisciplines : undefined;
   const measurementToolsAvailable = auth.scopes.includes(
     MCP_OAUTH_SCOPES.MeasurementsRead,
   );
@@ -1580,7 +1585,7 @@ export function createMcpServer(
       interval: input.interval,
       timeZone: input.timeZone,
       activityTypes: input.activityTypes,
-    })));
+    }, assistantActivityDisciplines?.query_metric)));
 
     registerMcpTool(server, 'query_metrics', {
       title: 'Query several activity or event metrics',
@@ -2405,7 +2410,7 @@ export function createMcpServer(
       includeLocation: routeLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
-    })));
+    }, assistantActivityDisciplines?.list_routes)));
 
     if (routeLocationAvailable) {
       registerMcpTool(server, 'find_routes_near_location', {

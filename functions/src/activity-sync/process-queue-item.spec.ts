@@ -1331,6 +1331,30 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['Road Cycling', 0], ['Vertical Running', 4], ['Indoor Walking', 6],
+    ['E-Enduro MTB', 64], ['LES MILLS RPM', 12], ['AMRAP', 43],
+  ])('persists the approved Wahoo correction for %s before upload', async (sport, id) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true, data: () => ({ stats: { 'Activity Types': [sport] } }),
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID, Buffer.from('FITDATA'), expect.objectContaining({ expectedWorkoutTypeId: id }),
+    );
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_destination_provider_operation',
+      updateData: expect.objectContaining({ destinationExpectedWorkoutTypeID: id }),
+    }));
+    expect(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUploadActivityFileToWahoo.mock.invocationCallOrder[0]);
+  });
+
   it('maps multiple persisted event activity types to Wahoo multisport', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,

@@ -1,7 +1,7 @@
 import { changeManualEditorTargetPresentation, workoutEditorTargetUnit, createManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 import { ActivityTypes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
-import type { WorkoutStructureV1 } from '@shared/planned-workout';
+import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, type WorkoutStructureV1 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   createManualWorkoutEditorStep,
@@ -15,6 +15,25 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it.each(MANUAL_WORKOUT_EDITOR_SPORTS_V1)('retains the exact %s name and canonical values through JSON, edit and copy', sport => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] });
+    const structure: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'repeat', id: 'pair', count: 2,
+      steps: [{ kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 1234.56789 },
+        targets: [{ kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 2.34567, maximumMetersPerSecond: 3.45678 }] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 75.12345 }, targets: [] }] }] };
+    const saved = JSON.parse(JSON.stringify(structure));
+    const reopened = workoutStructureToManualEditor('Exact sport', '2026-10-11', saved, units);
+    expect(reopened.sport).toBe(sport);
+    expect(manualWorkoutEditorToStructure({ ...reopened, title: 'Copied workout' }, units)).toEqual(structure);
+  });
+
+  it('offers exactly 45 distinct endurance sports and keeps unsupported editors separate', () => {
+    expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1).toHaveLength(45);
+    expect(new Set(MANUAL_WORKOUT_EDITOR_SPORTS_V1).size).toBe(45);
+    expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1).not.toContain(ActivityTypes.StrengthTraining);
+    expect(() => workoutStructureToManualEditor('Unsupported', '2026-10-11', { version: 1, sport: ActivityTypes.Football, nodes: [] }))
+      .toThrow('not supported');
+  });
   it.each([ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill,
     ActivityTypes.Cycling, ActivityTypes.IndoorCycling, ActivityTypes.MountainBiking])('round-trips editable cadence for %s', sport => {
     const value: ManualWorkoutEditorValue = { title: 'Cadence intervals', localDate: '2026-10-05', sport,

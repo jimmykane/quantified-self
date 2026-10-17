@@ -1,5 +1,4 @@
 import {
-  ActivityTypesHelper,
   THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
   THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
 } from '@sports-alliance/sports-lib';
@@ -19,6 +18,7 @@ import {
   type DerivedTrainingPowerSystemsSnapshot,
   type DerivedTrainingPowerSystemsStatus,
 } from '@shared/derived-metrics';
+import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import { getNumberFormatter } from './number-format.helper';
 import {
   createTrainingSportRecord,
@@ -596,7 +596,7 @@ function resolveActivityTypeEntry(
 ): DerivedTrainingPowerSystemsActivityType | null {
   const raw = asRecord(value);
   const activityType = typeof raw?.activityType === 'string' ? raw.activityType.trim() : '';
-  const canonicalActivityType = activityType ? ActivityTypesHelper.resolveActivityType(activityType) : null;
+  const canonicalActivityType = activityType ? resolveCompatibleActivityType(activityType) : null;
   const current = raw ? resolveSnapshot(raw.current, activityType, asOfDayMs) : null;
   const rawCounts = asRecord(raw?.evidenceCounts);
   const candidateActivityCount = nonNegativeInteger(rawCounts?.candidateActivityCount);

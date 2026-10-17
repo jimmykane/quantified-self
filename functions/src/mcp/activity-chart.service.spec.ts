@@ -4,6 +4,7 @@ import {
   DataAltitude,
   DataAltitudeSmooth,
   DataDistance,
+  DataDuration,
   DataGrade,
   DataGradeAdjustedPace,
   DataGradeAdjustedSpeed,
@@ -130,6 +131,38 @@ describe('MCP on-demand activity charts', () => {
       .toContain('cadence');
     expect(getUnsupportedActivityChartMetrics(['cadence'], ActivityTypes.OpenWaterSwimming))
       .toEqual(['cadence']);
+  });
+
+  it.each([
+    ['Cycling', 'Road Cycling'],
+    ['Hiking', 'Trekking'],
+    ['Backcountry Skiing', 'Ski Touring'],
+  ])('reads a renamed %s source as %s through its persisted identity', async (oldType, newType) => {
+    const startDate = Date.parse('2026-07-01T08:00:00.000Z');
+    const parsed = eventWithActivities([
+      activityJson(startDate, { [DataHeartRate.type]: [100, 105, 110] }, oldType as ActivityTypes),
+    ]);
+    // Synthetic parser result: no binary fixtures or decoding changes.
+    parsed.getActivities()[0].type = newType as ActivityTypes;
+    parsed.getActivities()[0].addStat(new DataDuration(2));
+    const sourceHash = 'a'.repeat(64);
+    Object.assign(parsed.getActivities()[0], { sourceActivityKey: `${sourceHash}:${'c'.repeat(64)}:0` });
+    const oldIdentity = {
+      ...persistedIdentity(startDate, 3, oldType as ActivityTypes),
+      sourceActivityKey: `${sourceHash}:${'b'.repeat(64)}:0`,
+      getStat: (type: string) => type === DataDuration.type ? new DataDuration(2) : null,
+    };
+    const result = await getActivityChartDataFromSources({
+      sourceFiles: [{ path: 'original.fit', startDate: new Date(startDate) }],
+      existingActivities: [oldIdentity],
+      targetExistingIndex: 0,
+    }, { metrics: ['heart_rate'], xAxis: 'elapsed_time', maxPoints: 3 }, {
+      loadSource: vi.fn().mockResolvedValue(Buffer.from('synthetic source')),
+      parseSource: vi.fn().mockResolvedValue(parsed),
+    });
+    expect(result.series[0].values).toEqual([100, 105, 110]);
+    expect(oldIdentity.type).toBe(oldType);
+    expect(parsed.getActivities()[0].type).toBe(newType);
   });
 
   it.each([

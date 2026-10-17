@@ -225,6 +225,56 @@ describe('garmin route sending', () => {
     });
   });
 
+  it.each([
+    ['BMX', 'ROAD_CYCLING'],
+    ['LES MILLS RPM', 'ROAD_CYCLING'],
+    ['LES MILLS SPRINT', 'ROAD_CYCLING'],
+    ['LES MILLS THE TRIP', 'ROAD_CYCLING'],
+    ['Obstacle Racing', 'RUNNING'],
+    ['Vertical Running', 'TRAIL_RUNNING'],
+    ['Enduro MTB', 'MOUNTAIN_BIKING'],
+    ['E-Enduro MTB', 'MOUNTAIN_BIKING'],
+    ['Gravel Cycling', 'GRAVEL_CYCLING'],
+    ['Motorcycling', 'OTHER'],
+    ['Motorcycle Enduro', 'OTHER'],
+    ['Hard Enduro', 'OTHER'],
+    ['Mountaineering', 'HIKING'],
+    ['Ski Mountaineering', 'OTHER'],
+    ['Offroad Duathlon', 'OTHER'],
+    ['Offroad Triathlon', 'OTHER'],
+    ['  MOTORCYCLE ENDURO  ', 'OTHER'],
+    ['  MOUNTAINEERING  ', 'HIKING'],
+    ['Unknown profile', 'OTHER'],
+  ])('sends %s through the approved Garmin course profile %s', async (sport, activityType) => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockResolvedValueOnce({ courseId: 9001 });
+    const document = { id: 'route-1', name: 'QS Route Name', activityTypes: [sport] };
+    const file = createRouteFile(sport);
+    await sendRouteToGarminConnect('user-1', 'route-1', document as any, file,
+      await createGarminRouteSendContext('user-1'));
+
+    expect(requestHelperMocks.post).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.objectContaining({ activityType }),
+    }));
+    expect(document.activityTypes).toEqual([sport]);
+    expect(file.getRoutes()[0].activityType).toBe(sport);
+  });
+
+  it('uses the refined persisted sport when Garmin route geometry has no sport', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockResolvedValueOnce({ courseId: 9001 });
+    await sendRouteToGarminConnect('user-1', 'route-1',
+      { name: 'QS Route Name', activityTypes: ['Vertical Running'] } as any, createRouteFile(''),
+      await createGarminRouteSendContext('user-1'));
+    expect(requestHelperMocks.post).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.objectContaining({ activityType: 'TRAIL_RUNNING' }),
+    }));
+  });
+
   it('runs the queued-route guard immediately before creating a Garmin course', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),

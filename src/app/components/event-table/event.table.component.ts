@@ -60,6 +60,7 @@ import { EventTagCatalogService } from '../../services/event-tag-catalog.service
 import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dialog.component';
+import { resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
 
@@ -428,6 +429,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (result) {
       this.benchmarkFlow.openBenchmarkReport({
         event: appEvent,
+        hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
         user: this.user,
         result,
@@ -436,6 +438,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } else {
       this.benchmarkFlow.openBenchmarkSelectionDialog({
         event: appEvent,
+        hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
         user: this.user,
         initialSelection
@@ -447,35 +450,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const result = this.getFirstBenchmarkResult(appEvent);
     if (!result) return '';
 
-    // Replicating grading logic from BenchmarkReportComponent
-
-    // 1. GNSS Grade
-    let gnssScore = 0; // poor
-    const cep50 = result.metrics.gnss.cep50;
-    if (cep50 <= 2) gnssScore = 3; // excellent
-    else if (cep50 <= 5) gnssScore = 2; // good
-    else if (cep50 <= 10) gnssScore = 1; // fair
-
-    // 2. Stream Grades
-    const streamScores: number[] = [];
-    Object.values(result.metrics.streamMetrics).forEach(m => {
-      const corr = m.pearsonCorrelation;
-      if (corr >= 0.98) streamScores.push(3);
-      else if (corr >= 0.95) streamScores.push(2);
-      else if (corr >= 0.90) streamScores.push(1);
-      else streamScores.push(0);
-    });
-
-    const allScores = [gnssScore, ...streamScores];
-    if (allScores.length === 0) return AppColors.Orange; // Fair default
-
-    const total = allScores.reduce((a, b) => a + b, 0);
-    const avg = total / allScores.length;
-
-    if (avg >= 2.5) return AppColors.Green; // Excellent
-    if (avg >= 1.5) return AppColors.Green; // Good (using same green for simplicity or could use a lighter one)
-    if (avg >= 0.5) return AppColors.Orange; // Fair
-    return AppColors.Red; // Poor
+    const grade = resolveBenchmarkOverallGrade(result);
+    if (grade === 'excellent' || grade === 'good') return AppColors.Green;
+    if (grade === 'poor') return AppColors.Red;
+    return AppColors.Orange;
   }
 
   private getFirstBenchmarkResult(appEvent: AppEventInterface): BenchmarkResult | null {

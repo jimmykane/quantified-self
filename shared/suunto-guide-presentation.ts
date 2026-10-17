@@ -1,5 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { WorkoutStepV1, WorkoutTargetV1 } from './planned-workout';
+import { plannedWorkoutSportAliasV1 } from './planned-workout-sport-aliases';
 
 export type SuuntoGuideLiveReadingTypeV1 = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
 export type SuuntoGuideReadingTypeV1 = SuuntoGuideLiveReadingTypeV1 | 'strokeRate' | 'swolf' | 'distance' | 'duration';
@@ -14,6 +15,7 @@ export function suuntoGuideWatchTextV1(value: string): string {
 }
 
 export function suuntoGuideLiveReadingsV1(sport: ActivityTypes): SuuntoGuideLiveReadingTypeV1[] {
+  sport = plannedWorkoutSportAliasV1('suunto', sport);
   if (sport === ActivityTypes.StrengthTraining) return ['heartRate'];
   if ([ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling,
     ActivityTypes.EBiking, ActivityTypes.Handcycle].includes(sport)) return ['power', 'heartRate', 'speed'];
@@ -21,6 +23,7 @@ export function suuntoGuideLiveReadingsV1(sport: ActivityTypes): SuuntoGuideLive
 }
 
 export function suuntoGuideMeasuredTargetV1(target: WorkoutTargetV1, sport: ActivityTypes): SuuntoGuideLiveReadingTypeV1 | null {
+  sport = plannedWorkoutSportAliasV1('suunto', sport);
   // Power/cadence sensors are documented for running/cycling, not swimming/rowing.
   const hasPowerCadence = suuntoGuideLiveReadingsV1(sport)[0] === 'power'
     || [ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill].includes(sport);

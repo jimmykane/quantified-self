@@ -1,3 +1,5 @@
+import { APPROVED_REMAINING_SPORT_CASES } from '../../../shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '../../../shared/testing/training-water-team-cases';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
@@ -136,6 +138,46 @@ describe('setTrainingBuildBenchmark', () => {
             DERIVED_METRIC_KINDS.TrainingBuildComparison,
         ], { incrementEventMutationVersion: false });
         expect(result).toEqual({ accepted: true, queued: true, generation: 14 });
+    });
+
+    it.each(['Wheel Chair', 'Wheelchair Push Walk', 'Wheelchair Push Run',
+        'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run', 'Wheelchair Racing'])(
+        'saves a wheelchair benchmark from a recorded %s child after JSON transport', async type => {
+            hoisted.transactionGet.mockImplementation(async (ref: unknown) => ref === hoisted.activitiesQuery
+                ? { docs: [{ data: () => ({ type }) }] }
+                : { exists: true, data: () => ({ startDate: Date.UTC(2026, 2, 1, 9) }) });
+            const data = JSON.parse(JSON.stringify({
+                discipline: 'wheelchair', selection: { mode: 'event', durationWeeks: 12, eventId: 'wheelchair-event' },
+            }));
+            await expect((setTrainingBuildBenchmark as any)({ auth: { uid: 'user-1' }, app: {}, data }))
+                .resolves.toMatchObject({ accepted: true });
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+                trainingSettings: { buildBenchmarks: { wheelchair: data.selection } },
+            }, { merge: true });
+        },
+    );
+
+    it.each([
+        ['climbing-mountaineering', 'Bouldering'],
+        ['mountain-snow', 'Ski Touring'],
+        ['skating', 'Inline Skating'],
+        ['combat-martial-arts', 'Boxing'],
+        ['dance', 'Ballet Dancing'],
+        ['team-sports', 'Basketball'],
+        ['racket-sports', 'Badminton'],
+        ...APPROVED_WATER_TEAM_SPORT_CASES.map(item => [item.sport, item.name]),
+        ...APPROVED_REMAINING_SPORT_CASES.filter(item => item.sport !== 'fitness-gym').map(item => [item.sport, item.name]),
+
+    ])('saves a %s benchmark using the matching recorded child and preserves sibling settings', async (discipline, type) => {
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => ref === hoisted.activitiesQuery
+            ? { docs: [{ data: () => ({ type }) }] }
+            : { exists: true, data: () => ({ startDate: Date.UTC(2026, 2, 1, 9) }) });
+        const data = JSON.parse(JSON.stringify({ discipline, selection: { mode: 'event', durationWeeks: 12, eventId: 'approved-sport-event' } }));
+        await expect((setTrainingBuildBenchmark as any)({ auth: { uid: 'user-1' }, app: {}, data })).resolves.toMatchObject({ accepted: true });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            trainingSettings: { buildBenchmarks: { [discipline]: data.selection } },
+        }, { merge: true });
+        expect(hoisted.transactionUpdate).not.toHaveBeenCalled();
     });
 
     it('accepts a valid historical event with an ISO start date', async () => {

@@ -329,7 +329,15 @@ describe('EventSummaryComponent', () => {
             expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledWith(expect.objectContaining({
                 event: component.event,
                 user: component.user,
+                hydrateStreamsForGeneration: true,
                 initialSelection: component.selectedActivities,
+            }));
+        });
+
+        it('loads all recorded streams when starting a benchmark from the summary dialog', () => {
+            component.openBenchmarkDialog();
+            expect(mockBenchmarkFlowService.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+                event: component.event, hydrateStreamsForGeneration: true,
             }));
         });
 
@@ -493,6 +501,12 @@ describe('EventSummaryComponent', () => {
 
             fixture.detectChanges();
             expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type, DataSpeedAvg.type]);
+        });
+
+        it('omits speed from the default climbing hero while leaving the raw stat available', () => {
+            component.event = { ...mockEvent, getActivities: () => [{ type: ActivityTypes.Climbing }] } as any;
+            fixture.detectChanges();
+            expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type]);
         });
 
         it('should resolve hero stat value from unit-aware DynamicDataLoader output', () => {

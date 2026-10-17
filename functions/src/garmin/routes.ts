@@ -13,6 +13,7 @@ import {
 
 import * as requestPromise from '../request-helper';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
+import { resolveGarminRouteActivityTypeOverride, resolveProviderRouteSportAlias } from '../../../shared/route-sport-aliases';
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   getGarminProviderUserIdFromTokenLike,
@@ -278,7 +279,10 @@ function resolveGarminCourseActivityType(routeFile: RouteFileInterface, routeDoc
     ...(Array.isArray(routeDocument.activityTypes) ? routeDocument.activityTypes : []),
   ].map(candidate => `${candidate || ''}`.trim().toLowerCase()).filter(Boolean);
 
-  for (const candidate of normalizedCandidates) {
+  for (const originalCandidate of normalizedCandidates) {
+    const override = resolveGarminRouteActivityTypeOverride(originalCandidate);
+    if (override !== null) return override;
+    const candidate = resolveProviderRouteSportAlias(originalCandidate)?.toLowerCase() || originalCandidate;
     if (candidate.includes('gravel')) {
       return 'GRAVEL_CYCLING';
     }

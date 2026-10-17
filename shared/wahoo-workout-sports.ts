@@ -1,11 +1,13 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { WorkoutStructureV1 } from './planned-workout';
+import { plannedWorkoutAliasedSportsV1, plannedWorkoutSportAliasV1 } from './planned-workout-sport-aliases';
 
 /** Explicit planning profiles, never a blanket admission of the activity catalog.
- * All 21 profiles have owner-confirmed timed playback (#789). This is not a
- * guarantee for other devices or proof of distance/intensity support.
+ * The 21 base profiles have owner-confirmed timed playback (#789). Additional
+ * QS names alias those profiles; they add no native playback claim or proof
+ * of distance/intensity support.
  * https://cloud-api.wahooligan.com/#workout-types */
-export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [
+export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Running,
   ActivityTypes.TrailRunning,
   ActivityTypes.Treadmill,
@@ -27,7 +29,8 @@ export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Rowing,
   ActivityTypes.IndoorRowing,
   ActivityTypes.StrengthTraining,
-] as const;
+  ...plannedWorkoutAliasedSportsV1('wahoo'),
+])] as const;
 
 export interface WahooWorkoutSportProfileV1 {
   family: 0 | 1 | 2 | 3 | 6 | 9;
@@ -38,6 +41,11 @@ export interface WahooWorkoutSportProfileV1 {
 }
 
 export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSportProfileV1 | null {
+  const mappedSport = plannedWorkoutSportAliasV1('wahoo', sport);
+  if (mappedSport !== sport) {
+    const profile = wahooWorkoutSportProfileV1(mappedSport);
+    return profile ? { ...profile, foldedTo: profile.foldedTo ?? mappedSport } : null;
+  }
   switch (sport) {
     case ActivityTypes.Cycling: return { family: 0, workoutType: 0, location: 1 };
     case ActivityTypes.MountainBiking: return { family: 0, workoutType: 13, location: 1 };
@@ -66,7 +74,8 @@ export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSp
 }
 
 export function isWahooWalkingWorkoutSportV1(sport: ActivityTypes): boolean {
-  return sport === ActivityTypes.Walking || sport === ActivityTypes.Hiking;
+  const mappedSport = plannedWorkoutSportAliasV1('wahoo', sport);
+  return mappedSport === ActivityTypes.Walking || mappedSport === ActivityTypes.Hiking;
 }
 
 /** Prescription limits are independent of whether native-profile playback is proven. */

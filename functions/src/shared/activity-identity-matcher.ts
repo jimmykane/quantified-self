@@ -22,6 +22,8 @@ export interface ActivityIdentityAssignmentResult {
 }
 
 export interface ActivityIdentityAssignmentOptions {
+  /** Require complete matching times/duration/distance, compatible source keys and exact/verified sport types. */
+  requireStrictMatch?: boolean;
   /**
    * Preserves the legacy reparse carry-over behavior when exactly one parsed
    * and persisted activity remain. Read-only consumers must leave this false
@@ -137,6 +139,145 @@ function assignUniqueMatches(
   });
 }
 
+// Verified import-name refinements, not Training-family equivalence. In
+// particular, Generic -> Chores and Generic -> Meditation are separate edges;
+// they never make Chores and Meditation interchangeable.
+export const HISTORICAL_IMPORT_TYPE_REFINEMENTS = [
+  ['Hiking', 'Trekking'],
+  ['Cycling', 'Road Cycling'],
+  ['Backcountry Skiing', 'Ski Touring'],
+  ['Flexibility Training', 'Stretching'],
+  ['Cycling', 'Gravel Cycling'],
+  ['Running', 'Track Running'],
+  ['Hang Gliding', 'Paragliding'],
+  ['Racquet Ball', 'Padel'],
+  ['Rock Climbing', 'Climbing'],
+  ['Generic', 'Meditation'],
+  ['Training', 'Breathwork'],
+  ['Generic', 'Chores'],
+  ['Cardio Training', 'Aerobics'],
+  ['Training', 'Meditation'],
+  ['Racquet Ball', 'Racket Sport'],
+  ['Unknown Sport', 'Dancing'],
+  ['Cycling', 'E-Biking'],
+  ['Elliptical Trainer', 'Crosstrainer'],
+  ['E-Biking', 'E-Mountain Biking'],
+  ['Cycling', 'E-Mountain Biking'],
+  ['Driving', 'Motorsports'],
+  ['Strength Training', 'Calisthenics'],
+  ['Generic', 'Calisthenics'],
+  ['Mountain Biking', 'Cyclocross'],
+  ['Sailing', 'Sail Racing'],
+  ['Unknown Sport', 'E-Mountain Biking'],
+  ['Generic', 'Mobility'],
+  ['Generic', 'Sailing'],
+  ['Crosscountry Skiing', 'Classic Crosscountry Skiing'],
+  ['Running', 'Ultra Running'],
+  ['Backcountry Skiing', 'Ski Mountaineering'],
+  ['Walking', 'Speed Walking'],
+  ['Crosscountry Skiing', 'Skate Skiing'],
+  ['Walking', 'Indoor Walking'],
+  ['Generic', 'Jump Rope'],
+  ['Unknown Sport', 'Jump Rope'],
+  ['Running', 'Road Running'],
+  ['Motorcycling', 'ATV'],
+  ['Generic', 'Rowing'],
+  ['Generic', 'Mixed Martial Arts'],
+  ['Backcountry Skiing', 'Backcountry Snowboarding'],
+  ['Running', 'Obstacle Racing'],
+  ['Cycling', 'Indoor Cycling'],
+  ['Hiking', 'Rucking'],
+  ['Rafting', 'Whitewater Rafting'],
+  ['Cycling', 'Mountain Biking'],
+  ['Generic', 'Water Tubing'],
+  ['Indoor Running', 'Indoor Track Running'],
+  ['Unknown Sport', 'Ultra Running'],
+  ['Unknown Sport', 'Gravel Cycling'],
+  ['Unknown Sport', 'Sailing'],
+  ['Unknown Sport', 'Trail Running'],
+  ['Unknown Sport', 'Track Running'],
+] as const;
+
+const compatibleImportTypes = new Set(HISTORICAL_IMPORT_TYPE_REFINEMENTS.flatMap(([oldType, newType]) => [
+  `${normalizedType(oldType)}|${normalizedType(newType)}`,
+  `${normalizedType(newType)}|${normalizedType(oldType)}`,
+]));
+
+function finiteRoundedStat(activity: ActivityIdentityLike, type: string): number | null {
+  const value = activity.getStat?.(type)?.getValue?.();
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null;
+}
+
+function refinementSignature(activity: ActivityIdentityLike): string | null {
+  const startMs = toTimestampMs(activity.startDate);
+  const endMs = toTimestampMs(activity.endDate);
+  const duration = finiteRoundedStat(activity, DataDuration.type);
+  if (startMs === null || endMs === null || endMs < startMs || duration === null) {
+    return null;
+  }
+  return [startMs, endMs, duration, finiteRoundedStat(activity, DataDistance.type) ?? 'na'].join('|');
+}
+
+function compatibleRefinementSourceKeys(previous: ActivityIdentityLike, parsed: ActivityIdentityLike): boolean {
+  const previousKey = sourceKey(previous);
+  const parsedKey = sourceKey(parsed);
+  if (!previousKey || !parsedKey || previousKey === parsedKey) {
+    return true;
+  }
+  // Generated keys contain source-content SHA : activity-fingerprint SHA : occurrence.
+  // Renaming a sport changes its fingerprint without changing the source bytes.
+  const generatedKey = /^([a-f0-9]{64}):[a-f0-9]{64}:[0-9]+$/i;
+  const previousSourceHash = generatedKey.exec(previousKey)?.[1];
+  const parsedSourceHash = generatedKey.exec(parsedKey)?.[1];
+  return Boolean(previousSourceHash && parsedSourceHash
+    && previousSourceHash.toLowerCase() === parsedSourceHash.toLowerCase());
+}
+
+function assignUniqueImportRefinements(
+  existing: readonly ActivityIdentityLike[],
+  parsed: readonly ActivityIdentityLike[],
+  assignments: Map<number, number>,
+  usedExisting: Set<number>,
+  allowUnchangedType = false,
+): void {
+  const existingBySignature = new Map<string, number[]>();
+  existing.forEach((activity, index) => {
+    const key = usedExisting.has(index) ? null : refinementSignature(activity);
+    if (key) {
+      existingBySignature.set(key, [...(existingBySignature.get(key) || []), index]);
+    }
+  });
+  const candidates = new Map<number, number>();
+  const parsedCandidateCountsByExisting = new Map<number, number>();
+  parsed.forEach((activity, parsedIndex) => {
+    const key = assignments.has(parsedIndex) ? null : refinementSignature(activity);
+    if (!key) {
+      return;
+    }
+    const matches = (existingBySignature.get(key) || []).filter(existingIndex => {
+      const previous = existing[existingIndex];
+      return compatibleRefinementSourceKeys(previous, activity)
+        && ((allowUnchangedType && normalizedType(previous.type) === normalizedType(activity.type))
+          || compatibleImportTypes.has(`${normalizedType(previous.type)}|${normalizedType(activity.type)}`));
+    });
+    if (matches.length === 1) {
+      candidates.set(parsedIndex, matches[0]);
+    }
+    matches.forEach(existingIndex => {
+      parsedCandidateCountsByExisting.set(existingIndex,
+        (parsedCandidateCountsByExisting.get(existingIndex) || 0) + 1);
+    });
+  });
+  // Check uniqueness on both sides before assigning any edge. Iterating and
+  // consuming candidates would otherwise turn an ambiguous graph into a match.
+  candidates.forEach((existingIndex, parsedIndex) => {
+    if (parsedCandidateCountsByExisting.get(existingIndex) === 1) {
+      assignments.set(parsedIndex, existingIndex);
+      usedExisting.add(existingIndex);
+    }
+  });
+}
+
 /**
  * Matches parsed activities to persisted identities without mutating either side.
  * Ambiguous signatures remain unmatched so callers can fail closed.
@@ -148,7 +289,7 @@ export function resolveActivityIdentityAssignments(
 ): ActivityIdentityAssignmentResult {
   const assignments = new Map<number, number>();
   const usedExisting = new Set<number>();
-  [sourceKey, strictSignature, timeTypeSignature, startTypeSignature].forEach(
+  (options.requireStrictMatch ? [] : [sourceKey, strictSignature, timeTypeSignature, startTypeSignature]).forEach(
     signature => assignUniqueMatches(
       existing,
       parsed,
@@ -158,6 +299,8 @@ export function resolveActivityIdentityAssignments(
     ),
   );
 
+  assignUniqueImportRefinements(existing, parsed, assignments, usedExisting, options.requireStrictMatch);
+
   const unmatchedParsedIndexes = parsed
     .map((_activity, index) => index)
     .filter(index => !assignments.has(index));
@@ -166,6 +309,7 @@ export function resolveActivityIdentityAssignments(
     .filter(index => !usedExisting.has(index));
   if (
     options.allowSingleRemainingFallback === true
+    && options.requireStrictMatch !== true
     && unmatchedParsedIndexes.length === 1
     && unmatchedExistingIndexes.length === 1
   ) {

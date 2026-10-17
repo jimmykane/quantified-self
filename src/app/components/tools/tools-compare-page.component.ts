@@ -1236,6 +1236,12 @@ export class ToolsComparePageComponent implements OnInit {
 
   private resolveBenchmarkInitialSelection(event: AppEventInterface): ActivityInterface[] | undefined {
     const activities = event.getActivities?.() || [];
+    const result = this.resolvePrimaryBenchmarkResult(event);
+    if (result && result.activityLinksResolved !== false) {
+      const reference = activities.find(activity => activity.getID() === result.referenceId);
+      const test = activities.find(activity => activity.getID() === result.testId);
+      if (reference && test && reference !== test) return [reference, test];
+    }
     return activities.length >= 2 ? activities.slice(0, 2) : undefined;
   }
 
@@ -2059,7 +2065,7 @@ export class ToolsComparePageComponent implements OnInit {
     const benchmarkPairTitle = this.formatBenchmarkPairTitle(primaryBenchmarkResult);
     const reportTitle = this.buildComparisonReportTitle(reportLabel, benchmarkPairTitle, hasReport);
     const benchmarkFailure = this.benchmarkFailureByEventID()[eventID] ?? null;
-    const statusPresentation = this.resolveComparisonStatusPresentation(hasReport, benchmarkFailure);
+    const statusPresentation = this.resolveComparisonStatusPresentation(hasReport, benchmarkFailure, primaryBenchmarkResult?.requiresRegeneration === true);
     const reportContext = this.buildBenchmarkReportContext(reportCount, benchmarkPairTitle);
     const gnssBenchmark = this.buildGnssBenchmarkMetricCell(primaryBenchmarkResult, reportContext);
     const heartRateBenchmark = this.buildStreamBenchmarkMetricCell(
@@ -2145,6 +2151,7 @@ export class ToolsComparePageComponent implements OnInit {
   private resolveComparisonStatusPresentation(
     hasReport: boolean,
     benchmarkFailure: ComparisonBenchmarkFailure | null,
+    requiresRegeneration = false,
   ): { label: string; title: string; icon: string; state: ComparisonStatusState } {
     if (benchmarkFailure?.type === 'no_overlap') {
       return {
@@ -2152,6 +2159,15 @@ export class ToolsComparePageComponent implements OnInit {
         title: `Last benchmark attempt failed: ${benchmarkFailure.message} Choose overlapping activities and rerun the benchmark.`,
         icon: 'error',
         state: 'error',
+      };
+    }
+
+    if (requiresRegeneration) {
+      return {
+        label: 'Regeneration required',
+        title: 'Previous report retained after reprocessing. Rerun to compare the current recordings.',
+        icon: 'refresh',
+        state: 'draft',
       };
     }
 
@@ -2252,6 +2268,8 @@ export class ToolsComparePageComponent implements OnInit {
       return this.buildPlaceholderBenchmarkMetricCell(MISSING_BENCHMARK_REPORT_TOOLTIP);
     }
 
+    if (result.requiresRegeneration) return this.buildRegenerationBenchmarkMetricCell();
+
     const gnss = result.metrics?.gnss;
     if (!gnss) {
       return this.buildPlaceholderBenchmarkMetricCell(this.appendReportContext('No GNSS metrics in latest benchmark report.', reportContext));
@@ -2314,6 +2332,8 @@ export class ToolsComparePageComponent implements OnInit {
       return this.buildPlaceholderBenchmarkMetricCell(MISSING_BENCHMARK_REPORT_TOOLTIP);
     }
 
+    if (result.requiresRegeneration) return this.buildRegenerationBenchmarkMetricCell();
+
     const metrics = resolveBenchmarkStreamMetrics(result.metrics?.streamMetrics || {}, streamType, streamAliases);
     if (!metrics) {
       return this.buildPlaceholderBenchmarkMetricCell(
@@ -2349,6 +2369,13 @@ export class ToolsComparePageComponent implements OnInit {
       color: this.resolveBenchmarkMetricColor(meanAbsoluteError),
       severityLabel: this.resolveBenchmarkMetricSeverityLabel(meanAbsoluteError),
       dominantLineLabel: meanAbsoluteError === null ? null : 'MAE',
+    };
+  }
+
+  private buildRegenerationBenchmarkMetricCell(): ComparisonBenchmarkMetricCell {
+    return {
+      ...this.buildPlaceholderBenchmarkMetricCell('Previous report retained after reprocessing. Rerun to compare the current recordings.'),
+      canRerunReport: true,
     };
   }
 

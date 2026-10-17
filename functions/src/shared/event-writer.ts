@@ -103,6 +103,7 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 
 function isControlFlowWriteAbort(error: Error): boolean {
     return error.name === 'EventWriteSkippedForDeletedUserError'
+        || error.name === 'EventWriteSkippedForDeletedEventError'
         || error.name === 'UserDeletionGuardReadError'
         || error.name === 'HistoryLifecycleChangedError';
 }
@@ -266,7 +267,7 @@ export class EventWriter {
                 }
 
             } else {
-                this.logger.warn('Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
+                this.logger.info('Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
                 // Preserve existing file metadata if no new files are being uploaded
                 if (event.originalFiles) {
                     eventJSON.originalFiles = event.originalFiles;

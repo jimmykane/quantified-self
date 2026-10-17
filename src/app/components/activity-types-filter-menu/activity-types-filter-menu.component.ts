@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Optional, Output, SimpleChanges } from '@angular/core';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { type ActivityTypeFamilyFilterOption, getActivityTypeFamilyFilterOptions, isSameActivityTypeSelection, normalizeActivityTypeSelection, toggleActivityTypeFamilySelection } from '../../helpers/activity-type-family-filter.helper';
 
 interface ActivityTypeFilterOption {
   label: string;
@@ -25,6 +27,9 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   @Input() ariaLabel = 'Filter activities';
   @Output() selectedActivityTypesChange = new EventEmitter<ActivityTypes[]>();
 
+  constructor(@Optional() private haptics: AppHapticsService | null = null) {}
+
+  public activityFamilyOptions: ReadonlyArray<ActivityTypeFamilyFilterOption> = [];
   public activityFilterLabel = 'All activities';
   public activityTypeOptions: ReadonlyArray<ActivityTypeFilterOption> = [];
 
@@ -50,13 +55,12 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
       return;
     }
 
-    const current = this.normalizeActivityTypes(this.selectedActivityTypes || []);
+    const current = normalizeActivityTypeSelection(this.selectedActivityTypes || []);
     const nextActivityTypes = checked
       ? Array.from(new Set([...current, activityType]))
       : current.filter(selectedActivityType => selectedActivityType !== activityType);
 
-    this.setSelectedActivityTypes(nextActivityTypes);
-    this.selectedActivityTypesChange.emit(nextActivityTypes);
+    this.applyUserSelection(nextActivityTypes);
   }
 
   clearActivityTypes(): void {
@@ -68,13 +72,24 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
       return;
     }
 
-    this.setSelectedActivityTypes([]);
-    this.selectedActivityTypesChange.emit([]);
+    this.applyUserSelection([]);
+  }
+
+  onActivityFamilyToggle(option: ActivityTypeFamilyFilterOption): void {
+    if (this.disabled) return;
+    this.applyUserSelection(toggleActivityTypeFamilySelection(this.selectedActivityTypes, option, !option.selected));
+  }
+
+  private applyUserSelection(next: ActivityTypes[]): void {
+    if (isSameActivityTypeSelection(normalizeActivityTypeSelection(this.selectedActivityTypes), next)) return;
+    this.setSelectedActivityTypes(next);
+    this.haptics?.selection();
+    this.selectedActivityTypesChange.emit(next);
   }
 
   private setSelectedActivityTypes(activityTypes: ActivityTypes[]): void {
-    this.selectedActivityTypes = activityTypes || [];
-    const selectedActivityTypes = this.normalizeActivityTypes(this.selectedActivityTypes);
+    const selectedActivityTypes = normalizeActivityTypeSelection(activityTypes || []);
+    this.selectedActivityTypes = selectedActivityTypes;
     const selectedActivityTypeSet = new Set(selectedActivityTypes);
     const selectedCount = selectedActivityTypes.length;
 
@@ -83,6 +98,7 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
       : selectedCount > 1
         ? `${selectedCount} activity filters`
         : 'All activities';
+    this.activityFamilyOptions = getActivityTypeFamilyFilterOptions(selectedActivityTypes, this.availableActivityTypes);
     const availableActivityTypes = this.getAvailableActivityTypeValues();
     this.activityTypeOptions = availableActivityTypes.map(activityType => ({
       label: activityType,
@@ -92,39 +108,20 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   }
 
   private getAvailableActivityTypeValues(): ReadonlyArray<ActivityTypes> {
+    // Already-selected canonical bridge names remain removable before the
+    // catalog upgrade. They are not offered as new choices or family members.
+    const catalogAndSelectedTypes = [...new Set([...this.activityTypeValues, ...this.selectedActivityTypes])];
     if (!Array.isArray(this.availableActivityTypes)) {
-      return this.activityTypeValues;
+      return catalogAndSelectedTypes;
     }
 
     // Keep an existing filter in view even when a new context has no matching
     // activities. Removing it would silently turn a no-results state into an
     // unfiltered result set.
-    const visibleActivityTypes = new Set(this.normalizeActivityTypes([
+    const visibleActivityTypes = new Set(normalizeActivityTypeSelection([
       ...this.availableActivityTypes,
       ...this.selectedActivityTypes,
     ]));
-    return this.activityTypeValues.filter(activityType => visibleActivityTypes.has(activityType));
-  }
-
-  private normalizeActivityTypes(activityTypes: readonly unknown[]): ActivityTypes[] {
-    const normalizedActivityTypes = activityTypes
-      .map((activityType) => this.resolveActivityType(activityType))
-      .filter((activityType): activityType is ActivityTypes => !!activityType);
-    return Array.from(new Set(normalizedActivityTypes));
-  }
-
-  private resolveActivityType(activityType: unknown): ActivityTypes | null {
-    if (typeof activityType !== 'string') {
-      return null;
-    }
-
-    const rawActivityType = activityType.trim();
-    if (!rawActivityType) {
-      return null;
-    }
-
-    return ActivityTypesHelper.resolveActivityType(rawActivityType)
-      || this.activityTypeValues.find(value => value === rawActivityType)
-      || null;
+    return catalogAndSelectedTypes.filter(activityType => visibleActivityTypes.has(activityType));
   }
 }

@@ -9,6 +9,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { By } from '@angular/platform-browser';
 import { HapticTapDirective } from '../../directives/haptic-tap.directive';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventMergeService } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -357,6 +358,17 @@ describe('EventTableComponent', () => {
         expect(settingsPayload.appSettings).toBeUndefined();
         expect(settingsPayload.unitSettings).toBeUndefined();
     };
+
+    it.each([false, true])('loads streams when starting or rerunning a benchmark from the list (saved: %s)', saved => {
+        const flow = TestBed.inject(AppBenchmarkFlowService);
+        const selection = vi.spyOn(flow, 'openBenchmarkSelectionDialog').mockResolvedValue(undefined);
+        const report = vi.spyOn(flow, 'openBenchmarkReport').mockResolvedValue(undefined);
+        const event = { getActivities: () => [], benchmarkResults: saved ? { pair: { referenceId: 'ref', testId: 'test' } } : {} } as any;
+        component.openBenchmarkFlow({ stopPropagation: vi.fn(), preventDefault: vi.fn() } as any, event);
+        expect(saved ? report : selection).toHaveBeenCalledWith(expect.objectContaining({
+            event, hydrateStreamsForGeneration: true,
+        }));
+    });
 
     it('should create', () => {
         expect(component).toBeTruthy();

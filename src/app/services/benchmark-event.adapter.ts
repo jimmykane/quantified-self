@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { normalizeEventTags } from '@shared/event-tags';
 
 @Injectable({
@@ -60,6 +60,17 @@ export class BenchmarkEventAdapter {
         : result.qualityIssues,
     });
 
+    if (rawData.benchmarkResult) {
+      event.benchmarkResult = cloneBenchmarkResult(rawData.benchmarkResult);
+      applyResultDates(event.benchmarkResult);
+    }
+    if (Number.isSafeInteger(rawData.benchmarkSourceRevision) && rawData.benchmarkSourceRevision >= 0) {
+      event.benchmarkSourceRevision = rawData.benchmarkSourceRevision;
+    }
+    if (typeof rawData.benchmarkSourceWritePending === 'boolean') {
+      event.benchmarkSourceWritePending = rawData.benchmarkSourceWritePending;
+    }
+
     if (rawData.benchmarkResults) {
       event.benchmarkResults = {};
       for (const key of Object.keys(rawData.benchmarkResults)) {
@@ -67,6 +78,11 @@ export class BenchmarkEventAdapter {
         applyResultDates(result);
         event.benchmarkResults[key] = result;
       }
+    }
+    if (event.benchmarkResult && !Object.keys(event.benchmarkResults || {}).length) {
+      event.benchmarkResults = {
+        [getBenchmarkPairKey(event.benchmarkResult.referenceId, event.benchmarkResult.testId)]: event.benchmarkResult,
+      };
     }
 
     if (rawData.hasBenchmark !== undefined) {

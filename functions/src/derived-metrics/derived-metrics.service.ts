@@ -62,6 +62,9 @@ import {
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
     DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
     DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_ACTIVITY_TYPES,
+    DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_MAX_BYTES,
+    DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES,
     DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
     DERIVED_METRICS_ENTRY_TYPES,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
@@ -109,6 +112,7 @@ import {
     type DerivedTrainingPowerSystemsComponent,
     type DerivedTrainingPowerSystemsHistoryPoint,
     type DerivedTrainingPowerSystemsMetricPayload,
+    type DerivedTrainingPowerSystemsLegacyPolicy1Sidecar,
     type DerivedTrainingPowerSystemsSnapshot,
     type DerivedTrainingBuildDurabilityComparison,
     type DerivedTrainingContextSummary,
@@ -153,6 +157,7 @@ import {
     normalizeDerivedMetricKindsStrict,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
+import { resolveCompatibleActivityType } from '../../../shared/activity-type-compatibility';
 import {
     buildReadinessSignals,
     READINESS_FORMULA_VERSION,
@@ -211,6 +216,7 @@ import {
     TRAINING_SPORT_CONTEXT_IDS,
     resolveTrainingDisciplineFromActivityType,
     resolveTrainingSportContextFromActivityType,
+    resolveTrainingPowerSystemsModelActivityType,
     type ResolvedTrainingSportContext,
     type TrainingProfileMetricId,
 } from '../../../shared/training-disciplines';
@@ -1860,6 +1866,7 @@ export function buildTrainingCapacityMetricPayload(
 
 interface TrainingPowerSystemsCandidate {
     activityType: ActivityTypes;
+    modelActivityType: ActivityTypes;
     sourceId: string;
     eventId: string;
     startDayMs: number;
@@ -1951,16 +1958,15 @@ function resolveUtcDateKeyDayMs(dateKey: string | null): number | null {
 
 function prepareTrainingPowerSystemsCandidate(
     activity: DerivedTrainingActivitySource,
+    poolGenericRoadPairs: boolean,
 ): TrainingPowerSystemsCandidate | null {
-    let activityType: ActivityTypes | null = null;
-    try {
-        activityType = ActivityTypesHelper.resolveActivityType(activity.activityData.type);
-    } catch {
-        return null;
-    }
+    const activityType = resolveCompatibleActivityType(activity.activityData.type);
     if (!activityType) {
         return null;
     }
+    const modelActivityType = poolGenericRoadPairs
+        ? resolveTrainingPowerSystemsModelActivityType(activityType) as ActivityTypes
+        : activityType;
     const sourceId = `${activity.activityId || ''}`.trim();
     const points = filterPowerCurvePointsByMaxDuration(
         normalizePowerCurvePoints(resolveRawStatValue(activity.activityData, POWER_CURVE_STAT_TYPE)).points,
@@ -1968,13 +1974,14 @@ function prepareTrainingPowerSystemsCandidate(
     );
     return {
         activityType,
+        modelActivityType,
         sourceId,
         eventId: activity.eventId,
         startDayMs: activity.startDayMs,
         datedCurve: sourceId && points.length
             ? {
                 sourceId,
-                activityType,
+                activityType: modelActivityType,
                 date: resolveUtcDateKey(activity.startDayMs),
                 powerCurve: points,
             }
@@ -2168,6 +2175,42 @@ export function buildTrainingPowerSystemsMetricPayload(
     nowMs = Date.now(),
     fitCapacityModel: ThreeDimensionalCapacityFitter = fitThreeDimensionalCapacityModel,
 ): DerivedMetricBuildResult<DerivedTrainingPowerSystemsMetricPayload> {
+    return buildTrainingPowerSystemsMetricPayloadForPolicy(activities, nowMs, fitCapacityModel, DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION);
+}
+
+/** Independently fit the affected exact types for the registered policy-1 read. */
+export function buildLegacyTrainingPowerSystemsMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+    fitCapacityModel: ThreeDimensionalCapacityFitter = fitThreeDimensionalCapacityModel,
+): DerivedMetricBuildResult<DerivedTrainingPowerSystemsLegacyPolicy1Sidecar> {
+    const legacyTypes = new Set<string>(DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_ACTIVITY_TYPES);
+    const result = buildTrainingPowerSystemsMetricPayloadForPolicy(
+        activities.filter(activity => legacyTypes.has(resolveCompatibleActivityType(activity.activityData.type) || '')),
+        nowMs,
+        fitCapacityModel,
+        1,
+    );
+    const maximumHistoryPoints = DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS + 1;
+    if (
+        result.payload.activityTypes.length > legacyTypes.size
+        || result.payload.activityTypes.some(entry => entry.history.length > maximumHistoryPoints)
+        || Buffer.byteLength(JSON.stringify(result.payload), 'utf8') > DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_MAX_BYTES
+    ) {
+        throw new Error('Legacy power-system sidecar exceeds its fixed storage bounds.');
+    }
+    return result;
+}
+
+function buildTrainingPowerSystemsMetricPayloadForPolicy<TPolicy extends 1 | 2>(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs: number,
+    fitCapacityModel: ThreeDimensionalCapacityFitter,
+    policyVersion: TPolicy,
+): DerivedMetricBuildResult<Omit<DerivedTrainingPowerSystemsMetricPayload, 'policyVersion'> & { policyVersion: TPolicy }> {
+    const resolveModelActivityType = (activityType: ActivityTypes): ActivityTypes => policyVersion === 2
+        ? resolveTrainingPowerSystemsModelActivityType(activityType) as ActivityTypes
+        : activityType;
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
     const historyStartDayMs = asOfDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS * DAY_MS);
     const earliestInputDayMs = historyStartDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
@@ -2178,7 +2221,7 @@ export function buildTrainingPowerSystemsMetricPayload(
             && activity.startDayMs >= earliestInputDayMs
             && activity.startDayMs <= asOfDayMs
         ))
-        .map(prepareTrainingPowerSystemsCandidate)
+        .map(activity => prepareTrainingPowerSystemsCandidate(activity, policyVersion === 2))
         .filter((candidate): candidate is TrainingPowerSystemsCandidate => candidate !== null)
         .sort((left, right) => (
             left.startDayMs - right.startDayMs
@@ -2201,15 +2244,16 @@ export function buildTrainingPowerSystemsMetricPayload(
         activityType: ActivityTypes,
         effectiveDayMs: number,
     ): DerivedTrainingPowerSystemsSnapshot => {
-        const cacheKey = `${activityType}\u0000${effectiveDayMs}`;
+        const modelActivityType = resolveModelActivityType(activityType);
+        const cacheKey = `${modelActivityType}\u0000${effectiveDayMs}`;
         const cached = fitCache.get(cacheKey);
         if (cached) {
-            return cached;
+            return { ...cached, activityType };
         }
         const windowStartDayMs = effectiveDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
         const curves = candidates
             .filter(candidate => (
-                candidate.activityType === activityType
+                candidate.modelActivityType === modelActivityType
                 && candidate.datedCurve !== null
                 && candidate.startDayMs >= windowStartDayMs
                 && candidate.startDayMs < effectiveDayMs
@@ -2217,24 +2261,25 @@ export function buildTrainingPowerSystemsMetricPayload(
             .map(candidate => candidate.datedCurve as DatedActivityPowerCurve);
         const snapshot = serializeTrainingPowerSystemsFit(
             fitCapacityModel(curves, { effectiveDate: resolveUtcDateKey(effectiveDayMs) }),
-            activityType,
+            modelActivityType,
             effectiveDayMs,
         );
         fitCache.set(cacheKey, snapshot);
-        return snapshot;
+        return { ...snapshot, activityType };
     };
 
     const activityTypes: DerivedTrainingPowerSystemsActivityType[] = discoveredActivityTypes.map((activityType) => {
+        const modelActivityType = resolveModelActivityType(activityType);
         const currentWindowStartDayMs = asOfDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
         const currentCandidates = candidates.filter(candidate => (
-            candidate.activityType === activityType
+            candidate.modelActivityType === modelActivityType
             && candidate.startDayMs >= currentWindowStartDayMs
             && candidate.startDayMs < asOfDayMs
         ));
         const effectiveDays = [...new Set([
             ...candidates
                 .filter(candidate => (
-                    candidate.activityType === activityType
+                    candidate.modelActivityType === modelActivityType
                     && candidate.datedCurve !== null
                     && candidate.startDayMs >= historyStartDayMs
                     && candidate.startDayMs <= asOfDayMs
@@ -2258,9 +2303,10 @@ export function buildTrainingPowerSystemsMetricPayload(
             },
         };
     });
+    const discoveredModelActivityTypes = new Set(discoveredActivityTypes.map(resolveModelActivityType));
     const sourceEventCount = new Set(
         candidates
-            .filter(candidate => discoveredActivityTypes.includes(candidate.activityType))
+            .filter(candidate => discoveredModelActivityTypes.has(candidate.modelActivityType))
             .map(candidate => candidate.eventId)
             .filter(Boolean),
     ).size;
@@ -2270,7 +2316,7 @@ export function buildTrainingPowerSystemsMetricPayload(
         payload: {
             dayBoundary: 'UTC',
             asOfDayMs,
-            policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+            policyVersion,
             windowDays: DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
             historyDays: DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
             cadence: 'workout-date',
@@ -2584,10 +2630,7 @@ function buildTrainingExplanationSportLoads(
 function resolveTrainingExplanationActivityLoad(
     activity: DerivedTrainingActivitySource,
 ): number | null {
-    const sportContext = resolveTrainingSportContextFromActivityType(activity.activityData.type);
-    return sportContext?.loadPolicy === 'volume-only'
-        ? null
-        : resolveTrainingStressScore(activity.activityData);
+    return resolveTrainingStressScore(activity.activityData);
 }
 
 function buildTrainingExplanationWindow(
@@ -2784,6 +2827,10 @@ interface ParsedDurabilityEvidence {
 function resolveTrainingDurabilityScope(
     activity: DerivedTrainingActivitySource,
 ): DerivedTrainingDurabilityScope | null {
+    const durabilityPolicy = resolveTrainingSportContextFromActivityType(activity.activityData.type)?.durabilityPolicy;
+    if (!durabilityPolicy || durabilityPolicy === 'omit') {
+        return null;
+    }
     if (activity.discipline === 'running' || activity.discipline === 'cycling') {
         return activity.discipline;
     }
@@ -2840,7 +2887,7 @@ function parsePersistedDurabilityEvidence(
     }
     const sportContext = resolveTrainingSportContextFromActivityType(activity.activityData.type);
     if (
-        (sportContext?.profile === 'gravity' || sportContext?.profile === 'mixed-gravity')
+        sportContext?.durabilityPolicy === 'unsupported-context'
         && (raw.eligibility.eligible || raw.eligibility.reason !== 'unsupported-context')
     ) {
         // Sports Lib previously applied the steady cycling adapter to every MTB
@@ -3282,9 +3329,7 @@ function addTrainingBuildEventToWindow(
         accumulator.distanceEventCount += 1;
     }
 
-    const trainingStressScore = sportContext?.loadPolicy === 'recorded'
-        ? resolveTrainingStressScore(eventData)
-        : null;
+    const trainingStressScore = resolveTrainingStressScore(eventData);
     if (trainingStressScore !== null && trainingStressScore >= 0) {
         accumulator.trainingStressScore += trainingStressScore;
         accumulator.trainingStressScoreEventCount += 1;
@@ -3422,12 +3467,7 @@ function buildTrainingBuildEventSuggestion(
             ? toFiniteNumber(resolveRawStatNumericValue(item.activityData, DataDistance.type))
             : null);
     }));
-    const trainingStressScore = sumOptional(events.map((item) => {
-        const sportContext = resolveTrainingSportContextFromActivityType(item.activityData.type);
-        return sportContext?.loadPolicy === 'recorded'
-            ? resolveTrainingStressScore(item.activityData)
-            : null;
-    }));
+    const trainingStressScore = sumOptional(events.map(item => resolveTrainingStressScore(item.activityData)));
     const durationSeconds = sumOptional(events.map(item => resolveTrainingBuildActivityDurationSeconds(item.activityData)));
     return {
         eventId: event.eventId,
@@ -6670,7 +6710,7 @@ export async function writeDerivedMetricSnapshotsReady(
         const persistedSourceDocCount = isBuildComparison && workoutSeed
             ? workoutSeed.metadata.formSourceDocCount + workoutSeed.metadata.activitySourceDocCount + 1 + trainingBuildSleepSourceDocCount
             : sourceDocCount;
-        writes.push({ metricKind, data: {
+        const snapshotData: Record<string, unknown> = {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
@@ -6682,7 +6722,15 @@ export async function writeDerivedMetricSnapshotsReady(
             payload: buildResult.payload,
             lastError: null,
             ...(isBuildComparison ? { workoutInputsReuse } : {}),
-        } });
+            ...(metricKind === DERIVED_METRIC_KINDS.TrainingPowerSystems ? {
+                legacyPowerSystemsPolicy1: buildLegacyTrainingPowerSystemsMetricPayload(buildContext.trainingActivities, nowMs).payload,
+            } : {}),
+        };
+        if (metricKind === DERIVED_METRIC_KINDS.TrainingPowerSystems
+            && Buffer.byteLength(JSON.stringify(snapshotData), 'utf8') > DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES) {
+            throw new Error('Power-system snapshot exceeds its fixed storage bound.');
+        }
+        writes.push({ metricKind, data: snapshotData });
     };
 
     metricKinds.forEach((metricKind) => {

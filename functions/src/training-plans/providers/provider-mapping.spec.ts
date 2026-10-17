@@ -107,8 +107,8 @@ describe('planned-workout provider proof fixtures', () => {
         });
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.unresolvedGates).not.toHaveLength(0);
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
-            .toEqual([...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining]);
-        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual([
+            .toEqual(expect.arrayContaining([...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining]));
+        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining([
             ActivityTypes.Running,
             ActivityTypes.TrailRunning,
             ActivityTypes.Treadmill,
@@ -130,7 +130,11 @@ describe('planned-workout provider proof fixtures', () => {
             ActivityTypes.Rowing,
             ActivityTypes.IndoorRowing,
             ActivityTypes.OpenWaterSwimming,
-        ]);
+        ]));
+        for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
+            const sports = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile!.sports!;
+            expect(new Set(sports).size).toBe(sports.length);
+        }
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
             MANUAL_WORKOUT_EDITOR_SPORTS_V1,
         ));

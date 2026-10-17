@@ -825,7 +825,6 @@ export class DashboardTileConfiguration {
   }
 
   onCustomEventActivityTypesChange(activityTypes: ActivityTypes[]): void {
-    this.hapticsService.selection();
     this.customEventActivityTypes = activityTypes || [];
   }
 
@@ -843,7 +842,6 @@ export class DashboardTileConfiguration {
   }
 
   onMapEventActivityTypesChange(activityTypes: ActivityTypes[]): void {
-    this.hapticsService.selection();
     this.mapEventActivityTypes = activityTypes || [];
   }
 

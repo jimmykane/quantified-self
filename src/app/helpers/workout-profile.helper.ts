@@ -7,6 +7,7 @@ import {
   isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1,
   type WorkoutStructureV1,
   type WorkoutStepV1,
   type WorkoutTargetV1,
@@ -27,6 +28,8 @@ export function workoutProfileMetricLabels(sport?: ActivityTypes): Record<Workou
 export function workoutProfileMetricOrder(sport?: ActivityTypes): readonly WorkoutProfileMetric[] {
   return (MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)
     ? ['power', 'speed', 'heart-rate', 'cadence', 'pace']
+    : (MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)
+      ? ['power', 'pace', 'heart-rate', 'cadence', 'speed']
     : isRowingWorkoutSportV1(sport) ? ['pace', 'power', 'heart-rate', 'speed', 'cadence']
       : ['pace', 'heart-rate', 'power', 'cadence', 'speed'];
 }
