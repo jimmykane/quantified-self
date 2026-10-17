@@ -6291,6 +6291,8 @@ variant shows one compact three-column number strip: **TSS**, **Workout CTL**, a
 Workout CTL is this workout's contribution; Day CTL is the whole-day net change after all training and normal load decay.
 The two must never be substituted for one another. Canonical Sports Lib TSS display uses one decimal through the shared
 unit-aware formatter; CTL retains locale-aware two-decimal display with signed-zero and sub-display-precision normalization.
+The heading is a small inline divider label without a leading icon; its adjacent info glyph is 14px in a 24px
+visual button while retaining Material's expanded touch target. The heading row no longer reserves a 44px button row.
 The three columns remain side by side on phones and desktop, without nested cards, per-stat borders, subtitles or a
 second visible Day-result row. Full descriptive accessible names distinguish each value. The expanded calculation
 retains all four workout contribution values, including Fatigue (ATL) and Form, plus the plain-language **Day result**

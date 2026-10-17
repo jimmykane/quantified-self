@@ -118,7 +118,20 @@
 
   header {
     align-items: center;
+    min-height: 24px;
+    gap: 4px;
   }
+
+  h3 {
+    font-size: .625rem;
+    line-height: 1.2;
+    font-weight: 400;
+  }
+}
+
+.training-impact-heading-divider {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .training-impact-result-line span,
@@ -174,12 +187,20 @@
 
 .training-impact-calculation-info {
   flex: 0 0 auto;
-  margin-inline-start: auto;
-  width: 44px;
-  height: 44px;
-  --mat-icon-button-state-layer-size: 44px;
-  --mat-icon-button-icon-size: 20px;
+  width: 24px;
+  height: 24px;
+  padding: 5px;
+  // Keep Material's expanded touch target; only the visible button occupies this compact row.
+  --mat-icon-button-state-layer-size: 24px;
+  --mat-icon-button-icon-size: 14px;
   --mat-icon-button-icon-color: var(--mat-sys-on-surface-variant);
+}
+
+.training-impact-calculation-info mat-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
 }
 
 .training-impact-calculation {
