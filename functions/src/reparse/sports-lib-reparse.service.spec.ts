@@ -10,6 +10,7 @@ vi.mock('../training-load/training-load-source-write', () => ({
 }));
 import { createHash } from 'node:crypto';
 import { FitEncoder, FitBaseType } from 'fit-file-parser/encoder';
+import { DataDistance, DataDuration } from '@sports-alliance/sports-lib';
 import { sourceReferenceFingerprint } from './non-activity-sources';
 import { gzipSync } from 'node:zlib';
 import {
@@ -838,6 +839,57 @@ describe('sports-lib-reparse.service', () => {
         expect(firstKeys.get('Ride|2026-01-01T12:00:00.000Z')).toMatch(/^[a-f0-9]{64}:/);
     });
 
+    it('disambiguates equal summaries from distinct files without depending on upload order', async () => {
+        const makeActivity = (values: number[]) => ({
+            getID: () => null, setID: vi.fn(), creator: { name: 'same-device' }, type: 'Cycling',
+            startDate: new Date('2026-10-01T10:00:00Z'), endDate: new Date('2026-10-01T10:30:00Z'),
+            getStat: (type: string) => type === DataDuration.type ? { getValue: () => 1800 }
+                : type === DataDistance.type ? { getValue: () => 10000 } : null,
+            getAllStreams: () => [{ type: 'HeartRate' }], getStreamData: () => values,
+        });
+        const parse = async (reverse: boolean) => {
+            const a = makeActivity([100, 110, 120]);
+            const b = makeActivity([110, 100, 120]);
+            const activities = reverse ? [b, a] : [a, b];
+            const bytes = reverse ? ['source-B', 'source-A'] : ['source-A', 'source-B'];
+            for (let index = 0; index < activities.length; index++) {
+                hoisted.mockDownload.mockResolvedValueOnce([Buffer.from(bytes[index])]);
+                hoisted.fitImporter.getFromArrayBuffer.mockResolvedValueOnce(makeEvent({ getActivities: () => [activities[index]] }));
+            }
+            hoisted.mergeEvents.mockReturnValueOnce(makeEvent({ getActivities: () => activities }));
+            const parsed = await parseFromOriginalFilesStrict([{ path: 'one.fit' }, { path: 'two.fit' }]);
+            await assignReimportActivityIds(parsed.finalEvent, 'comparison', { combinedSourceContentHash: parsed.combinedSourceContentHash });
+            return [a, b].map(activity => (activity as any).sourceActivityKey);
+        };
+        const forward = await parse(false);
+        expect(forward).toEqual(await parse(true));
+        expect(forward[0]).not.toBe(forward[1]);
+        expect(forward[0].split(':')[0]).toBe(createHash('sha256').update('source-A').digest('hex'));
+        expect(forward[1].split(':')[0]).toBe(createHash('sha256').update('source-B').digest('hex'));
+    });
+
+    it('preserves live comparison reports through the transactional event rewrite', async () => {
+        const old = { startDate: new Date('2026-10-01T10:00:00Z'), endDate: new Date('2026-10-01T10:30:00Z'),
+            type: 'Running', stats: { [DataDuration.type]: { _value: 1800 }, [DataDistance.type]: { _value: 5000 } } };
+        const parsedActivity = { ...old, getID: () => 'new-ref',
+            getStat: (type: string) => type === DataDuration.type ? { getValue: () => 1800 } : type === DataDistance.type ? { getValue: () => 5000 } : null };
+        const parsed = makeEvent({ getActivities: () => [parsedActivity] });
+        const liveReport = { referenceId: 'old-ref', testId: 'unknown-test', timestamp: new Date(0), metrics: { gnss: null, streamMetrics: {} } };
+        const set = vi.fn().mockResolvedValue(undefined);
+        const live = { comparisonTitle: 'Latest title', benchmarkResults: { original: liveReport }, hasBenchmark: true,
+            benchmarkStatus: 'draft', toolSource: 'tools/compare', sourceFilesCount: 2, tags: ['review'] };
+        hoisted.mockDoc.mockImplementation(() => ({ get: vi.fn().mockResolvedValue({ exists: true, data: () => live }), set }));
+        await persistReparsedEvent('u1', 'e1', parsed, { comparisonTitle: 'Outdated title' }, [{ id: 'old-ref', data: () => old }] as any, TARGET_SPORTS_LIB_VERSION);
+        const adapter = hoisted.eventWriterCtorArgs[0].adapter;
+        await adapter.setDoc(['users', 'u1', 'events', 'e1'], { name: 'Parsed event', activities: [], nested: { streams: [] } });
+        const payload = set.mock.calls.at(-1)![0];
+        expect(payload.comparisonTitle).toBe('Latest title');
+        expect(payload.tags).toEqual(['review']);
+        expect(payload.benchmarkResults.original).toEqual({ ...liveReport, requiresRegeneration: true, activityLinksResolved: false });
+        expect(payload).not.toHaveProperty('activities');
+        expect(payload.nested).not.toHaveProperty('streams');
+    });
+
     it('parseFromOriginalFilesStrict should leave keys unset for unresolved indistinguishable duplicates', async () => {
         const buildDuplicateActivity = () => ({
             setID: vi.fn(),
@@ -1027,6 +1079,46 @@ describe('sports-lib-reparse.service', () => {
         expect(result.assignments.size).toBe(2);
         expect(activityOne.creator.name).toBe('old1');
         expect(activityTwo.creator.name).toBe('old2');
+    });
+
+    it.each([true, false])('carries edits across renamed multisport legs only with matching source hashes (%s)', async (sameSource) => {
+        const makeActivity = (type: string, startMs: number, name: string) => ({
+            sourceActivityKey: undefined as string | undefined,
+            creator: { name },
+            startDate: new Date(startMs),
+            endDate: new Date(startMs + 1_800_000),
+            type,
+            getStat: (statType: string) => statType === DataDuration.type
+                ? { getValue: () => 1800 }
+                : statType === DataDistance.type ? { getValue: () => 5000 } : null,
+        });
+        const startMs = Date.parse('2026-07-01T08:00:00.000Z');
+        const oldActivities = [
+            makeActivity('Hiking', startMs, 'saved-first'),
+            makeActivity('Backcountry Skiing', startMs + 3_600_000, 'saved-second'),
+        ];
+        const parsedActivities = [
+            makeActivity('Ski Touring', startMs + 3_600_000, 'parsed-second'),
+            makeActivity('Trekking', startMs, 'parsed-first'),
+        ];
+        const parsedEvent = { getActivities: () => parsedActivities } as any;
+        await assignReimportActivityIds({ getActivities: () => oldActivities } as any, 'event', {
+            combinedSourceContentHash: 'a'.repeat(64),
+        });
+        await assignReimportActivityIds(parsedEvent, 'event', {
+            combinedSourceContentHash: (sameSource ? 'a' : 'd').repeat(64),
+        });
+        expect(oldActivities[0].sourceActivityKey).not.toBe(parsedActivities[1].sourceActivityKey);
+        expect(oldActivities[1].sourceActivityKey).not.toBe(parsedActivities[0].sourceActivityKey);
+        const parsedKeys = parsedActivities.map(activity => activity.sourceActivityKey);
+        const result = resolveActivityEditCarryover(parsedEvent, oldActivities.map((activity, index) => ({
+            id: `old-${index}`,
+            data: () => ({ ...activity, stats: { [DataDuration.type]: 1800, [DataDistance.type]: 5000 } }),
+        })) as any);
+        expect([...result.assignments].sort()).toEqual(sameSource ? [[0, 1], [1, 0]] : []);
+        expect(parsedActivities.map(activity => activity.creator.name)).toEqual(sameSource
+            ? ['saved-second', 'saved-first'] : ['parsed-second', 'parsed-first']);
+        expect(parsedActivities.map(activity => activity.sourceActivityKey)).toEqual(parsedKeys);
     });
 
     it.each(['Unknown', 'Unknown Device', ' UNKNOWN   DEVICE '])(
@@ -1650,7 +1742,7 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
         expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/u1/events/e1' }),
-            { probe: true },
+            { probe: true, benchmarkSourceRevision: 1 },
             undefined,
         );
     });
@@ -1714,6 +1806,7 @@ describe('sports-lib-reparse.service', () => {
                 tags: ['Latest'],
                 stats: { 'Recovery Time': 46_140 },
                 diagnostics: { keep: true },
+                benchmarkSourceRevision: 1,
             },
             undefined,
         );

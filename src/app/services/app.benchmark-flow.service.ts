@@ -1,16 +1,23 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityInterface, User } from '@sports-alliance/sports-lib';
-import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
-import { BENCHMARK_NO_OVERLAP_MESSAGE, BenchmarkNoOverlapError, AppBenchmarkService } from './app.benchmark.service';
+import { AppEventInterface, BenchmarkOptions, BenchmarkResult, BenchmarkSourceChangedError, getBenchmarkPairKey } from '@shared/app-event.interface';
+import { BENCHMARK_NO_OVERLAP_MESSAGE, BenchmarkNoOverlapError, BenchmarkNoSharedDataError, AppBenchmarkService } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
 import { AppAnalyticsService } from './app.analytics.service';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, take } from 'rxjs';
 import { AppUserUtilities } from '../utils/app.user.utilities';
+import { AppHapticsService } from './app.haptics.service';
+
+class BenchmarkStreamsUnavailableError extends Error {
+  constructor() {
+    super('Could not load the selected recordings. Reload them and try again.');
+  }
+}
 
 interface BenchmarkFlowConfig {
   event: AppEventInterface;
@@ -27,12 +34,13 @@ interface BenchmarkFlowConfig {
   allowRerun?: boolean;
 }
 
-export type BenchmarkGenerationFailureReason = 'no_overlap' | 'unknown';
+export type BenchmarkGenerationFailureReason = 'no_overlap' | 'streams_unavailable' | 'no_shared_data' | 'unknown';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AppBenchmarkFlowService {
+  private readonly haptics = inject(AppHapticsService);
   constructor(
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
@@ -199,6 +207,7 @@ export class AppBenchmarkFlowService {
 
     try {
       const generationConfig = await this.resolveBenchmarkGenerationConfig(config);
+      const expectedSourceRevision = generationConfig.event.benchmarkSourceRevision ?? 0;
       this.analyticsService.logEvent('benchmark_generate_start');
       const benchmarkResult = await this.benchmarkService.generateBenchmark(
         generationConfig.ref,
@@ -213,34 +222,17 @@ export class AppBenchmarkFlowService {
       const key = getBenchmarkPairKey(referenceID, testID);
 
       const persistEvent = generationConfig.persistEvent ?? generationConfig.event;
-      if (!persistEvent.benchmarkResults) persistEvent.benchmarkResults = {};
-      persistEvent.benchmarkResults[key] = benchmarkResult;
-
-      if (persistEvent !== generationConfig.event) {
-        if (!generationConfig.event.benchmarkResults) generationConfig.event.benchmarkResults = {};
-        generationConfig.event.benchmarkResults[key] = benchmarkResult;
-      }
-
-      const benchmarkDevices = this.buildBenchmarkDevices(persistEvent);
+      const benchmarkResults = { ...(persistEvent.benchmarkResults || {}), [key]: benchmarkResult };
+      const benchmarkDevices = this.buildBenchmarkDevices(benchmarkResults);
       const benchmarkLatestAt = benchmarkResult.timestamp;
-      persistEvent.hasBenchmark = true;
-      persistEvent.benchmarkDevices = benchmarkDevices;
-      persistEvent.benchmarkLatestAt = benchmarkLatestAt;
-      if (persistEvent !== generationConfig.event) {
-        generationConfig.event.hasBenchmark = true;
-        generationConfig.event.benchmarkDevices = benchmarkDevices;
-        generationConfig.event.benchmarkLatestAt = benchmarkLatestAt;
-      }
-
+      let resultPatch = { benchmarkResults, hasBenchmark: true, benchmarkDevices, benchmarkLatestAt };
       const persistEventID = persistEvent.getID();
       if (generationConfig.user && persistEventID) {
-        await this.eventService.updateEventProperties(generationConfig.user, persistEventID, {
-          benchmarkResults: persistEvent.benchmarkResults,
-          hasBenchmark: true,
-          benchmarkDevices,
-          benchmarkLatestAt
-        });
+        resultPatch = await this.eventService.saveBenchmarkResult(generationConfig.user, persistEventID, benchmarkResult,
+          expectedSourceRevision);
       }
+      Object.assign(persistEvent, resultPatch);
+      Object.assign(generationConfig.event, resultPatch);
 
       this.analyticsService.logEvent('benchmark_generate_success');
       generationConfig.onResult?.(benchmarkResult);
@@ -249,6 +241,19 @@ export class AppBenchmarkFlowService {
       generationSucceeded = true;
     } catch (error) {
       this.analyticsService.logEvent('benchmark_generate_failure');
+      if (error instanceof BenchmarkStreamsUnavailableError || error instanceof BenchmarkSourceChangedError) {
+        failureReason = 'streams_unavailable';
+        this.snackBar.open(error.message, 'Retry')?.onAction().pipe(take(1)).subscribe(() => {
+          this.haptics.selection();
+          void this.reloadBenchmarkSelection(config);
+        });
+        return;
+      }
+      if (error instanceof BenchmarkNoSharedDataError) {
+        failureReason = 'no_shared_data';
+        this.snackBar.open(error.message, 'Close');
+        return;
+      }
       if (error instanceof BenchmarkNoOverlapError) {
         failureReason = 'no_overlap';
         this.snackBar.open(BENCHMARK_NO_OVERLAP_MESSAGE, 'Close');
@@ -281,7 +286,7 @@ export class AppBenchmarkFlowService {
     const referenceID = config.ref.getID();
     const testID = config.test.getID();
     if (!config.user || !eventID || !referenceID || !testID) {
-      return config;
+      throw new BenchmarkStreamsUnavailableError();
     }
 
     try {
@@ -291,7 +296,7 @@ export class AppBenchmarkFlowService {
       const hydratedTest = activities.find(activity => activity.getID() === testID);
 
       if (!fullEvent || !hydratedReference || !hydratedTest) {
-        return config;
+        throw new BenchmarkStreamsUnavailableError();
       }
 
       return {
@@ -303,7 +308,20 @@ export class AppBenchmarkFlowService {
       };
     } catch (error) {
       this.logger.error('Failed to load all streams for benchmark generation', error);
-      return config;
+      throw new BenchmarkStreamsUnavailableError();
+    }
+  }
+
+  private async reloadBenchmarkSelection(config: BenchmarkFlowConfig): Promise<void> {
+    try {
+      const eventID = config.event.getID?.();
+      if (!config.user || !eventID) throw new BenchmarkStreamsUnavailableError();
+      const event = await firstValueFrom(this.eventService.getEventAndActivities(config.user, eventID));
+      if (!event) throw new BenchmarkStreamsUnavailableError();
+      await this.openBenchmarkSelectionDialog({ ...config, event, persistEvent: event, initialSelection: undefined });
+    } catch (error) {
+      this.logger.error('Failed to reload benchmark selection', error);
+      this.snackBar.open('Could not reload recordings. Open the comparison and try again.', 'Close');
     }
   }
 
@@ -347,10 +365,10 @@ export class AppBenchmarkFlowService {
     }
   }
 
-  private buildBenchmarkDevices(event: AppEventInterface): string[] {
+  private buildBenchmarkDevices(results: Record<string, BenchmarkResult>): string[] {
     const devices = new Set<string>();
-    if (event.benchmarkResults) {
-      Object.values(event.benchmarkResults).forEach(result => {
+    if (results) {
+      Object.values(results).forEach(result => {
         const names = [result.referenceName, result.testName];
         names.forEach(name => {
           const normalized = this.normalizeBenchmarkDevice(name);

@@ -1,3 +1,5 @@
+import { APPROVED_REMAINING_SPORT_CASES, APPROVED_OTHER_TRAINING_NAMES } from '@shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { searchHelpSections } from '../helpers/help-search.helper';
@@ -231,6 +233,109 @@ describe('help.content', () => {
     expect(copy).toContain('never loads your account data or saves changes');
     expect(copy).not.toContain('/demo');
   });
+  it('explains separate destination profiles while retaining recorded and route sport names', () => {
+    const uploads = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    const services = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(uploads).toContain('BMX and LES MILLS RPM / SPRINT / THE TRIP use Garmin Road Cycling, COROS Bike, and Wahoo Cycling');
+    expect(uploads).toContain('Vertical Running uses Garmin Trail Running');
+    expect(uploads).toContain('Your saved route keeps its original sport name');
+    expect(uploads).toContain('Garmin uses Hiking for Mountaineering');
+    expect(uploads).toContain('Wahoo uses Other for Offroad Triathlon and Offroad Duathlon');
+    expect(services).toContain('Road Cycling and BMX use Cycling');
+    expect(services).toContain('AMRAP, EMOM and Tabata use Cardio Class');
+    expect(services).toContain('Brick Training, Pool Triathlon, Offroad Triathlon and Offroad Duathlon use Multisport');
+    expect(services).toContain('Your QS activity keeps its original sport name');
+    expect(services).toContain('separate from route profiles and planned workouts');
+  });
+
+  it('explains refined endurance contexts and unsplit combined-sport load', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Classic Roller Skiing and Skate Roller Skiing use **Nordic Skiing → Roller skiing**');
+    expect(training).toContain('Virtual Rowing uses **Rowing → Indoor rowing**');
+    expect(training).toContain('Whitewater Kayaking uses **Paddling → Kayaking**');
+    expect(training).toContain('An unsplit combined recording keeps its saved event TSS in global load');
+    expect(training).toContain('contributes no standalone sport workout');
+    expect(training).toContain('QS does not invent legs from the sport name');
+  });
+
+  it('explains recorded endurance, aquatic and wheelchair Training classifications', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Rucking uses **Walking & Hiking → Rucking**');
+    expect(training).toContain('Orienteering uses **Running → Orienteering**');
+    expect(training).toContain('Ski Orienteering and Biathlon have their own rows within **Nordic Skiing**');
+    expect(training).toContain('Fitness Racing and Aqua Fitness use **Fitness & Gym → Conditioning**');
+    expect(training).toContain('**Fitness & Gym → Water Running** row with duration and recorded intensity zones');
+    expect(training).toContain('**Wheelchair Training** supports Training Mix, Best build and Power systems');
+    expect(training).toContain('Walk/Run describes pushing speed');
+    expect(training).toContain('every exact sport retains its separate power history');
+    expect(training).toContain('twenty-three benchmark families');
+    expect(training).toContain('**Wheelchair Training** appears when wheelchair workouts exist');
+  });
+
+  it('explains the final 46 approved classifications and their saved-load analysis', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    [...APPROVED_REMAINING_SPORT_CASES.map(item => item.name), ...APPROVED_OTHER_TRAINING_NAMES]
+      .forEach(name => expect(training).toContain(name));
+    ['**Performance Sports**', '**Outdoor Adventures**', '**Aerial Sports**', '**Motorized Activities**',
+      'All 37 newly classified sports', 'saved TSS, including zero', 'zones, distance and durability are omitted',
+      'twenty-three benchmark families', 'Training Mix-only capability', 'Planned-workout and provider-delivery mappings stay as previously tested']
+      .forEach(phrase => expect(training).toContain(phrase));
+    expect(training).not.toContain('such as surfing or sailing, remain visible');
+  });
+
+  it('explains all 50 approved sport names and the recorded-only analysis policies', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    for (const name of [
+      'Snowshoeing',
+      'Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing', 'Via Ferrata',
+      'Mountaineering',
+      'Ski Touring', 'Ski Mountaineering', 'Backcountry Skiing', 'Backcountry Snowboarding', 'Splitboarding',
+      'Alpine Skiing', 'Snowboarding', 'Telemark Skiing',
+      'Inline Skating',
+      'Skating', 'Ice Skating', 'Skateboarding',
+      'Boxing', 'Combat', 'Judo', 'Kickboxing', 'Mixed Martial Arts', 'Taekwondo',
+      'Ballet Dancing', 'Ballroom Dancing', 'Dancing', 'Jazz Dancing', 'Latin Dancing', 'Modern Dancing', 'Show Dancing', 'Street Dancing',
+      'Basketball', 'Wheelchair Basketball', 'Football', 'Soccer', 'Volleyball', 'Beach Volleyball',
+      'Badminton', 'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport', 'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis',
+
+    ]) expect(training).toContain(name);
+    expect(training).toContain('**Walking & Hiking → Snowshoeing**');
+    expect(training).toContain('The eight zone-enabled additions use power first, then heart rate');
+    expect(training).toContain('All 50 newly classified sports omit durability analysis');
+    expect(training).toContain('including zero');
+    expect(training).toContain('Zones cover the whole recording');
+    expect(training).toContain('existing planned-workout and provider-delivery mappings');
+    expect(training).toContain('twenty-three benchmark families');
+  });
+
+  it('explains all 50 water, team, precision and diving classifications and their approved analysis', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    APPROVED_WATER_TEAM_SPORT_CASES.forEach(item => expect(training).toContain(item.name));
+    ['**Precision Sports**', '**Water Sports**', '**Diving**', 'recording elapsed time and saved TSS',
+      'Their recorded zones use power first, then heart rate', 'stroke metrics when present',
+      'All 50 additional classifications keep their original names', 'including zero, and omit durability analysis',
+      'Planned-workout and provider-delivery mappings stay as previously tested', 'twenty-three benchmark families']
+      .forEach(phrase => expect(training).toContain(phrase));
+  });
+
+  it('explains stair climbing classification and its recorded evidence', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Floor Climbing uses **Fitness & Gym → Stair Climbing**');
+    expect(training).toContain('recorded duration and ascent when available');
+    expect(training).toContain('Its intensity uses recorded power zones first, then heart-rate zones');
+    expect(training).toContain('Saved TSS stays preserved, including zero, and durability analysis is omitted');
+  });
+
+  it('explains the approved strength, conditioning, mobility and equipment memberships', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Calisthenics, Core Training, LES MILLS CORE and LES MILLS GRIT Strength use **Strength**');
+    expect(training).toContain('**Fitness & Gym → Conditioning** includes Bootcamp, Functional Training');
+    expect(training).toContain('**Fitness & Gym → Mobility & movement** includes Barre, Mobility, Dynamic Mobility, Static Mobility');
+    expect(training).toContain('**Fitness & Gym → General fitness** includes Indoor Skiing, Indoor Grinding and Trucker Workout');
+    expect(training).toContain('These groups summarize recorded duration, session counts and saved TSS');
+    expect(training).toContain('Your activities keep their original sport names');
+  });
+
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');
@@ -1381,7 +1486,11 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('unmatched types appear under **Other power activities**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
     expect(trainingSection?.content).toContain('hand cycle, velomobile');
-    expect(trainingSection?.content).toContain('does not invent downhill runs or uplift/lift segments');
+    expect(trainingSection?.content).toContain('Durations for downhill runs and uplift/lift segments need recorded evidence');
+    expect(trainingSection?.content).toContain('Every Training group counts an activity\'s saved TSS when present, including zero');
+    expect(trainingSection?.content).toContain('Cycling and Road Cycling share a rolling capacity history');
+    expect(trainingSection?.content).toContain('Running and Road Running share another');
+    expect(trainingSection?.content).toContain('Every other sport keeps its own history');
     expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
     expect(trainingSection?.content).toContain('gravity MTB jump count and longest jump');
     expect(trainingSection?.content).toContain('Rowing does not have a durability adapter');
@@ -2389,6 +2498,8 @@ it('explains separately approved activity description access and event semantics
   expect(content).toContain('without truncation');
 
 
+
+
 });
 
   it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
@@ -2421,4 +2532,11 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('cleanup resumes automatically after partial failures');
   expect(content).toContain('Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent');
   expect(content).toContain('unknown acceptance never triggers an automatic replacement upload');
+});
+
+it('explains explicit family shortcuts and the climbing default display rule', () => {
+  const section = HELP_SECTIONS.find(section => section.id === 'supported-activities');
+  for (const phrase of ['**All Running / Trail**', '**All Cycling / MTB**', '**All Walking / Hiking**', 'Existing saved individual selections stay exact', 'partial check', 'full stats, exports, and explicitly selected metrics', 'unconfigured lap columns', 'saved lap columns', 'Floor Climbing']) {
+    expect(section?.content).toContain(phrase);
+  }
 });

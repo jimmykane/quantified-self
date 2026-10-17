@@ -1,4 +1,5 @@
 import { ActivityTypes, DateRanges, DaysOfTheWeek, EventInterface } from '@sports-alliance/sports-lib';
+import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import {
   AppDashboardEventTableFiltersInterface,
   AppDashboardTileEventFilterRange,
@@ -44,11 +45,6 @@ const VALID_TILE_EVENT_RANGES = new Set<AppDashboardTileEventFilterRange>(
 );
 const VALID_EVENT_TABLE_DATE_RANGES = new Set<number>(
   Object.values(DateRanges).filter((value): value is number => typeof value === 'number'),
-);
-const VALID_ACTIVITY_TYPES = new Set<string>(
-  Object.values(ActivityTypes)
-    .filter(value => typeof value === 'string')
-    .map(value => `${value}`),
 );
 
 export function normalizeDashboardTileEventFilterRange(
@@ -229,8 +225,8 @@ export function normalizeActivityTypes(
   const values = Array.isArray(activityTypes) ? activityTypes : fallback;
   return values
     .map(activityType => normalizeActivityType(activityType))
-    .filter((activityType, index, normalized) => (
-      VALID_ACTIVITY_TYPES.has(`${activityType}`)
+    .filter((activityType, index, normalized): activityType is ActivityTypes => (
+      activityType !== null
       && normalized.indexOf(activityType) === index
     ));
 }
@@ -280,10 +276,10 @@ function finiteNumberOrNull(value: unknown, fallback: number | null): number | n
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function normalizeActivityType(value: unknown): ActivityTypes {
+function normalizeActivityType(value: unknown): ActivityTypes | null {
   const keyMappedValue = ActivityTypes[value as keyof typeof ActivityTypes];
   const candidate = typeof keyMappedValue === 'string' ? keyMappedValue : value;
-  return candidate as ActivityTypes;
+  return resolveCompatibleActivityType(candidate);
 }
 
 function resolveDateMs(value: unknown): number | null {

@@ -1,4 +1,5 @@
 import { ActivityTypes, DataDuration, DataWeight, type WeightUnits } from '@sports-alliance/sports-lib';
+import { plannedWorkoutSportAliasV1 } from '../../../../shared/planned-workout-sport-aliases';
 import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 import { suuntoGuideWatchTextV1 as watchText, suuntoGuideLiveReadingsV1 as sportLiveFields,
     suuntoGuideMeasuredTargetV1 as measuredTarget, suuntoGuideOptionalReadingsV1, suuntoGuidePoolScreenReadingsV1, suuntoGuideSwimScreenReadingsV1, isSuuntoGuideManualLapAverageV1,
@@ -128,7 +129,7 @@ const SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT: ReadonlyMap<
 export function suuntoGuideActivityIdsForSport(
     sport: ActivityTypes,
 ): SuuntoGuideActivityIdV1[] {
-    const activities = SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT.get(sport);
+    const activities = SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT.get(plannedWorkoutSportAliasV1('suunto', sport));
     if (!activities) throw new Error(`Unsupported Suunto Guide sport: ${sport}.`);
     return [...activities];
 }
@@ -738,7 +739,7 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
         usage: 'workout',
         localDate,
         externalId,
-        steps: structureToSteps(structure, presentation),
+        steps: structureToSteps({ ...structure, sport: plannedWorkoutSportAliasV1('suunto', structure.sport) }, presentation),
     };
 
     return { ...resolved, artifact };

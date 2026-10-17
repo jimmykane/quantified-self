@@ -1,4 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { plannedWorkoutAliasedSportsV1, plannedWorkoutSportAliasV1 } from './planned-workout-sport-aliases';
 import { assessCorosStrengthWorkoutV1 } from './coros-strength-workout';
 import { assessGarminStrengthWorkoutV1 } from './garmin-strength-workout';
 import { assessWahooStrengthWorkoutV1 } from './wahoo-strength-workout';
@@ -46,8 +47,8 @@ export interface PlannedWorkoutProviderCapabilityV1 {
 
 export type PlannedWorkoutProviderMappingLevel = 'exact' | 'degraded' | 'unsupported';
 
-/** Suunto Guide sport support proved against the provider activity catalog. */
-export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
+/** Existing Suunto Guide profiles plus explicitly approved aliases into them. */
+export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Running,
   ActivityTypes.TrailRunning,
   ActivityTypes.Treadmill,
@@ -63,7 +64,8 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Rowing,
   ActivityTypes.IndoorRowing,
   ActivityTypes.StrengthTraining,
-] as const;
+  ...plannedWorkoutAliasedSportsV1('suunto'),
+])] as const;
 
 /**
  * Garmin Training API V2 accepts broad running/cycling and exact lap swimming.
@@ -98,13 +100,14 @@ export const GARMIN_GENERIC_WORKOUT_SPORTS_V1 = [
   ActivityTypes.OpenWaterSwimming,
 ] as const;
 
-export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
+export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
   ActivityTypes.StrengthTraining,
   ...GARMIN_GENERIC_WORKOUT_SPORTS_V1,
-] as const;
+  ...plannedWorkoutAliasedSportsV1('garmin'),
+])] as const;
 
 export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Running,
@@ -131,18 +134,20 @@ export const COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 = [
   ActivityTypes.DownhillCycling,
 ] as const;
 
-export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
+export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ...COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1,
   ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
   ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
   ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
   ActivityTypes.StrengthTraining,
-] as const;
+  ...plannedWorkoutAliasedSportsV1('coros'),
+])] as const;
 
 export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
 
 export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSportFamilyV1 | null {
+  sport = plannedWorkoutSportAliasV1('coros', sport);
   if (([...COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1] as readonly ActivityTypes[])
     .includes(sport)) return 'RUNNING';
   if (([...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1] as readonly ActivityTypes[])
@@ -153,6 +158,7 @@ export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSpo
 export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING' | 'GENERIC';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
+  sport = plannedWorkoutSportAliasV1('garmin', sport);
   if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
   if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
   if (sport === ActivityTypes.Swimming) return 'LAP_SWIMMING';
@@ -282,7 +288,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     },
     scheduling: 'Create an app-owned Plan record, then attach it to a dated Workout record.',
     limits: [
-      'The public plan.json schema is version 1.0.0 and documents running/cycling. All 21 mapped sport profiles have account-tested acceptance and owner-confirmed native profile/timed playback; other devices and intensity/distance support are not established by those tests.',
+      'The public plan.json schema is version 1.0.0 and documents running/cycling. The 21 base sport profiles have account-tested acceptance and owner-confirmed native profile/timed playback. Additional QS names reuse those profiles with mapping review; other devices and intensity/distance support are not established by those tests.',
       'Walking/Hiking and pool/open-water swimming and outdoor/indoor rowing support only time-based steps without intensity targets. Wahoo has no documented physical pool-length delivery field; QS does not support sending that setting.',
       'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
@@ -416,7 +422,8 @@ export function assessPlannedWorkoutProviderMappingV1(
       ? garminWorkoutSportFamilyV1(structure.sport)
       : corosWorkoutSportFamilyV1(structure.sport);
     if (family) {
-      const familyLabel = family === 'RUNNING' ? 'Running' : 'Cycling';
+      const familyLabel = provider === 'coros' && plannedWorkoutSportAliasV1('coros', structure.sport) === ActivityTypes.TrailRunning
+        ? 'Trail Running' : family === 'RUNNING' ? 'Running' : 'Cycling';
       issues.push({
         severity: 'degraded',
         code: 'sport_profile_degraded',
@@ -426,6 +433,12 @@ export function assessPlannedWorkoutProviderMappingV1(
           : `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
       });
     }
+  }
+
+  if (provider === 'suunto') {
+    const mappedSport = plannedWorkoutSportAliasV1(provider, structure.sport);
+    if (mappedSport !== structure.sport) issues.push({ severity: 'degraded', code: 'sport_profile_degraded', path: '$.sport',
+      message: `Suunto receives ${structure.sport} using its ${mappedSport} profile; QS keeps the authored sport.` });
   }
 
   if (provider === 'wahoo') {

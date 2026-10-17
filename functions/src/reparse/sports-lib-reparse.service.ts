@@ -60,6 +60,7 @@ import { getActivityCreatorNameCarryover } from '../../../shared/activity-creato
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { shouldPreserveParsedDistance } from './regeneration-distance';
 import { preserveFreshSourceEventSummary } from './source-event-summary';
+import { BenchmarkReparseIdentity, preserveBenchmarkMetadataOnReparse } from './benchmark-preservation';
 import { ClassifiedReparseSource, NonActivitySourceAssessment, NonActivitySourcesError,
     classifyRejectedActivitySource, sourceReferenceFingerprint, SPORTS_LIB_PRIMARY_BUCKET } from './non-activity-sources';
 
@@ -809,6 +810,7 @@ export async function parseFromOriginalFilesStrict(
     const failedFiles: { path: string; reason: string }[] = [];
     const resolvedSourceBuckets: ResolvedSourceBucketInfo[] = [];
     const sourceContentHashes: string[] = [];
+    const sourceHashByActivity = new Map<object, string>();
     const inspectedSources: ClassifiedReparseSource[] = [];
     const uid = runtimeBudget?.uid || 'unknown';
     const eventId = runtimeBudget?.eventId || 'unknown';
@@ -893,6 +895,7 @@ export async function parseFromOriginalFilesStrict(
             assertReparseRuntimeBudget(runtimeBudget, `finish_parse_source_file:${sourceFile.path}`);
 
             parsedEvents.push(parsedEvent);
+            parsedEvent.getActivities().forEach(activity => sourceHashByActivity.set(activity, sourceContentHash));
             logReparseStageCompleted(uid, eventId, 'source_file', sourceFileStartedAtMs, {
                 ...sourceFileLogContext,
                 rawBytes: rawBytes.byteLength,
@@ -937,6 +940,23 @@ export async function parseFromOriginalFilesStrict(
     const combinedSourceContentHash = createHash('sha256')
         .update(sourceContentHashes.slice().sort().join('|'))
         .digest('hex');
+    // Equal summaries can be legitimate comparisons of two recordings from the same model.
+    // Use each original file's provenance only for these collisions; retain existing keys
+    // and the combined-source identity scheme for all other activities.
+    const equalSummaries = new Map<string, ActivityIdentityLike[]>();
+    for (const activity of finalEvent.getActivities() as ActivityIdentityLike[]) {
+        const fingerprint = getSourceActivityFingerprintDescriptor(activity);
+        const key = `${fingerprint.primary}|${fingerprint.secondary}`;
+        equalSummaries.set(key, [...(equalSummaries.get(key) || []), activity]);
+    }
+    for (const group of equalSummaries.values()) {
+        if (group.length < 2) continue;
+        const hashes = group.map(activity => sourceHashByActivity.get(activity));
+        if (hashes.some(hash => !hash) || new Set(hashes).size !== group.length) continue;
+        group.forEach((activity, index) => stampSourceActivityKeysForActivities([activity], hashes[index]!, {
+            strictAmbiguity: false,
+        }));
+    }
     stampSourceActivityKeysForActivities(finalEvent.getActivities() as ActivityIdentityLike[], combinedSourceContentHash, {
         strictAmbiguity: false,
     });
@@ -1052,15 +1072,16 @@ function copyPreservedReparseEventFields(
 function preserveReparseEventEditsOnRewrite(
     incomingData: admin.firestore.DocumentData,
     existingData: admin.firestore.DocumentData | null,
+    identity: BenchmarkReparseIdentity,
 ): admin.firestore.DocumentData {
     const preservedData = preserveEventTagsOnRewrite(incomingData, existingData);
     if (!existingData) {
         return sanitizeEventFirestoreWritePayload(preservedData);
     }
 
-    const finalData = { ...preservedData };
+    const finalData = { ...preservedData, ...extractPreservedMergeMetadata(existingData) };
     copyPreservedReparseEventFields(finalData, existingData);
-    return sanitizeEventFirestoreWritePayload(finalData);
+    return sanitizeEventFirestoreWritePayload(preserveBenchmarkMetadataOnReparse(finalData, existingData, identity));
 }
 
 export interface ActivityEditCarryoverResult {
@@ -1584,7 +1605,7 @@ async function setReparseDocIfUserActive(
     }));
 }
 
-function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite): FirestoreAdapter {
+function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite, identity: BenchmarkReparseIdentity): FirestoreAdapter {
     return {
         prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
         setDoc: async (path: string[], data: unknown) => {
@@ -1596,7 +1617,7 @@ function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite):
                 admin.firestore().doc(documentPath),
                 data,
                 undefined,
-                isEventDocument ? preserveReparseEventEditsOnRewrite : undefined,
+                isEventDocument ? (incoming, existing) => preserveReparseEventEditsOnRewrite(incoming, existing, identity) : undefined,
                 sourceWrite.assertCurrent,
             );
         },
@@ -1715,7 +1736,18 @@ export async function persistReparsedEvent(
     }
 
     const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareTrainingLoadMetadata(uid, event));
-    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite), undefined, undefined, getWriterLogAdapter());
+    const parsedActivities = parsedEvent.getActivities();
+    const strictIdentity = resolveActivityIdentityAssignments(existingActivityDocs.map(toComparableExistingActivity), parsedActivities as ActivityIdentityLike[], {
+        requireStrictMatch: true,
+    });
+    const identity: BenchmarkReparseIdentity = {
+        activityIDRemap: new Map([...strictIdentity.assignments].flatMap(([parsedIndex, existingIndex]) => {
+            const parsedID = parsedActivities[parsedIndex].getID();
+            return parsedID ? [[existingActivityDocs[existingIndex].id, parsedID] as const] : [];
+        })),
+        currentActivityIDs: new Set(parsedActivities.map(activity => activity.getID()).filter((id): id is string => !!id)),
+    };
+    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite, identity), undefined, undefined, getWriterLogAdapter());
     await runReparsePersistencePhase(
         uid,
         eventId,

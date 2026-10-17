@@ -327,6 +327,7 @@ async function readDerivedMetricsProbe(uid: string, metricKinds: DerivedMetricKi
                 metricKind,
                 snapshotData.payload,
                 snapshotData.sourceEventCount,
+                snapshotData.legacyPowerSystemsPolicy1,
             ),
         };
         return result;
@@ -516,9 +517,10 @@ export function isDerivedMetricSnapshotReadableByMcp(
     metricKind: DerivedMetricKind,
     payload: unknown,
     sourceEventCount?: unknown,
+    legacyPowerSystemsPolicy1?: unknown,
 ): boolean {
     return resolveDerivedMetricSnapshotPayloadValidity(metricKind, payload, sourceEventCount)
-        && isMcpTrainingMetricPayloadReadable(metricKind, payload);
+        && isMcpTrainingMetricPayloadReadable(metricKind, payload, legacyPowerSystemsPolicy1);
 }
 
 function hasTrainingDurabilitySupportingEventStartTimes(payload: unknown): boolean {

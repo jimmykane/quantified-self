@@ -1,4 +1,5 @@
 import {
+  EventImporterJSON,
   ActivityTypes,
   DataAltitudeAvg,
   DataAltitudeMax,
@@ -13,6 +14,7 @@ import {
   DataContactTimeToFlightTimeRatioMax,
   DataContactTimeToFlightTimeRatioMin,
   DataDescent,
+  DataEffortPace,
   DataDescentTime,
   DataDepthAvg,
   DataEndingPotentialStamina,
@@ -55,7 +57,7 @@ import {
   DataVerticalSpeedMax,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
-import { getDefaultSummaryStatTypes } from './summary-stats.helper';
+import { getDefaultSummaryStatTypes, shouldHideDefaultSpeedSummary } from './summary-stats.helper';
 
 describe('getDefaultSummaryStatTypes', () => {
   it('should include expanded default metrics from constants', () => {
@@ -239,4 +241,26 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain(DataGradeAdjustedPaceAvg.type);
     expect(stats).toContain(DataVerticalSpeedMax.type);
   });
+  it.each([ActivityTypes.Climbing, ActivityTypes.RockClimbing, ActivityTypes['Indoor Climbing'], ActivityTypes.Bouldering, ActivityTypes.FloorClimbing])('hides speed and pace from automatic summaries for %s', type => {
+    expect(shouldHideDefaultSpeedSummary([type])).toBe(true);
+    const stats = getDefaultSummaryStatTypes([type]);
+    expect(stats).not.toContain(DataSpeedAvg.type);
+    expect(stats).not.toContain(DataPaceAvg.type);
+    expect(stats).not.toContain(DataEffortPace.type);
+    expect(stats).not.toContain(DataGradeAdjustedPaceAvg.type);
+    expect(stats).not.toContain(DataGradeAdjustedSpeedAvg.type);
+    const raw = EventImporterJSON.getActivityFromJSON({
+      type, startDate: 0, endDate: 1000, creator: { name: 'test' },
+      stats: { [DataSpeedAvg.type]: 2 }, streams: [], laps: [], intensityZones: [], events: [],
+    } as any);
+    expect(raw.getStat(DataSpeedAvg.type)?.getValue()).toBe(2);
+  });
+
+  it('retains speed or pace defaults for mixed climbing and movement activity selections', () => {
+    expect(shouldHideDefaultSpeedSummary([])).toBe(false);
+    expect(shouldHideDefaultSpeedSummary([ActivityTypes.Climbing, ActivityTypes.Running])).toBe(false);
+    expect(getDefaultSummaryStatTypes([ActivityTypes.Climbing, ActivityTypes.Running])).toContain(DataPaceAvg.type);
+    expect(getDefaultSummaryStatTypes([ActivityTypes.Climbing, ActivityTypes.Cycling])).toContain(DataSpeedAvg.type);
+  });
+
 });

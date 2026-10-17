@@ -8,6 +8,7 @@ import {
   DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
   getDerivedMetricDocId,
   type EnsureDerivedMetricsRequest,
@@ -553,7 +554,7 @@ describe('DashboardDerivedMetricsService', () => {
     const validPayload = {
       dayBoundary: 'UTC',
       asOfDayMs,
-      policyVersion: 1,
+      policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
       windowDays: 42,
       historyDays: 84,
       cadence: 'workout-date',

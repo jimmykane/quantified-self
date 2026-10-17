@@ -212,6 +212,16 @@ describe('COROS route uploads', () => {
     expect(body).toContain('<gpx><rte /></gpx>');
   });
 
+  it.each(['BMX', 'LES MILLS RPM', 'LES MILLS SPRINT', 'LES MILLS THE TRIP'])(
+    'sends %s as a COROS Bike route without changing the QS sport', async (sport) => {
+      const file = routeFile(sport);
+      await uploadGPXRouteToCOROS(uploadParams({ routeFile: file }));
+      const body = (mocks.post.mock.calls[0][0].body as Buffer).toString('utf8');
+      expect(body).toContain('name="type"\r\n\r\n1');
+      expect(file.getRoutes()[0].activityType).toBe(sport);
+    },
+  );
+
   it('derives the same route id for the same revision and a new id for changed content', () => {
     const first = createCOROSRouteId('user-1', 'coros-user-1', 'route-1', '<gpx/>');
     expect(createCOROSRouteId('user-1', 'coros-user-1', 'route-1', '<gpx/>')).toBe(first);
@@ -229,6 +239,15 @@ describe('COROS route uploads', () => {
   it.each([
     ['cycling', 1],
     ['Mountain Biking', 1],
+    ['BMX', 1],
+    ['LES MILLS RPM', 1],
+    ['LES MILLS SPRINT', 1],
+    ['LES MILLS THE TRIP', 1],
+    ['Enduro MTB', 1],
+    ['E-Enduro MTB', 1],
+    ['Obstacle Racing', 2],
+    ['Vertical Running', 2],
+    ['Unknown profile', 2],
     ['gravel ride', 1],
     ['running', 2],
     ['road running', 2],
@@ -239,7 +258,8 @@ describe('COROS route uploads', () => {
   });
 
   it('uses persisted activity types when route geometry has no type', () => {
-    expect(resolveCOROSRouteType(routeFile(undefined), { activityTypes: ['road cycling'] })).toBe(1);
+    expect(resolveCOROSRouteType(routeFile(null), { activityTypes: ['road cycling'] })).toBe(1);
+    expect(resolveCOROSRouteType(routeFile(null), { activityTypes: ['BMX'] })).toBe(1);
   });
 
   it('treats COROS duplicate route code 13001 as success', async () => {

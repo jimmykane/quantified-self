@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   assistantToolUsesDefaultTimeZone,
   normalizeAssistantToolInput,
@@ -130,7 +131,7 @@ describe('Assistant tool input boundary', () => {
     });
   });
 
-  it('canonicalizes a user-friendly Enduro context for aggregate metric queries', () => {
+  it('canonicalizes Enduro only while the installed context has one sport', () => {
     expect(normalizeAssistantToolInput('query_metric', {
       metric: 'distance',
       activityTypes: ['Enduro'],
@@ -141,12 +142,30 @@ describe('Assistant tool input boundary', () => {
       interval: 'weekly',
     }, 'Europe/Helsinki')).toMatchObject({
       metric: 'Distance',
-      activityTypes: ['Enduro MTB'],
+      activityTypes: ActivityTypesHelper.resolveActivityType('E-Enduro MTB') ? ['Enduro'] : ['Enduro MTB'],
       aggregation: 'total',
       groupBy: 'date',
       interval: 'weekly',
       timeZone: 'Europe/Helsinki',
     });
+  });
+
+  it('keeps a context alias ambiguous when the installed catalog contains both Enduro MTB types', () => {
+    const resolve = ActivityTypesHelper.resolveActivityType.bind(ActivityTypesHelper);
+    const resolver = vi.spyOn(ActivityTypesHelper, 'resolveActivityType').mockImplementation(value => (
+      value === 'E-Enduro MTB'
+        ? 'E-Enduro MTB' as ReturnType<typeof resolve>
+        : resolve(value)
+    ));
+    try {
+      expect(normalizeAssistantToolInput('query_activities', { activityTypes: ['Enduro'] }, 'UTC'))
+        .toEqual({ activityTypes: ['Enduro'] });
+      expect(normalizeAssistantToolInput('query_activities', {
+        activityTypes: ['Enduro MTB', 'E-Enduro MTB', 'Motorcycle Enduro'],
+      }, 'UTC')).toEqual({ activityTypes: ['Enduro MTB', 'E-Enduro MTB', 'Motorcycle Enduro'] });
+    } finally {
+      resolver.mockRestore();
+    }
   });
 
   it('canonicalizes model-friendly sport casing across Training preview shapes', () => {
@@ -177,6 +196,13 @@ describe('Assistant tool input boundary', () => {
       changes: [{ structure: { sport: 'Running' } }],
     });
   });
+
+  it.each(['Road Cycling', 'E-Enduro MTB', 'Obstacle Racing', 'Indoor Walking'])('canonicalizes approved %s recipe names without changing recorded-activity query filters', sport => {
+      const input = { structure: { version: 1, sport: ` ${sport.toLowerCase()} `, nodes: [] } };
+      expect(normalizeAssistantToolInput('preview_create_planned_workout', input, 'UTC'))
+        .toMatchObject({ structure: { sport } });
+      expect(input.structure.sport).toBe(` ${sport.toLowerCase()} `);
+    });
 
   it('normalizes local date-only ranges without adding a timezone to activity tools', () => {
     expect(normalizeAssistantToolInput('query_activities', {

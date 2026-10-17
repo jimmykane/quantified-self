@@ -1627,6 +1627,17 @@ describe('Firestore Security Rules', () => {
                     benchmarkStatus: 'complete'
                 }));
             });
+
+            it('denies owner changes to the server-owned benchmark source revision', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Comparison', privacy: 'private', benchmarkSourceRevision: 2,
+                    });
+                });
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({ benchmarkSourceRevision: 1 }));
+                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).update({ hasBenchmark: true }));
+            });
         });
 
         describe('Routes (users/{uid}/routes/{routeId})', () => {

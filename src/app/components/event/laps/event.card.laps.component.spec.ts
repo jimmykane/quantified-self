@@ -17,6 +17,7 @@ import {
     DataPowerAvg,
     DataJumpHangTimeMax,
     DataHeartRateAvg,
+    DataHeartRateMin,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
@@ -1015,6 +1016,59 @@ describe('EventCardLapsComponent', () => {
             isLapAverage: true,
             [DataSpeedAvg.type]: '18.00 km/h',
         });
+    });
+
+    it.each(['Climbing', 'Rock Climbing', 'Indoor Climbing', 'Bouldering', 'Floor Climbing'])('omits unconfigured effort columns for %s without changing raw lap stats', sport => {
+            const speed = new DataSpeedAvg(5);
+            const lap = { ...createRenderableLap(LapTypes.Manual),
+                getStat: (type: string) => type === DataSpeedAvg.type ? speed : undefined,
+            } as unknown as LapInterface;
+            const activity = { ...createActivity([lap]), type: sport } as ActivityInterface;
+            component.selectedActivities = [activity];
+            component.ngOnChanges();
+
+            expect(component.getColumnsToDisplay(sport)).not.toContain(DataSpeedAvg.type);
+            expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataSpeedAvg.type]).toBeUndefined();
+            expect(component.lapColumnMenuGroups[0].selectedMetricTypes).not.toContain(DataSpeedAvg.type);
+            expect(lap.getStat(DataSpeedAvg.type)).toBe(speed);
+        });
+
+    it('keeps movement sport defaults alongside climbing in a mixed lap view', () => {
+        const lap = { ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataSpeedAvg.type ? new DataSpeedAvg(5)
+                : type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined,
+        } as unknown as LapInterface;
+        const climbing = { ...createActivity([lap]), type: ActivityTypes.Climbing, getID: () => 'climbing' } as ActivityInterface;
+        const hiking = { ...createActivity([lap]), type: ActivityTypes.Hiking, getID: () => 'hiking' } as ActivityInterface;
+        const running = { ...createActivity([lap]), getID: () => 'running' } as ActivityInterface;
+        component.selectedActivities = [climbing, hiking, running];
+        component.ngOnChanges();
+
+        expect(component.getColumns(climbing, LapTypes.Manual)).not.toContain(DataSpeedAvg.type);
+        expect(component.getColumns(hiking, LapTypes.Manual)).toContain(DataSpeedAvg.type);
+        expect(component.getColumns(running, LapTypes.Manual)).toContain(DataPaceAvg.type);
+        expect(component.lapColumnMenuGroups.find(group => group.family === 'other')?.selectedMetricTypes).toContain(DataSpeedAvg.type);
+    });
+
+    it('retains saved climbing speed and pace columns and avoids saving a hidden default accidentally', async () => {
+        const lap = { ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataSpeedAvg.type ? new DataSpeedAvg(5)
+                : type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined,
+        } as unknown as LapInterface;
+        const activity = { ...createActivity([lap]), type: ActivityTypes.Climbing } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        await component.onLapColumnSelectionChange('other', createLapColumnSelectionChange([DataHeartRateMin.type]));
+        expect(updateLapTableColumns.mock.calls[0][1]).not.toContain(DataSpeedAvg.type);
+
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            other: [DataSpeedAvg.type, DataPaceAvg.type],
+        } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        expect(component.getColumns(activity, LapTypes.Manual)).toEqual(['selection', '#', DataSpeedAvg.type, DataPaceAvg.type]);
+        expect(component.lapColumnMenuGroups[0].selectedMetricTypes).toEqual([DataSpeedAvg.type, DataPaceAvg.type]);
     });
 
     it('uses speed for cycling laps', () => {

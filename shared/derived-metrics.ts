@@ -94,7 +94,8 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 20;
+// Refresh existing snapshots after canonical sport membership changes.
+export const DERIVED_METRIC_SCHEMA_VERSION = 22;
 export const DERIVED_FORM_PAYLOAD_VERSION = 2;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
@@ -553,7 +554,7 @@ export interface DerivedTrainingCapacityMetricPayload {
   disciplines: DerivedTrainingCapacityDiscipline[];
 }
 
-export const DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION = 1 as const;
+export const DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION = 2 as const;
 export const DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS = 42 as const;
 export const DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS = 84 as const;
 
@@ -718,6 +719,16 @@ export interface DerivedTrainingPowerSystemsMetricPayload {
   excludesMergedEvents: true;
   activityTypes: DerivedTrainingPowerSystemsActivityType[];
 }
+
+/** Private snapshot sidecar preserving exact-type policy 1 for the four pooled labels. */
+export type DerivedTrainingPowerSystemsLegacyPolicy1Sidecar = Omit<DerivedTrainingPowerSystemsMetricPayload, 'policyVersion'> & {
+  policyVersion: 1;
+};
+export const DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_ACTIVITY_TYPES = [
+  'Cycling', 'Road Cycling', 'Running', 'Road Running',
+] as const;
+export const DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_MAX_BYTES = 128 * 1024;
+export const DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES = 900 * 1024;
 
 export interface DerivedTrainingExplanationLoadCoverage {
   totalCount: number;
@@ -1183,7 +1194,9 @@ export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBa
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
 export type DerivedTrainingCapacityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingCapacityMetricPayload>;
-export type DerivedTrainingPowerSystemsMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingPowerSystemsMetricPayload>;
+export type DerivedTrainingPowerSystemsMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingPowerSystemsMetricPayload> & {
+  legacyPowerSystemsPolicy1?: DerivedTrainingPowerSystemsLegacyPolicy1Sidecar;
+};
 export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
 export type DerivedTrainingExplanationMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingExplanationMetricPayload>;
 export type DerivedTrainingDurabilityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingDurabilityMetricPayload>;

@@ -67,7 +67,7 @@ import {
 import { resolvePrimaryUnitAwareDisplayStat } from './summary-display.helper';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { getNominalSwimDistanceDisplayContext, NominalSwimDistanceDisplayContext } from './event-swim-distance-display.helper';
-import { resolvePreferredSpeedDerivedAverageTypeForActivity } from './summary-stats.helper';
+import { resolvePreferredSpeedDerivedAverageTypeForActivity, shouldHideDefaultSpeedSummary } from './summary-stats.helper';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../constants/event-summary-metric-groups';
 import {
   AppEventDetailsSettingsInterface,
@@ -400,6 +400,7 @@ export const resolveEventLapSportFamily = (activityType: unknown): AppEventLapSp
 
 export const getDefaultEventLapMetricTypes = (
   family: AppEventLapSportFamily,
+  activityTypes: readonly unknown[] = [],
 ): string[] => {
   if (family === 'swimming') {
     return [
@@ -415,7 +416,7 @@ export const getDefaultEventLapMetricTypes = (
   return [
     DataDuration.type,
     DataDistance.type,
-    effortType,
+    ...(shouldHideDefaultSpeedSummary(activityTypes) ? [] : [effortType]),
     ...CORE_LAP_METRIC_TYPES.filter((type) => type !== DataDuration.type && type !== DataDistance.type),
   ].filter((type, index, values) => values.indexOf(type) === index);
 };
@@ -469,11 +470,12 @@ export const normalizeEventDetailsSettings = (value: unknown): AppEventDetailsSe
 export const getSelectedEventLapMetricTypes = (
   settings: AppEventDetailsSettingsInterface | null | undefined,
   family: AppEventLapSportFamily,
+  activityTypes: readonly unknown[] = [],
 ): string[] => {
   const normalizedSettings = normalizeEventDetailsSettings(settings);
   const selectedMetricTypes = normalizedSettings.lapTableColumnsBySportFamily?.[family];
   return (selectedMetricTypes === undefined
-    ? getDefaultEventLapMetricTypes(family)
+    ? getDefaultEventLapMetricTypes(family, activityTypes)
     : selectedMetricTypes).filter(type => family === 'swimming' || !SWIM_ONLY_LAP_METRIC_TYPES.has(type));
 };
 

@@ -11,6 +11,7 @@ import {
   resolveAssistantSummaryMetricType,
 } from './metric-intent';
 import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
+import { resolveCompatibleActivityType } from '../../../shared/activity-type-compatibility';
 import type { AssistantMcpToolName } from './mcp-session';
 
 const ASSISTANT_DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -69,7 +70,13 @@ function normalizeAssistantActivityTypeValue(value: unknown): readonly unknown[]
   let matchedActivityTypes: readonly string[] | null = null;
   for (const sport of TRAINING_SPORT_DEFINITIONS) {
     for (const context of sport.contexts) {
-      if (context.activityTypes.length !== 1
+      // Query filters admit installed catalog members only. A future refined
+      // member must not prevent an existing single-profile context alias.
+      const supportedTypes = context.activityTypes.flatMap(type => {
+        const resolved = ActivityTypesHelper.resolveActivityType(type);
+        return resolved ? [resolved] : [];
+      });
+      if (supportedTypes.length !== 1
         || (
           normalizeAssistantCatalogTerm(context.id) !== normalized
           && normalizeAssistantCatalogTerm(context.label) !== normalized
@@ -79,7 +86,7 @@ function normalizeAssistantActivityTypeValue(value: unknown): readonly unknown[]
       if (matchedActivityTypes) {
         return [value];
       }
-      matchedActivityTypes = context.activityTypes;
+      matchedActivityTypes = supportedTypes;
     }
   }
   return matchedActivityTypes || [value];
@@ -103,7 +110,7 @@ function normalizeAssistantWorkoutStructure(value: unknown): unknown {
   }
   const structure = value as Record<string, unknown>;
   const sport = typeof structure.sport === 'string'
-    ? ActivityTypesHelper.resolveActivityType(structure.sport)
+    ? resolveCompatibleActivityType(structure.sport)
     : null;
   return sport ? { ...structure, sport } : structure;
 }

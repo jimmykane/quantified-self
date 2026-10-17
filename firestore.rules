@@ -216,6 +216,7 @@ service cloud.firestore {
               'activitiesCount',
               'comparisonTitle',
               'benchmarkStatus',
+              'benchmarkSourceRevision',
               'privacy'
             ];
           }

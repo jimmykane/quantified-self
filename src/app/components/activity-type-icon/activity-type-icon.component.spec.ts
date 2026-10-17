@@ -91,6 +91,35 @@ describe('ActivityTypeIconComponent', () => {
     expect(component.getIcon()).toBe('terrain');
   });
 
+  it.each([
+    ['Road Running', 'directions_run'],
+    ['Indoor Track Running', 'directions_run'],
+    ['Vertical Running', 'directions_run'],
+    ['Road Cycling', 'directions_bike'],
+    ['Gravel Cycling', 'directions_bike'],
+    ['Indoor Walking', 'directions_walk'],
+    ['Speed Walking', 'directions_walk'],
+    ['Mountain Bike Orienteering', 'terrain'],
+    ['E-Mountain Biking', 'electric_bike'],
+    ['E-Enduro MTB', 'electric_bike'],
+    ['Stretching', 'self_improvement'],
+    ['Meditation', 'self_improvement'],
+    ['Breathwork', 'self_improvement'],
+    ['Table Tennis', 'sports'],
+    ['American Football', 'sports_football'],
+    ['Virtual Rowing', 'rowing'],
+    ['Whitewater Kayaking', 'kayaking'],
+    ['Sail Racing', 'sailing'],
+    ['Skateboarding', 'skateboarding'],
+    ['Video Gaming', 'sports_esports'],
+    ['Soccer', 'sports_soccer'],
+    ['Fitness Boxing', 'sports_mma'],
+  ])('uses approved bundled icons for %s', (type, icon) => {
+    const component = new ActivityTypeIconComponent();
+    component.activityType = type;
+    expect(component.getIcon()).toBe(icon);
+  });
+
   it('falls back safely for numeric activity type values', () => {
     const component = new ActivityTypeIconComponent();
     component.activityType = 4;

@@ -288,6 +288,11 @@ Route type inference is intentionally broad because COROS accepts only two types
 - cycling-family types—including bike, MTB, road cycling, gravel, cycling, velo, and spin—map to bike (`1`);
 - every other or missing activity type maps to running (`2`).
 
+The explicit refined-name route aliases additionally send BMX and LES MILLS RPM / SPRINT / THE TRIP as Bike (`1`).
+Obstacle Racing and Vertical Running retain Running (`2`); Enduro MTB and E-Enduro MTB retain Bike (`1`). These are
+route metadata profiles, not activity-upload or planned-workout modes. QS keeps the original route sport and file.
+Monitoring coverage is unchanged because these sends use the same COROS route worker, outcome labels and lifecycle.
+
 The provider route ID is a deterministic digest of the Quantified Self user, active COROS account, stable source key, and exact generated GPX revision. Repeating the same revision uses the same ID; changed geometry produces a new revision ID. COROS duplicate result `13001` is success. Direct selected-file delivery creates no Quantified Self route, while saved delivery persists provider route/account metadata before a multi-route batch continues.
 
 HTTP 408, 429, 5xx, and transient transport failures are retryable. Authentication failures require reconnect, and HTTP 403 or provider code `30009` is a permission-required failure. Invalid parameters, missing required distance, invalid provider responses, and rejected content are terminal and sanitized before reaching the browser or DLQ.

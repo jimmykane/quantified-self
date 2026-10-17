@@ -2253,6 +2253,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         activityTypes: ['Running'],
         search: 'ridge',
       }),
+      undefined, // External calls never receive an internal Assistant family.
     );
 
     const distanceChart = await connection.client.callTool({
