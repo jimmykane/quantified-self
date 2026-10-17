@@ -107,6 +107,13 @@ describe('ActivityTypeIconComponent', () => {
     ['Breathwork', 'self_improvement'],
     ['Table Tennis', 'sports'],
     ['American Football', 'sports_football'],
+    ['Virtual Rowing', 'rowing'],
+    ['Whitewater Kayaking', 'kayaking'],
+    ['Sail Racing', 'sailing'],
+    ['Skateboarding', 'skateboarding'],
+    ['Video Gaming', 'sports_esports'],
+    ['Soccer', 'sports_soccer'],
+    ['Fitness Boxing', 'sports_mma'],
   ])('uses approved bundled icons for %s', (type, icon) => {
     const component = new ActivityTypeIconComponent();
     component.activityType = type;
