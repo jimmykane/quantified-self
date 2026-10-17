@@ -420,7 +420,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `21.5.0`; the provider-sport expansion is verified against its candidate build before package adoption
+- Installed `@sports-alliance/sports-lib`: `22.0.0`; the provider-sport expansion is verified against its candidate build before package adoption
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -4636,7 +4636,7 @@ Racket Sports under their separately approved contexts. Generic Wheel Chair neve
 All 13 keep their original activity names and finite nonnegative saved TSS, including zero. The 11 unpublished names
 join only the recorded-analysis compatibility bridge; the original 29 public recipe additions, manual editor options,
 provider delivery mappings and scopes are unchanged. New wheelchair exact-type power fits require the expanded
-Sports Lib catalog; while pinning 21.5.0, its fitter rejects canonical types absent from that release. QS preserves the
+Sports Lib catalog; the installed 22.0.0 fitter rejects canonical types absent from that release. QS preserves the
 exact input labels and curves, and forward tests verify independent fits under the candidate catalog. These changes
 remain part of the same unreleased schema-22 rebuild, including cached workout inputs. Canonical grouping follows the
 approved product decision informed by [Garmin rucking](https://www.garmin.com/en-GB/garmin-technology/rucking-science/),
@@ -4685,7 +4685,7 @@ installed catalog join only the recorded-analysis bridge, which now contains 124
 29 future recipe names. Original canonical aliases continue to come from Sports Lib. The batch changes no manual
 editor options, planning profiles or provider mappings and remains in the same unreleased schema-22 snapshot/workout
 rebuild preparation. Exact power fits for unpublished types require the expanded Sports Lib catalog; QS keeps their
-input names and curves while pinned to 21.5.0. Candidate-catalog tests cover all 50 exact histories.
+input names and curves while pinned to 22.0.0. Candidate-catalog tests cover all 50 exact histories.
 
 The second approved 50-sport batch adds 20 Team Sports contexts, six Precision Sports contexts, 13 Water Sports
 contexts, two Paddling contexts and nine Diving contexts, exactly as listed above. Precision Sports, Water Sports and
@@ -4702,7 +4702,7 @@ entry or new sport-specific calculation is introduced.
 
 The 28 unpublished names join only the recorded-analysis bridge: 124 recorded-only additions plus the unchanged 29
 future recipe names, totaling 153 bridged canonical values (149 context memberships and four aggregate exclusions).
-Both dependency trees remain on Sports Lib 21.5.0 until its expanded catalog is published. JSON activity hydration and
+Both dependency trees now use published Sports Lib 22.0.0; the expanded sport catalog remains separately unreleased. JSON activity hydration and
 exact power fits for unpublished names require that release; installed/candidate tests retain the input labels and
 verify separate fits once available. These additions join the same unreleased schema-22 snapshot/workout rebuild and
 planned activity reparse after release. The 284-sport catalog audit changes exactly these 50 Training classifications;
@@ -4736,8 +4736,8 @@ MCP impact: the registered Running/Cycling/Swimming-plus-Other projections, metr
 boundary and pending digest stay unchanged. Summary/build projection discards the four new private families and their
 contexts; Explanation folds their complete saved load/composition into Other. Negative leakage and recipe enum/runtime
 coverage verify this with installed and candidate catalogs. No plan/workout capability or provider transport changes;
-no plugin rebuild or registered-contract promotion is needed. Both app and Functions remain pinned to 21.5.0 until
-Sports Lib PR #144's coordinated release, prepared as 21.7.0, is available. No deployment or production reparse is
+no plugin rebuild or registered-contract promotion is needed. Both app and Functions use published Sports Lib 22.0.0.
+Sports Lib PR #144's coordinated catalog release must use a unique version newer than 22.0.0 before adoption. No deployment or production reparse is
 performed by these source changes.
 
 The grouping decisions are app-owned recommendations informed by [Polar's sport profiles](https://support.polar.com/au-en/polar-flow-sport-profiles),
@@ -7679,7 +7679,7 @@ For durability specifically, distinguish:
 
 ## Release Order
 
-This preparation change retains Sports Lib `21.5.0` while moving internal Training snapshots to schema 22 and rolling
+The original preparation retained Sports Lib `21.5.0` while moving internal Training snapshots to schema 22 and rolling
 capacity policy 2. Use the established coordinated builder/frontend release: deploy matching Functions builders before
 the new-schema frontend. Cached old snapshots rebuild through the existing ensure lifecycle during that transition;
 the app does not relabel an old policy-1 fit as policy 2. Registered MCP policy-1 behavior remains available through the
@@ -7883,8 +7883,8 @@ derived schema, planning or provider-delivery capability, write path, provider t
 change is introduced. This is classification work, with no Training planning surface change or MCP deferral. Current
 Help remains accurate because supported activities use the installed dynamic catalog.
 
-Adopt the library in the application and Functions together. Their installed Sports Lib `21.5.0` catalog still contains
-131 types. The current candidate prepares `21.7.0` with 284 types and remains unadopted. A separately approved targeted
+Adopt the library in the application and Functions together. Their installed Sports Lib `22.0.0` catalog still contains
+131 types. The expanded 284-type candidate remains unadopted and needs a unique release version newer than 22.0.0. A separately approved targeted
 source-backed reparse can correct identified historical Generic, Racquet Ball, or Diving classifications when the source
 retains enough detail. Regenerate affected event summaries, activity-type aggregates, applicable durability evidence,
 and Training snapshots through the existing ingress. A collapsed broad label cannot recover missing detail. Saved
