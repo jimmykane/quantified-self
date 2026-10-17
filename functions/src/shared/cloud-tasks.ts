@@ -823,6 +823,11 @@ export async function enqueueDerivedMetricsTask(
     const safeGeneration = Number.isFinite(generation) ? Math.max(0, Math.floor(generation)) : 0;
     const taskId = `derived-metrics-${safeUid}-${safeGeneration}`;
     const payload = { uid, generation: safeGeneration };
+    // The Admin SDK resolves relative delays on each enqueue attempt. Anchor a
+    // batched build once so transient failures cannot restart its waiting period.
+    const scheduleAtEpochSeconds = Number.isFinite(scheduleDelaySeconds)
+        ? Math.ceil((Date.now() + Math.max(1, scheduleDelaySeconds as number) * 1000) / 1000)
+        : undefined;
 
     return enqueueTaskWithRetry({
         projectId,
@@ -831,6 +836,7 @@ export async function enqueueDerivedMetricsTask(
         taskId,
         payload,
         scheduleDelaySeconds,
+        scheduleAtEpochSeconds,
         alreadyExistsLogMessage: `[DerivedMetricsDispatcher] Task already exists for ${uid} generation ${safeGeneration}, skipping`,
         failedLogPrefix: `[DerivedMetricsDispatcher] Failed to enqueue derived metrics task for ${uid} generation ${safeGeneration}:`,
     });

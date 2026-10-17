@@ -4780,12 +4780,14 @@ The existing per-account coordinator batches expensive background rebuilds indep
 bucket. The first idle build is prompt. After a claim, automatic ingress and freshness requests schedule the next
 background build no earlier than two minutes after that claim. This is a fixed deadline, not a sliding debounce:
 subsequent changes merge dirty kinds and advance source revisions without postponing the task. A build lasting more
-than two minutes needs no additional delay. Different accounts remain independent.
+than two minutes needs no additional delay. Different accounts remain independent. Claim timestamps are sampled
+after transactional reads on every attempt, so waiting for concurrent writes does not consume the next build's interval.
 
 `buildNotBeforeMs` and `pendingImmediate` are private coordinator fields, not metric payload fields. The existing
 `startedAtMs` supplies the previous build start while idle; legacy/malformed/future start times fall back to prompt
 execution. No new collection, scanner, scheduler, transaction read, index or public API is added. The existing Cloud
-Tasks worker uses its scheduled delay and deterministic generation ID. Ordinary enqueue/worker failures and stuck-job
+Tasks worker uses an absolute delivery time and deterministic generation ID for delayed builds. Enqueue retries retain
+that delivery time rather than restarting the delay after each transient failure. Ordinary enqueue/worker failures and stuck-job
 recovery remain prompt under the existing retry policy and 10-minute queued / 15-minute processing limits.
 
 Actual Training-load control changes (including zero overrides, exclusion and reset) and benchmark selection changes
@@ -4809,6 +4811,7 @@ seconds apart with representative 21-second builds require five background build
 while the final ready snapshot includes all fourteen mutation revisions. This is a scheduling comparison, not a measured
 production cost reduction. It also covers concurrent arrivals, delayed enqueue failure after priority promotion,
 automatic/MCP freshness requests, completion/write-block follow-ups, stale tasks and account deletion.
+Focused unit regressions additionally cover slow enqueue retries and claims delayed by transaction contention.
 
 Monitoring impact: **unchanged** queue names, native depth/delay metrics, retry limits, memory, concurrency and Admin
 queue coverage. An intentionally future task is scheduled work, not overdue backlog. The new identity-free

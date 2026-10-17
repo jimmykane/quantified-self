@@ -4367,6 +4367,44 @@ describe('startDerivedMetricsProcessing', () => {
         vi.useRealTimers();
     });
 
+    it('anchors the build start to the successful claim after transaction contention', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        const requestAtMs = Date.UTC(2026, 9, 17, 10);
+        vi.setSystemTime(requestAtMs);
+        const coordinatorSnapshot = { exists: true, data: () => ({
+            status: 'queued', generation: 42, eventMutationVersion: 7,
+            startedAtMs: requestAtMs - 120_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) };
+        const defaultGet = hoisted.transactionGet.getMockImplementation()!;
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => {
+            if (ref === hoisted.coordinatorRef) {
+                return coordinatorSnapshot;
+            }
+            // Reading the owner guard can also wait behind concurrent writes.
+            if (ref === hoisted.userRootRef) {
+                vi.setSystemTime(Date.now() + 10_000);
+            }
+            return defaultGet(ref);
+        });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction); // Aborted attempt; a concurrent write forces a retry.
+            vi.setSystemTime(requestAtMs + 30_000);
+            await callback(transaction);
+        });
+
+        const result = await startDerivedMetricsProcessing('user-1', 42);
+
+        expect(result).toEqual({
+            startedAtMs: requestAtMs + 40_000, eventMutationVersion: 7, workoutInputsVersion: 0,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenLastCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'processing', startedAtMs: requestAtMs + 40_000, updatedAtMs: requestAtMs + 40_000,
+        }), { merge: true });
+    });
+
     it('reclaims failed work with a distinct claim even when the retry starts in the same millisecond', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
         vi.useFakeTimers();

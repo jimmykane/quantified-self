@@ -6052,7 +6052,6 @@ export async function startDerivedMetricsProcessing(
     generation: number,
 ): Promise<StartDerivedMetricsProcessingResult | null> {
     const coordinatorRef = getCoordinatorDocRef(uid);
-    const nowMs = Date.now();
     let startedResult: StartDerivedMetricsProcessingResult | null = null;
 
     await admin.firestore().runTransaction(async (transaction) => {
@@ -6074,6 +6073,9 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
+        // Reads and transaction retries may wait behind concurrent imports. Start
+        // the build interval at this claim, not at the original request's arrival.
+        const nowMs = Date.now();
         if (coordinator.status === 'processing') {
             // Keep healthy in-flight generations single-flight only.
             if (!isDerivedMetricsCoordinatorStuck(coordinator, nowMs)) {
