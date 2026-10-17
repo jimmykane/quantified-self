@@ -4767,9 +4767,9 @@ capacity projections through the existing freshness/rebuild path, including cach
 summaries and power curves. TSS formulas and imported-TSS preservation remain owned by Sports Lib; no reparse or cloud
 mutation is performed by these source changes.
 
-Original-file chart/sample reads also retain historical identities across eight verified import refinements: Cycling
-↔ Road Cycling, Running ↔ Road Running, Indoor Running ↔ Indoor Track Running, Elliptical Trainer ↔ Crosstrainer,
-Flexibility Training ↔ Stretching, Rock Climbing ↔ Climbing, Generic ↔ Chores, and Generic ↔ Meditation. After existing
+Original-file chart/sample reads also retain historical identities across all 53 direct import-name refinements
+verified by the corpus, including Hiking ↔ Trekking, Backcountry Skiing ↔ Ski Touring, Cycling ↔ Road Cycling and
+Running ↔ Track Running. The exact allowlist lives in `HISTORICAL_IMPORT_TYPE_REFINEMENTS`. After existing
 exact matching, this fallback requires matching start/end timestamps, finite rounded duration, equal rounded distance
 or missing distance on both sides, and uniqueness on both sides. Conflicting source keys block this fallback. Separate
 refinement edges never imply Chores ↔ Meditation or arbitrary Training-family identity equivalence. Persisted IDs and

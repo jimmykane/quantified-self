@@ -2,6 +2,7 @@ import { DataDistance, DataDuration } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   ActivityIdentityLike,
+  HISTORICAL_IMPORT_TYPE_REFINEMENTS,
   resolveActivityIdentityAssignments,
 } from './activity-identity-matcher';
 
@@ -27,16 +28,7 @@ function identity(
 }
 
 describe('activity identity matcher', () => {
-  it.each([
-    ['Cycling', 'Road Cycling'],
-    ['Running', 'Road Running'],
-    ['Indoor Running', 'Indoor Track Running'],
-    ['Elliptical Trainer', 'Crosstrainer'],
-    ['Flexibility Training', 'Stretching'],
-    ['Rock Climbing', 'Climbing'],
-    ['Generic', 'Chores'],
-    ['Generic', 'Meditation'],
-  ])('matches a documented %s -> %s refinement with identical source evidence', (oldType, newType) => {
+  it.each(HISTORICAL_IMPORT_TYPE_REFINEMENTS)('matches a documented %s -> %s refinement with identical source evidence', (oldType, newType) => {
     const startDate = Date.parse('2026-07-01T08:00:00.000Z');
     const oldActivity = { ...identity('persisted-source-key', startDate), type: oldType };
     const parsedActivity = { ...identity(undefined, startDate), type: newType };
@@ -58,6 +50,22 @@ describe('activity identity matcher', () => {
     expect([...result.assignments].sort()).toEqual([[0, 1], [1, 0]]);
   });
 
+  it('matches several corpus-verified renames without relying on the one-leg fallback', () => {
+    const startDate = Date.parse('2026-07-01T08:00:00.000Z');
+    const result = resolveActivityIdentityAssignments([
+      { ...identity(undefined, startDate), type: 'Hiking' },
+      { ...identity(undefined, startDate + 3_600_000), type: 'Backcountry Skiing' },
+      { ...identity(undefined, startDate + 7_200_000), type: 'Running' },
+    ], [
+      { ...identity(undefined, startDate + 7_200_000), type: 'Track Running' },
+      { ...identity(undefined, startDate), type: 'Trekking' },
+      { ...identity(undefined, startDate + 3_600_000), type: 'Ski Touring' },
+    ]);
+    expect([...result.assignments].sort()).toEqual([[0, 2], [1, 0], [2, 1]]);
+    expect(result.unmatchedParsedIndexes).toEqual([]);
+    expect(result.unmatchedExistingIndexes).toEqual([]);
+  });
+
   it('rejects type refinements with differing or missing source evidence', () => {
     const original = { ...identity(undefined, 1_000), type: 'Cycling' };
     const refined = { ...identity(undefined, 1_000), type: 'Road Cycling' };
@@ -68,7 +76,7 @@ describe('activity identity matcher', () => {
       { ...refined, getStat: () => null },
       { ...refined, getStat: () => ({ getValue: () => null }) },
       { ...identity(undefined, 1_000, 3_600, 12_000), type: 'Road Cycling' },
-      { ...refined, type: 'Mountain Biking' },
+      { ...refined, type: 'Swimming' },
     ].forEach(candidate => expect(resolveActivityIdentityAssignments([original], [candidate]).assignments.size).toBe(0));
     expect(resolveActivityIdentityAssignments(
       [{ ...original, sourceActivityKey: 'source-a' }],
