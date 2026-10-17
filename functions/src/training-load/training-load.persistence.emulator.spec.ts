@@ -559,7 +559,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const ref = db.doc(metadataPath(uid));
     const first = (await ref.get()).data() as TrainingLoadMetadata;
     expect(first.legs!.leg).toMatchObject({ policy: { revision: 1, method: 'HR', included: true },
-      evaluations: { automatic: { score: 9, method: 'MET' }, hr: { score: 9, reasons: ['missing-hr-calibration'] } } });
+      evaluations: { automatic: { score: 9, method: 'MET' }, hr: { score: 9, reasons: ['missing-hr-calibration', 'missing-power-inputs'] } } });
     await finish();
     expect((await ref.get()).data()).toEqual(first);
     await ref.update({ controls: { leg: { override: 0 } }, revision: first.revision + 1 });
