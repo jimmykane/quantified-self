@@ -238,6 +238,8 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
 
 export interface TrainingWorkspacePreferences {
     preferredDestination?: TrainingDestinationId;
+    /** Last explicitly selected Training Plans browse scope; unrelated to plan activation. */
+    plansView?: 'plans' | 'standalone';
     /** Null selects automatic shortcuts; an array pins a canonical one-to-four sport set. */
     sportShortcuts?: TrainingSportId[] | null;
 }

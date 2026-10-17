@@ -40,6 +40,7 @@ import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   TrainingPlansService,
@@ -193,6 +194,7 @@ export class PlansWorkspaceComponent {
   readonly deletedWorkoutRecoveryDays = DELETED_WORKOUT_RECOVERY_DAYS;
   readonly strengthSport = ActivityTypes.StrengthTraining;
   private readonly userService = inject(AppUserService);
+  private readonly userSettings = inject(AppUserSettingsQueryService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
   private readonly libraryService = inject(WorkoutLibraryService);
@@ -228,6 +230,8 @@ export class PlansWorkspaceComponent {
   private editorGeneration = 0;
   private navigationSequence = 0;
   private routeOwner: string | undefined;
+  private viewPreferenceSequence = 0;
+  private viewPreferenceOwnerGeneration = 0;
   private historyRequestSequence = 0;
   private deletedWorkoutRequestSequence = 0;
   private nodeSequence = 1;
@@ -662,6 +666,9 @@ export class PlansWorkspaceComponent {
       this.phaseDialog?.close();
       this.phaseDialog = null;
       this.routeOwner = uid;
+      this.viewPreferenceOwnerGeneration += 1;
+      this.viewPreferenceSequence += 1;
+      this.view.set('plans');
       this.appliedRouteKey = null;
       this.advanceEditorGeneration();
       this.editor.set(null);
@@ -749,6 +756,14 @@ export class PlansWorkspaceComponent {
       this.replaceUnavailableRoute();
       return;
     }
+    if (requested.mode === 'browse' && !requested.planId && !requested.standalone
+      && this.currentUser()?.settings?.appSettings?.trainingWorkspace?.plansView === 'standalone') {
+      this.selectWorkoutScope(null, requested.localDate ?? todayLocalDate());
+      this.scheduleDateSelection.set(null);
+      const restored = { ...requested, standalone: true };
+      this.navigateWorkspace(trainingPlansBrowseRoute(null, true), restored, { replaceUrl: true });
+      return;
+    }
     const plan = this.planOptions().find(candidate => candidate.id === requested.planId);
     if (requested.planId && !plan) {
       this.snackBar.open('That training plan is no longer available.', 'Dismiss', { duration: 5000 });
@@ -813,14 +828,26 @@ export class PlansWorkspaceComponent {
     if (document.visibilityState === 'visible') this.refreshToday();
   }
 
-  selectView(view: PlansView): void {
-    if (view === this.view() || !this.browsing() || this.busyAction()) return;
+  async selectView(view: PlansView): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || (view !== 'plans' && view !== 'standalone')
+      || view === this.view() || !this.browsing() || this.busyAction()) return;
     this.haptics.selection();
     this.view.set(view);
     this.closeHistory();
     this.clearPlanActions();
     const route = this.browseRouteState();
     this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route);
+    const sequence = ++this.viewPreferenceSequence;
+    const ownerGeneration = this.viewPreferenceOwnerGeneration;
+    try {
+      // The shared writer orders saves even when this route is closed and reopened.
+      await this.userSettings.updateTrainingWorkspacePreferences(uid, { plansView: view });
+    } catch {
+      if (this.destroyRef.destroyed || uid !== this.currentUser()?.uid
+        || sequence !== this.viewPreferenceSequence || ownerGeneration !== this.viewPreferenceOwnerGeneration) return;
+      this.showError(new Error('Could not remember your Plans view. Your selection is still active for this visit.'));
+    }
   }
 
   selectPlan(planId: string): void {
