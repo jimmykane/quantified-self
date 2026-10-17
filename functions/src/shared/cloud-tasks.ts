@@ -848,6 +848,7 @@ export async function enqueueDerivedMetricsIngressTask(
         taskScope?: string;
         metricKinds?: readonly DerivedMetricKind[];
         incrementEventMutationVersion?: boolean;
+        immediate?: boolean;
     },
 ): Promise<boolean> {
     const {
@@ -888,12 +889,15 @@ export async function enqueueDerivedMetricsIngressTask(
     const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
         ? computedScheduleEpochSec
         : (currentEpochSeconds + effectiveScheduleDelaySeconds);
-    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}`;
+    // Priority cannot share a task name with background ingress: an earlier task
+    // would otherwise discard the later priority payload as an already-existing ID.
+    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}${options?.immediate === true ? '-immediate' : ''}`;
     const payload = {
         uid,
         bucketStartEpochSec,
         ...(hasTargetedMetricKinds ? { metricKinds } : {}),
         ...(options?.incrementEventMutationVersion === false ? { incrementEventMutationVersion: false } : {}),
+        ...(options?.immediate === true ? { immediate: true } : {}),
     };
 
     return enqueueTaskWithRetry({

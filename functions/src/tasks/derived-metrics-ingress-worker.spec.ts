@@ -82,7 +82,7 @@ describe('processDerivedMetricsIngressTask', () => {
         expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).toHaveBeenCalledWith(
             'user-1',
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
-            { incrementEventMutationVersion: true },
+            { incrementEventMutationVersion: true, background: true },
         );
     });
 
@@ -100,7 +100,7 @@ describe('processDerivedMetricsIngressTask', () => {
         expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).toHaveBeenCalledWith(
             'user-1',
             [DERIVED_METRIC_KINDS.TrainingBuildComparison],
-            { incrementEventMutationVersion: false, preserveWorkoutInputs: true },
+            { incrementEventMutationVersion: false, preserveWorkoutInputs: true, background: true },
         );
     });
 
@@ -111,6 +111,12 @@ describe('processDerivedMetricsIngressTask', () => {
         await (processDerivedMetricsIngressTask as any)({ data: { uid: 'user-1', metricKinds, incrementEventMutationVersion: false } });
         const options = hoisted.markDerivedMetricsDirtyAndMaybeQueue.mock.calls[0][2];
         expect(options.preserveWorkoutInputs === true).toBe(!metricKinds.includes(DERIVED_METRIC_KINDS.TrainingCapacity));
+    });
+
+    it.each([true, false, undefined, 'true', 1])('accepts only boolean internal priority: %s', async immediate => {
+        await (processDerivedMetricsIngressTask as unknown as (request: unknown) => Promise<void>)({ data: { uid: 'user-1', immediate } });
+        expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).toHaveBeenCalledWith('user-1', expect.any(Array),
+            { incrementEventMutationVersion: true, background: immediate !== true });
     });
 
     it('rejects malformed targeted metric kinds instead of rebuilding every metric', async () => {

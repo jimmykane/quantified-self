@@ -4774,6 +4774,53 @@ Admin queue observability treats these as two separate Cloud Tasks queues: deriv
 coalesce, while derived workers show snapshot builds waiting to run. The global Cloud Tasks depth and the Admin Dashboard
 Derived Metrics row include both queues so ingress backlogs cannot disappear from headline health totals.
 
+### Bounded background build batching
+
+The existing per-account coordinator batches expensive background rebuilds independently of the 30-second ingress
+bucket. The first idle build is prompt. After a claim, automatic ingress and freshness requests schedule the next
+background build no earlier than two minutes after that claim. This is a fixed deadline, not a sliding debounce:
+subsequent changes merge dirty kinds and advance source revisions without postponing the task. A build lasting more
+than two minutes needs no additional delay. Different accounts remain independent.
+
+`buildNotBeforeMs` and `pendingImmediate` are private coordinator fields, not metric payload fields. The existing
+`startedAtMs` supplies the previous build start while idle; legacy/malformed/future start times fall back to prompt
+execution. No new collection, scanner, scheduler, transaction read, index or public API is added. The existing Cloud
+Tasks worker uses its scheduled delay and deterministic generation ID. Ordinary enqueue/worker failures and stuck-job
+recovery remain prompt under the existing retry policy and 10-minute queued / 15-minute processing limits.
+
+Actual Training-load control changes (including zero overrides, exclusion and reset) and benchmark selection changes
+retain priority. A control ingress has a distinct deterministic task name from background ingress, so a same-bucket
+import cannot discard its priority. Import preparation/finalization alone does not get priority. A priority request
+replaces a still-delayed queued generation while preserving its dirty union; the older task is fenced out before source scans
+or publication. During processing, priority stays set until completion, even if background invalidations arrive later;
+there is still only one active claim. Completion queues any pending work, and write-block recovery retains claimed plus
+pending kinds with the same bounded background deadline. Neither path needs a later import to wake the final rebuild.
+All generation, claim, revision, enqueue-failure and account-deletion guards remain in force.
+
+Opening Training/Dashboard, automatic freshness probes, MCP preparation and the generic refresh retry join this same
+policy; they cannot cancel the delay by requesting a missing kind. A scheduled rebuild is still preparing, not a fresh
+zero-valued result. The added background wait is at most two minutes under a healthy queue, in addition to the existing
+up-to-30-second ingress bucket plus buffer, processing time and queue delivery latency. Explicit owner edits bypass the
+build cooldown, not ingress delivery or an already-running build. Calculations, UTC boundaries and snapshot schemas are
+unchanged; no activity reparse or data migration is required for this scheduling change.
+
+Validation uses synthetic fixtures in the existing isolated Firestore emulator suite: fourteen ingress arrivals 30
+seconds apart with representative 21-second builds require five background builds instead of fourteen prompt builds,
+while the final ready snapshot includes all fourteen mutation revisions. This is a scheduling comparison, not a measured
+production cost reduction. It also covers concurrent arrivals, delayed enqueue failure after priority promotion,
+automatic/MCP freshness requests, completion/write-block follow-ups, stale tasks and account deletion.
+
+Monitoring impact: **unchanged** queue names, native depth/delay metrics, retry limits, memory, concurrency and Admin
+queue coverage. An intentionally future task is scheduled work, not overdue backlog. The new identity-free
+`Scheduled batched rebuild` log records generation and delay seconds for diagnosis; do not use generation as a metric
+label. End-to-end derived ingress/publication alert coverage remains **deferred** to existing
+[#831](https://github.com/jimmykane/quantified-self/issues/831), including dirty-generation age and stale-task exclusions.
+No monitoring configuration is activated by this code change.
+
+MCP impact: **no wire or authority change**. Existing prepare/read contracts retain bounded waiting and `preparing`
+retry guidance; the private scheduling fields are never projected into their responses. No additional scopes, tools,
+planning fields, provider actions, registered-schema changes or plugin rebuild are required.
+
 ### Frontend freshness probe
 
 On `/training`, the frontend:

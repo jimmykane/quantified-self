@@ -14,6 +14,15 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains bounded bulk Training refreshes without promising instant edit results', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(copy).toContain('background rebuild may wait up to two minutes');
+    expect(copy).toContain('plus normal sync, queue and calculation time');
+    expect(copy).toContain('All changes are retained');
+    expect(copy).toContain('Training load edits and benchmark changes receive priority');
+    expect(copy).toContain('wait for any calculation already running');
+    expect(copy).toContain('Opening Training again does not speed up');
+  });
   it('explains the flat Timeline notes shortcut and reuse of the current workspace and comparison destination', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     expect(copy).toContain("app navigation's **Training & health** section");

@@ -95,6 +95,23 @@ describe('derived metrics task dispatch', () => {
         );
     });
 
+    it('keeps owner priority separate from background tasks in the same scope and bucket', async () => {
+        const options = { taskScope: 'training-load', metricKinds: [DERIVED_METRIC_KINDS.Form] };
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, options);
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, { ...options, immediate: true });
+        const [background, priority] = hoisted.mockTaskQueue.enqueue.mock.calls;
+        expect(background[0]).not.toHaveProperty('immediate');
+        expect(priority[0]).toMatchObject({ immediate: true, metricKinds: [DERIVED_METRIC_KINDS.Form] });
+        expect(priority[1].id).toBe(`${background[1].id}-immediate`);
+        expect(priority[1].scheduleTime).toEqual(background[1].scheduleTime);
+    });
+
+    it('schedules a worker after the remaining batching interval', async () => {
+        await enqueueDerivedMetricsTask('user-1', 7, 90);
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith({ uid: 'user-1', generation: 7 },
+            { id: 'derived-metrics-user-1-7', scheduleDelaySeconds: 90 });
+    });
+
     it('rejects invalid ingress scopes and empty targeted metric lists before dispatch', async () => {
         await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
             taskScope: 'sleep/other',

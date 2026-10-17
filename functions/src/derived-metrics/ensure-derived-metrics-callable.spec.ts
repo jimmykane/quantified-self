@@ -73,7 +73,7 @@ describe('ensureDerivedMetrics rejection diagnostics', () => {
 
     it('leaves successful freshness checks and metric selection unchanged without new logs', async () => {
         await expect(invoke(request())).resolves.toBe(response);
-        expect(mocks.markDirty).toHaveBeenCalledExactlyOnceWith('synthetic-private-owner', [DERIVED_METRIC_KINDS.FormNow]);
+        expect(mocks.markDirty).toHaveBeenCalledExactlyOnceWith('synthetic-private-owner', [DERIVED_METRIC_KINDS.FormNow], { background: true });
         expect(logger.warn).not.toHaveBeenCalled();
         expect(logger.error).not.toHaveBeenCalled();
     });

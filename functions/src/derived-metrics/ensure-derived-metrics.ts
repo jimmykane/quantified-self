@@ -387,6 +387,7 @@ export async function ensureDerivedMetricsForUser(
     return markDerivedMetricsDirtyAndMaybeQueue(
         uid,
         metricKindsToQueue,
+        { background: true },
     );
 }
 

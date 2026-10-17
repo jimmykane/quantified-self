@@ -10,6 +10,7 @@ interface DerivedMetricsIngressTaskPayload {
     bucketStartEpochSec?: number;
     metricKinds?: unknown;
     incrementEventMutationVersion?: unknown;
+    immediate?: unknown;
 }
 
 export const processDerivedMetricsIngressTask = onTaskDispatched({
@@ -44,6 +45,7 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
             || kind === DERIVED_METRIC_KINDS.TrainingReadiness);
     const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, {
         incrementEventMutationVersion,
+        background: payload.immediate !== true,
         ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
     logger.info('[derived-metrics-ingress] Processed ingress task.', {
