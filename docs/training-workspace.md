@@ -7823,9 +7823,9 @@ Indoor Cycling reuses the existing modeled indoor-cycling context. At that initi
 contexts, including E-Mountain Biking, are listed in the registry table above. Library group membership does not widen planning, intensity/load policies,
 modeled contexts or provider delivery support. Indoor Cycling and E-Mountain Biking retain library cycling durability;
 the other eight types have no durability adapter. Paramotoring and RC Drone Flying omit calculated POWER/HR/MET
-TSS and remove stale calculated scores/methods while preserving finite imported scores, including legacy scores
-without a method, when preservation is true or omitted. With false, both TSS and its method stay unset for these
-two sports. Other Aerial Sports and Unspecified activities
+TSS and remove stale calculated scores/methods while preserving valid nonnegative imported scores, including zero
+and legacy scores without a method, for every legacy flag setting. The library's deprecated `preserveImportedTss`
+option does not discard imported scores. Other Aerial Sports and Unspecified activities
 retain their existing TSS eligibility. No numeric metric token, unit, formula or durability protocol is added.
 
 MCP impact review: the built 193-type catalog passes the existing strict activity-type output schema, and the 99
@@ -7837,20 +7837,21 @@ or explicit aliases, then regenerate event summaries, activity-type aggregates, 
 Training snapshots through existing source-backed reparse and derived ingress. Broad stored values cannot recover
 lost detail. The Sports Lib importing guide owns exact aliases and parent guards; no reparse or deployment was run.
 
-The initial sport-mapping audit adds 62 canonical types and adds or corrects aliases for 70 types. Its 193-type
-catalog follows one `preserveImportedTss` policy. True or omission (the default) retains finite imported TSS exactly,
-including zero and legacy scores without a method, even for sports excluded from calculation. False discards the
-existing score and method, calculates a replacement where supported with sufficient inputs, and leaves both unset
-otherwise. The same flag applies to Motorized, Adaptive Mobility, Video Gaming, Paramotoring and RC Drone Flying.
-Calculated scores on eligible sports retain their existing true/default preservation behavior and refresh with false.
+The initial sport-mapping audit added 62 canonical types and added or corrected aliases for 70 types, producing
+193 types at that stage. The current rebased library always preserves valid nonnegative imported TSS exactly,
+including zero and legacy scores without a method, even for sports excluded from calculation. Its deprecated
+`preserveImportedTss` option is accepted for compatibility and has no effect. Known calculated scores refresh from
+eligible current inputs. QS's existing internal regeneration path can explicitly remove both the imported score
+and its method before requesting recalculation; forwarding the library flag alone does not do that. This remains
+an internal regeneration contract, without a new user-facing setting.
 
 MCP impact review: the canonical numeric TSS token, aliases, units, JSON representation, activity catalog, read
 projections, scopes, consent and registered schemas remain unchanged. No Training formula, derived schema, planning
 capability, plugin rebuild, write path, queue lifecycle or monitoring change is added. Current app help remains accurate
-because the default retains imported scores and there is no user-facing false-flag override. Adopt the library in the
-application and Functions together. No global reparse is required; a separately approved targeted source-backed
-reparse can correct specifically affected imports that previously ignored false or retained TSS after calculation
-failed. Regenerate affected event summaries and Training snapshots through the existing ingress when a score changes.
+because imported scores remain preserved by default and there is no user-facing false-flag override. Adopt the library
+in application and Functions together. Historical sport-name corrections require separately approved source-backed
+reparsing where the retained source supplies the distinction. Renaming a sport keeps its valid provider TSS. Regenerate
+affected event summaries and Training snapshots through the existing ingress when calculated values change.
 
 The next approved unreleased batch adds Racket Sport and Ultimate Disc in Team/Racket and Para Sport in Unspecified,
 bringing the library catalog to 196 canonical types. Bare FIT Racket (`64`) preserves the broad category; recognized
@@ -7872,9 +7873,9 @@ HIIT aliases retain Fitness/Gym conditioning; E-Biking and Cycling retain the Cy
 and zone policies, and applicable cycling durability; Walking retains its Walking context and recorded-load policies.
 The three new types have no library durability adapter. Dynamic Apnea inherits Pool Apnea's Diving terrain-summary
 exclusions, including native JSON normalization. Usable power curves stay isolated by exact canonical type. The same
-TSS policy holds for all 196 types: true or omission preserves finite provider TSS exactly, including zero and legacy
-methodless scores; false discards the score and method, recalculates with sufficient eligible inputs, and leaves both
-unset otherwise.
+current library TSS policy also holds for those 196 types: valid nonnegative provider TSS stays exact, including zero
+and legacy methodless scores, for every legacy flag setting. Explicit recalculation requires removing both score and
+method before evaluation, as in QS's internal regeneration path.
 
 MCP impact review: the built 196-type catalog passes the existing strict activity-type output schema in ESM and CJS;
 the public output and Training-impact suites pass 113 tests. Canonical numeric tokens, units, metric discovery,
@@ -7903,8 +7904,8 @@ Verification: the profile-name importer suite passes 286 tests, and the activity
 and TSS integration suites pass 3,524 tests. Both package formats build, the documentation build verifies 13 pages,
 and all 20 aliases resolve to their canonical Training contexts. Full-catalog runtime checks cover both TSS settings,
 zero and methodless imported scores, JSON regeneration, strict MCP catalog output, and all 121 audited Suunto protocol
-pairs. The public MCP output and Training-impact suites pass 113 tests. Default/true keeps the provider's finite TSS;
-false discards it and uses the existing calculation policy.
+pairs. The public MCP output and Training-impact suites pass 113 tests. The current rebased library preserves valid
+nonnegative provider TSS for every legacy flag setting; the deprecated flag itself does not request recalculation.
 
 MCP impact review: this alias batch changes no numeric metric, unit, Training formula, planning surface, derived schema,
 wire schema, read projection, consent, scope, mutation, provider delivery, persisted write path, transport, queue lifecycle,
