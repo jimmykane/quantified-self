@@ -6224,16 +6224,17 @@ calculations, provider behavior, or refresh subscriptions.
 Activity details place a surface-free **Compact strip** immediately below the primary activity summary, before tags,
 device metadata, and additional statistics. It shares the other activity sections' full content width inside the
 workspace shell, without an additional side inset. For event details, the shared Training-impact component's `strip`
-variant labels the four contribution columns **This workout’s contribution** rather than repeating the session's
-maintenance/building/decay role as a headline. The heading sits beside the columns on desktop; in narrower containers
-it moves above two columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
-values and one **Day result** remain visible. The result says **Fitness load increased/decreased by … CTL** or
-**Fitness load stayed steady**; locale-aware two-decimal display normalizes signed zero and sub-display-precision noise.
-It explicitly includes all training counted for that day, not only this workout. No second Training-day outcome or
-maintenance headline appears in event details, and UTC terminology stays out of its main presentation.
+variant shows one compact three-column number strip: **TSS**, **Workout CTL**, and **Day CTL**, under a small heading.
+Workout CTL is this workout's contribution; Day CTL is the whole-day net change after all training and normal load decay.
+The two must never be substituted for one another. Canonical Sports Lib TSS display uses one decimal through the shared
+unit-aware formatter; CTL retains locale-aware two-decimal display with signed-zero and sub-display-precision normalization.
+The three columns remain side by side on phones and desktop, without nested cards, per-stat borders, subtitles or a
+second visible Day-result row. Full descriptive accessible names distinguish each value. The expanded calculation
+retains all four workout contribution values, including Fatigue (ATL) and Form, plus the plain-language **Day result**
+and its all-training/day-decay explanation. No maintenance headline or UTC terminology enters the collapsed strip.
 When the strip is present, the activity summary uses the shared
 header's bottom-padding hooks to leave an 8px join instead of stacking summary and phone metric padding. Other summary
-surfaces retain their existing spacing. A Material info icon stays beside the day result, including on phones, with
+surfaces retain their existing spacing. A Material info icon stays in the heading row, including on phones, with
 the accessible label and hover/keyboard tooltip **How Training impact is calculated**. Its native tooltip touch gestures
 are disabled (`matTooltipTouchGestures="off"`), so long-press handling never suppresses mobile scrolling. A tap or
 keyboard activation still controls a labelled hidden region through `aria-expanded` and
