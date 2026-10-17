@@ -23,6 +23,13 @@ export class BenchmarkNoOverlapError extends Error {
     }
 }
 
+export class BenchmarkNoSharedDataError extends Error {
+    constructor() {
+        super('No usable shared measurements. Choose recordings with overlapping sensor or GPS samples.');
+        this.name = 'BenchmarkNoSharedDataError';
+    }
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -95,7 +102,7 @@ export class AppBenchmarkService {
             testName: test.creator?.name || 'Device B',
             timestamp: new Date(),
             metrics: {
-                gnss: { cep50: 0, cep95: 0, maxDeviation: 0, rmse: 0, totalDistanceDifference: 0 },
+                gnss: null,
                 streamMetrics: {}
             }
         };
@@ -149,6 +156,7 @@ export class AppBenchmarkService {
         // 5. Calculate GNSS Metrics
         if (gnssDeviations.length > 0) {
             gnssDeviations.sort((a, b) => a - b);
+            result.metrics.gnss = { cep50: 0, cep95: 0, maxDeviation: 0, rmse: 0, totalDistanceDifference: 0 };
             result.metrics.gnss.cep50 = gnssDeviations[Math.floor(gnssDeviations.length * 0.50)];
             result.metrics.gnss.cep95 = gnssDeviations[Math.floor(gnssDeviations.length * 0.95)];
             result.metrics.gnss.maxDeviation = gnssDeviations[gnssDeviations.length - 1];
@@ -181,16 +189,21 @@ export class AppBenchmarkService {
         commonTypes.forEach(type => {
             const vals = streamValues[type];
             if (vals.a.length > 1) { // Need at least 2 points for correlation
+                const correlation = this.pearsonCorrelation(vals.a, vals.b);
                 result.metrics.streamMetrics[type] = {
                     sourceA_mean: this.mean(vals.a),
                     sourceB_mean: this.mean(vals.b),
                     meanDeviation: this.meanDeviation(vals.a, vals.b),
-                    pearsonCorrelation: this.pearsonCorrelation(vals.a, vals.b),
+                    pearsonCorrelation: Number.isFinite(correlation) ? correlation : null,
                     meanAbsoluteError: this.meanAbsoluteError(vals.a, vals.b),
                     rootMeanSquareError: this.rmse(vals.a, vals.b)
                 };
             }
         });
+
+        if (!result.metrics.gnss && Object.keys(result.metrics.streamMetrics).length === 0) {
+            throw new BenchmarkNoSharedDataError();
+        }
 
         // 7. Quality Issues & Metadata
         const issuesRef = this.detectQualityIssues(reference, {
@@ -213,7 +226,7 @@ export class AppBenchmarkService {
 
     private getPositionAtTime(activity: ActivityInterface, date: Date): DataPositionInterface | null {
         const index = activity.getDateIndex(date);
-        if (index === -1) return null;
+        if (!Number.isInteger(index) || index < 0) return null;
 
         const streams = activity.getAllStreams().map(s => s.type);
         if (!streams.includes('Latitude') || !streams.includes('Longitude')) return null;
@@ -222,24 +235,26 @@ export class AppBenchmarkService {
         const longStream = activity.getStreamData('Longitude');
 
         // Check bounds
-        if (!latStream || !longStream || index >= latStream.length) return null;
+        if (!latStream || !longStream || index >= latStream.length || index >= longStream.length) return null;
 
         const lat = latStream[index];
         const lng = longStream[index];
 
-        if (lat === null || lng === null) return null;
+        if (typeof lat !== 'number' || !Number.isFinite(lat) || Math.abs(lat) > 90
+            || typeof lng !== 'number' || !Number.isFinite(lng) || Math.abs(lng) > 180) return null;
 
         return { latitudeDegrees: lat, longitudeDegrees: lng } as DataPositionInterface;
     }
 
     private getValueAtTime(activity: ActivityInterface, type: string, date: Date): number | null {
         const index = activity.getDateIndex(date);
-        if (index === -1) return null;
+        if (!Number.isInteger(index) || index < 0) return null;
 
         const stream = activity.getStreamData(type);
         if (!stream || index >= stream.length) return null;
 
-        return stream[index] as number | null;
+        const value = stream[index];
+        return typeof value === 'number' && Number.isFinite(value) ? value : null;
     }
 
     // Math Helpers

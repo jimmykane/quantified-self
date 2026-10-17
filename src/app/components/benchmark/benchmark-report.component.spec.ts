@@ -1,14 +1,15 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { BenchmarkReportComponent } from './benchmark-report.component';
 import { BenchmarkResult } from '@shared/app-event.interface';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { CommonModule } from '@angular/common';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconModule } from '@angular/material/icon';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 describe('BenchmarkReportComponent', () => {
     let component: BenchmarkReportComponent;
-    let fixture: ComponentFixture<BenchmarkReportComponent>;
 
     const createMockResult = (cep50: number, correlation: number): BenchmarkResult => ({
         referenceId: 'ref-id',
@@ -35,7 +36,7 @@ describe('BenchmarkReportComponent', () => {
         await TestBed.configureTestingModule({
             declarations: [BenchmarkReportComponent],
             imports: [
-                MatIconModule
+                CommonModule, MatTooltipModule, MatIconModule
             ],
             providers: [
                 {
@@ -55,12 +56,52 @@ describe('BenchmarkReportComponent', () => {
             ]
         }).compileComponents();
 
-        fixture = TestBed.createComponent(BenchmarkReportComponent);
-        component = fixture.componentInstance;
+        component = TestBed.runInInjectionContext(() => new BenchmarkReportComponent());
+    });
+
+    it.each([true, false])('renders GPS availability and the regeneration notice (missing GPS: %s)', missingGps => {
+        const fixture = TestBed.createComponent(BenchmarkReportComponent);
+        const report = { ...createMockResult(1, 0.99), requiresRegeneration: true, activityLinksResolved: false };
+        if (missingGps) report.metrics.gnss = null;
+        fixture.componentRef.setInput('result', report);
+        fixture.detectChanges();
+        const element: HTMLElement = fixture.nativeElement;
+        expect(element.textContent).toContain('Regeneration required');
+        expect(element.textContent).toContain('Choose the reference and test recordings again');
+        expect(element.textContent?.includes('No shared GPS data')).toBe(missingGps);
+        expect(!!element.querySelector('.gnss-card')).toBe(!missingGps);
     });
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('excludes unavailable GPS from grades and insights', () => {
+        component.result = createMockResult(0, 0.85);
+        component.result.metrics.gnss = null;
+        expect(component.getGnssGrade()).toBe('unavailable');
+        expect(component.getOverallGrade()).toBe('poor');
+        expect(component.getInsights()).toContainEqual({ label: 'No shared GPS data', grade: 'unavailable' });
+        expect(component.getInsights().some(insight => insight.label.includes('GNSS accuracy'))).toBe(false);
+    });
+
+    it('excludes undefined correlation and handles an entirely ungraded report', () => {
+        component.result = createMockResult(0, 0.99);
+        component.result.metrics.gnss = null;
+        component.result.metrics.streamMetrics.HeartRate.pearsonCorrelation = null;
+        expect(component.getOverallGrade()).toBe('unavailable');
+        expect(component.getStreamGrades()).toEqual([]);
+        expect(component.getCorrelationLabel(null)).toBe('Correlation unavailable');
+        expect(component.getInsights()).toEqual([{ label: 'No shared GPS data', grade: 'unavailable' }]);
+    });
+
+    it('marks historical reports for regeneration and skips current-stat differences', () => {
+        component.result = { ...createMockResult(0, 1), requiresRegeneration: true, activityLinksResolved: false };
+        component.diffChips = [{ label: 'Distance', hasDiff: true, absPercent: 0 }];
+        component.ngOnChanges({ result: { currentValue: component.result, previousValue: null, firstChange: true, isFirstChange: () => true } });
+        expect(component.getOverallGrade()).toBe('unavailable');
+        expect(component.getVerdictTitle()).toBe('Regeneration required');
+        expect(component.diffChips).toEqual([]);
     });
 
     describe('Grade Calculations', () => {

@@ -88,6 +88,32 @@ describe('BenchmarkEventAdapter', () => {
     expect(event.benchmarkLatestAt?.toISOString()).toBe(fixedDate.toISOString());
   });
 
+  it('round-trips unavailable GPS, regeneration flags and source revision without mutating stored data', () => {
+    const event = {} as AppEventInterface;
+    const raw = {
+      benchmarkSourceRevision: 3,
+      benchmarkResults: { pair: makeResult({ metrics: { gnss: null, streamMetrics: {} },
+        requiresRegeneration: true, activityLinksResolved: false }) },
+    };
+    const roundtrip = JSON.parse(JSON.stringify(raw));
+    adapter.applyBenchmarkFieldsFromFirestore(event, roundtrip);
+    expect(event.benchmarkSourceRevision).toBe(3);
+    expect(event.benchmarkResults?.pair.metrics.gnss).toBeNull();
+    expect(event.benchmarkResults?.pair.requiresRegeneration).toBe(true);
+    expect(event.benchmarkResults?.pair.activityLinksResolved).toBe(false);
+    expect(event.benchmarkResults?.pair.timestamp).toBeInstanceOf(Date);
+    expect(typeof roundtrip.benchmarkResults.pair.timestamp).toBe('string');
+  });
+
+  it('hydrates legacy single reports into a usable pair and derives their index fields', () => {
+    const event = {} as AppEventInterface;
+    adapter.applyBenchmarkFieldsFromFirestore(event, { benchmarkResult: makeResult({ requiresRegeneration: true }) });
+    expect(event.benchmarkResults?.['ref-1_test-1']).toBe(event.benchmarkResult);
+    expect(event.benchmarkResult?.requiresRegeneration).toBe(true);
+    expect(event.hasBenchmark).toBe(true);
+    expect(event.benchmarkLatestAt).toEqual(new Date('2024-01-01T10:00:00Z'));
+  });
+
   it('hydrates reviewer tags from saved comparison event metadata', () => {
     const event = {} as AppEventInterface;
 

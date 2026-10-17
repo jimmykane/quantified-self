@@ -60,6 +60,42 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const promise = new Promise<void>(resolve => { release = resolve; });
     return { promise, release };
   }
+  it('preserves benchmark reports and remaps participants through repeated real writer reparses', async () => {
+    const { DataDuration } = await import('@sports-alliance/sports-lib');
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup();
+    const comparison = (suffix: string) => {
+      const event = workout(`ref-${suffix}`);
+      event.addActivity(workout(`test-${suffix}`, Date.UTC(2026, 0, 2, 1)).getFirstActivity());
+      event.isMerge = true;
+      (event as EventInterface & { mergeType: string }).mergeType = 'benchmark';
+      event.getActivities().forEach((activity, index) => {
+        activity.addStat(new DataDuration(3600));
+        activity.addStat(new DataDistance(1000 + index * 1000));
+      });
+      return event;
+    };
+    await source(uid, comparison('old'));
+    const ref = db.doc(`users/${uid}/events/workout`);
+    await ref.update({ mergeType: 'benchmark', toolSource: 'tools/compare', comparisonTitle: 'Saved comparison',
+      hasBenchmark: true, tags: ['firmware'], benchmarkResults: { 'ref-old_test-old': {
+        referenceId: 'ref-old', testId: 'test-old', timestamp: new Date(0),
+        metrics: { gnss: null, streamMetrics: {} },
+      } } });
+    const oldLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    await persistReparsedEvent(uid, 'workout', comparison('new'), (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
+    const first = (await ref.get()).data()!;
+    expect(first).toMatchObject({ comparisonTitle: 'Saved comparison', tags: ['firmware'], mergeType: 'benchmark', benchmarkSourceRevision: 1 });
+    expect(first.benchmarkResults['ref-new_test-new']).toMatchObject({ referenceId: 'ref-new', testId: 'test-new',
+      requiresRegeneration: true, activityLinksResolved: true, metrics: { gnss: null } });
+    const newLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    expect(newLegs.docs.map(doc => doc.id).sort()).toEqual(['ref-new', 'test-new']);
+    await persistReparsedEvent(uid, 'workout', comparison('new'), first, newLegs.docs, SPORTS_LIB_VERSION);
+    const second = (await ref.get()).data()!;
+    expect(second.benchmarkResults).toEqual(first.benchmarkResults);
+    expect(second.benchmarkSourceRevision).toBe(2);
+  });
+
   it.each(['unchanged', 'replaced', 'event-deleted', 'user-deleted'])(
     'guards non-activity reparse classification in a real transaction: %s', async lifecycle => {
       const uid = setup(); await source(uid, workout());

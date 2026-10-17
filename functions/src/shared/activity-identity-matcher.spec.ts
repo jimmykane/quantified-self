@@ -34,6 +34,7 @@ describe('activity identity matcher', () => {
     const parsedActivity = { ...identity(undefined, startDate), type: newType };
     expect([...resolveActivityIdentityAssignments([oldActivity], [parsedActivity]).assignments])
       .toEqual([[0, 0]]);
+    expect([...resolveActivityIdentityAssignments([oldActivity], [parsedActivity], { requireStrictMatch: true }).assignments]).toEqual([[0, 0]]);
     expect(oldActivity.type).toBe(oldType);
     expect(parsedActivity.type).toBe(newType);
 
@@ -195,6 +196,31 @@ describe('activity identity matcher', () => {
     expect(result.assignments.size).toBe(0);
     expect(result.unmatchedParsedIndexes).toEqual([0]);
     expect(result.unmatchedExistingIndexes).toEqual([0]);
+  });
+
+  it('requires complete strict evidence for report links even when keys agree or a fallback was requested', () => {
+    const old = identity('shared-key', Date.parse('2026-07-01T08:00:00Z'));
+    const mismatches = [
+      { ...old, endDate: Number(old.endDate) + 1000 },
+      { ...old, getStat: () => ({ getValue: () => 999 }) },
+      { ...old, getStat: () => null },
+      { ...old, type: 'Cycling' },
+    ];
+    for (const parsed of mismatches) {
+      expect(resolveActivityIdentityAssignments([old], [parsed], {
+        requireStrictMatch: true, allowSingleRemainingFallback: true,
+      }).assignments.size).toBe(0);
+    }
+    expect([...resolveActivityIdentityAssignments([old], [old], { requireStrictMatch: true }).assignments]).toEqual([[0, 0]]);
+  });
+
+  it('uses source-file hashes to disambiguate otherwise identical strict report participants', () => {
+    const start = Date.parse('2026-07-01T08:00:00Z');
+    const a = identity(`${'a'.repeat(64)}:${'c'.repeat(64)}:0`, start);
+    const b = identity(`${'b'.repeat(64)}:${'c'.repeat(64)}:0`, start);
+    expect([...resolveActivityIdentityAssignments([a, b], [b, a], { requireStrictMatch: true }).assignments]).toEqual([[0, 1], [1, 0]]);
+    const wrongFile = { ...a, sourceActivityKey: `${'f'.repeat(64)}:${'c'.repeat(64)}:0` };
+    expect(resolveActivityIdentityAssignments([a], [wrongFile], { requireStrictMatch: true }).assignments.size).toBe(0);
   });
 
   it('retains the one-remaining-item fallback only when a legacy caller requests it', () => {

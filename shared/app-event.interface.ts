@@ -32,6 +32,8 @@ export interface AppEventInterface extends EventInterface {
     benchmarkDevices?: string[];
     /** Latest benchmark timestamp for querying/sorting */
     benchmarkLatestAt?: Date;
+    /** Server-owned reparse generation used to reject reports computed from older recordings. */
+    benchmarkSourceRevision?: number;
     /** Merge classification for merged or benchmark comparison events. */
     mergeType?: 'benchmark' | 'multi' | string;
     /** Product/tool route that created this event when applicable. */
@@ -56,12 +58,20 @@ export function getBenchmarkPairKey(referenceId: string, testId: string): string
     return `${referenceId}_${testId}`;
 }
 
+export class BenchmarkSourceChangedError extends Error {
+    constructor() {
+        super('The recordings changed during benchmark generation. Reload them and try again.');
+        this.name = 'BenchmarkSourceChangedError';
+    }
+}
+
 export interface BenchmarkStreamMetrics {
     sourceA_mean: number;
     sourceB_mean: number;
     /** Signed mean difference, calculated as test minus reference. */
     meanDeviation?: number;
-    pearsonCorrelation: number;
+    /** Null when either recording has no variance, so correlation is undefined. */
+    pearsonCorrelation: number | null;
     meanAbsoluteError: number;
     rootMeanSquareError: number;
 }
@@ -75,7 +85,12 @@ export interface BenchmarkResult {
     testName?: string;
     sourceEventId?: string;
     timestamp: Date;
+    /** Retained historical result; regenerate after original-file reprocessing. */
+    requiresRegeneration?: boolean;
+    /** False when reparse could not uniquely reconnect both saved participants. */
+    activityLinksResolved?: boolean;
     metrics: {
+        /** Null when there are no valid paired GPS samples. Older reports retain their existing object. */
         gnss: {
             /** Mean radial GNSS deviation in meters. Unsigned for GNSS in v1. */
             meanDeviation?: number;
@@ -86,7 +101,7 @@ export interface BenchmarkResult {
             maxDeviation: number;
             rmse: number;
             totalDistanceDifference: number;
-        };
+        } | null;
         streamMetrics: {
             [streamType: string]: BenchmarkStreamMetrics;
         };

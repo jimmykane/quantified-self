@@ -1,17 +1,18 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityInterface, User } from '@sports-alliance/sports-lib';
-import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
+import { AppEventInterface, BenchmarkOptions, BenchmarkResult, BenchmarkSourceChangedError, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { AppBenchmarkFlowService } from './app.benchmark-flow.service';
-import { AppBenchmarkService, BenchmarkNoOverlapError } from './app.benchmark.service';
+import { AppBenchmarkService, BenchmarkNoOverlapError, BenchmarkNoSharedDataError } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
 import { AppAnalyticsService } from './app.analytics.service';
+import { AppHapticsService } from './app.haptics.service';
 
 describe('AppBenchmarkFlowService', () => {
   let service: AppBenchmarkFlowService;
@@ -21,11 +22,12 @@ describe('AppBenchmarkFlowService', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let benchmarkService: { generateBenchmark: ReturnType<typeof vi.fn> };
   let eventService: {
-    updateEventProperties: ReturnType<typeof vi.fn>;
+    saveBenchmarkResult: ReturnType<typeof vi.fn>;
     getEventAndActivities: ReturnType<typeof vi.fn>;
     getEventActivitiesAndAllStreams: ReturnType<typeof vi.fn>;
   };
   let logger: { error: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn> };
+  const haptics = { selection: vi.fn() };
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
   const activityA = { getID: () => 'a1' } as ActivityInterface;
@@ -56,7 +58,10 @@ describe('AppBenchmarkFlowService', () => {
     snackBar = { open: vi.fn() };
     benchmarkService = { generateBenchmark: vi.fn() };
     eventService = {
-      updateEventProperties: vi.fn().mockResolvedValue(undefined),
+      saveBenchmarkResult: vi.fn().mockImplementation(async (_user, _id, result: BenchmarkResult) => ({
+        benchmarkResults: { [getBenchmarkPairKey(result.referenceId, result.testId)]: result },
+        hasBenchmark: true, benchmarkDevices: [], benchmarkLatestAt: result.timestamp,
+      })),
       getEventAndActivities: vi.fn(),
       getEventActivitiesAndAllStreams: vi.fn(),
     };
@@ -66,6 +71,7 @@ describe('AppBenchmarkFlowService', () => {
     TestBed.configureTestingModule({
       providers: [
         AppBenchmarkFlowService,
+        { provide: AppHapticsService, useValue: haptics },
         { provide: MatBottomSheet, useValue: bottomSheet },
         { provide: Overlay, useValue: overlay },
         { provide: MatDialog, useValue: dialog },
@@ -377,6 +383,75 @@ describe('AppBenchmarkFlowService', () => {
     );
   });
 
+  it.each(['failed download', 'changed IDs', 'missing event'])('keeps saved reports untouched after %s and reloads on Retry', async (failure) => {
+    const event = createEvent();
+    const oldResult = createResult();
+    event.benchmarkResults = { a1_b1: oldResult };
+    eventService.getEventActivitiesAndAllStreams.mockReturnValue(failure === 'failed download'
+      ? throwError(() => new Error('download unavailable'))
+      : of(failure === 'missing event' ? null : { getActivities: () => [{ getID: () => 'new-a' }, { getID: () => 'new-b' }] }));
+    const actions$ = new Subject<void>();
+    snackBar.open.mockReturnValue({ onAction: () => actions$ });
+    const freshEvent = createEvent();
+    eventService.getEventAndActivities.mockReturnValue(of(freshEvent));
+    const selection = vi.spyOn(service, 'openBenchmarkSelectionDialog').mockResolvedValue(undefined);
+    const complete = vi.fn();
+    await service.generateAndOpenReport({ event, user: { uid: 'user-1' } as User, ref: activityA, test: activityB,
+      options: { autoAlignTime: true }, hydrateStreamsForGeneration: true, onGenerationComplete: complete });
+    expect(benchmarkService.generateBenchmark).not.toHaveBeenCalled();
+    expect(eventService.saveBenchmarkResult).not.toHaveBeenCalled();
+    expect(event.benchmarkResults).toEqual({ a1_b1: oldResult });
+    expect(complete).toHaveBeenCalledWith('failure', 'streams_unavailable');
+    expect(snackBar.open).toHaveBeenCalledWith(expect.stringContaining('Could not load'), 'Retry');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    actions$.next();
+    await vi.waitFor(() => expect(selection).toHaveBeenCalledWith(expect.objectContaining({
+      event: freshEvent, persistEvent: freshEvent, initialSelection: undefined,
+    })));
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    actions$.next();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects missing shared measurements without saving or opening a report', async () => {
+    benchmarkService.generateBenchmark.mockRejectedValue(new BenchmarkNoSharedDataError());
+    await service.generateAndOpenReport({ event: createEvent(), ref: activityA, test: activityB, options: { autoAlignTime: false } });
+    expect(eventService.saveBenchmarkResult).not.toHaveBeenCalled();
+    expect(bottomSheet.open).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith(expect.stringContaining('No usable shared measurements'), 'Close');
+  });
+
+  it('reloads before retry when reparse overtakes report generation', async () => {
+    const event = createEvent();
+    event.benchmarkSourceRevision = 4;
+    eventService.getEventActivitiesAndAllStreams.mockReturnValue(of(event));
+    eventService.saveBenchmarkResult.mockRejectedValue(new BenchmarkSourceChangedError());
+    const result = createResult();
+    benchmarkService.generateBenchmark.mockImplementation(async () => {
+      event.benchmarkSourceRevision = 5;
+      return result;
+    });
+    const complete = vi.fn();
+    await service.generateAndOpenReport({ event, user: { uid: 'u1' } as User, ref: activityA, test: activityB,
+      options: { autoAlignTime: true }, hydrateStreamsForGeneration: true, onGenerationComplete: complete });
+    expect(eventService.saveBenchmarkResult).toHaveBeenCalledWith(expect.anything(), 'event-1', result, 4);
+    expect(event.benchmarkResults).toEqual({});
+    expect(bottomSheet.open).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith(expect.stringContaining('recordings changed'), 'Retry');
+    expect(complete).toHaveBeenCalledWith('failure', 'streams_unavailable');
+  });
+
+  it('keeps the old in-memory report when saving a replacement fails', async () => {
+    const event = createEvent();
+    const oldResult = createResult();
+    event.benchmarkResults = { a1_b1: oldResult };
+    benchmarkService.generateBenchmark.mockResolvedValue({ ...createResult(), timestamp: new Date(0) });
+    eventService.saveBenchmarkResult.mockRejectedValue(new Error('write unavailable'));
+    await service.generateAndOpenReport({ event, user: { uid: 'user-1' } as User, ref: activityA, test: activityB, options: { autoAlignTime: false } });
+    expect(event.benchmarkResults.a1_b1).toBe(oldResult);
+    expect(bottomSheet.open).not.toHaveBeenCalled();
+  });
+
   it('opens selection when a benchmark event has more than two activities', async () => {
     const activityC = { getID: () => 'c1' } as ActivityInterface;
     const event = {
@@ -415,14 +490,7 @@ describe('AppBenchmarkFlowService', () => {
     const key = getBenchmarkPairKey(activityA.getID(), activityB.getID());
     expect(benchmarkService.generateBenchmark).toHaveBeenCalledWith(activityA, activityB, options);
     expect(event.benchmarkResults?.[key]).toBe(result);
-    expect(eventService.updateEventProperties).toHaveBeenCalledWith(
-      user,
-      event.getID(),
-      expect.objectContaining({
-        benchmarkResults: event.benchmarkResults,
-        hasBenchmark: true,
-      })
-    );
+    expect(eventService.saveBenchmarkResult).toHaveBeenCalledWith(user, 'event-1', result, 0);
     expect(onResult).toHaveBeenCalledWith(result);
     expect(bottomSheet.open).toHaveBeenCalled();
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
@@ -444,7 +512,7 @@ describe('AppBenchmarkFlowService', () => {
       options
     });
 
-    expect(eventService.updateEventProperties).not.toHaveBeenCalled();
+    expect(eventService.saveBenchmarkResult).not.toHaveBeenCalled();
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
     expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_success');
   });

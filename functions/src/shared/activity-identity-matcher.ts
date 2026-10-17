@@ -22,6 +22,8 @@ export interface ActivityIdentityAssignmentResult {
 }
 
 export interface ActivityIdentityAssignmentOptions {
+  /** Require complete matching times/duration/distance, compatible source keys and exact/verified sport types. */
+  requireStrictMatch?: boolean;
   /**
    * Preserves the legacy reparse carry-over behavior when exactly one parsed
    * and persisted activity remain. Read-only consumers must leave this false
@@ -236,6 +238,7 @@ function assignUniqueImportRefinements(
   parsed: readonly ActivityIdentityLike[],
   assignments: Map<number, number>,
   usedExisting: Set<number>,
+  allowUnchangedType = false,
 ): void {
   const existingBySignature = new Map<string, number[]>();
   existing.forEach((activity, index) => {
@@ -254,7 +257,8 @@ function assignUniqueImportRefinements(
     const matches = (existingBySignature.get(key) || []).filter(existingIndex => {
       const previous = existing[existingIndex];
       return compatibleRefinementSourceKeys(previous, activity)
-        && compatibleImportTypes.has(`${normalizedType(previous.type)}|${normalizedType(activity.type)}`);
+        && ((allowUnchangedType && normalizedType(previous.type) === normalizedType(activity.type))
+          || compatibleImportTypes.has(`${normalizedType(previous.type)}|${normalizedType(activity.type)}`));
     });
     if (matches.length === 1) {
       candidates.set(parsedIndex, matches[0]);
@@ -285,7 +289,7 @@ export function resolveActivityIdentityAssignments(
 ): ActivityIdentityAssignmentResult {
   const assignments = new Map<number, number>();
   const usedExisting = new Set<number>();
-  [sourceKey, strictSignature, timeTypeSignature, startTypeSignature].forEach(
+  (options.requireStrictMatch ? [] : [sourceKey, strictSignature, timeTypeSignature, startTypeSignature]).forEach(
     signature => assignUniqueMatches(
       existing,
       parsed,
@@ -295,7 +299,7 @@ export function resolveActivityIdentityAssignments(
     ),
   );
 
-  assignUniqueImportRefinements(existing, parsed, assignments, usedExisting);
+  assignUniqueImportRefinements(existing, parsed, assignments, usedExisting, options.requireStrictMatch);
 
   const unmatchedParsedIndexes = parsed
     .map((_activity, index) => index)
@@ -305,6 +309,7 @@ export function resolveActivityIdentityAssignments(
     .filter(index => !usedExisting.has(index));
   if (
     options.allowSingleRemainingFallback === true
+    && options.requireStrictMatch !== true
     && unmatchedParsedIndexes.length === 1
     && unmatchedExistingIndexes.length === 1
   ) {

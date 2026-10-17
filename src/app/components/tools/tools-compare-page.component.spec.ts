@@ -2041,7 +2041,34 @@ describe('ToolsComparePageComponent', () => {
     ]));
   });
 
+  it('keeps the saved reference/test selection when reparsed comparison activities are reordered', () => {
+    const activities = ['third', 'test', 'ref'].map(id => ({ getID: () => id }));
+    const event = { getActivities: () => activities, benchmarkResults: { pair: {
+      referenceId: 'ref', testId: 'test', timestamp: new Date(), requiresRegeneration: true,
+    } } } as any;
+    expect((component as any).resolveBenchmarkInitialSelection(event)).toEqual([activities[2], activities[1]]);
+  });
+
+  it('shows retained reports as requiring regeneration and offers rerun for every metric', () => {
+    const result = {
+      referenceId: 'old-a', testId: 'old-b', timestamp: new Date(), requiresRegeneration: true,
+      metrics: { gnss: null, streamMetrics: {} },
+    };
+    const event = {
+      getID: () => 'retained-report', getActivities: () => [], startDate: new Date(),
+      benchmarkResults: { 'old-a_old-b': result },
+    } as any;
+    const row = (component as any).toComparisonListItem(event);
+    expect(row.hasReport).toBe(true);
+    expect(row.statusLabel).toBe('Regeneration required');
+    for (const metric of [row.gnssBenchmark, row.heartRateBenchmark, row.altitudeBenchmark]) {
+      expect(metric.isPlaceholder).toBe(true);
+      expect(metric.canRerunReport).toBe(true);
+    }
+  });
+
   it('resolves per-device sport types from activity stats and raw activity type aliases', () => {
+    const roadRunning = (ActivityTypes as Record<string, string>).RoadRunning ?? ActivityTypes.Running;
     const user = new User('user-1');
     userSubject.next(user);
     const cyclingActivityTypes = new DataActivityTypes([ActivityTypes.Cycling]);
@@ -2071,21 +2098,21 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
 
     const item = component.comparisonItems()[0];
-    expect(item.activityTypesLabel).toBe('Cycling, Running');
+    expect(item.activityTypesLabel).toBe(`Cycling, ${roadRunning}`);
     expect(item.activitySummaries.map(summary => ({
       deviceLabel: summary.deviceLabel,
       activityTypeLabel: summary.activityTypeLabel,
     }))).toEqual([
       { deviceLabel: 'Garmin Edge', activityTypeLabel: 'Cycling' },
-      { deviceLabel: 'Suunto Race', activityTypeLabel: 'Running' },
+      { deviceLabel: 'Suunto Race', activityTypeLabel: roadRunning },
     ]);
 
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
       .map(line => line.querySelector('.summary-type-value')?.textContent?.trim());
     expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
     expect(sportTypeLines).toContain('Cycling');
-    expect(sportTypeLines).toContain('Running');
-    expect(item.activityTypesTitle).toBe('Cycling\nRunning');
+    expect(sportTypeLines).toContain(roadRunning);
+    expect(item.activityTypesTitle).toBe(`Cycling\n${roadRunning}`);
   });
 
   it('hydrates previous comparison report rows cache-first when activity summaries are missing', async () => {

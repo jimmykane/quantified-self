@@ -17,6 +17,7 @@
     "src/app/helpers/assistant-reflection-review.helper.spec.ts",
     "src/app/helpers/assistant-training-deletion-review.helper.spec.ts",
     "src/app/helpers/assistant-workout-review.helper.spec.ts",
+    "src/app/helpers/benchmark-review.helper.spec.ts",
     "src/app/helpers/calendar-day-story.helper.spec.ts",
     "src/app/helpers/calendar-period-summary.helper.spec.ts",
     "src/app/helpers/calendar-read-error.helper.spec.ts",

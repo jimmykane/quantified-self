@@ -2,7 +2,7 @@ import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromServer, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath } from 'app/firebase/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromServer, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath, runTransaction } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -30,7 +30,7 @@ import { EventUtilities } from '@sports-alliance/sports-lib';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import type { EventJSONSanitizerIssue } from '../utils/event-json-sanitizer';
 
-import { AppEventInterface } from '@shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult, BenchmarkSourceChangedError, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
@@ -105,6 +105,7 @@ const SERVER_OWNED_EVENT_UPDATE_FIELDS = [
   'activitiesCount',
   'comparisonTitle',
   'benchmarkStatus',
+  'benchmarkSourceRevision',
   'privacy',
 ] as const;
 
@@ -343,6 +344,8 @@ export class AppEventService implements OnDestroy {
     if (event.originalFile) {
       clonedEvent.originalFile = event.originalFile;
     }
+
+    clonedEvent.benchmarkSourceRevision = event.benchmarkSourceRevision;
 
     // Preserve benchmark fields needed by event details UI.
     if (event.benchmarkResults) {
@@ -942,6 +945,32 @@ export class AppEventService implements OnDestroy {
       batch.update(eventRef, sanitizedEventPatch);
     }
     await batch.commit();
+  }
+
+  /** Owner-scoped transaction: retain other pairs and reject a report overtaken by reparse. */
+  public async saveBenchmarkResult(user: User, eventID: string, result: BenchmarkResult, expectedSourceRevision = 0) {
+    const eventRef = doc(this.firestore, 'users', user.uid, 'events', eventID);
+    return runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(eventRef);
+      if (!snapshot.exists()) throw new BenchmarkSourceChangedError();
+      const current = snapshot.data();
+      if ((current['benchmarkSourceRevision'] ?? 0) !== expectedSourceRevision) throw new BenchmarkSourceChangedError();
+      const legacy = current['benchmarkResult'] as BenchmarkResult | undefined;
+      const previousResults = Object.keys(current['benchmarkResults'] || {}).length ? current['benchmarkResults'] : (legacy
+        ? { [getBenchmarkPairKey(legacy.referenceId, legacy.testId)]: legacy } : {});
+      const benchmarkResults: Record<string, BenchmarkResult> = {
+        ...previousResults,
+        [getBenchmarkPairKey(result.referenceId, result.testId)]: result,
+      };
+      const benchmarkDevices = [...new Set(Object.values(benchmarkResults).flatMap(report =>
+        [report.referenceName, report.testName]
+          .filter((name): name is string => typeof name === 'string' && !!name.trim())
+          .map(name => name.trim().replace(/\s+/g, ' ').toLowerCase()),
+      ))];
+      const patch = { benchmarkResults, hasBenchmark: true, benchmarkDevices, benchmarkLatestAt: result.timestamp };
+      transaction.update(eventRef, sanitizeEventFirestoreWritePayload(patch));
+      return patch;
+    });
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {

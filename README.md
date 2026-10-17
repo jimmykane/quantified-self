@@ -236,6 +236,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [Benchmark comparison generation and reparse preservation](docs/benchmark-comparisons.md)
 - [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Helper test environment benchmark](docs/ci-helper-test-benchmark.md)
 - [Component fixture benchmark](docs/ci-component-fixture-benchmark.md)
