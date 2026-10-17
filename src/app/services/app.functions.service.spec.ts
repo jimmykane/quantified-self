@@ -4,6 +4,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
 import { FirebaseApp } from 'app/firebase/app';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { LoggerService } from './logger.service';
 
 const mocks = vi.hoisted(() => {
     const callableSpy = vi.fn().mockResolvedValue({ data: 'success' });
@@ -73,7 +74,8 @@ vi.mock('@shared/functions-manifest', () => ({
             region: 'europe-west2',
             clientTimeoutMs: 3_660_000,
         },
-        'otherRegionFunc': { name: 'func2', region: 'europe-west3' }
+        'otherRegionFunc': { name: 'func2', region: 'europe-west3' },
+        'ensureDerivedMetrics': { name: 'ensureDerivedMetrics', region: 'europe-west2' },
     }
 }));
 
@@ -81,13 +83,15 @@ describe('AppFunctionsService', () => {
     let service: AppFunctionsService;
     let mockApp: any;
     let appCheckReadinessMock: Pick<AppCheckReadinessService, 'ensureReady' | 'isConfigured'>;
+    let loggerMock: { getUser: ReturnType<typeof vi.fn>; captureMessage: ReturnType<typeof vi.fn> };
 
     function configureTestingModule(): AppFunctionsService {
         const providers: any[] = [
             AppFunctionsService,
             { provide: Functions, useValue: { region: 'europe-west2-instance' } },
             { provide: FirebaseApp, useValue: mockApp },
-            { provide: AppCheckReadinessService, useValue: appCheckReadinessMock }
+            { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
+            { provide: LoggerService, useValue: loggerMock },
         ];
 
         TestBed.configureTestingModule({
@@ -100,8 +104,8 @@ describe('AppFunctionsService', () => {
         mocks.getFunctionsMock.mockClear();
         mocks.connectFunctionsEmulatorMock.mockClear();
         mocks.httpsCallableMock.mockClear();
-        mocks.callableSpy.mockClear();
-        mocks.ensureReadyMock.mockClear();
+        mocks.callableSpy.mockReset().mockResolvedValue({ data: 'success' });
+        mocks.ensureReadyMock.mockReset();
         mocks.ensureReadyMock.mockResolvedValue(undefined);
         mocks.isConfiguredMock.mockClear();
         mocks.isConfiguredMock.mockReturnValue(true);
@@ -113,11 +117,16 @@ describe('AppFunctionsService', () => {
             ensureReady: mocks.ensureReadyMock,
             isConfigured: mocks.isConfiguredMock,
         };
+        loggerMock = {
+            getUser: vi.fn().mockReturnValue({ id: 'account-a' }),
+            captureMessage: vi.fn(),
+        };
 
         service = configureTestingModule();
     });
 
     afterEach(() => {
+        vi.restoreAllMocks();
         vi.clearAllMocks();
     });
 
@@ -126,7 +135,7 @@ describe('AppFunctionsService', () => {
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
         expect(getFunctions).toHaveBeenCalledTimes(2);
-        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(6);
+        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(7);
         expect(httpsCallable).toHaveBeenCalledWith(
             expect.anything(),
             'func1',
@@ -269,6 +278,172 @@ describe('AppFunctionsService', () => {
         expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
     });
 
+    describe('derived-metric failure diagnostics', () => {
+        const appCheckRejection = {
+            code: 'functions/failed-precondition',
+            message: 'App Check verification failed. private-details',
+            details: { token: 'private-token' },
+        };
+
+        it('reports only the final failed retry without serializing the request or raw error', async () => {
+            mocks.callableSpy.mockRejectedValue(appCheckRejection);
+
+            await expect(service.call('ensureDerivedMetrics', { privateRequest: 'activity-data' }))
+                .rejects.toBe(appCheckRejection);
+
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+            expect(mocks.ensureReadyMock.mock.calls).toEqual([[], [true]]);
+            expect(loggerMock.captureMessage).toHaveBeenCalledExactlyOnceWith('ensureDerivedMetrics request failed', {
+                level: 'warning',
+                user: { id: 'account-a' },
+                fingerprint: ['ensureDerivedMetrics', 'callable_retry', 'functions/failed-precondition'],
+                tags: { operation: 'ensureDerivedMetrics', stage: 'callable_retry', errorCode: 'functions/failed-precondition' },
+                contexts: { callable: { appCheckConfigured: true, recoveryAttempted: true } },
+            });
+        });
+
+        it.each([false, true])('does not report a successful request (recovery: %s)', async recovery => {
+            if (recovery) mocks.callableSpy.mockRejectedValueOnce(appCheckRejection);
+            await expect(service.call('ensureDerivedMetrics')).resolves.toEqual({ data: 'success' });
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(recovery ? 2 : 1);
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('identifies token acquisition failures (forced refresh: %s)', async refresh => {
+            const failure = { code: 'appCheck/recaptcha-error', message: 'private-provider-message' };
+            if (refresh) {
+                mocks.callableSpy.mockRejectedValueOnce(appCheckRejection);
+                mocks.ensureReadyMock.mockResolvedValueOnce(undefined);
+            }
+            mocks.ensureReadyMock.mockRejectedValueOnce(failure);
+
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(refresh ? 1 : 0);
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(1);
+            expect(loggerMock.captureMessage.mock.calls[0][1]).toMatchObject({
+                tags: { stage: refresh ? 'app_check_refresh' : 'app_check_readiness', errorCode: 'appCheck/recaptcha-error' },
+                contexts: { callable: { recoveryAttempted: refresh } },
+            });
+        });
+
+        it.each([
+            new Error('private-timeout-message'),
+            { code: 'functions/private-error-with-token', details: 'private-details' },
+            'private-failure',
+            null,
+        ])('redacts unknown errors and preserves the rejection value', async failure => {
+            mocks.callableSpy.mockRejectedValue(failure);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            expect(loggerMock.captureMessage.mock.calls[0][1].tags).toEqual({
+                operation: 'ensureDerivedMetrics', stage: 'callable', errorCode: 'unknown',
+            });
+            expect(JSON.stringify(loggerMock.captureMessage.mock.calls)).not.toContain('private');
+        });
+
+        it('records when App Check is unavailable without adding a retry', async () => {
+            mocks.isConfiguredMock.mockReturnValue(false);
+            mocks.callableSpy.mockRejectedValue(appCheckRejection);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(appCheckRejection);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            expect(loggerMock.captureMessage.mock.calls[0][1]).toMatchObject({
+                tags: { stage: 'callable' },
+                contexts: { callable: { appCheckConfigured: false, recoveryAttempted: false } },
+            });
+        });
+
+        it('deduplicates concurrent scopes, keeps the cooldown across successes and expires after five minutes', async () => {
+            const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+            const failure = { code: 'functions/unavailable' };
+            mocks.callableSpy.mockRejectedValue(failure);
+            await Promise.allSettled([
+                service.call('ensureDerivedMetrics', { metricKinds: ['form'] }),
+                service.call('ensureDerivedMetrics', { metricKinds: ['trainingSummary'] }),
+            ]);
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(1);
+            mocks.callableSpy.mockResolvedValueOnce({ data: 'success' });
+            await service.call('ensureDerivedMetrics');
+            clock.mockReturnValue(1_299_999);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(1);
+            clock.mockReturnValue(1_300_000);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(2);
+        });
+
+        it('keeps different error categories and accounts reportable', async () => {
+            for (const [id, code] of [['account-a', 'functions/internal'], ['account-a', 'functions/unavailable'],
+                ['account-b', 'functions/unavailable']]) {
+                loggerMock.getUser.mockReturnValue({ id });
+                mocks.callableSpy.mockRejectedValueOnce({ code });
+                await expect(service.call('ensureDerivedMetrics')).rejects.toEqual({ code });
+            }
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(3);
+            expect(service['reportedEnsureFailures'].size).toBe(3);
+        });
+
+        it('bounds diagnostic memory across account switches', async () => {
+            mocks.callableSpy.mockRejectedValue({ code: 'functions/internal' });
+            for (let index = 0; index < 70; index++) {
+                loggerMock.getUser.mockReturnValue({ id: `account-${index}` });
+                await expect(service.call('ensureDerivedMetrics')).rejects.toMatchObject({ code: 'functions/internal' });
+            }
+            expect(service['reportedEnsureFailures'].size).toBe(64);
+        });
+
+        it.each([{ id: 'account-a' }, {}])('does not misattribute a failure after Sentry identity changes: %j', async user => {
+            loggerMock.getUser.mockReturnValue(user);
+            mocks.ensureReadyMock.mockImplementation(async () => {
+                loggerMock.getUser.mockReturnValue({ id: 'account-b' });
+            });
+            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/internal' });
+            await expect(service.call('ensureDerivedMetrics')).rejects.toMatchObject({ code: 'functions/internal' });
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it('preserves an anonymous Sentry context without inferring identity from request data', async () => {
+            loggerMock.getUser.mockReturnValue({});
+            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/unauthenticated' });
+            await expect(service.call('ensureDerivedMetrics', { uid: 'private-uid' }))
+                .rejects.toMatchObject({ code: 'functions/unauthenticated' });
+            expect(loggerMock.captureMessage.mock.calls[0][1].user).toEqual({});
+            expect(JSON.stringify(loggerMock.captureMessage.mock.calls)).not.toContain('private-uid');
+        });
+
+        it.each([false, true])('does not report a local cancellation after readiness (recovery: %s)', async recovery => {
+            let current = true;
+            if (recovery) mocks.callableSpy.mockRejectedValueOnce(appCheckRejection);
+            mocks.ensureReadyMock.mockImplementation(async refresh => {
+                if (!recovery || refresh) current = false;
+            });
+            await expect(service.call('ensureDerivedMetrics', undefined, { canExecute: () => current }))
+                .rejects.toThrow('Operation cancelled');
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('does not report localhost failures (Functions emulator: %s)', async emulator => {
+            mocks.setLocalhost(true);
+            mocks.setUseFunctionsEmulator(emulator);
+            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/internal' });
+            await expect(service.call('ensureDerivedMetrics')).rejects.toMatchObject({ code: 'functions/internal' });
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it('leaves diagnostics for other callables unchanged', async () => {
+            mocks.callableSpy.mockRejectedValue(appCheckRejection);
+            await expect(service.call('defaultRegionFunc' as any)).rejects.toBe(appCheckRejection);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+            expect(loggerMock.getUser).not.toHaveBeenCalled();
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it.each(['getUser', 'captureMessage'] as const)('preserves the request and original error if %s fails', async method => {
+            loggerMock[method].mockImplementation(() => { throw new Error('Sentry failure'); });
+            mocks.callableSpy.mockRejectedValue(appCheckRejection);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(appCheckRejection);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+        });
+    });
+
     it('should throw error for invalid function key', async () => {
         await expect(service.call('invalidFunc' as any)).rejects.toThrow('Function invalidFunc not initialized');
     });
@@ -320,7 +495,7 @@ describe('AppFunctionsService', () => {
 
         expect(getFunctions).toHaveBeenCalledTimes(2);
         expect(connectFunctionsEmulator).not.toHaveBeenCalled();
-        expect(httpsCallable).toHaveBeenCalledTimes(6);
+        expect(httpsCallable).toHaveBeenCalledTimes(7);
         expect(localProdFunctionsService).toBeTruthy();
     });
 });

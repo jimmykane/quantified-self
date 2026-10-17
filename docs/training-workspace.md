@@ -4804,6 +4804,21 @@ changing the current/historical readiness formula or its persisted input project
 This probe is important in local development and recovery scenarios: opening Training can repair missing or stale
 snapshots even when no new Firestore write arrives.
 
+Failed `ensureDerivedMetrics` requests are reported by `AppFunctionsService` to Sentry as
+`ensureDerivedMetrics request failed`. Reporting occurs only after the existing App Check recovery attempt finishes
+unsuccessfully, or immediately for a failure that is not eligible for that retry. The fixed `stage` label distinguishes
+`app_check_readiness`, `callable`, `app_check_refresh`, and `callable_retry`. Only allowlisted SDK error codes (otherwise
+`unknown`), App Check configuration state and whether recovery was attempted are added; request data, tokens, original
+exceptions, error messages and details are not attached. The existing Sentry user context is captured at request start;
+reports are discarded if that identity changes while the request is pending. Identity is never included in tags or
+fingerprints. Localhost and local cancellations remain silent, as do successes and successful retries.
+
+Reports share a five-minute cooldown per Sentry identity, stage and error code across Dashboard and Training metric
+subsets. Successful requests do not reset that cooldown. The cache lives only in the service instance, expires old
+entries and retains at most 64 keys; reloads and separate tabs have independent budgets. Diagnostics cannot replace the
+original failure or change the existing snackbar/fallback behavior. This adds Sentry events only, with no additional
+Firestore reads, callable requests or retries. App help, MCP contracts and Training planning behavior are unchanged.
+
 ### Worker lifecycle
 
 The `ensureDerivedMetrics` callable logs one `[derived-metrics] ensureDerivedMetrics request rejected.` warning for
