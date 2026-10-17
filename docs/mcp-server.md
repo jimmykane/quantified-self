@@ -2676,6 +2676,12 @@ after validation, but no additional server deployment or registered-app rescan o
 
 ### Other domains
 
+- Explicit public activity-type lists remain limited to 20. The built-in Assistant's fixed Cycling load and saved-route
+  workflows bind their approved family through first-party session context, outside tool input. All installed-catalog
+  family members participate in one ordinary bounded scan, with each metric event counted once. Route continuation
+  hashes bind the full family. This does not widen public schemas, scopes or work/response budgets; external clients
+  cannot select the internal family context. See the analytical-workflow description in the
+  [Assistant documentation](assistant.md).
 - Event and sleep date ranges are at most 366 days.
 - Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's
   2,000-document, 4 MiB stats, and 20,000 stat-entry limits, then apply a separate 128 KiB response limit.

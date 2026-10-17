@@ -527,6 +527,13 @@ Cycling load and route workflows also receive the complete app-owned Cycling/MTB
 of relying on the model to reproduce catalog values. Because these selectors are server-owned, the workflows omit
 redundant discovery calls and spend their bounded tool budget only on account-data reads.
 
+These fixed family selectors are bound to the first-party session outside model tool arguments. The MCP data service
+resolves every family member supported by the installed Sports Lib catalog inside the existing bounded event or route
+scan. A family may exceed the public input's 20 explicit-type limit; that public schema and service validation remain
+unchanged. Metric queries aggregate each matching event once, including recordings with multiple family sports, instead
+of merging overlapping sport-query results. Route cursors bind the complete canonical family and retain the existing
+scan, byte, result and continuation limits. External clients and arbitrary tool fields cannot select this internal scope.
+
 ## Grounded evidence
 
 The model writes only the answer. Evidence shown in the UI is generated deterministically from validated tool results,

@@ -65,7 +65,7 @@ describe('Training phase preview routing', () => {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
-import { ActivityTypes, ActivityTypesHelper, ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
@@ -75,7 +75,6 @@ import {
   findAssistantPromptExample,
   findAssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
-import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import { assistantGenkit } from './model';
 import {
   createAssistantRuntime,
@@ -1618,8 +1617,9 @@ describe('Assistant runtime', () => {
         list_routes: { activityTypes: ['Cycling'], limit: 1 },
       };
       const now = new Date('2026-08-15T12:00:00.000Z');
+      const createMcpSession = vi.fn().mockResolvedValue(session);
       const runtime = createAssistantRuntime({
-        createMcpSession: vi.fn().mockResolvedValue(session),
+        createMcpSession,
         now: () => now,
         generateAnswer: async (input) => {
           expect(input.workflow).toEqual(workflow);
@@ -1653,15 +1653,8 @@ describe('Assistant runtime', () => {
         ));
         const activityDiscipline = workflow.activityDisciplineOverrides?.[toolName];
         if (activityDiscipline) {
-          expect(calledInput.activityTypes).toEqual([...new Set(
-            TRAINING_SPORT_DEFINITIONS
-              .filter(sport => sport.id === activityDiscipline)
-              .flatMap(sport => sport.contexts)
-              .flatMap(context => context.activityTypes)
-              .filter(type => ActivityTypesHelper.getActivityTypesAsUniqueArray().includes(type)),
-          )]);
-          const catalog = new Set(ActivityTypesHelper.getActivityTypesAsUniqueArray());
-          expect((calledInput.activityTypes as string[]).every(type => catalog.has(type))).toBe(true);
+          expect(calledInput).not.toHaveProperty('activityTypes');
+          expect(createMcpSession.mock.calls[0][12]).toEqual(workflow.activityDisciplineOverrides);
         }
         if (workflow.dateRange?.toolNames.includes(toolName)) {
           expect(calledInput.start).toBe(new Date(
@@ -3094,7 +3087,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined, false, false, false, false);
+      false, false, false, false, undefined, false, false, false, false, undefined);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -3484,7 +3477,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined, false, false, false, false);
+      false, false, false, false, undefined, false, false, false, false, undefined);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

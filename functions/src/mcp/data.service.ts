@@ -1,4 +1,5 @@
 import { getRejectedSwimTiming, resolveSwimTiming } from '../../../shared/swim-timing';
+import { getTrainingSportDefinition, type TrainingSportId } from '../../../shared/training-disciplines';
 import { runMcpWorkoutReflection } from './workout-reflections.service';
 import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
@@ -2646,6 +2647,22 @@ function resolveCanonicalActivityTypes(
   ].sort();
 }
 
+/** Internal workflow family, applied once inside the ordinary bounded scan. */
+function resolveWorkflowActivityTypes(
+  explicitTypes: readonly string[] | undefined,
+  discipline?: TrainingSportId,
+): ActivityTypes[] {
+  // Keep the explicit input validation even for internal callers.
+  const explicit = resolveActivityTypes(explicitTypes);
+  if (!discipline) return [...new Set(explicit)];
+  const types = getTrainingSportDefinition(discipline)?.contexts.flatMap(context => context.activityTypes) ?? [];
+  const canonical = [...new Set(types.flatMap(type => ActivityTypesHelper.resolveActivityType(type) || []))];
+  if (!canonical.length) {
+    throw new McpDataError('invalid_request', 'The workflow activity family has no supported canonical sports.');
+  }
+  return canonical;
+}
+
 function resolveRankingActivityTypes(
   activityTypes: readonly string[] | undefined,
   activityGroup: string | undefined,
@@ -2692,12 +2709,12 @@ function normalizeRouteSearch(search: string | undefined): string | null {
   return normalized || null;
 }
 
-function resolveRouteListQuery(input: ListRoutesInput): {
+function resolveRouteListQuery(input: ListRoutesInput, discipline?: TrainingSportId): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedRouteListQuery;
 } {
   const query: ResolvedRouteListQuery = {
-    activityTypes: resolveCanonicalActivityTypes(input.activityTypes),
+    activityTypes: resolveWorkflowActivityTypes(input.activityTypes, discipline).map(String).sort(),
     search: normalizeRouteSearch(input.search),
   };
   return {
@@ -3166,11 +3183,12 @@ function resolveMetricSelectors(
 async function querySelectedMetrics(
   dependencies: McpDataServiceDependencies,
   input: QueryMetricsInput,
+  discipline?: TrainingSportId,
 ) {
   validateBoundedRange(input.startTimeMs, input.endTimeMs);
   const timeZone = requireTimeZone(input.timeZone);
   const selectors = resolveMetricSelectors(input.metrics);
-  const activityTypes = resolveActivityTypes(input.activityTypes);
+  const activityTypes = resolveWorkflowActivityTypes(input.activityTypes, discipline);
   const metricTypes = [...new Set(
     selectors.map(selector => selector.metric.type),
   )];
@@ -6477,14 +6495,14 @@ export function createMcpDataService(
       return result;
     },
 
-    async queryMetric(input: QueryMetricInput) {
+    async queryMetric(input: QueryMetricInput, discipline?: TrainingSportId) {
       const result = await querySelectedMetrics(dependencies, {
         ...input,
         metrics: [{
           metric: input.metric,
           aggregation: input.aggregation,
         }],
-      });
+      }, discipline);
       return result.results[0];
     },
 
@@ -7559,11 +7577,11 @@ export function createMcpDataService(
       return getActivityChartData(dependencies, input);
     },
 
-    async listRoutes(input: ListRoutesInput) {
+    async listRoutes(input: ListRoutesInput, discipline?: TrainingSportId) {
       const {
         cursor,
         query,
-      } = resolveRouteListQuery(input);
+      } = resolveRouteListQuery(input, discipline);
       const limit = Math.min(
         MAX_ROUTE_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),

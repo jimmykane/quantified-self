@@ -3,7 +3,7 @@ import { PUBLIC_MCP_TOOL_NAMES, type PublicMcpToolName } from '../mcp/tool-outpu
 import { MCP_MANUAL_MEASUREMENT_READ_TOOLS, MCP_MANUAL_MEASUREMENT_SCHEMA, MCP_MANUAL_MEASUREMENT_INPUTS } from '../mcp/manual-measurements.schemas';
 import { resolveManualMeasurementFields } from '../mcp/manual-measurements.service';
 import type { ManualHealthMeasurementFields } from '../../../shared/manual-health';
-import { ActivityTypesHelper, DataDuration } from '@sports-alliance/sports-lib';
+import { DataDuration } from '@sports-alliance/sports-lib';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
 import { z } from 'genkit';
 import { ZodError as McpSchemaError } from 'zod';
@@ -25,7 +25,6 @@ import {
   findAssistantPromptWorkflow,
   type AssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
-import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import { assistantGenkit } from './model';
 import {
   buildAssistantEvidenceList,
@@ -218,6 +217,7 @@ export interface AssistantRuntimeDependencies {
     timelineNoteChangesEnabled?: boolean,
     measurementChangesEnabled?: boolean,
     reflectionChangesEnabled?: boolean,
+    activityDisciplines?: AssistantPromptWorkflow['activityDisciplineOverrides'],
   ) => Promise<AssistantMcpSession>;
   generateAnswer: (input: AssistantModelGenerationInput) => Promise<AssistantModelGenerationResult>;
   createVisualSource: typeof createAssistantVisualSource;
@@ -312,30 +312,6 @@ function asToolInput(value: unknown): Record<string, unknown> {
   throw new Error('The Assistant model returned invalid tool input.');
 }
 
-function resolveAssistantWorkflowActivityTypes(
-  discipline: NonNullable<
-    AssistantPromptWorkflow['activityDisciplineOverrides']
-  >[string],
-): string[] {
-  const activityTypes = new Set<string>();
-  for (const sport of TRAINING_SPORT_DEFINITIONS) {
-    if (sport.id !== discipline) {
-      continue;
-    }
-    for (const context of sport.contexts) {
-      context.activityTypes.forEach(activityType => {
-        // The registry prepares future canonical names; MCP query filters must
-        // still be accepted by the currently installed Sports Lib catalog.
-        const canonicalType = ActivityTypesHelper.resolveActivityType(activityType);
-        if (canonicalType) {
-          activityTypes.add(canonicalType);
-        }
-      });
-    }
-  }
-  return [...activityTypes];
-}
-
 function applyAssistantWorkflowToolPolicy(
   workflow: AssistantPromptWorkflow | null,
   toolName: AssistantMcpToolName,
@@ -349,13 +325,13 @@ function applyAssistantWorkflowToolPolicy(
     ...toolInput,
     ...(workflow.toolInputOverrides?.[toolName] || {}),
   };
-  const activityDiscipline = workflow.activityDisciplineOverrides?.[toolName];
-  const activityTypes = activityDiscipline
-    ? resolveAssistantWorkflowActivityTypes(activityDiscipline)
-    : null;
-  const activityScopedInput = activityTypes
-    ? { ...overriddenInput, activityTypes }
-    : overriddenInput;
+  // Family selectors are bound to the internal session, not sent through the
+  // public explicit-type input (which remains capped at 20). Ignore model filters
+  // for these fixed workflows so they cannot narrow the approved family.
+  const activityScopedInput = { ...overriddenInput };
+  if (workflow.activityDisciplineOverrides?.[toolName]) {
+    delete activityScopedInput.activityTypes;
+  }
   if (!workflow.dateRange?.toolNames.includes(toolName)) {
     return activityScopedInput;
   }
@@ -1369,7 +1345,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
 const defaultDependencies: AssistantRuntimeDependencies = {
   createMcpSession: (uid, appBaseUrl, locationAccess, timelineNotesEnabled, trainingPlansEnabled,
     trainingPlanChangesEnabled, trainingDeliveryEnabled, conversationId, activityTagChangesEnabled,
-    timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled) => createAssistantMcpSession(
+    timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled, activityDisciplines) => createAssistantMcpSession(
     uid,
     appBaseUrl,
     undefined,
@@ -1383,6 +1359,7 @@ const defaultDependencies: AssistantRuntimeDependencies = {
     timelineNoteChangesEnabled,
     measurementChangesEnabled,
     reflectionChangesEnabled,
+    activityDisciplines,
   ),
   generateAnswer: generateAssistantModelAnswer,
   createVisualSource: createAssistantVisualSource,
@@ -1422,6 +1399,8 @@ export function createAssistantRuntime(
       onBillableAttempt?: () => Promise<void>;
     }): Promise<AssistantRuntimeResult> => {
       const locationAccess = input.locationAccess ?? 'coordinate_free';
+      const dailyWorkoutRequested = requestsDailyWorkoutContext(input.prompt, input.history);
+      const promptWorkflow = dailyWorkoutRequested ? null : findAssistantPromptWorkflow(input.prompt);
       const session: AssistantMcpSession = await dependencies.createMcpSession(
         input.uid,
         input.appBaseUrl,
@@ -1435,6 +1414,7 @@ export function createAssistantRuntime(
         input.timelineNoteChangesEnabled === true,
         input.measurementChangesEnabled === true,
         input.reflectionChangesEnabled === true,
+        promptWorkflow?.activityDisciplineOverrides,
       );
       const invocations: AssistantToolInvocation[] = [];
       const visualSources: AssistantVisualSource[] = [];
@@ -1450,11 +1430,9 @@ export function createAssistantRuntime(
       } } | undefined;
       try {
         const currentTime = dependencies.now();
-        const dailyWorkoutRequested = requestsDailyWorkoutContext(input.prompt, input.history);
         const dailyWorkoutRequest = dailyWorkoutRequested
           ? resolveDailyWorkoutRequest(input.prompt, input.history, currentTime, input.timeZone) : undefined;
         const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
-        const promptWorkflow = dailyWorkoutRequested ? null : findAssistantPromptWorkflow(input.prompt);
         const metricTrendIntent = promptWorkflow || dailyWorkoutRequested
           ? null
           : findAssistantMetricTrendIntent({
