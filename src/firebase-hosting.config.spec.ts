@@ -344,7 +344,8 @@ describe('Firebase Hosting configuration', () => {
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
-    // QS-calculated Garmin sleep-window HR and remembered Plans/Standalone navigation.
+    // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
+    // and bounded background Training rebuilds during bulk imports/reparse.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -379,6 +380,7 @@ describe('Firebase Hosting configuration', () => {
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
     // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
     // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
+    // Event details now documents the compact TSS / Workout CTL / Day CTL strip.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

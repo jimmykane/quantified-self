@@ -17,6 +17,8 @@ import {
 } from './derived-metrics.service';
 import { trainingBuildSettingsKey } from './training-build-workout-seed';
 import { processDerivedMetricsTask } from '../tasks/derived-metrics-worker';
+import { processDerivedMetricsIngressTask } from '../tasks/derived-metrics-ingress-worker';
+import { ensureDerivedMetricsForUser, prepareDerivedMetricsForUser } from './ensure-derived-metrics';
 
 // A separate demo namespace, synthetic fixtures only, and no Cloud Tasks or provider calls.
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / real Firestore', { timeout: 30_000 }, () => {
@@ -31,6 +33,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
     const metric = () => user().collection('derivedMetrics').doc(kinds[0]);
     const tombstone = () => db.doc(`userDeletionTombstones/${uid}`);
     beforeEach(async () => {
+        mocks.enqueue.mockReset().mockResolvedValue(undefined);
         mocks.firestore.mockReturnValue(db);
         uid = `reuse-fixture-${randomUUID()}`; owners.push(uid);
         await user().set({ fixture: true });
@@ -57,6 +60,137 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
             eventMutationVersion: start.eventMutationVersion, settingsKey: trainingBuildSettingsKey({}) };
         return { start, claim, context };
     }
+
+    it.each([false, true])('replays fourteen 30-second ingress arrivals without losing the tail (background=%s)', async background => {
+        const base = Math.floor(Date.now() / 1000) * 1000;
+        let now = base;
+        vi.spyOn(Date, 'now').mockImplementation(() => now);
+        const tasks: { generation: number; due: number }[] = [];
+        mocks.enqueue.mockImplementation(async (...args: unknown[]) => {
+            tasks.push({ generation: Number(args[1]), due: now + Number(args[2] ?? 0) * 1000 });
+        });
+        const starts: number[] = [];
+        let arrivals = 0;
+        while (arrivals < 14 || tasks.length) {
+            const arrival = arrivals < 14 ? base + arrivals * 30_000 : Infinity;
+            now = Math.min(arrival, ...tasks.map(task => task.due));
+            if (now === arrival) {
+                await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background, incrementEventMutationVersion: true });
+                arrivals++;
+            }
+            const index = tasks.findIndex(task => task.due <= now);
+            if (index < 0) continue;
+            const [task] = tasks.splice(index, 1);
+            const start = await startDerivedMetricsProcessing(uid, task.generation);
+            if (!start) continue;
+            starts.push(now - base);
+            const claim = { generation: task.generation, startedAtMs: start.startedAtMs };
+            await markDerivedMetricSnapshotsBuilding(uid, start.dirtyMetricKinds, claim);
+            now += 21_000; // Representative build time, with no real waiting or private fixtures.
+            expect(await writeDerivedMetricSnapshotsReady(uid, start.dirtyMetricKinds, { trainingActivities: [] }, {
+                claim, buildAtMs: now, builtFromEventMutationVersion: start.eventMutationVersion,
+                workoutInputsVersion: start.workoutInputsVersion,
+            })).toBe(true);
+            await completeDerivedMetricsProcessing(uid, task.generation, claim);
+        }
+        expect(starts).toEqual(background ? [0, 120_000, 240_000, 360_000, 480_000]
+            : Array.from({ length: 14 }, (_, i) => i * 30_000));
+        expect((await coordinator().get()).data()).toMatchObject({ status: 'idle', dirtyMetricKinds: [],
+            eventMutationVersion: 14, workoutInputsVersion: 14 });
+        expect((await metric().get()).data()).toMatchObject({ status: 'ready', builtFromEventMutationVersion: 14 });
+    });
+
+    it('coalesces simultaneous ingress and automatic/MCP freshness requests without moving the deadline', async () => {
+        const { claim } = await warm();
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        const extraKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingReadiness, DERIVED_METRIC_KINDS.Acwr];
+        const results = await Promise.all(extraKinds.map(kind => markDerivedMetricsDirtyAndMaybeQueue(uid, [kind],
+            { background: true, incrementEventMutationVersion: true })));
+        expect(new Set(results.map(result => result.generation)).size).toBe(1);
+        expect(results.filter(result => result.queued)).toHaveLength(1);
+        const before = (await coordinator().get()).data()!;
+        const queuedCalls = mocks.enqueue.mock.calls.length;
+        await ensureDerivedMetricsForUser(uid, [DERIVED_METRIC_KINDS.TrainingDurability]);
+        const preparation = await prepareDerivedMetricsForUser(uid, [DERIVED_METRIC_KINDS.Form], 0);
+        expect(preparation).toEqual({ status: 'preparing', metricKinds: [DERIVED_METRIC_KINDS.Form],
+            readyMetricKinds: [], retryAfterSeconds: 5 });
+        const after = (await coordinator().get()).data()!;
+        expect(after).toMatchObject({ generation: before.generation, buildNotBeforeMs: before.buildNotBeforeMs,
+            requestedAtMs: before.requestedAtMs, eventMutationVersion: 4 });
+        expect(new Set(after.dirtyMetricKinds)).toEqual(new Set([...extraKinds, DERIVED_METRIC_KINDS.TrainingDurability]));
+        expect(mocks.enqueue).toHaveBeenCalledTimes(queuedCalls);
+    });
+
+    it('promotes waiting work and fences a late failed enqueue and delivery of its old generation', async () => {
+        const { claim } = await warm();
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        let rejectOld!: (error: Error) => void;
+        let entered!: () => void;
+        const enqueuing = new Promise<void>(resolve => { entered = resolve; });
+        mocks.enqueue.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; entered(); }));
+        const waiting = markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true, incrementEventMutationVersion: true });
+        await enqueuing;
+        const old = (await coordinator().get()).data()!;
+        const priority = await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form]);
+        rejectOld(new Error('synthetic late enqueue failure'));
+        await waiting;
+        expect(priority.generation).toBe(old.generation + 1);
+        expect((await coordinator().get()).data()).toMatchObject({ status: 'queued', generation: priority.generation, lastError: null });
+        expect(await startDerivedMetricsProcessing(uid, old.generation)).toBeNull();
+        const start = (await startDerivedMetricsProcessing(uid, priority.generation!))!;
+        expect(new Set(start.dirtyMetricKinds)).toEqual(new Set([...kinds, DERIVED_METRIC_KINDS.Form]));
+        expect(start.eventMutationVersion).toBe(2);
+    });
+
+    it.each(['complete', 'abandon'] as const)('schedules pending work after %s even without another ingress', async path => {
+        const { claim } = await warm();
+        const now = claim.startedAtMs + 30_000;
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form],
+            { background: true, incrementEventMutationVersion: true });
+        const result = path === 'complete'
+            ? await completeDerivedMetricsProcessing(uid, claim.generation, claim)
+            : await abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds, 'synthetic rejected write', claim);
+        expect(result.requeued).toBe(true);
+        expect(mocks.enqueue).toHaveBeenLastCalledWith(uid, result.nextGeneration, 90);
+        const pending = (await coordinator().get()).data()!;
+        expect(pending).toMatchObject({ buildNotBeforeMs: claim.startedAtMs + 120_000, pendingImmediate: false,
+            eventMutationVersion: 2 });
+        expect(pending.dirtyMetricKinds).toContain(DERIVED_METRIC_KINDS.Form);
+        if (path === 'abandon') expect(pending.dirtyMetricKinds).toContain(kinds[0]);
+        vi.mocked(Date.now).mockReturnValue(pending.buildNotBeforeMs);
+        const start = (await startDerivedMetricsProcessing(uid, result.nextGeneration!))!;
+        const finalClaim = { generation: result.nextGeneration!, startedAtMs: start.startedAtMs };
+        await writeDerivedMetricSnapshotsReady(uid, start.dirtyMetricKinds, {}, {
+            claim: finalClaim, builtFromEventMutationVersion: start.eventMutationVersion,
+        });
+        await completeDerivedMetricsProcessing(uid, finalClaim.generation, finalClaim);
+        expect((await coordinator().get()).data()?.status).toBe('idle');
+    });
+
+    it.each(['complete', 'abandon'] as const)('keeps edits during processing urgent through later background writes and %s', async path => {
+        const { claim } = await warm();
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form]);
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.TrainingReadiness], { background: true });
+        expect((await coordinator().get()).data()?.pendingImmediate).toBe(true);
+        const result = path === 'complete'
+            ? await completeDerivedMetricsProcessing(uid, claim.generation, claim)
+            : await abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds, 'synthetic rejected write', claim);
+        expect(mocks.enqueue).toHaveBeenLastCalledWith(uid, result.nextGeneration);
+        const start = (await startDerivedMetricsProcessing(uid, result.nextGeneration!))!;
+        expect(start.dirtyMetricKinds).toEqual(expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingReadiness]));
+        expect((await coordinator().get()).data()?.pendingImmediate).toBe(false);
+    });
+
+    it('does not claim a delayed build after account deletion begins', async () => {
+        const { claim } = await warm();
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        const next = await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        const before = (await coordinator().get()).updateTime;
+        await tombstone().set({ fixture: true });
+        expect(await startDerivedMetricsProcessing(uid, next.generation!)).toBeNull();
+        expect((await coordinator().get()).updateTime!.isEqual(before!)).toBe(true);
+    });
 
     it('round-trips a seed through real Firestore and coalesces sleep ingress without invalidating workouts', async () => {
         const { claim, context } = await warm();
@@ -99,6 +233,106 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         expect((await coordinator().get()).data()?.status).toBe('idle');
     });
 
+    it('retries an ingress enqueue failure without waiting for another source mutation', async () => {
+        const ingress = processDerivedMetricsIngressTask as unknown as (request: unknown) => Promise<void>;
+        const run = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+        const request = { data: { uid, metricKinds: kinds } };
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic enqueue outage'));
+        await expect(ingress(request)).rejects.toThrow('derived_metrics_ingress_enqueue_failed');
+        const failed = (await coordinator().get()).data()!;
+        expect(failed).toMatchObject({ status: 'failed', dirtyMetricKinds: kinds });
+        await ingress(request); // Redelivery of the original ingress task.
+        const retry = (await coordinator().get()).data()!;
+        expect(retry).toMatchObject({ status: 'queued', generation: failed.generation + 1, dirtyMetricKinds: kinds });
+        await run({ data: { uid, generation: retry.generation } });
+        expect((await coordinator().get()).data()?.status).toBe('idle');
+        expect((await metric().get()).data()).toMatchObject({ status: 'ready',
+            builtFromEventMutationVersion: retry.eventMutationVersion });
+    });
+
+    it('keeps published snapshots intact when a real worker fails during follow-up dispatch', async () => {
+        const queued = await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { incrementEventMutationVersion: true });
+        const originalDoc = db.doc.bind(db);
+        let injectMutation = true;
+        vi.spyOn(db, 'doc').mockImplementation(path => {
+            const ref = originalDoc(path);
+            if (injectMutation && path === `users/${uid}/derivedMetrics/${kinds[0]}`) {
+                injectMutation = false;
+                const get = ref.get.bind(ref);
+                vi.spyOn(ref, 'get').mockImplementationOnce(async () => {
+                    await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds,
+                        { background: true, incrementEventMutationVersion: true });
+                    return get();
+                });
+            }
+            return ref;
+        });
+        const run = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+        const request = { data: { uid, generation: queued.generation } };
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic follow-up outage'));
+        await expect(run(request)).rejects.toThrow('synthetic follow-up outage');
+        const followUp = (await coordinator().get()).data()!;
+        expect(followUp).toMatchObject({ status: 'failed', generation: queued.generation! + 1,
+            retryFromGeneration: queued.generation, eventMutationVersion: 2, dirtyMetricKinds: kinds });
+        const published = await metric().get();
+        expect(published.data()).toMatchObject({ status: 'ready', builtFromEventMutationVersion: 1 });
+        await run(request);
+        expect((await metric().get()).updateTime!.isEqual(published.updateTime!)).toBe(true);
+        vi.spyOn(Date, 'now').mockReturnValue(followUp.buildNotBeforeMs);
+        await run({ data: { uid, generation: followUp.generation } });
+        expect((await coordinator().get()).data()).toMatchObject({ status: 'idle', retryFromGeneration: null });
+        expect((await metric().get()).data()).toMatchObject({ status: 'ready', builtFromEventMutationVersion: 2 });
+    });
+
+    it.each(['complete', 'abandon'] as const)('recovers failed %s handoff through the predecessor retry', async path => {
+        const { claim } = await warm();
+        vi.spyOn(Date, 'now').mockReturnValue(claim.startedAtMs + 30_000);
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true, incrementEventMutationVersion: true });
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic enqueue outage'));
+        const handoff = path === 'complete'
+            ? completeDerivedMetricsProcessing(uid, claim.generation, claim)
+            : abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds, 'fixture write block', claim);
+        await expect(handoff).rejects.toThrow('synthetic enqueue outage');
+        const failed = (await coordinator().get()).data()!;
+        expect(failed).toMatchObject({ status: 'failed', generation: claim.generation + 1,
+            retryFromGeneration: claim.generation, dirtyMetricKinds: kinds,
+            buildNotBeforeMs: claim.startedAtMs + 120_000 });
+
+        const run = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+        const predecessor = { data: { uid, generation: claim.generation } };
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic repeated outage'));
+        await expect(run(predecessor)).rejects.toThrow('synthetic repeated outage');
+        await run(predecessor);
+        expect(mocks.enqueue).toHaveBeenLastCalledWith(uid, failed.generation, 90);
+        expect((await coordinator().get()).data()).toEqual(failed); // No re-scan or source revision bump.
+        vi.mocked(Date.now).mockReturnValue(failed.buildNotBeforeMs);
+        await run({ data: { uid, generation: failed.generation } });
+        const completed = (await coordinator().get()).data()!;
+        expect(completed).toMatchObject({ status: 'idle', retryFromGeneration: null, dirtyMetricKinds: [],
+            eventMutationVersion: failed.eventMutationVersion, workoutInputsVersion: failed.workoutInputsVersion });
+        expect((await metric().get()).data()).toMatchObject({ status: 'ready',
+            builtFromEventMutationVersion: failed.eventMutationVersion });
+        const calls = mocks.enqueue.mock.calls.length;
+        await run(predecessor);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+        expect((await coordinator().get()).data()).toEqual(completed);
+    });
+
+    it.each(['deletion', 'priority promotion', 'claimed successor'] as const)('fences handoff retries after %s', async replacement => {
+        const { claim } = await warm();
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true, incrementEventMutationVersion: true });
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic enqueue outage'));
+        await expect(completeDerivedMetricsProcessing(uid, claim.generation, claim)).rejects.toThrow('synthetic enqueue outage');
+        if (replacement === 'deletion') await tombstone().set({ fixture: true });
+        if (replacement === 'priority promotion') await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds);
+        if (replacement === 'claimed successor') await startDerivedMetricsProcessing(uid, claim.generation + 1);
+        const before = (await coordinator().get()).data();
+        const calls = mocks.enqueue.mock.calls.length;
+        expect(await startDerivedMetricsProcessing(uid, claim.generation)).toBeNull();
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+        expect((await coordinator().get()).data()).toEqual(before);
+    });
+
     it('carries claimed workout kinds into a replacement generation triggered only by Readiness', async () => {
         const originalKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingDurability];
         const queued = await markDerivedMetricsDirtyAndMaybeQueue(uid, originalKinds);
@@ -119,17 +353,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         }
     });
 
-    it('does not downgrade an already claimed replacement after a late enqueue failure during write-block recovery', async () => {
+    it.each(['complete', 'abandon'] as const)('does not downgrade an already claimed replacement after a late %s enqueue failure', async path => {
         const { claim } = await warm();
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
         mocks.enqueue.mockImplementationOnce(async (...args: unknown[]) => {
             expect(await startDerivedMetricsProcessing(uid, Number(args[1]))).not.toBeNull();
             throw new Error('enqueue_response_lost_after_dispatch');
         });
-        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds,
-            'fixture write block cleared', claim);
-        expect(result.requeued).toBe(true);
+        const handoff = path === 'complete'
+            ? completeDerivedMetricsProcessing(uid, claim.generation, claim)
+            : abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds, 'fixture write block cleared', claim);
+        await expect(handoff).rejects.toThrow('enqueue_response_lost_after_dispatch');
         expect((await coordinator().get()).data()).toMatchObject({ status: 'processing',
-            generation: result.nextGeneration, processingMetricKinds: kinds, lastError: null });
+            generation: claim.generation + 1, processingMetricKinds: kinds, retryFromGeneration: null, lastError: null });
+        const calls = mocks.enqueue.mock.calls.length;
+        expect(await startDerivedMetricsProcessing(uid, claim.generation)).toBeNull();
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
     });
 
     it.each(['workout mutation', 'explicit repair'] as const)('invalidates on %s during processing and retains follow-up work', async reason => {

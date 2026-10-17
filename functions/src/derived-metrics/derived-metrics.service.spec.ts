@@ -5099,6 +5099,7 @@ describe('startDerivedMetricsProcessing', () => {
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
         mockTransactionDeletionGuardDefaults();
+        hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
                 get: hoisted.transactionGet,
@@ -5109,6 +5110,87 @@ describe('startDerivedMetricsProcessing', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it.each(['queued', 'failed'])('retries only its own unclaimed follow-up enqueue (%s)', async status => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17, 10));
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status, generation: 43, retryFromGeneration: 42, buildNotBeforeMs: Date.now() + 90_000,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 90);
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { status: 'processing', generation: 43, retryFromGeneration: 42 },
+        { status: 'idle', generation: 43, retryFromGeneration: 42 },
+        { status: 'failed', generation: 43, retryFromGeneration: 41 },
+        { status: 'queued', generation: 44, retryFromGeneration: 42 },
+        { status: 'failed', generation: 43 },
+    ])('does not let stale tasks repair unrelated or already claimed work: %j', async coordinator => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => coordinator });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it('discards the follow-up enqueue decision from an aborted transaction', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        hoisted.transactionGet
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'queued', generation: 43, retryFromGeneration: 42 }) })
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'processing', generation: 43 }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction);
+            await callback(transaction);
+        });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+    });
+
+    it('anchors the build start to the successful claim after transaction contention', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        const requestAtMs = Date.UTC(2026, 9, 17, 10);
+        vi.setSystemTime(requestAtMs);
+        const coordinatorSnapshot = { exists: true, data: () => ({
+            status: 'queued', generation: 42, eventMutationVersion: 7,
+            startedAtMs: requestAtMs - 120_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) };
+        const defaultGet = hoisted.transactionGet.getMockImplementation()!;
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => {
+            if (ref === hoisted.coordinatorRef) {
+                return coordinatorSnapshot;
+            }
+            // Reading the owner guard can also wait behind concurrent writes.
+            if (ref === hoisted.userRootRef) {
+                vi.setSystemTime(Date.now() + 10_000);
+            }
+            return defaultGet(ref);
+        });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction); // Aborted attempt; a concurrent write forces a retry.
+            vi.setSystemTime(requestAtMs + 30_000);
+            await callback(transaction);
+        });
+
+        const result = await startDerivedMetricsProcessing('user-1', 42);
+
+        expect(result).toEqual({
+            startedAtMs: requestAtMs + 40_000, eventMutationVersion: 7, workoutInputsVersion: 0,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenLastCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'processing', startedAtMs: requestAtMs + 40_000, updatedAtMs: requestAtMs + 40_000,
+        }), { merge: true });
     });
 
     it('reclaims failed work with a distinct claim even when the retry starts in the same millisecond', async () => {
@@ -5249,6 +5331,8 @@ describe('startDerivedMetricsProcessing', () => {
 
 describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
     beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
         vi.clearAllMocks();
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
@@ -5261,6 +5345,28 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
         });
         hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
         hoisted.recursiveDelete.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => vi.useRealTimers());
+
+    it('discards a delayed enqueue decision when the transaction retries after another completion', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        hoisted.transactionGet
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'processing', generation: 42,
+                startedAtMs: Date.now() - 30_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form] }) })
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'queued', generation: 43,
+                buildNotBeforeMs: Date.now(), dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form] }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction); // Aborted optimistic attempt, not a committed write.
+            await callback(transaction);
+        });
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock('user-1', 42,
+            [DERIVED_METRIC_KINDS.Form], 'synthetic write block');
+        expect(result.requeued).toBe(false);
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
     it('recursively deletes derived metric state when the deletion guard is still active after claiming work', async () => {
@@ -5327,7 +5433,7 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 120);
         expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
     });
 
@@ -5410,7 +5516,7 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 120);
         expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
     });
 
@@ -5478,6 +5584,92 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it.each([
+        ['idle', null, 0], ['idle', -30_000, 90], ['idle', -120_000, 0],
+        ['idle', 30_000, 0], ['failed', -30_000, 0],
+        ['queued', -30_000, 0], ['processing', -1_200_000, 0],
+    ] as const)('batches background work from %s with previous start offset %s', async (status, offset, delay) => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
+        const now = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status, generation: 12, eventMutationVersion: 9, workoutInputsVersion: 5,
+            startedAtMs: offset === null ? null : now + offset,
+            requestedAtMs: now - 1_200_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        const response = await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Acwr],
+            { background: true, incrementEventMutationVersion: true });
+        expect(response).toMatchObject({ queued: true, generation: 13 });
+        expect(hoisted.enqueueDerivedMetricsTask.mock.calls).toEqual([
+            delay ? ['user-1', 13, delay] : ['user-1', 13],
+        ]);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            buildNotBeforeMs: now + delay * 1000, pendingImmediate: false,
+            eventMutationVersion: 10, workoutInputsVersion: 6,
+            dirtyMetricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr]),
+        }), { merge: true });
+    });
+
+    it('uses the transaction time when an earlier request observes a newly completed build', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
+        const enteredAt = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'idle', generation: 12, startedAtMs: enteredAt + 10_000, dirtyMetricKinds: [],
+        }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            vi.setSystemTime(enteredAt + 30_000);
+            await callback({ get: hoisted.transactionGet, set: hoisted.transactionSet });
+        });
+        await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Form], { background: true });
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 13, 100);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef,
+            expect.objectContaining({ buildNotBeforeMs: enteredAt + 130_000 }), { merge: true });
+    });
+
+    it.each([true, false])('preserves a fixed queued deadline or promotes it for an explicit edit (background=%s)', async background => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
+        const now = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'queued', generation: 12, buildNotBeforeMs: now + 70_000,
+            requestedAtMs: now - 20_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        const response = await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Acwr], { background });
+        expect(response).toMatchObject({ queued: !background, generation: background ? 12 : 13 });
+        const update = hoisted.transactionSet.mock.calls[0][1];
+        expect(update.dirtyMetricKinds).toEqual(expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr]));
+        if (background) {
+            expect(update).not.toHaveProperty('buildNotBeforeMs');
+            expect(update).not.toHaveProperty('requestedAtMs');
+            expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+        } else {
+            expect(update.buildNotBeforeMs).toBe(now);
+            expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 13);
+        }
+    });
+
+    it.each([true, false])('retains explicit priority during processing (later background=%s)', async background => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'processing', generation: 12, startedAtMs: Date.now(),
+            pendingImmediate: background, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Form],
+            { background, preserveWorkoutInputs: true });
+        if (!background) {
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef,
+                expect.objectContaining({ pendingImmediate: true }), { merge: true });
+        } else {
+            // An identical recovery-only invalidation need not write; priority stays true.
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        }
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
     it('invalidates workout reuse on an explicit repair even when its dirty set is unchanged', async () => {

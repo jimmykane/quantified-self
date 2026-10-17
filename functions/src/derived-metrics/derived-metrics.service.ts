@@ -5497,8 +5497,23 @@ function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFi
     return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`);
 }
 
-async function queueDerivedMetricsTask(uid: string, generation: number): Promise<boolean> {
-    const queued = await enqueueDerivedMetricsTask(uid, generation);
+// Private coordinator scheduling only; metric schemas and source revisions are unchanged.
+const BACKGROUND_BUILD_INTERVAL_MS = 2 * 60_000;
+
+function backgroundBuildNotBeforeMs(startedAtMs: number | null, nowMs: number): number {
+    // Legacy/malformed clocks must never create an unbounded wait.
+    return startedAtMs !== null && Number.isFinite(startedAtMs) && startedAtMs >= 0 && startedAtMs <= nowMs
+        ? Math.max(nowMs, startedAtMs + BACKGROUND_BUILD_INTERVAL_MS) : nowMs;
+}
+
+async function queueDerivedMetricsTask(uid: string, generation: number, notBeforeMs = 0): Promise<boolean> {
+    const delaySeconds = Math.max(0, Math.ceil((notBeforeMs - Date.now()) / 1000));
+    const queued = delaySeconds > 0
+        ? await enqueueDerivedMetricsTask(uid, generation, delaySeconds)
+        : await enqueueDerivedMetricsTask(uid, generation);
+    if (queued && delaySeconds > 0) {
+        logger.info('[derived-metrics] Scheduled batched rebuild.', { generation, scheduledDelaySeconds: delaySeconds });
+    }
     return queued;
 }
 
@@ -5885,6 +5900,8 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         incrementEventMutationVersion?: boolean;
         // Only internal sleep/HRV ingress may preserve the workout projection.
         preserveWorkoutInputs?: boolean;
+        // Automatic ingress/freshness probes batch; explicit owner edits retain priority.
+        background?: boolean;
     },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
@@ -5911,13 +5928,19 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
     }
 
     const coordinatorRef = getCoordinatorDocRef(uid);
-    const nowMs = Date.now();
+    let nowMs = Date.now();
 
     let shouldEnqueue = false;
     let generationToQueue: number | null = null;
+    let notBeforeMs = nowMs;
     let blockedByDeletion = false;
 
     await admin.firestore().runTransaction(async (transaction) => {
+        // A transaction retry must not enqueue the decision from an abandoned attempt.
+        shouldEnqueue = false;
+        generationToQueue = null;
+        blockedByDeletion = false;
+        notBeforeMs = nowMs;
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'dirty-mark transaction', { metricKinds })) {
             blockedByDeletion = true;
@@ -5926,11 +5949,21 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             return;
         }
 
+        // Contention may outlive another build: compare its start with the current
+        // transaction time, not the timestamp when this request first arrived.
+        nowMs = Date.now();
         const rawCoordinatorData = coordinatorSnapshot.data();
         const coordinator = parseCoordinator(rawCoordinatorData);
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
             && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
+        const immediate = options?.background !== true;
+        const promoteQueuedBuild = immediate && coordinator.status === 'queued'
+            && typeof rawCoordinatorData?.buildNotBeforeMs === 'number'
+            && rawCoordinatorData.buildNotBeforeMs > nowMs;
+        const pendingImmediate = coordinator.status === 'processing'
+            && (immediate || rawCoordinatorData?.pendingImmediate === true);
+        const priorityChanged = pendingImmediate && rawCoordinatorData?.pendingImmediate !== true;
         // Replacing a stuck generation also fences its old worker. Carry its
         // claimed work forward before clearing processingMetricKinds below.
         const retainedMetricKinds = coordinatorLikelyStuck && coordinator.status === 'processing'
@@ -5956,6 +5989,8 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         if (isAlreadyQueuedOrProcessing
             && !dirtyMetricKindsChanged
             && !coordinatorLikelyStuck
+            && !promoteQueuedBuild
+            && !priorityChanged
             && !eventMutationVersionChanged
             && !invalidateWorkoutInputs) {
             shouldEnqueue = false;
@@ -5974,15 +6009,13 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             });
         }
 
-        const nextGeneration = (isAlreadyQueuedOrProcessing && !coordinatorLikelyStuck)
-            ? coordinator.generation
-            : coordinator.generation + 1;
-        const nextStatus = (isAlreadyQueuedOrProcessing && !coordinatorLikelyStuck)
-            ? coordinator.status
-            : 'queued';
-        const shouldResetLifecycleFields = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
-
-        shouldEnqueue = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
+        shouldEnqueue = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck || promoteQueuedBuild;
+        const nextGeneration = shouldEnqueue ? coordinator.generation + 1 : coordinator.generation;
+        const nextStatus = shouldEnqueue ? 'queued' : coordinator.status;
+        const shouldResetLifecycleFields = shouldEnqueue;
+        // A fixed deadline from the last claim, never a sliding debounce. Recovery is prompt.
+        notBeforeMs = !immediate && coordinator.status === 'idle'
+            ? backgroundBuildNotBeforeMs(coordinator.startedAtMs, nowMs) : nowMs;
         generationToQueue = nextGeneration;
 
         const coordinatorUpdatePayload: Record<string, unknown> = {
@@ -5993,7 +6026,9 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             workoutInputsVersion,
             dirtyMetricKinds: nextDirtyMetricKinds,
             updatedAtMs: nowMs,
+            pendingImmediate: shouldEnqueue ? false : pendingImmediate,
             ...(shouldResetLifecycleFields ? {
+                retryFromGeneration: null,
                 startedAtMs: null,
                 completedAtMs: null,
                 lastError: null,
@@ -6004,6 +6039,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         // coordinators can still be detected and force-requeued.
         if (nextStatus === 'queued' && shouldEnqueue) {
             coordinatorUpdatePayload.requestedAtMs = nowMs;
+            coordinatorUpdatePayload.buildNotBeforeMs = notBeforeMs;
         }
 
         transaction.set(coordinatorRef, coordinatorUpdatePayload, { merge: true });
@@ -6020,7 +6056,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
 
     if (shouldEnqueue && generationToQueue !== null) {
         try {
-            await queueDerivedMetricsTask(uid, generationToQueue);
+            await queueDerivedMetricsTask(uid, generationToQueue, notBeforeMs);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue derived metrics task', {
                 uid,
@@ -6057,10 +6093,11 @@ export async function startDerivedMetricsProcessing(
     generation: number,
 ): Promise<StartDerivedMetricsProcessingResult | null> {
     const coordinatorRef = getCoordinatorDocRef(uid);
-    const nowMs = Date.now();
     let startedResult: StartDerivedMetricsProcessingResult | null = null;
+    const followUpRetry = { generation: null as number | null, notBeforeMs: 0 };
 
     await admin.firestore().runTransaction(async (transaction) => {
+        followUpRetry.generation = null;
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             startedResult = null;
@@ -6071,6 +6108,16 @@ export async function startDerivedMetricsProcessing(
         const coordinator = parseCoordinator(rawCoordinatorData);
         if (coordinator.generation !== generation) {
             startedResult = null;
+            // Completion may commit a successor before task creation fails (or
+            // the caller times out). The predecessor's retry can dispatch only
+            // that unclaimed successor, without rebuilding or advancing revisions.
+            if (coordinator.generation === generation + 1
+                && rawCoordinatorData?.retryFromGeneration === generation
+                && (coordinator.status === 'queued' || coordinator.status === 'failed')
+                && !await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'follow-up enqueue retry', { generation })) {
+                followUpRetry.generation = coordinator.generation;
+                followUpRetry.notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+            }
             return;
         }
 
@@ -6079,6 +6126,9 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
+        // Reads and transaction retries may wait behind concurrent imports. Start
+        // the build interval at this claim, not at the original request's arrival.
+        const nowMs = Date.now();
         if (coordinator.status === 'processing') {
             // Keep healthy in-flight generations single-flight only.
             if (!isDerivedMetricsCoordinatorStuck(coordinator, nowMs)) {
@@ -6135,6 +6185,9 @@ export async function startDerivedMetricsProcessing(
             status: 'processing',
             dirtyMetricKinds: [],
             processingMetricKinds: dirtyMetricKinds,
+            retryFromGeneration: null,
+            pendingImmediate: false,
+            buildNotBeforeMs: null,
             startedAtMs: claimedAtMs,
             updatedAtMs: nowMs,
             lastError: null,
@@ -6148,6 +6201,15 @@ export async function startDerivedMetricsProcessing(
         };
     });
 
+    if (followUpRetry.generation !== null) {
+        try {
+            await queueDerivedMetricsTask(uid, followUpRetry.generation, followUpRetry.notBeforeMs);
+        } catch (error) {
+            await markDerivedMetricsEnqueueFailed(uid, followUpRetry.generation, error,
+                'follow-up retry enqueue failure', 'enqueue_follow_up_retry_failed');
+            throw error;
+        }
+    }
     return startedResult;
 }
 
@@ -6158,6 +6220,7 @@ export async function completeDerivedMetricsProcessing(
 ): Promise<CompleteDerivedMetricsProcessingResult> {
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
+    let notBeforeMs = nowMs;
     let completion: CompleteDerivedMetricsProcessingResult = {
         requeued: false,
         nextGeneration: null,
@@ -6184,12 +6247,17 @@ export async function completeDerivedMetricsProcessing(
         const pendingDirtyMetricKinds = normalizeDerivedMetricKindsStrict(coordinator.dirtyMetricKinds);
         if (pendingDirtyMetricKinds.length) {
             const nextGeneration = coordinator.generation + 1;
+            notBeforeMs = coordinatorSnapshot.data()?.pendingImmediate === true
+                ? nowMs : backgroundBuildNotBeforeMs(coordinator.startedAtMs, nowMs);
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
+                retryFromGeneration: generation,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
                 processingMetricKinds: [],
+                pendingImmediate: false,
+                buildNotBeforeMs: notBeforeMs,
                 requestedAtMs: nowMs,
                 updatedAtMs: nowMs,
                 completedAtMs: null,
@@ -6207,6 +6275,8 @@ export async function completeDerivedMetricsProcessing(
             status: 'idle',
             dirtyMetricKinds: [],
             processingMetricKinds: [],
+            pendingImmediate: false,
+            buildNotBeforeMs: null,
             updatedAtMs: nowMs,
             completedAtMs: nowMs,
             lastError: null,
@@ -6226,7 +6296,7 @@ export async function completeDerivedMetricsProcessing(
             })) {
                 return completion;
             }
-            await queueDerivedMetricsTask(uid, completion.nextGeneration);
+            await queueDerivedMetricsTask(uid, completion.nextGeneration, notBeforeMs);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue follow-up derived metrics task', {
                 uid,
@@ -6241,6 +6311,7 @@ export async function completeDerivedMetricsProcessing(
                 'follow-up enqueue failure write',
                 'enqueue_follow_up_failed',
             );
+            throw error;
         }
     }
 
@@ -6271,6 +6342,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
 
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
+    let notBeforeMs = nowMs;
     let requeueResult: AbandonDerivedMetricsProcessingAfterWriteBlockResult = {
         cleaned: false,
         requeued: false,
@@ -6281,6 +6353,12 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
         let attemptState: AbandonRequeueAttemptState = 'noop';
 
         await db.runTransaction(async (transaction) => {
+            // A retried transaction may find that completion/promotion already won.
+            // Never enqueue an abandoned attempt with its older (possibly delayed) decision.
+            attemptState = 'noop';
+            notBeforeMs = nowMs;
+            requeueResult = { cleaned: false, requeued: false, nextGeneration: null,
+                dirtyMetricKinds: normalizedMetricKinds };
             const coordinatorSnapshot = await transaction.get(coordinatorRef);
             if (!coordinatorSnapshot.exists) {
                 return;
@@ -6326,12 +6404,17 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
             }
 
             const nextGeneration = coordinator.generation + 1;
+            notBeforeMs = coordinatorSnapshot.data()?.pendingImmediate === true
+                ? nowMs : backgroundBuildNotBeforeMs(coordinator.startedAtMs, nowMs);
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
+                retryFromGeneration: generation,
                 dirtyMetricKinds: retainedDirtyMetricKinds,
                 processingMetricKinds: [],
+                pendingImmediate: false,
+                buildNotBeforeMs: notBeforeMs,
                 requestedAtMs: nowMs,
                 startedAtMs: null,
                 completedAtMs: null,
@@ -6385,7 +6468,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                     '[derived-metrics] Cleaned up derived metrics before write-block follow-up enqueue.',
                 );
             }
-            await queueDerivedMetricsTask(uid, requeueResult.nextGeneration);
+            await queueDerivedMetricsTask(uid, requeueResult.nextGeneration, notBeforeMs);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue write-block follow-up derived metrics task', {
                 uid,
@@ -6414,6 +6497,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                 'write-block follow-up enqueue failure',
                 'enqueue_write_block_follow_up_failed',
             );
+            throw error;
         }
     }
 

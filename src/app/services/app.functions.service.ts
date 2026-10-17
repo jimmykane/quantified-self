@@ -5,6 +5,20 @@ import type { Functions as FirebaseFunctions } from 'firebase/functions';
 import { environment } from '../../environments/environment';
 import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { LoggerService } from './logger.service';
+
+type CallableFailureStage = 'app_check_readiness' | 'callable' | 'app_check_refresh' | 'callable_retry';
+
+// Only SDK-defined codes may enter diagnostics; arbitrary error fields can contain private data.
+const CALLABLE_DIAGNOSTIC_CODES = new Set([
+    ...['cancelled', 'unknown', 'invalid-argument', 'deadline-exceeded', 'not-found', 'already-exists',
+        'permission-denied', 'resource-exhausted', 'failed-precondition', 'aborted', 'out-of-range',
+        'unimplemented', 'internal', 'unavailable', 'data-loss', 'unauthenticated']
+        .flatMap(code => [code, `functions/${code}`]),
+    ...['already-initialized', 'use-before-activation', 'fetch-network-error', 'fetch-parse-error',
+        'fetch-status-error', 'storage-open', 'storage-get', 'storage-set', 'recaptcha-error',
+        'initial-throttle', 'throttled'].map(code => `appCheck/${code}`),
+]);
 
 @Injectable({
     providedIn: 'root'
@@ -12,9 +26,13 @@ import { AppCheckReadinessService } from './app-check-readiness.service';
 export class AppFunctionsService {
     private app = inject(FirebaseApp);
     private appCheckReadiness = inject(AppCheckReadinessService);
+    private logger = inject(LoggerService);
     private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
     private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private functionsByRegion = new Map<string, FirebaseFunctions>();
+    private readonly reportedEnsureFailures = new Map<string, number>();
+    private static readonly FAILURE_REPORT_COOLDOWN_MS = 5 * 60 * 1000;
+    private static readonly MAX_FAILURE_REPORT_KEYS = 64;
     /**
      * Map of pre-initialized callable functions.
      * We initialize these in the constructor to capture the current Injection Context.
@@ -44,30 +62,90 @@ export class AppFunctionsService {
             throw new Error(`Function ${functionKey} not initialized`);
         }
         // A local cancellation check, never serialized or used as server authorization.
+        let cancelled = false;
         const assertCurrent = () => {
-            if (options && !options.canExecute()) throw new Error('Operation cancelled because its account or view changed.');
+            if (options && !options.canExecute()) {
+                cancelled = true;
+                throw new Error('Operation cancelled because its account or view changed.');
+            }
         };
         assertCurrent();
 
         const usesFunctionsEmulator = this.shouldUseFunctionsEmulator();
-        // The local Functions worker deliberately bypasses its server-side
-        // App Check guard. Do not let a hosted debug-token exchange prevent a
-        // loopback callable from exercising the emulator.
-        if (!usesFunctionsEmulator) {
-            await this.appCheckReadiness.ensureReady();
+        const reportFailure = functionKey === 'ensureDerivedMetrics' && environment.localhost !== true;
+        // Retain only the existing Sentry identity, captured before asynchronous work.
+        // Reports are discarded if that identity changes while the request is pending.
+        let diagnosticUser: ReturnType<LoggerService['getUser']> = {};
+        if (reportFailure) {
+            try { diagnosticUser = this.logger.getUser(); } catch { /* Diagnostics must not gate requests. */ }
         }
-
+        let stage: CallableFailureStage = 'app_check_readiness';
         try {
-            assertCurrent();
-            return await callable(data);
-        } catch (error) {
-            if (usesFunctionsEmulator || !this.shouldRetryAfterAppCheckFailure(error)) {
-                throw error;
+            // The local worker bypasses App Check; never gate it on a hosted token exchange.
+            if (!usesFunctionsEmulator) {
+                await this.appCheckReadiness.ensureReady();
             }
 
-            await this.appCheckReadiness.ensureReady(true);
-            assertCurrent();
-            return callable(data);
+            try {
+                assertCurrent();
+                stage = 'callable';
+                return await callable(data);
+            } catch (error) {
+                if (usesFunctionsEmulator || !this.shouldRetryAfterAppCheckFailure(error)) {
+                    throw error;
+                }
+
+                stage = 'app_check_refresh';
+                await this.appCheckReadiness.ensureReady(true);
+                assertCurrent();
+                stage = 'callable_retry';
+                return await callable(data);
+            }
+        } catch (error) {
+            if (reportFailure && !cancelled) this.reportEnsureFailure(error, stage, diagnosticUser);
+            throw error;
+        }
+    }
+
+    private reportEnsureFailure(
+        error: unknown,
+        stage: CallableFailureStage,
+        user: ReturnType<LoggerService['getUser']>,
+    ): void {
+        try {
+            // Firebase may acquire auth credentials asynchronously. After an account
+            // switch, neither the old nor the new identity is reliable for this failure.
+            if (this.logger.getUser().id !== user.id) return;
+            const code = (error as { code?: unknown } | null)?.code;
+            const errorCode = typeof code === 'string' && CALLABLE_DIAGNOSTIC_CODES.has(code) ? code : 'unknown';
+            const now = Date.now();
+            for (const [key, reportedAt] of this.reportedEnsureFailures) {
+                if (now - reportedAt >= AppFunctionsService.FAILURE_REPORT_COOLDOWN_MS) {
+                    this.reportedEnsureFailures.delete(key);
+                }
+            }
+            // Independent of metric subsets: Dashboard and Training share this failure budget.
+            // Identity is used only locally for deduplication, never in tags or fingerprints.
+            const key = JSON.stringify([user.id ?? null, stage, errorCode]);
+            if (this.reportedEnsureFailures.has(key)) return;
+            if (this.reportedEnsureFailures.size >= AppFunctionsService.MAX_FAILURE_REPORT_KEYS) {
+                this.reportedEnsureFailures.delete(this.reportedEnsureFailures.keys().next().value!);
+            }
+            this.reportedEnsureFailures.set(key, now);
+            this.logger.captureMessage('ensureDerivedMetrics request failed', {
+                level: 'warning',
+                user,
+                fingerprint: ['ensureDerivedMetrics', stage, errorCode],
+                tags: { operation: 'ensureDerivedMetrics', stage, errorCode },
+                contexts: {
+                    callable: {
+                        appCheckConfigured: this.appCheckReadiness.isConfigured(),
+                        recoveryAttempted: stage === 'app_check_refresh' || stage === 'callable_retry',
+                    },
+                },
+            });
+        } catch {
+            // Keep the original failure and the caller's fallback UI even if Sentry fails.
         }
     }
 

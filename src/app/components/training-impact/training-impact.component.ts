@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, linkedSignal } from '@angular/core';
 import { SharedModule } from '../../modules/shared.module';
+import { DataTrainingStressScore, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
@@ -26,6 +28,7 @@ export class TrainingImpactComponent {
   readonly impact = input.required<TrainingSessionImpactView | TrainingDayImpactView>();
   readonly variant = input<TrainingImpactVariant>('card');
   readonly title = input('Training impact');
+  readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly modelExplanation = 'TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.';
   readonly isReady = computed(() => this.impact().availability === 'ready');
   readonly isDayImpact = computed(() => 'sessions' in this.impact());
@@ -38,6 +41,11 @@ export class TrainingImpactComponent {
       ? `${impact.eventId}:${impact.dayMs}` : null;
   });
   readonly calculationExpanded = linkedSignal({ source: this.calculationContext, computation: () => false });
+  readonly sessionDayCtl = computed(() => {
+    const impact = this.impact();
+    return impact.availability === 'ready' && !('sessions' in impact) && impact.impact
+      ? this.formatSigned(impact.impact.day.ctlChange) : '—';
+  });
   readonly sessionDayResult = computed(() => {
     const impact = this.impact();
     if (impact.availability !== 'ready' || 'sessions' in impact || !impact.impact) return null;
@@ -77,7 +85,10 @@ export class TrainingImpactComponent {
     }
     const values = impact.impact;
     return {
-      tss: values ? this.formatNumber(values.trainingStressScore) : '—',
+      tss: values ? this.isSessionStrip()
+        ? resolveUnitAwareDisplayFromValue(DataTrainingStressScore.type, values.trainingStressScore,
+          this.unitSettings(), { trainingStressScoreDecimals: 1, locale: this.locale })?.value ?? '—'
+        : this.formatNumber(values.trainingStressScore) : '—',
       ctl: values ? this.formatSigned(values.ctlContribution) : '—',
       atl: values ? this.formatSigned(values.atlContribution) : '—',
       form: values ? this.formatSigned(values.formContribution) : '—',

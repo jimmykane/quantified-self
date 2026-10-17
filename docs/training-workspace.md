@@ -5061,6 +5061,69 @@ Admin queue observability treats these as two separate Cloud Tasks queues: deriv
 coalesce, while derived workers show snapshot builds waiting to run. The global Cloud Tasks depth and the Admin Dashboard
 Derived Metrics row include both queues so ingress backlogs cannot disappear from headline health totals.
 
+### Bounded background build batching
+
+The existing per-account coordinator batches expensive background rebuilds independently of the 30-second ingress
+bucket. The first idle build is prompt. After a claim, automatic ingress and freshness requests schedule the next
+background build no earlier than two minutes after that claim. This is a fixed deadline, not a sliding debounce:
+subsequent changes merge dirty kinds and advance source revisions without postponing the task. A build lasting more
+than two minutes needs no additional delay. Different accounts remain independent. Claim timestamps are sampled
+after transactional reads on every attempt, so waiting for concurrent writes does not consume the next build's interval.
+
+`buildNotBeforeMs`, `pendingImmediate` and `retryFromGeneration` are private coordinator fields, not metric payload
+fields. The existing `startedAtMs` supplies the previous build start while idle; legacy/malformed/future start times fall back to prompt
+execution. No new collection, scanner, scheduler, index or public API is added. Ordinary successful paths retain their
+existing read count. The Cloud Tasks worker uses an absolute delivery time and deterministic generation ID for delayed
+builds. Enqueue retries retain
+that delivery time rather than restarting the delay after each transient failure. Worker retries and stuck-job recovery
+use the existing retry policy and 10-minute queued / 15-minute processing limits.
+
+Exhausted task-creation attempts must reject the calling ingress/worker task so Cloud Tasks can redeliver it. Intentional
+deletion/rollout skips and successfully coalesced ingress still acknowledge normally. Completion and write-block recovery
+save `retryFromGeneration` with the queued successor. If the caller fails or times out after that transaction, its retry
+can enqueue that exact, still-unclaimed successor at the saved deadline. It cannot publish snapshots, advance source
+revisions, or repair unrelated work. Claiming or replacing the successor clears the marker; deletion checks and
+generation fencing remain mandatory. This adds no reads/writes on ordinary successful paths beyond the field in the
+existing coordinator write, and uses no repair scanner or additional queue. Recovery remains bounded by the existing
+Cloud Tasks retry budget; a sustained outage can still require the normal freshness/Retry repair after exhaustion.
+
+Actual Training-load control changes (including zero overrides, exclusion and reset) and benchmark selection changes
+retain priority. A control ingress has a distinct deterministic task name from background ingress, so a same-bucket
+import cannot discard its priority. Import preparation/finalization alone does not get priority. A priority request
+replaces a still-delayed queued generation while preserving its dirty union; the older task is fenced out before source scans
+or publication. During processing, priority stays set until completion, even if background invalidations arrive later;
+there is still only one active claim. Completion queues any pending work, and write-block recovery retains claimed plus
+pending kinds with the same bounded background deadline. Neither path needs a later import to wake the final rebuild.
+All generation, claim, revision, enqueue-failure and account-deletion guards remain in force.
+
+Opening Training/Dashboard, automatic freshness probes, MCP preparation and the generic refresh retry join this same
+policy; they cannot cancel the delay by requesting a missing kind. A scheduled rebuild is still preparing, not a fresh
+zero-valued result. The added background wait is at most two minutes under a healthy queue, in addition to the existing
+up-to-30-second ingress bucket plus buffer, processing time and queue delivery latency. Explicit owner edits bypass the
+build cooldown, not ingress delivery or an already-running build. Calculations, UTC boundaries and snapshot schemas are
+unchanged; no activity reparse or data migration is required for this scheduling change.
+
+Validation uses synthetic fixtures in the existing isolated Firestore emulator suite: fourteen ingress arrivals 30
+seconds apart with representative 21-second builds require five background builds instead of fourteen prompt builds,
+while the final ready snapshot includes all fourteen mutation revisions. This is a scheduling comparison, not a measured
+production cost reduction. It also covers concurrent arrivals, delayed enqueue failure after priority promotion,
+automatic/MCP freshness requests, completion/write-block follow-ups, stale tasks and account deletion.
+Focused unit regressions additionally cover slow enqueue retries and claims delayed by transaction contention.
+Emulator regressions cover ingress enqueue failure, repeated completion/write-block handoff failures, predecessor
+redelivery without another source write, and handoff fencing after deletion, priority promotion or a successor claim.
+
+Monitoring impact: **unchanged** queue names, native depth/delay metrics, retry limits, memory, concurrency and Admin
+queue coverage. Failed task creation now rejects instead of reporting a successful acknowledgement; HTTP success is
+still separate from a committed snapshot. An intentionally future task is scheduled work, not overdue backlog. The identity-free
+`Scheduled batched rebuild` log records generation and delay seconds for diagnosis; do not use generation as a metric
+label. End-to-end derived ingress/publication alert coverage remains **deferred** to existing
+[#831](https://github.com/jimmykane/quantified-self/issues/831), including dirty-generation age and stale-task exclusions.
+No monitoring configuration is activated by this code change.
+
+MCP impact: **no wire or authority change**. Existing prepare/read contracts retain bounded waiting and `preparing`
+retry guidance; the private scheduling fields are never projected into their responses. No additional scopes, tools,
+planning fields, provider actions, registered-schema changes or plugin rebuild are required.
+
 ### Frontend freshness probe
 
 On `/training`, the frontend:
@@ -5091,7 +5154,33 @@ changing the current/historical readiness formula or its persisted input project
 This probe is important in local development and recovery scenarios: opening Training can repair missing or stale
 snapshots even when no new Firestore write arrives.
 
+Failed `ensureDerivedMetrics` requests are reported by `AppFunctionsService` to Sentry as
+`ensureDerivedMetrics request failed`. Reporting occurs only after the existing App Check recovery attempt finishes
+unsuccessfully, or immediately for a failure that is not eligible for that retry. The fixed `stage` label distinguishes
+`app_check_readiness`, `callable`, `app_check_refresh`, and `callable_retry`. Only allowlisted SDK error codes (otherwise
+`unknown`), App Check configuration state and whether recovery was attempted are added; request data, tokens, original
+exceptions, error messages and details are not attached. The existing Sentry user context is captured at request start;
+reports are discarded if that identity changes while the request is pending. Identity is never included in tags or
+fingerprints. Localhost and local cancellations remain silent, as do successes and successful retries.
+
+Reports share a five-minute cooldown per Sentry identity, stage and error code across Dashboard and Training metric
+subsets. Successful requests do not reset that cooldown. The cache lives only in the service instance, expires old
+entries and retains at most 64 keys; reloads and separate tabs have independent budgets. Diagnostics cannot replace the
+original failure or change the existing snackbar/fallback behavior. This adds Sentry events only, with no additional
+Firestore reads, callable requests or retries. App help, MCP contracts and Training planning behavior are unchanged.
+
 ### Worker lifecycle
+
+The `ensureDerivedMetrics` callable logs one `[derived-metrics] ensureDerivedMetrics request rejected.` warning for
+an application `HttpsError`, with only fixed `stage`, `errorCode`, and `reason` labels. Authentication and App Check
+rejections happen before data access. `app_check_unverified` means no verified App Check context reached the handler;
+use the SDK's verification log on the same trace to distinguish a missing token from an invalid token. Neither log
+establishes why the browser failed to supply a valid token or identifies the Firebase user. Existing execution/trace
+correlation supplies request linkage without logging user IDs, headers, tokens, payloads, error messages, or details.
+Successful calls add no log. Unexpected errors retain Firebase's existing error logging, and diagnostic failures never
+replace the original exception. Framework rejections before the handler retain the SDK's own diagnostics.
+This observability-only change preserves responses, Auth/App Check enforcement, freshness decisions and queue behavior;
+it adds no Firestore operations or Function invocations. App help, MCP reads/contracts and planning coverage are unchanged.
 
 `processDerivedMetricsIngressTask` runs with 512 MiB of memory and a 120-second timeout to provide headroom above
 the previous 256 MiB limit. It marks requested metric kinds dirty and queues a generation; it does not perform
@@ -6488,16 +6577,19 @@ calculations, provider behavior, or refresh subscriptions.
 Activity details place a surface-free **Compact strip** immediately below the primary activity summary, before tags,
 device metadata, and additional statistics. It shares the other activity sections' full content width inside the
 workspace shell, without an additional side inset. For event details, the shared Training-impact component's `strip`
-variant labels the four contribution columns **This workout’s contribution** rather than repeating the session's
-maintenance/building/decay role as a headline. The heading sits beside the columns on desktop; in narrower containers
-it moves above two columns. Numbers match the adjacent activity stats' compact size, with tighter row gaps and vertical padding. Exact
-values and one **Day result** remain visible. The result says **Fitness load increased/decreased by … CTL** or
-**Fitness load stayed steady**; locale-aware two-decimal display normalizes signed zero and sub-display-precision noise.
-It explicitly includes all training counted for that day, not only this workout. No second Training-day outcome or
-maintenance headline appears in event details, and UTC terminology stays out of its main presentation.
+variant shows one compact three-column number strip: **TSS**, **Workout CTL**, and **Day CTL**, under a small heading.
+Workout CTL is this workout's contribution; Day CTL is the whole-day net change after all training and normal load decay.
+The two must never be substituted for one another. Canonical Sports Lib TSS display uses one decimal through the shared
+unit-aware formatter; CTL retains locale-aware two-decimal display with signed-zero and sub-display-precision normalization.
+The heading is a small inline divider label without a leading icon; its adjacent info glyph is 14px in a 24px
+visual button while retaining Material's expanded touch target. The heading row no longer reserves a 44px button row.
+The three columns remain side by side on phones and desktop, without nested cards, per-stat borders, subtitles or a
+second visible Day-result row. Full descriptive accessible names distinguish each value. The expanded calculation
+retains all four workout contribution values, including Fatigue (ATL) and Form, plus the plain-language **Day result**
+and its all-training/day-decay explanation. No maintenance headline or UTC terminology enters the collapsed strip.
 When the strip is present, the activity summary uses the shared
 header's bottom-padding hooks to leave an 8px join instead of stacking summary and phone metric padding. Other summary
-surfaces retain their existing spacing. A Material info icon stays beside the day result, including on phones, with
+surfaces retain their existing spacing. A Material info icon stays in the heading row, including on phones, with
 the accessible label and hover/keyboard tooltip **How Training impact is calculated**. Its native tooltip touch gestures
 are disabled (`matTooltipTouchGestures="off"`), so long-press handling never suppresses mobile scrolling. A tap or
 keyboard activation still controls a labelled hidden region through `aria-expanded` and

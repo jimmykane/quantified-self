@@ -113,32 +113,64 @@
 }
 
 .training-impact--strip.training-impact--session {
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+
+  header {
+    align-items: center;
+    min-height: 24px;
+    gap: 4px;
+  }
+
+  h3 {
+    font-size: .625rem;
+    line-height: 1.2;
+    font-weight: 400;
+  }
 }
 
-.training-impact-scope,
+.training-impact-heading-divider {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .training-impact-result-line span,
 .training-impact-calculation {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
 }
 
-.training-impact-result,
 .training-impact-calculation {
   grid-column: 1 / -1;
 }
 
-.training-impact-result {
-  display: flex;
-  align-items: center;
-  gap: 4px 12px;
-  padding-top: 4px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
+.training-impact-session-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding-bottom: 8px;
 }
 
-.training-impact-result-context {
-  flex: 1 1 0;
+.training-impact-session-metrics > div {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  text-align: center;
+  gap: 2px;
   min-width: 0;
+}
+
+.training-impact-session-metrics strong {
+  font: 500 1.25rem / 1.2 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.training-impact-session-metrics span {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  font-size: .6875rem;
+  line-height: 1.3;
 }
 
 .training-impact-result-line {
@@ -153,13 +185,22 @@
   font-weight: 500;
 }
 
-.training-impact-result-context .training-impact-note {
-  margin-top: 3px;
-}
-
 .training-impact-calculation-info {
   flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 5px;
+  // Keep Material's expanded touch target; only the visible button occupies this compact row.
+  --mat-icon-button-state-layer-size: 24px;
+  --mat-icon-button-icon-size: 14px;
   --mat-icon-button-icon-color: var(--mat-sys-on-surface-variant);
+}
+
+.training-impact-calculation-info mat-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 14px;
 }
 
 .training-impact-calculation {
