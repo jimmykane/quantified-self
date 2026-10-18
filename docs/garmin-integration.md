@@ -77,6 +77,15 @@ repeated identical downloads; normal files retain their original bytes. Review a
 changing the limit and worker memory. Fetch failures retain only a fixed error message and status category, never
 provider bodies or signed URL text. Parser work limits are a separate concern.
 
+### Health worker diagnostics
+
+Health worker ERROR diagnostics distinguish token refresh, legacy identity lookup, callback request/mapping,
+Health writes, checkpoints and sync-state writes using `failureStage`. Only typed request errors can report a validated
+`providerStatusCode`; internal failures retain allowlisted RPC/transport codes instead. Correlate by `queueItemId`
+and platform trace, never by credentials or provider data. The separate failure-state write ERROR uses
+`failureStage="failure_state_write"` and cannot replace the original failure or bypass its existing retry accounting.
+These are logging-only changes; deploy only `processSleepSyncTask` after separate approval. #830 monitoring is unchanged.
+
 ## Temporary webhook URL probe
 
 `garminWebhookProbe` was a temporary public Gen 2 endpoint for checking Garmin's URL transport. It discarded

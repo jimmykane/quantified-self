@@ -333,7 +333,8 @@ vi.mock('../garmin/health-lifecycle', () => ({
     },
 }));
 
-vi.mock('../garmin/health-sync', () => ({
+vi.mock('../garmin/health-sync', async importOriginal => ({
+    ...(await importOriginal<typeof import('../garmin/health-sync')>()),
     processGarminHealthQueueItem: hoisted.processGarminHealthQueueItem,
     sanitizeGarminHealthErrorForTelemetry: vi.fn(() => new Error('Garmin Health callback request failed.')),
     GarminHealthPermissionError: class GarminHealthPermissionError extends Error {
@@ -354,7 +355,7 @@ import {
     processSleepSyncQueueItem,
     resolveGarminPingFirebaseUserIDs,
 } from './queue';
-import { GarminHealthPermissionError } from '../garmin/health-sync';
+import { GarminHealthPermissionError, GarminHealthRequestError } from '../garmin/health-sync';
 import { GarminHealthValidationError } from '../garmin/health';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
@@ -2213,6 +2214,62 @@ describe('sleep queue', () => {
             garminCallbackURLs: 'DELETE_SENTINEL',
         }));
     });
+
+    it.each(['callback_request', 'health_write', 'sync_state_write'] as const)(
+        'logs the original Garmin %s failure separately from a failure-state write error and still retries', async stage => {
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [{ id: 'garmin-token-1',
+                data: () => ({ serviceName: ServiceNames.GarminAPI, userID: 'garmin-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            }], empty: false });
+            const primaryError = stage === 'callback_request' ? new GarminHealthRequestError(503)
+                : Object.assign(new Error('private-primary-token/path'), { code: 10 });
+            if (stage === 'callback_request') {
+                hoisted.processGarminHealthQueueItem.mockImplementationOnce(async (...args: unknown[]) => {
+                    (args[5] as (stage: string) => void)(stage);
+                    throw primaryError;
+                });
+            } else if (stage === 'health_write') {
+                hoisted.processGarminHealthQueueItem.mockResolvedValueOnce({
+                    healthResults: [{ input: { sourceRecordKind: 'daily_summary', metrics: [] }, observedAtMs: 1_777_424_400_000 }],
+                    lifecycleGuards: await hoisted.captureActiveGarminHealthWriteLifecycleGuards(),
+                    continuation: null,
+                });
+                hoisted.replaceHealthSourceRecord.mockRejectedValueOnce(primaryError);
+            } else {
+                hoisted.updateHealthSyncState.mockRejectedValueOnce(primaryError);
+            }
+            hoisted.updateHealthSyncState.mockRejectedValueOnce(Object.assign(
+                new Error('private-secondary-health/path'), { code: 14, details: 'private-details', cause: primaryError },
+            ));
+            const update = vi.fn().mockResolvedValue(undefined);
+            const id = 'garmin-diagnostics-' + stage;
+            const result = await processSleepSyncQueueItem({
+                id, dateCreated: 1_700_000_000_000, dispatchedToCloudTask: 1_700_000_000_500,
+                processed: false, provider: 'GarminAPI', userID: 'test-user-uid', providerUserId: 'garmin-user-1',
+                retryCount: 0, type: 'garmin_ping', garminSummaryType: 'dailies',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=private-callback-token',
+                ref: { update } as unknown as admin.firestore.DocumentReference,
+            });
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(hoisted.loggerError).toHaveBeenCalledWith(
+                '[HealthSync] Failed to record provider Health sync failure.', expect.objectContaining({
+                    queueItemId: id, provider: 'GarminAPI', failure: 'garmin_health_state_write_failed',
+                    failureStage: 'failure_state_write', failureCategory: 'rpc_error', rpcStatusCode: 14,
+                }),
+            );
+            const primaryLog = hoisted.loggerError.mock.calls.find(([message]) => message === `[SleepSync] Queue item ${id} failed`);
+            expect(primaryLog?.[1]).toMatchObject({ queueItemId: id, provider: 'GarminAPI', failureStage: stage,
+                ...(stage === 'callback_request' ? { failureCategory: 'provider_http_error', providerStatusCode: 503 }
+                    : { failureCategory: 'rpc_error', rpcStatusCode: 10 }), processingElapsedMs: expect.any(Number) });
+            if (stage !== 'callback_request') expect(primaryLog?.[1]).not.toHaveProperty('providerStatusCode');
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1,
+                dispatchedToCloudTask: null, errors: [expect.objectContaining({ error: 'Garmin Health callback request failed.' })] }));
+            expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ processed: true }));
+            expect(hoisted.processGarminHealthQueueItem).toHaveBeenCalledOnce();
+            expect(hoisted.releaseSleepQueueRevision).toHaveBeenCalledOnce();
+            expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('private');
+        },
+    );
 
     it('uses refreshed Garmin lifecycle guards when recording callback permission failure', async () => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };

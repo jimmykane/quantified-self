@@ -178,6 +178,10 @@ queue row permanently stuck.
 
 ## Routine Verification
 
+For Garmin Health failures, use the [safe worker diagnostics](garmin-integration.md#health-worker-diagnostics)
+to distinguish upstream HTTP failures from internal errors. A separate `failure_state_write` ERROR describes only
+the attempt to record failure status; it does not replace the original error or stop the existing queue retry.
+
 1. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
    function manually in the Firebase console.
 2. Verify new COROS queue items complete successfully, `users/{uid}/sleepSyncState/COROSAPI`

@@ -102,6 +102,13 @@ Suunto Health history adapts to item-count limits by halving oversized target wi
 
 Suunto Health failure logs retain allowlisted operation stages and error classifications before raw errors are sanitized for retry storage. Distinguish worker HTTP 500s from validated upstream status codes; RPC, transport, validation and unknown failures have separate safe diagnostics. See [backfill diagnostic fields](health-backfill-operations.md#verification). Do not add raw provider responses, exception messages, stacks, credential URLs or account identifiers to those fields.
 
+Garmin Health failures likewise classify the original exception with safe stages, elapsed time and HTTP/transport/RPC
+codes before retry-storage sanitization; unknown internal errors are not labelled as confirmed provider HTTP failures.
+The shared Health failure-state write error separately retains its queue ID, provider and allowlisted diagnostics.
+Both remain ERROR logs, without raw error text, payloads or credentials. Monitoring is **unchanged**: #830 uses existing
+worker/committed-transition events, not these diagnostic messages or queue IDs. Requests, retries and lifecycle guards
+are unchanged; release requires separate approval for only `processSleepSyncTask`. Existing Help and MCP are unaffected.
+
 Suunto workout downloads, activity-history reads, and Health pulls allow one same-account forced token refresh and
 read retry after HTTP 401 or 403. Health shares that recovery budget across all feeds/subrequests in one invocation;
 its existing durable queue retry policy remains unchanged. Never select another connected account to recover old work.
