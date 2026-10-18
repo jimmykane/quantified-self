@@ -5896,8 +5896,9 @@ Version-1 private evaluations can add `hrAlgorithm: 'BANISTER' | 'THRESHOLD'`; t
 `threshold-hr-fallback` and `estimated: true`. The editor labels these **HR · Banister** and **HR · Threshold (estimate)**.
 Older evaluations keep the existing HR label without guessing an algorithm. The shared effective-load resolver carries
 this optional value only for the selected calculated HR result, never an override, imported score, exclusion or
-multi-result total. Compact private load summaries preserve it through their existing lifecycle. No extra reads,
-writes, queues, triggers or rebuilds are added.
+multi-result total. Compact private load summaries preserve it through their existing lifecycle. There are no new
+query paths, queues, triggers or scheduled rebuilds. Refreshed evaluations and changed summaries use the existing
+metadata/cache writes and invalidation flow; reparsing history still incurs that normal refresh work.
 
 Rollout is gated on a published sports-lib release: this compatible reader change is prepared against the current
 23.0.0 pins and verified locally with the candidate package. Before enabling the calculation in QS, adopt the same
