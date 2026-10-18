@@ -22,7 +22,7 @@
       <div><dt>Recorded TSS</dt><dd>{{ score(recorded) }}</dd></div>
       <div><dt>Automatic TSS</dt><dd>{{ score(automatic) }}</dd></div>
       <div><dt>Modeled leg TSS</dt><dd>{{ score(legModel.score) }}</dd></div>
-      <div><dt>Actual method</dt><dd>{{ legModel.status === 'excluded' ? 'Excluded' : legModel.method ?? 'Unavailable' }}{{ legModel.estimated ? ' (estimate)' : '' }}</dd></div>
+      <div><dt>Actual method</dt><dd>{{ actualMethodLabel }}</dd></div>
     </dl>
     <p role="status">{{ explanation }} {{ reasonText }}</p>
     <div [formGroup]="form" class="load-fields">

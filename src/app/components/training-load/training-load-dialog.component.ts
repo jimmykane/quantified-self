@@ -6,7 +6,8 @@ import { firstValueFrom, forkJoin, take } from 'rxjs';
 import { DataTrainingStressScore, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
-  unresolvedTrainingLoadLegs, validTrainingLoadOverride, type TrainingLoadMetadata, type TrainingLoadMethod } from '@shared/training-load-policy';
+  unresolvedTrainingLoadLegs, validTrainingLoadOverride, type TrainingLoadMetadata, type TrainingLoadMethod,
+  type EffectiveTrainingLoad } from '@shared/training-load-policy';
 import { resolveTrainingDisciplineFromActivityType, TRAINING_SPORT_DEFINITIONS } from '@shared/training-disciplines';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
@@ -79,13 +80,20 @@ export class TrainingLoadDialogComponent implements OnInit {
   get policy() { return this.metadata()?.legs?.[this.selectedKey]?.policy ?? this.leg?.policy ?? defaultAppliedTrainingLoadPolicy(this.activities.find(a => a.id === this.selectedId())?.type); }
   get family() { return resolveTrainingDisciplineFromActivityType(this.activities.find(activity => activity.id === this.selectedId())?.type); }
   get familyLabel(): string { return TRAINING_SPORT_DEFINITIONS.find(family => family.id === this.family)?.label ?? 'this sport'; }
-  private resolveLoad(activityId?: string) {
+  private resolveLoad(activityId?: string): EffectiveTrainingLoad {
     if (!this.sourceCurrent() && !this.metadata()?.excluded) return { score: null, status: 'unavailable' as const,
       method: null, estimated: false, reasons: ['source-updating'] };
     return resolveEffectiveTrainingLoad(this.data.event, this.metadata(), this.activities, activityId);
   }
   get model() { return this.resolveLoad(); }
   get legModel() { return this.resolveLoad(this.selectedId()); }
+  get actualMethodLabel(): string {
+    const load = this.legModel;
+    if (load.status === 'excluded') return 'Excluded';
+    const method = load.method === 'HR' && load.hrAlgorithm
+      ? `HR · ${load.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold'}` : load.method ?? 'Unavailable';
+    return method + (load.estimated ? ' (estimate)' : '');
+  }
   get automatic(): number | null {
     return this.sourceCurrent() && !this.metadata()?.sourceWritePending ? (this.leg?.evaluations ? this.leg.evaluations.automatic.score : this.recorded) : null;
   }
@@ -101,13 +109,16 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this leg’s saved policy.';
     if (!this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate HR and MET candidates.';
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
-    if (this.legModel.method === 'MET') return 'Estimate from file calories, body mass and duration. HR requires explicit resting, threshold and maximum HR in the file.';
+    if (this.legModel.method === 'MET') return 'Estimate from file calories, body mass and duration.';
+    if (this.legModel.hrAlgorithm === 'BANISTER') return 'Calculated from recorded heart rate and explicit resting, threshold and maximum HR calibration.';
+    if (this.legModel.hrAlgorithm === 'THRESHOLD') return 'Estimated from recorded heart rate relative to the file threshold. This fallback is available for running and cycling when resting or maximum HR is missing.';
     if (this.legModel.score === null) return 'No eligible load calculation is available from this file. Use a numeric override or exclude the leg.';
     return this.legModel.reasons.length ? 'An eligible calculation was unavailable. The next eligible Automatic method was used.' : 'Calculated from the available file inputs.';
   }
   get reasonText(): string {
     const messages: Record<string, string> = {
-      'missing-hr-calibration': 'The file has no complete HR calibration.',
+      'missing-hr-calibration': 'The file is missing required HR calibration.',
+      'threshold-hr-fallback': 'Full Banister calibration is unavailable; the threshold-HR estimate was used.',
       'invalid-hr-calibration': 'The file HR calibration is inconsistent or invalid.',
       'ambiguous-hr-calibration': 'The file has ambiguous HR calibration records.',
       'missing-hr-samples': 'No usable heart-rate samples are available.',

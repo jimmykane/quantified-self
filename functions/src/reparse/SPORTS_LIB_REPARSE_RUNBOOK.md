@@ -7,6 +7,20 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Pending threshold-HR calculation update
+
+The compatible editor/shared resolver understands optional private `hrAlgorithm` evaluations while root and Functions
+remain pinned to 23.0.0. Publish sports-lib first, then adopt the same released package and lockfile updates in both
+consumers before enabling the new fallback. A local packed build is verification only, never a deployment dependency.
+
+Running/cycling families can then use threshold-HR estimates when resting or maximum HR is missing but the original
+supplies a valid threshold. Full calibration keeps Banister; imported scores, eligible power and other sport eligibility
+are preserved. Historical values need the existing authorized original-file reparse and normal Training refresh.
+JSON hydration or a Training rebuild cannot recover discarded calibration. Reparse refreshes candidates while keeping
+saved policy snapshots and latest controls through strict identity matching, source reservations, retries and deletion
+guards. No new persistence path, derived schema bump, route migration, queue or automatic reparse campaign is required.
+See the [Training contract](../../../docs/training-workspace.md#file-only-tss-evaluation-and-owner-load-controls).
+
 ### Sports Lib 23.0.0 provider sport catalog adoption
 
 Benchmark source writes now set a server-owned pending barrier before activity persistence. The existing source

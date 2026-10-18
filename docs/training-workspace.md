@@ -5873,11 +5873,42 @@ classification. Correcting persisted GPX attribution or TCX classification needs
 normal summary refresh. Existing strict identity matching protects policies/controls; ambiguous matches still require
 review. No bulk rewrite, automatic scan, new storage operation or provider request is introduced.
 
-HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
+Banister HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
 threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
 `zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
-setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
+setting. Observed peak HR and guessed threshold ratios are ineligible calibration. QS supplies no athlete
 settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
+
+The pending sports-lib threshold-HR update adds a fallback for Running, Trail Running, Cycling and Mountain Biking
+groups when resting or maximum HR is missing but an explicit, unambiguous threshold remains valid. Full valid
+calibration still selects Banister. Imported scores and eligible power retain Automatic priority; walking/hiking,
+swimming and other groups retain their current HR eligibility. Complete rejected calibration cannot use the fallback.
+Only this threshold candidate treats numeric zero FIT rest/max settings as unused; threshold zero, conflicting
+selected settings, ambiguous session references and malformed values remain rejected. No athlete settings, zone-derived
+thresholds or observed-peak maximums are supplied by QS. Unmapped source thresholds remain unavailable.
+
+The fallback uses the sports-lib threshold bands over the same observed timer-active intervals, with no extrapolation
+outside observations or through invalid readings. It is explicitly estimated and is not interchangeable with normalized
+Banister. Exact threshold is in the 80 TSS/hour band; just above threshold is 100 TSS/hour. Its low-intensity floor is
+not enabled for walking/recovery families. The library calculation guide owns the complete rate table.
+
+Version-1 private evaluations can add `hrAlgorithm: 'BANISTER' | 'THRESHOLD'`; the threshold result also carries
+`threshold-hr-fallback` and `estimated: true`. The editor labels these **HR · Banister** and **HR · Threshold (estimate)**.
+Older evaluations keep the existing HR label without guessing an algorithm. The shared effective-load resolver carries
+this optional value only for the selected calculated HR result, never an override, imported score, exclusion or
+multi-result total. Compact private load summaries preserve it through their existing lifecycle. No extra reads,
+writes, queues, triggers or rebuilds are added.
+
+Rollout is gated on a published sports-lib release: this compatible reader change is prepared against the current
+23.0.0 pins and verified locally with the candidate package. Before enabling the calculation in QS, adopt the same
+published version in root and Functions and update both lockfiles. Historical candidates require the normal approved
+original-file reparse lifecycle and derived refresh; a Training rebuild alone cannot recover file calibration.
+Strict leg matching, latest controls, immutable applied policies, source reservations, retries and deletion guards
+remain in force. Activity JSON, recorded-TSS metric names, public MCP schemas and evaluation version stay compatible.
+MCP impact is limited to reading the resulting modeled score: the algorithm and fallback reason remain private,
+and focused Training-impact tests validate the frozen public schema. Planning reads, mutations, scopes, consent,
+provider delivery, plugin content and registered contract snapshots are unchanged. No deployment or reparse campaign
+is enabled by these PRs, and saved routes need no reparse for this calculation change.
 
 Sports Lib 21.6.6 removes explicit timer pauses from HR integration across eligible sports, including gaps spanning
 a pause, and excludes HR readings inside pauses. A reading exactly at a stop may close the preceding active interval.
@@ -6041,7 +6072,7 @@ while missing or conflicting timing does not invent pauses. These in-memory corr
 
 MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
 10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
-not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
+not invent mass, subtract resting calories, use reference-MET tables, or replace it with a linear calorie score.
 
 Settings keeps Training load in the Preferences disclosure group. Its sport-policy editor initializes on first
 expansion, then remains mounted while collapsed so drafts and the existing policy subscription survive section

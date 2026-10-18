@@ -2198,6 +2198,11 @@ missing TSS. Focused tests validate actual service results against the strict ou
 exclusions on all three transports. Stale benchmark/incomplete selections cannot hold up other selected sessions;
 a recent owner exclusion still waits for Form to remove its previous contribution. These runtime checks preserve the
 registered JSON schemas and require no local plugin rebuild, catalog rescan, new consent or mutation capability.
+
+Optional private HR algorithm metadata distinguishes Banister from the sports-lib threshold-HR estimate in the owner
+editor. Training impact projects only the selected modeled score through its existing public contract; `hrAlgorithm`,
+`threshold-hr-fallback`, calibration and saved policies remain private. Legacy evaluations without the field remain
+readable. This adds no public field, metric token, scope, planning read, mutation or provider-delivery capability.
 Session and selected-day load comparisons share the app's machine-precision tolerance, scaled by load and summed
 term count. Numerically equivalent decimal totals do not falsely report `form_updating`; genuinely higher selected
 load still waits for Form. No stored scores, wire fields, read counts or refresh behavior change.

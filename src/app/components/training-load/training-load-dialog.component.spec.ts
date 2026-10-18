@@ -16,6 +16,21 @@ describe('Training load editor', () => {
   const watch = vi.fn(); const watchPolicies = vi.fn();
   const source = { startDate: 1000, endDate: 3601000, stats: { 'Training Stress Score': 87.3 } };
   let component: TrainingLoadDialogComponent;
+  it.each([
+    ['BANISTER', false, 'HR · Banister'], ['THRESHOLD', true, 'HR · Threshold (estimate)'],
+    [undefined, false, 'HR'], ['unrecognized', false, 'HR'],
+  ])('shows the recorded HR algorithm %s without inferring legacy algorithms', (hrAlgorithm, estimated, label) => {
+    const candidate = { preference: 'AUTOMATIC' as const, score: 70, method: 'HR' as const,
+      estimated: !!estimated, provenance: 'calculated' as const, reasons: [], ...(hrAlgorithm ? { hrAlgorithm } : {}) };
+    component.metadata.set(JSON.parse(JSON.stringify({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: 'Running', duration: 3600, distance: null },
+      recordedTss: 70, policy: defaultAppliedTrainingLoadPolicy('Running'), evaluations: { version: 1,
+        automatic: candidate, hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' } },
+    } } })));
+    expect(component.actualMethodLabel).toBe(label);
+    if (hrAlgorithm === 'THRESHOLD') expect(component.explanation).toContain('running and cycling');
+    if (hrAlgorithm === 'BANISTER') expect(component.explanation).toContain('resting, threshold and maximum');
+  });
   beforeEach(async () => {
     vi.clearAllMocks(); save.mockResolvedValue(undefined);
     watch.mockReturnValue(of(null)); watchPolicies.mockReturnValue(of([])); vi.stubGlobal('crypto', webcrypto);

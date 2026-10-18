@@ -676,6 +676,31 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await db.doc(`userDeletionTombstones/${uid}`).set({ deleting: true });
     await expect(finish()).rejects.toThrow('account deletion');
   });
+  it('persists additive HR algorithm metadata on retry while retaining a concurrent zero override', async () => {
+    const uid = setup(); const event = workout(); event.getFirstActivity().type = ActivityTypes.Running;
+    await importWorkout(uid, event);
+    const ref = db.doc(metadataPath(uid));
+    const before = (await ref.get()).data() as TrainingLoadMetadata;
+    const hr = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 70, estimated: true,
+      provenance: 'calculated' as const, reasons: [], hrAlgorithm: 'THRESHOLD' as const };
+    const evaluate = vi.spyOn(ActivityUtilities, 'getTrainingStressScoreEvaluations').mockReturnValue({ version: 1,
+      automatic: hr, hr: { ...hr, preference: 'HR' }, met: { ...hr, preference: 'MET', method: 'MET', score: 9 } });
+    try {
+      const changed = workout('new-leg'); changed.getFirstActivity().type = ActivityTypes.Running;
+      await prepareTrainingLoadMetadata(uid, changed);
+      await source(uid, changed); // Simulate an interrupted finalization.
+      const finish = await prepareTrainingLoadMetadata(uid, changed);
+      await ref.update({ controls: { leg: { override: 0 } }, revision: before.revision + 2 });
+      await finish(); await finish();
+      const saved = (await ref.get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg).toMatchObject({ activityId: 'new-leg', policy: before.legs!.leg.policy,
+        evaluations: { automatic: { method: 'HR', score: 70, hrAlgorithm: 'THRESHOLD' } } });
+      expect(saved.controls).toEqual({ leg: { override: 0 } });
+      expect(resolveEffectiveTrainingLoad({}, saved, [], 'new-leg')).toMatchObject({ score: 0, method: 'OVERRIDE' });
+      expect(resolveEffectiveTrainingLoad({}, { ...saved, controls: {} }, [], 'new-leg'))
+        .toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD', estimated: true });
+    } finally { evaluate.mockRestore(); }
+  });
   it('serializes concurrent owner edits and source reparses without losing the override', async () => {
     const uid = setup(); const original = workout(); await importWorkout(uid, original);
     const ref = db.doc(metadataPath(uid));

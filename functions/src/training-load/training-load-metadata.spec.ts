@@ -21,6 +21,23 @@ describe('training load reconciliation', () => {
       policy: { method: 'HR', included: false, revision: 3 } });
     expect(next.controls).toEqual({ old: { override: 0 } });
   });
+  it('refreshes HR algorithm evaluations across changed IDs and retries while preserving controls and saved policies', () => {
+    const prior = previous();
+    const hr = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 70, estimated: true,
+      provenance: 'calculated' as const, reasons: [], hrAlgorithm: 'THRESHOLD' as const };
+    const candidate: TrainingLoadLeg = { ...leg('new'), recordedTss: 70, evaluations: { version: 1,
+      automatic: hr, hr: { ...hr, preference: 'HR' }, met: { ...hr, method: 'MET', preference: 'MET', score: 9 } } };
+    const next = reconcileTrainingLoadLegs(prior, [candidate]);
+    expect(next.legs!.old.evaluations).toEqual(candidate.evaluations);
+    expect(next.controls).toEqual(prior.controls);
+    expect(next.legs!.old.policy).toEqual(prior.legs!.old.policy);
+    expect(reconcileTrainingLoadLegs(JSON.parse(JSON.stringify({ ...prior, ...next })), [candidate])).toEqual(next);
+    expect(resolveEffectiveTrainingLoad({}, { ...prior, ...next }, [], 'new')).toMatchObject({ status: 'excluded' });
+    const included: TrainingLoadMetadata = { ...prior, ...next, controls: { old: { included: true, override: 0 } } };
+    expect(resolveEffectiveTrainingLoad({}, included, [], 'new')).toMatchObject({ score: 0, method: 'OVERRIDE' });
+    included.controls = { old: { included: true } };
+    expect(resolveEffectiveTrainingLoad({}, included, [], 'new')).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD' });
+  });
   it.each([0, 2400])('retains saved controls when source timer recovery corrects active duration to %s', duration => {
     const prior = previous();
     const candidate = { ...leg('new'), identity: { ...leg('new').identity, duration },
