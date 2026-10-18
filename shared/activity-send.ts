@@ -6,7 +6,7 @@ export const ACTIVITY_SEND_PROVIDERS = {
   wahoo: ServiceNames.WahooAPI,
 } as const;
 export type ActivitySendProvider = keyof typeof ACTIVITY_SEND_PROVIDERS;
-export const ACTIVITY_SEND_LIMITS = { fileBytes: 20 * 1024 * 1024, userBytes: 200 * 1024 * 1024, files: 50, page: 50 } as const;
+export const ACTIVITY_SEND_LIMITS = { fileBytes: 20 * 1024 * 1024, userBytes: 200 * 1024 * 1024, files: 50, page: 5 } as const;
 export type ActivitySendStatus = 'preparing' | 'ready' | 'queued' | 'sending' | 'processing' | 'delivered' | 'duplicate' | 'needs_action' | 'stopped';
 export type ActivitySendRecovery = 'none' | 'choose_file' | 'reconnect' | 'check_status' | 'retry_send' | 'review_provider' | 'upgrade';
 export interface ActivitySendRow {

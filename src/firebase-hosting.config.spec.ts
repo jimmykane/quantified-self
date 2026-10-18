@@ -381,6 +381,7 @@ describe('Firebase Hosting configuration', () => {
     // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
     // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
     // Event details now documents the compact TSS / Workout CTL / Day CTL strip.
+    // The same-day Help revision clarifies preview timeouts, source provenance and checked/ready/excluded draft counts.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

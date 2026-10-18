@@ -201,9 +201,18 @@ export class ActivitySendPageComponent {
     const batch = this.sends.batch(); if (batch) await this.run(() => this.command({ version: 1, action: 'stop', batchId: batch.id }));
   }
   toggleDetails(): void { this.showDetails.update(value => !value); this.haptics.selection(); }
-  private command(request: ActivitySendCommand): Promise<ActivitySendCommandResult> {
+  private async command(request: ActivitySendCommand): Promise<ActivitySendCommandResult> {
     this.assertActive();
-    return this.sends.command(request, this.activeOwner!);
+    try { return await this.sends.command(request, this.activeOwner!); }
+    catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      if (request.action === 'prepare' && this.activeSource === 'saved'
+        && (code === 'deadline-exceeded' || code === 'functions/deadline-exceeded' || error instanceof Error && error.message === 'deadline-exceeded')) {
+        throw new Error('Preview timed out. Previewing does not send activities. Choose Continue saved-activity preview to resume.');
+      }
+      // A timed-out confirmation may have committed. Never claim it sent nothing or retry it here.
+      throw error;
+    }
   }
   private isActive(): boolean {
     return !this.destroyed && !!this.activeOwner && this.users.user()?.uid === this.activeOwner

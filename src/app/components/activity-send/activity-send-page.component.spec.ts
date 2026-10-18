@@ -185,6 +185,50 @@ describe('activity sending workspace', () => {
     expect(sends.command).toHaveBeenNthCalledWith(2, { version: 1, action: 'prepare', batchId: 'batch-1' }, 'owner');
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
   });
+  it('labels draft counts as checked, ready and excluded rather than delivered or finished', () => {
+    const fixture = render(); fixture.componentInstance.source.set('saved');
+    const draft = { ...batchValue, source: 'saved' as const, reviewed: false, total: 36, finished: 36 };
+    sends.batch.set(draft); sends.recent.set([draft]); fixture.detectChanges();
+    const summary = fixture.nativeElement.querySelector('.review-summary').textContent.replace(/\s+/g, ' ');
+    expect(summary).toContain('36 checked · 0 ready · 36 excluded');
+    expect(summary).not.toContain('finished');
+    expect(fixture.nativeElement.querySelector('.recent-send').textContent).toContain('Draft · 36 activities');
+    expect(fixture.nativeElement.textContent).toContain('Sending starts only after you confirm Send');
+    sends.batch.set({ ...draft, total: 50, finished: 0 }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.review-summary').textContent.replace(/\s+/g, ' ')).toContain('50 checked · 50 ready · 0 excluded');
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('keeps confirmed delivery counts distinct from draft checking', () => {
+    const fixture = render(); sends.batch.set({ ...batchValue, state: 'confirmed', total: 50, finished: 20 }); fixture.detectChanges();
+    const summary = fixture.nativeElement.querySelector('.review-summary').textContent.replace(/\s+/g, ' ');
+    expect(summary).toContain('20/50 finished'); expect(summary).not.toContain('checked');
+    expect(fixture.nativeElement.textContent).not.toContain('Sending starts only after you confirm Send');
+  });
+  it.each(['deadline-exceeded', 'functions/deadline-exceeded', undefined])('explains saved preview timeout %s and resumes only when requested', async code => {
+    const fixture = render(); fixture.componentInstance.source.set('saved');
+    sends.batch.set({ ...batchValue, source: 'saved', reviewed: false, savedSelectionReady: true }); sends.rows.set([row]);
+    sends.command.mockRejectedValueOnce(Object.assign(new Error('deadline-exceeded'), { code }));
+    await fixture.componentInstance.reviewFiles(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('Preview timed out. Previewing does not send activities.');
+    expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('Continue saved-activity preview');
+    expect(fixture.componentInstance.busy()).toBe(false); expect(fixture.componentInstance.canConfirm()).toBe(false);
+    expect(sends.command).toHaveBeenCalledOnce();
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    await fixture.componentInstance.reviewFiles(); fixture.detectChanges();
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(sends.command).toHaveBeenCalledTimes(2);
+    expect(sends.command.mock.calls.every(([request]) => request.action === 'prepare')).toBe(true);
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('does not describe an uncertain Send confirmation as a preview or send it again', async () => {
+    const fixture = render(); fixture.componentInstance.source.set('saved');
+    sends.batch.set({ ...batchValue, source: 'saved' }); sends.rows.set([row]);
+    sends.command.mockRejectedValueOnce(Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' }));
+    await fixture.componentInstance.confirm(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toBe('deadline-exceeded');
+    expect(sends.command).toHaveBeenCalledExactlyOnceWith({ version: 1, action: 'confirm', batchId: 'batch-1', revision: 2 }, 'owner');
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
   it('reports a fully excluded selection without offering confirmation', () => {
     const fixture = render(); sends.batch.set({ ...batchValue, total: 1, finished: 1 }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No eligible activities');

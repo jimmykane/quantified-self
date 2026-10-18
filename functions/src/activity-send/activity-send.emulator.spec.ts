@@ -158,7 +158,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   });
   it('recovers a lost date-range preview reply and resumes at the server cursor', async () => {
     const writes = db.batch();
-    for (let index = 0; index < 51; index++) writes.set(db.doc(`users/${uid}/events/synthetic-${String(index).padStart(2, '0')}`), { name: 'Excluded synthetic merge', startDate: 1000 + index, isMerge: true });
+    const count = ACTIVITY_SEND_LIMITS.page + 1;
+    for (let index = 0; index < count; index++) writes.set(db.doc(`users/${uid}/events/synthetic-${String(index).padStart(2, '0')}`), { name: 'Excluded synthetic merge', startDate: 1000 + index, isMerge: true });
     await writes.commit();
     await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
     const request = { version: 1 as const, action: 'prepare' as const, batchId: id, startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString() };
@@ -166,10 +167,74 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect(first.nextCursor).toBeTruthy();
     const recovered = await runSendCommand(uid, request);
     expect(recovered.nextCursor).toBe(first.nextCursor);
-    expect((await batchRef(uid, id).get()).data()?.total).toBe(50);
+    expect((await batchRef(uid, id).get()).data()?.total).toBe(ACTIVITY_SEND_LIMITS.page);
     const last = await runSendCommand(uid, { ...request, cursor: recovered.nextCursor! });
     expect(last.nextCursor).toBeNull();
-    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 51, reviewed: true });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: count, reviewed: true });
+  });
+  it.each(['selection', 'date range'])('bounds a saved %s preview and resumes each recording once without sending', async kind => {
+    const eventIds = Array.from({ length: 11 }, (_, index) => `bounded-${String(index).padStart(2, '0')}`);
+    for (const eventId of eventIds) await savedOriginal(eventId);
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const criteria = kind === 'selection' ? { eventIds: [...eventIds].reverse() } : { startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString() };
+    const request = { version: 1 as const, action: 'prepare' as const, batchId: id, ...criteria, sources: [ServiceNames.GarminAPI] };
+    const first = await runSendCommand(uid, request);
+    expect(first.nextCursor).toBeTruthy();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 5, reviewed: false });
+    await expect(runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: first.revision })).rejects.toMatchObject({ code: 'failed-precondition' });
+    const recovered = await runSendCommand(uid, request);
+    expect(recovered.nextCursor).toBe(first.nextCursor);
+    expect(state.downloaded).toHaveLength(5);
+    const second = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect(second.nextCursor).toBeTruthy(); expect(second.nextCursor).not.toBe(first.nextCursor);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 10, reviewed: false });
+    const last = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect(last.nextCursor).toBeNull();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 11, finished: 0, reviewed: true });
+    expect(state.downloaded).toHaveLength(11); expect(new Set(state.downloaded).size).toBe(11);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+    expect(state.enqueue).not.toHaveBeenCalled();
+  });
+  it.each(['selection', 'date range'])('yields a slow %s preview at its last durable recording without skipping the rest', async kind => {
+    const eventIds = ['slow-one', 'slow-two'];
+    for (const eventId of eventIds) await savedOriginal(eventId);
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const criteria = kind === 'selection' ? { eventIds } : { startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString() };
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now + (state.downloaded.length ? 25_000 : 0));
+    try {
+      const first = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, ...criteria, sources: [ServiceNames.GarminAPI] });
+      expect(first.nextCursor).toBeTruthy();
+      expect((await operationRef(uid, id).get()).data()).toMatchObject({ total: 1, lastEventId: 'slow-one', reviewed: false });
+    } finally { clock.mockRestore(); }
+    const last = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect(last.nextCursor).toBeNull();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 2, reviewed: true });
+    expect(state.downloaded).toHaveLength(2); expect(new Set(state.downloaded).size).toBe(2);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('resumes a retained fifty-row date cursor after the preview page size is reduced', async () => {
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const writes = db.batch();
+    for (let index = 0; index < 51; index++) {
+      const eventId = `legacy-${String(index).padStart(2, '0')}`;
+      writes.set(db.doc(`users/${uid}/events/${eventId}`), { name: 'Synthetic excluded merge', startDate: 1000 + index, isMerge: true });
+      if (index < 50) {
+        writes.set(operationRef(uid, id).collection('rows').doc(eventId), { excluded: true, admitted: false, eventID: eventId, sourceServiceName: 'manualUpload' });
+        writes.set(batchRef(uid, id).collection('rows').doc(eventId), { id: eventId, status: 'needs_action' });
+      }
+    }
+    writes.update(operationRef(uid, id), {
+      total: 50, finished: 50, revision: 50, nextCursor: 'retained-legacy-cursor', lastEventId: 'legacy-49', lastStartDate: 1049,
+      savedSelection: { startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString(), sources: [ServiceNames.GarminAPI] },
+    });
+    writes.update(batchRef(uid, id), { total: 50, finished: 50, revision: 50, savedSelectionReady: true });
+    await writes.commit();
+    const resumed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect(resumed.nextCursor).toBeNull();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 51, finished: 51, reviewed: true });
+    expect((await operationRef(uid, id).collection('rows').get()).size).toBe(51);
+    expect(state.downloaded).toHaveLength(0); expect(state.enqueue).not.toHaveBeenCalled();
   });
   it('denies new sends without Pro before creating any state', async () => {
     state.pro = false;
@@ -205,7 +270,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   });
   it('continues an interrupted saved preview from private criteria after the browser loses its selection', async () => {
     const writes = db.batch();
-    for (let index = 0; index < 51; index++) writes.set(db.doc(`users/${uid}/events/resume-${String(index).padStart(2, '0')}`), { name: 'Synthetic excluded merge', startDate: 1000 + index, isMerge: true });
+    const count = ACTIVITY_SEND_LIMITS.page + 1;
+    for (let index = 0; index < count; index++) writes.set(db.doc(`users/${uid}/events/resume-${String(index).padStart(2, '0')}`), { name: 'Synthetic excluded merge', startDate: 1000 + index, isMerge: true });
     await writes.commit();
     await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
     const first = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString(), sources: [ServiceNames.COROSAPI] });
@@ -213,7 +279,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect((await batchRef(uid, id).get()).data()).not.toHaveProperty('savedSelection');
     const resumed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
     expect(resumed.nextCursor).toBeNull();
-    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 51, finished: 51, reviewed: true });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: count, finished: count, reviewed: true });
     expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
   });
   it('rejects invalid preview criteria before freezing the draft and explains deleted selections', async () => {
