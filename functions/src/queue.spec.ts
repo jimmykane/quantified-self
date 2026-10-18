@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { ServiceNames, ActivityParsingOptions, EventImporterFIT, COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+
+const mockGetServiceConnectionMeta = vi.hoisted(() => vi.fn());
+vi.mock('./service-connection-meta', async importOriginal => ({
+    ...await importOriginal<typeof import('./service-connection-meta')>(),
+    getServiceConnectionMeta: mockGetServiceConnectionMeta,
+}));
 
 // Mock firebase-functions first (needed by auth modules at load time)
 vi.mock('firebase-functions', () => ({
@@ -72,6 +79,7 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
             size: 1,
         })),
         where: vi.fn().mockImplementation(function (this: any) { return this; }),
+        select: vi.fn(() => collection),
         limit: vi.fn().mockImplementation(function (this: any) { return this; }),
         orderBy: vi.fn().mockImplementation(function (this: any) { return this; }),
     };
@@ -408,6 +416,7 @@ function createBinaryResponse(body: Buffer, contentType = 'application/octet-str
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockGetServiceConnectionMeta.mockReset().mockResolvedValue(null);
         mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.TokenRefreshDeferred);
         mockDocRef.update.mockResolvedValue(undefined);
         mockDocRef.set.mockResolvedValue(undefined);
@@ -2999,6 +3008,101 @@ describe('queue', () => {
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+        });
+
+        describe('owned Suunto imports after completed disconnect', () => {
+            const disconnectedMeta = {
+                connectionStateGeneration: 'cleared-generation',
+                connectionAccountsRevisionKey: 'empty-accounts-revision',
+                connectionAccounts: [],
+            };
+            const committedLogs = () => vi.mocked(logger.info).mock.calls.filter(([message, data]) =>
+                message === '[ActivityImport]' && data?.event === 'committed');
+
+            beforeEach(() => {
+                suuntoQueueItem.firebaseUserID = 'mock-user-id';
+                mockGetServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+                mockCollection.get.mockResolvedValue({ size: 0, docs: [], empty: true });
+                mockRef.get.mockResolvedValue({ exists: true, data: () => ({ ...suuntoQueueItem }) });
+            });
+
+            it.each([false, true])('commits an INFO skip without provider work or DLQ (cached: %s)', async cached => {
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem,
+                    undefined, cached ? new Map() : undefined)).resolves.toBe(QueueResult.Processed);
+                expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                    processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                }));
+                expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith('mock-user-id', ServiceNames.SuuntoApp);
+                expect(logger.info).toHaveBeenCalledWith('[SuuntoWorkoutQueue] Import skipped after completed disconnect.', {
+                    queueItemId: suuntoQueueItem.id, reason: 'service_disconnected',
+                });
+                expect(logger.warn).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+                expect(mockBatch.delete).not.toHaveBeenCalled();
+                expect(getTokenData).not.toHaveBeenCalled();
+                expect(getBinaryResponse).not.toHaveBeenCalled();
+                expect(utils.setEvent).not.toHaveBeenCalled();
+                expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({
+                    provider: 'suunto', outcome: 'skipped',
+                })]]);
+            });
+
+            it.each([null, {}, { ...disconnectedMeta, connectionState: 'connected' },
+                { ...disconnectedMeta, connectionState: 'reconnect_required' },
+                { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+                { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'another-account' }] },
+            ])('retains missing-token failure when disconnect is not confirmed: %j', async meta => {
+                mockGetServiceConnectionMeta.mockResolvedValue(meta);
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.MovedToDLQ);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            });
+
+            it('does not classify a legacy unowned job as disconnected', async () => {
+                suuntoQueueItem.firebaseUserID = undefined;
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.MovedToDLQ);
+                expect(mockGetServiceConnectionMeta).not.toHaveBeenCalled();
+            });
+
+            it('does not borrow another retained account or hide a missing exact credential', async () => {
+                mockCollection.get.mockResolvedValueOnce({ size: 0, docs: [], empty: true })
+                    .mockResolvedValueOnce({ size: 1, docs: [{}], empty: false });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.MovedToDLQ);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(getTokenData).not.toHaveBeenCalled();
+            });
+
+            it.each(['processed', 'owner', 'account', 'workout', 'date', 'revision', 'removed'])('does not overwrite a changed %s row', async state => {
+                const changes = {
+                    processed: { processed: true }, owner: { firebaseUserID: 'another-owner' },
+                    account: { userName: 'another-account' }, workout: { workoutID: 'another-workout' },
+                    date: { dateCreated: 1 }, revision: { queueRevision: 'replacement-revision' }, removed: {},
+                };
+                mockRef.get.mockResolvedValue({ exists: state !== 'removed', data: () => ({ ...suuntoQueueItem, ...changes[state as keyof typeof changes] }) });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.Processed);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[SuuntoWorkoutQueue] Import skipped after completed disconnect.', expect.anything());
+                expect(committedLogs()).toEqual([]);
+            });
+
+            it('does not write or count a skip after account deletion wins', async () => {
+                mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.Processed);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(committedLogs()).toEqual([]);
+            });
+
+            it.each(['metadata', 'credentials', 'completion'])('leaves %s failures retryable without a false completion', async stage => {
+                const error = new Error('temporary Firestore failure');
+                if (stage === 'metadata') mockGetServiceConnectionMeta.mockRejectedValueOnce(error);
+                else if (stage === 'credentials') mockCollection.get.mockResolvedValueOnce({ size: 0, docs: [], empty: true }).mockRejectedValueOnce(error);
+                else mockRunTransaction.mockRejectedValueOnce(error);
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).rejects.toBe(error);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+                expect(committedLogs()).toEqual([]);
+            });
         });
 
         it('service-scopes Suunto token lookups before processing', async () => {

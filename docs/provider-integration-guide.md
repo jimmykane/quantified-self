@@ -1467,6 +1467,13 @@ owns deletion/revision/lease checks and post-commit skip telemetry; no new lifec
 See [COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) and the
 [Sleep operations runbook](sleep-sync-operations.md#queued-coros-polls-after-disconnect).
 
+Owned Suunto workout and Sleep/Health jobs use the same confirmed-disconnect skip, requiring a cleared generated
+lifecycle, revisioned empty account projection and no remaining token children for that Firebase owner. An empty
+OAuth root may remain; a missing exact-account token while another credential exists is not a completed disconnect.
+Legacy unowned jobs and unknown/reconnect-required/pending state retain existing failure handling. Completion uses
+the existing deletion/queue-identity guards and post-commit skip telemetry. Routes already skip unavailable sources
+and are unchanged. See [Suunto queued disconnects](suunto-integration.md#queued-work-after-disconnect).
+
 The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten cleanup tasks concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle for an active user, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup for an active user. Transient failures retain the intent without a finite event-retry or TTL deadline.
 
 Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the same bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.
