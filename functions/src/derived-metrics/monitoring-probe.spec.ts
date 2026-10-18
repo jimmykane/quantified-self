@@ -34,6 +34,23 @@ describe('derived generation-only observation timing', () => {
     it('allows only the short observation race window, never negative ages', () => {
         expect(derivedMetricsPendingAge({ ...row(), requestedAtMs: now + 1 }, now)).toBe(0);
     });
+    it.each(['queued', 'failed'])('excludes intentionally future %s work and ages only eligible waiting time afterward', status => {
+        const scheduled = { ...row(), status, updatedAtMs: now - 5 * 3_600_000, buildNotBeforeMs: now + 120_000 };
+        expect(derivedMetricsPendingAge(scheduled, now)).toBe('excluded');
+        expect(derivedMetricsPendingAge(scheduled, scheduled.buildNotBeforeMs)).toBe(0);
+        expect(derivedMetricsPendingAge(scheduled, scheduled.buildNotBeforeMs + 60_000)).toBe(60_000);
+    });
+    it('retains legacy timing and never uses a queued deadline to hide a processing claim', () => {
+        for (const buildNotBeforeMs of [undefined, null, 0]) {
+            expect(derivedMetricsPendingAge({ ...row(), buildNotBeforeMs }, now)).toBe(60 * 60_000);
+        }
+        expect(derivedMetricsPendingAge({ ...row(), status: 'processing', buildNotBeforeMs: now + 120_000 }, now)).toBe(40 * 60_000);
+    });
+    it('keeps invalid scheduling metadata unknown without coercion or a false idle zero', () => {
+        for (const buildNotBeforeMs of ['PRIVATE_DEADLINE', -1, Infinity, {}, { toString: null }]) {
+            expect(derivedMetricsPendingAge({ ...row(), buildNotBeforeMs }, now)).toBe('unknown');
+        }
+    });
     it.each(['dirtyMetricKinds', 'processingMetricKinds'])('rejects non-string %s without coercing persisted objects', field => {
         const status = field === 'dirtyMetricKinds' ? 'queued' : 'processing';
         for (const value of [null, 1, { toString: null }, { toString: 'PRIVATE_KIND' }]) {

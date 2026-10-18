@@ -79,6 +79,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived metrics monitorin
         await seed(); await tombstone().set({ expireAt: new Date(now - 1) });
         await observeDerivedMetricsQueue(db, now); expect(sample()).toMatchObject({ pendingSample: 1 });
     });
+    it.each(['queued', 'failed'])('reads the saved %s build deadline and excludes scheduled work until it is eligible', async status => {
+        const due = now + 120_000;
+        await seed({ status, buildNotBeforeMs: due });
+        await observeDerivedMetricsQueue(db, now);
+        expect(sample(status)).toMatchObject({ pendingSample: 0, excludedSample: 1, unknownSample: 0 });
+        vi.clearAllMocks();
+        await observeDerivedMetricsQueue(db, due + 1);
+        expect(sample(status)).toMatchObject({ pendingSample: 1, ageLowerBoundMs: 1, excludedSample: 0, unknownSample: 0 });
+    });
+    it('keeps a malformed build deadline unknown instead of hiding pending work', async () => {
+        await seed({ buildNotBeforeMs: 'PRIVATE_DEADLINE' });
+        await observeDerivedMetricsQueue(db, now);
+        expect(sample()).toMatchObject({ unknownSample: 1 });
+        expect(sample()).not.toHaveProperty('pendingSample');
+        expect(JSON.stringify(observations())).not.toContain('PRIVATE');
+    });
     it('keeps malformed pending metadata unknown instead of substituting a last-ready timestamp', async () => {
         await seed({ requestedAtMs: null });
         await observeDerivedMetricsQueue(db, now);

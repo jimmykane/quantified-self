@@ -7618,6 +7618,8 @@ Gen 2, 2 GiB/540 seconds with concurrency one. Both remain in `europe-west2`. St
 - Ingress `queued`, `coalesced`, `not_admitted` and invalid admission, not completed calculations. Not admitted
   includes both lifecycle skips and rejected enqueue attempts; only the separate guarded enqueue-failure commit
   establishes a persisted enqueue failure. Do not label all rejected admissions as expected exclusions.
+  Enqueue failures with a generation reject so Cloud Tasks retries; those attempts also record
+  ingress exceptions. Deletion/rollout skips without a generation and accepted coalescing still acknowledge normally.
 - Whole-task duration and acknowledged/exception outcomes. Acknowledgement includes stale, unchanged, superseded
   and deletion-fenced no-ops; HTTP success is not snapshot publication.
 - Ready/failed snapshot writes, emitted only after the existing claim/deletion-guarded transaction commits.
@@ -7642,13 +7644,16 @@ of an already-started Firestore RPC. No further work or late healthy samples fol
 One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`,
 and fetches at most 21 projected records (20 candidates plus lookahead). Each candidate has one read-only transaction
 over its current coordinator, owner existence and deletion tombstone, with a field mask limited to entry/status,
-generation, dirty/processing kind lists, pending timestamps and tombstone expiry. Owner contents, payloads, raw errors,
+generation, dirty/processing kind lists, pending timestamps, optional build deadline and tombstone expiry. User profile fields, payloads, raw errors,
 recorded activities and athlete settings are not fetched. Exact owner paths, rollout eligibility, active deletion,
 unchanged document version and valid metadata are checked before contributing a sample.
 
-Pending age uses `requestedAtMs` for queued/failed work and `startedAtMs` for processing. It never uses the date of
-the last activity or ready snapshot; an inactive athlete with no pending generation produces a real idle zero.
-Coalescing does not redefine the pending-age anchor. Failed work is excluded for the existing maximum **four-hour**
+Pending age uses the later of `requestedAtMs` and a saved `buildNotBeforeMs` for queued/failed work, and `startedAtMs`
+for processing. Intentionally future builds are excluded; their batching interval does not count as eligible waiting.
+Legacy missing/null deadlines retain the requested-at anchor, invalid deadlines remain unknown, and stale queued
+deadlines never hide an active processing claim. It never uses the date of the last activity or ready snapshot;
+an inactive athlete with no pending generation produces a real idle zero. Coalescing does not redefine the pending-age
+anchor. Failed work is excluded for the existing maximum **four-hour**
 Cloud Tasks retry backoff after its last failed coordinator update, not treated as stalled during that wait.
 Superseded samples and lifecycle exclusions do not count as failures. Unknown/invalid metadata is not a healthy zero.
 Kind entries must be literal canonical strings, never coerced persisted objects. A malformed row contributes unknown

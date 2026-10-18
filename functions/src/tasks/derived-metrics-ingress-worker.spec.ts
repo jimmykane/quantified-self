@@ -81,7 +81,14 @@ describe('processDerivedMetricsIngressTask', () => {
         const { outcome, ...admission } = result;
         hoisted.markDerivedMetricsDirtyAndMaybeQueue.mockResolvedValueOnce({ ...admission, metricKinds: [DERIVED_METRIC_KINDS.Form] });
         const run = processDerivedMetricsIngressTask as unknown as (request: { data: { uid: string } }) => Promise<void>;
-        await run({ data: { uid: 'PRIVATE_OWNER' } });
+        if (!admission.accepted && admission.generation !== null) {
+            await expect(run({ data: { uid: 'PRIVATE_OWNER' } })).rejects.toThrow('derived_metrics_ingress_enqueue_failed');
+            expect(logger.info).toHaveBeenCalledWith('[DerivedMetrics]', expect.objectContaining({
+                event: 'worker_attempt', stage: 'ingress', outcome: 'failed',
+            }));
+        } else {
+            await expect(run({ data: { uid: 'PRIVATE_OWNER' } })).resolves.toBeUndefined();
+        }
         const observations = vi.mocked(logger.info).mock.calls.filter(([message, fields]) => message === '[DerivedMetrics]' && fields.event === 'ingress');
         expect(observations).toEqual([['[DerivedMetrics]', { telemetryVersion: 1, event: 'ingress', outcome }]]);
     });

@@ -53,9 +53,9 @@ export function buildDerivedMetricsMonitoring(project, channel) {
   metric('sampled_pending', `${probe} jsonPayload.event="queue_sample" jsonPayload.pendingSample>=0`,
     'Bounded eligible pending-generation sample, not all accounts or stale snapshots.', ['state'], 'pendingSample');
   metric('sampled_age', `${probe} jsonPayload.event="queue_sample" jsonPayload.ageLowerBoundMs>=0`,
-    'Pending generation requested/claim age; never last activity or last ready snapshot age.', ['state'], 'ageLowerBoundMs');
+    'Eligible pending-generation requested/deadline or claim age; never last activity or last ready snapshot age.', ['state'], 'ageLowerBoundMs');
   metric('overdue_samples', `${probe} jsonPayload.event="queue_sample" jsonPayload.pendingSample>0 jsonPayload.ageLowerBoundMs>=1800000`,
-    'Positive eligible pending samples at least 30 minutes old. Failed coordinators wait out the four-hour retry grace.', ['state']);
+    'Positive samples waiting at least 30 eligible minutes. Future build deadlines are excluded; failed coordinators wait out the four-hour retry grace.', ['state']);
   metric('probe_failures', `${probe} (jsonPayload.event="queue_sample_unavailable" OR (jsonPayload.event="queue_sample" (jsonPayload.unknownSample>0 OR (jsonPayload.truncated=true NOT jsonPayload.pendingSample:*))))`,
     'Unknown/unavailable or saturated prefixes without a proven positive lower bound; never healthy zero.', ['state']);
   metric('sample_truncated', `${probe} jsonPayload.event="queue_sample" jsonPayload.truncated=true`,
@@ -77,7 +77,7 @@ export function buildDerivedMetricsMonitoring(project, channel) {
         content: `${explanation}\n\n[Runbook](${runbook})\n\nACK, guarded snapshot publication and coordinator settlement are different. Native queue emptiness does not prove fresh snapshots. Bounded observations are lower bounds. Never blindly rebuild, replay, purge, clear claims or alter retries. Preserve generation/publication and deletion fences. No UIDs, job IDs, payloads, athlete values, credentials or raw errors in incident text. Initial thresholds need tuning from measured volume.` } });
   }
   policy('backlog', 'Sustained pending generation', 'ERROR', threshold('overdue_samples', 3, '3600s', ['metric.label.state']),
-    'Three positive eligible observations at least 30 minutes old in one hour. Age is requestedAtMs or the active claim startedAtMs. Failed work is excluded until four hours after its last failed write; native retry backoff is not a stall.');
+    'Three positive eligible observations at least 30 minutes old in one hour. Queued/failed age starts at the later of requestedAtMs and a saved buildNotBeforeMs; active claims use startedAtMs. Future build deadlines are excluded. Failed work is excluded until four hours after its last failed write; intentional batching and native retry backoff are not stalls.');
   policy('calculation', 'Repeated committed calculation failures', 'ERROR', threshold('calculation_failures', 5, '1800s', ['metric.label.metricKind']),
     'Five guarded failure observations for one canonical kind in 30 minutes. Per-kind observations are not unique tasks; one multi-kind failure must not be summed into a global incident.');
   policy('enqueue', 'Repeated enqueue failures', 'ERROR', threshold('enqueue_failures', 3, '900s', ['metric.label.metricKind']),

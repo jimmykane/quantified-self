@@ -109,6 +109,7 @@ test('real idle, partial, malformed and capped observations do not fabricate hea
   assert.equal(selected('probe_failures', entry('queue_sample_unavailable', { state: 'failed' }, SERVICES[2])), true);
 });
 test('six sustained policies retain missing-data behavior and do not sum multi-kind failures into a global incident', () => {
+  assert.match(bundle().policies.find(policy => policy.userLabels.policy_id === 'backlog').documentation.content, /Future build deadlines are excluded/);
   const types = bundle().metrics.map(m => `logging.googleapis.com/user/${m.name}`);
   for (const policy of bundle().policies) {
     assert.equal(policy.enabled, true); assert.equal(policy.userLabels.managed_by, OWNER);

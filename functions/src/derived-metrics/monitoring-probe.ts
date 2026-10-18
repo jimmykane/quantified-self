@@ -14,7 +14,7 @@ export const DERIVED_METRICS_PROBE_LIMIT = 20;
 export const DERIVED_METRICS_PROBE_TIMEOUT_MS = 5_000;
 export const DERIVED_METRICS_PROBE_FIELDS = [
     'entryType', 'status', 'generation', 'dirtyMetricKinds', 'processingMetricKinds',
-    'requestedAtMs', 'startedAtMs', 'updatedAtMs',
+    'requestedAtMs', 'startedAtMs', 'updatedAtMs', 'buildNotBeforeMs',
 ];
 const timestamp = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 
@@ -30,8 +30,15 @@ export function derivedMetricsPendingAge(data: FirebaseFirestore.DocumentData, n
     // while coercing an object and suppress every other owner's observation.
     if (!Array.isArray(kinds) || !kinds.length || kinds.some(kind => typeof kind !== 'string')
         || normalizeDerivedMetricKindsStrict(kinds).length !== kinds.length) return 'unknown';
-    const since = data.status === 'processing' ? data.startedAtMs : data.requestedAtMs;
+    let since = data.status === 'processing' ? data.startedAtMs : data.requestedAtMs;
     if (!timestamp(since) || since > now + DERIVED_METRICS_PROBE_TIMEOUT_MS) return 'unknown';
+    if (data.status !== 'processing' && data.buildNotBeforeMs != null) {
+        if (!timestamp(data.buildNotBeforeMs)) return 'unknown';
+        if (data.buildNotBeforeMs > now) return 'excluded';
+        // Intentional batching is scheduled work, not eligible waiting time.
+        // Legacy records without a deadline retain their requested-at anchor.
+        since = Math.max(since, data.buildNotBeforeMs);
+    }
     // Native task retries can intentionally wait up to four hours. A retained failure
     // is not a stalled calculation while that conservative retry window remains open.
     if (data.status === 'failed' && now - data.updatedAtMs < CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds * 1_000) return 'excluded';
