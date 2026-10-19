@@ -35,10 +35,10 @@ const HEART_RATE_READINGS: Readonly<Record<string, readonly [string, string]>> =
 
 export function heartRateReading(series: Pick<HealthWorkspaceSeries, 'semanticVariant' | 'aggregation' | 'semanticLabel' | 'nativeOnly'> & Partial<Pick<HealthWorkspaceSeries, 'metricId'>>): { key: string; label: string } | null {
   if (series.metricId !== HEALTH_METRIC_IDS.HeartRate) return null;
-  const variant = series.semanticVariant.replace(/^qs_sleep_/, 'sleep_');
+  const variant = series.semanticVariant.replace(/^qs_(?=sleep_|nap_)/, '');
   const known = !series.nativeOnly && HEART_RATE_READINGS[variant];
   return known ? { key: known[0], label: known[1] }
-    : { key: `${series.nativeOnly ? 'native:' : ''}${variant}:${series.aggregation}`, label: healthChartReadingLabel(series) };
+    : { key: `${series.nativeOnly ? 'native:' : ''}${series.semanticVariant}:${series.aggregation}`, label: healthChartReadingLabel(series) };
 }
 
 export function restingHeartRateSupportNote(metric: string): string | null {

@@ -44,6 +44,32 @@ describe('compact chart source attribution', () => {
     expect(choice.label).toBe(`${series.sourceLabel} · Average sleep HRV`);
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'sleep_overnight_hrv' }).shortLabel).toContain('Overnight HRV');
   });
+  it.each(['average', 'minimum'] as const)('groups provider and calculated nap %s without losing provenance or series identity', kind => {
+    const provider = healthChartSourceChoice({ ...series, id: `provider-${kind}`, metricId: 'heart_rate',
+      aggregation: kind, semanticVariant: `nap_${kind}_heart_rate` });
+    const calculated = healthChartSourceChoice({ ...series, id: `calculated-${kind}`, metricId: 'heart_rate',
+      aggregation: kind, semanticVariant: `qs_nap_${kind}_heart_rate`, origin: 'quantified_self_derived' });
+    expect(calculated.readingKey).toBe(provider.readingKey);
+    expect(calculated.readingLabel).toBe(provider.readingLabel);
+    expect(calculated.secondaryMeasurement).toBe(true);
+    expect(calculated.key).not.toBe(provider.key);
+    expect(calculated.detail).toContain('Calculated by QS');
+    expect(provider.detail).not.toContain('Calculated by QS');
+    const native = healthChartSourceChoice({ ...series, metricId: 'heart_rate', nativeOnly: true,
+      aggregation: kind, semanticVariant: `qs_nap_${kind}_heart_rate` });
+    expect(native.readingKey).not.toBe(provider.readingKey);
+    expect(native.readingKey).not.toBe(healthChartSourceChoice({ ...series, metricId: 'heart_rate', nativeOnly: true,
+      aggregation: kind, semanticVariant: `nap_${kind}_heart_rate` }).readingKey);
+  });
+  it('does not group unknown sleep or nap variants just because they share a calculation prefix', () => {
+    for (const variant of ['sleep_future_reading', 'nap_future_reading']) {
+      const provider = healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant: variant });
+      const calculated = healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant: `qs_${variant}` });
+      expect(provider.readingKey).not.toBe(calculated.readingKey);
+      expect(provider.secondaryMeasurement).toBe(true);
+      expect(calculated.secondaryMeasurement).toBe(true);
+    }
+  });
   it('keeps new Sleep vital labels compact without disguising minimums, maximums or naps', () => {
     for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Minimum sleep HR'], ['sleep_session_maximum_spo2', 'Maximum sleep SpO₂'],
       ['sleep_session_resting_heart_rate', 'Sleep resting HR'], ['nap_average_respiration', 'Average nap breathing rate'],
