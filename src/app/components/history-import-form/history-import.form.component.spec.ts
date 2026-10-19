@@ -664,10 +664,11 @@ describe('HistoryImportFormComponent', () => {
                     expect(zone.hasPendingMacrotasks).toBe(false);
                     expirySubscription = zone.onUnstable.subscribe(expiryZone);
                     await vi.waitFor(() => {
+                        // The Sleep getter can unlock before the deadline timer re-enters Angular.
+                        expect(expiryZone).toHaveBeenCalled();
                         if (deadline === 'sleep cooldown') expect(component.canSubmitSleepBackfill).toBe(true);
                         else expect(component.formGroup.enabled).toBe(true);
                     });
-                    expect(expiryZone).toHaveBeenCalled();
                     expect(expiryZone.mock.results.every(result => result.value === true)).toBe(true);
                     expect(haptics.selection).not.toHaveBeenCalled();
                     expect(haptics.success).not.toHaveBeenCalled();
