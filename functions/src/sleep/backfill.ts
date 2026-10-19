@@ -559,7 +559,7 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
                 recoveryAttempt: attempt + 1,
                 requestedStartMs: requestStartMs,
                 requestedEndMs: endMs,
-                providerMinimumStartMs: minStartMs,
+                providerMinimumStartMs: Number.isFinite(minStartMs) ? minStartMs : null,
             };
             if (minStartMs === null) {
                 logger.warn('[SleepBackfill][Garmin] Provider minimum unavailable; skipping Sleep window.', telemetry);
@@ -576,7 +576,11 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
             const latestRetryStartMs = requestEndMs - GARMIN_BACKFILL_SECOND_MS;
             const retryHeadroomMs = Math.min(GARMIN_SLEEP_BACKFILL_RETRY_HEADROOM_MS, Math.max(0, latestRetryStartMs - earliestRetryStartMs));
             const providerMinStartMs = await rememberGarminProviderMinBackfillStartMs(userID, context, earliestRetryStartMs + retryHeadroomMs);
-            if (!Number.isFinite(providerMinStartMs) || providerMinStartMs >= requestEndMs) {
+            if (!Number.isFinite(providerMinStartMs)) {
+                logger.warn('[SleepBackfill][Garmin] Provider minimum unavailable; skipping Sleep window.', telemetry);
+                return 'skipped';
+            }
+            if (providerMinStartMs >= requestEndMs) {
                 logger.info('[SleepBackfill][Garmin] Provider minimum adjusted.', {
                     ...telemetry, nextStartMs: null, outcome: 'window_skipped',
                 });

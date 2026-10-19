@@ -1832,6 +1832,24 @@ describe('backfillGarminAPIHealth', () => {
         }), nowMs);
     });
 
+    it('keeps a non-finite Garmin cutoff at WARNING without logging an invalid timestamp', async () => {
+        seedGarminToken();
+        hoisted.requestGet.mockRejectedValueOnce({
+            statusCode: 400,
+            error: { minStartTimeInSeconds: '9'.repeat(400) },
+        });
+
+        const result = await backfillGarminAPIHealth(createRequest());
+
+        expect(result.sleepQueued).toBe(chunkSleepBackfillRange(startMs, nowMs, windowDays).length - 1);
+        expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+            '[SleepBackfill][Garmin] Provider minimum unavailable; skipping Sleep window.',
+            { summaryType: 'sleeps', statusCode: 400, recoveryAttempt: 1, requestedStartMs: startMs,
+                requestedEndMs: chunkSleepBackfillRange(startMs, nowMs, windowDays)[0].endMs, providerMinimumStartMs: null },
+        );
+        expect(logger.info).not.toHaveBeenCalledWith('[SleepBackfill][Garmin] Provider minimum adjusted.', expect.anything());
+    });
+
     it('skips Garmin windows before the provider min start time when Garmin does not return a usable min start', async () => {
         seedGarminToken();
         hoisted.requestGet
