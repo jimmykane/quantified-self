@@ -39,7 +39,7 @@
             (settingsChange)="updateCardSettings($event.settings, $event.initial)" (contextChange)="observeSources($event)" (readFailed)="observeReadFailure(card.id)" />
         </mat-card-content>
         <mat-card-actions>
-          <button mat-button type="button" [attr.aria-label]="'View ' + card.label + ' history'" (click)="metricSelected.emit(card.id)">View history<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></button>
+          <button mat-button type="button" [attr.aria-label]="'View ' + card.label + ' history'" (click)="openHistory(card.id)">View history<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></button>
         </mat-card-actions>
       </mat-card>
     }

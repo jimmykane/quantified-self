@@ -89,7 +89,7 @@ describe('help.content', () => {
     expect(copy).toContain('pace-based load needs a threshold belonging to that sport');
     expect(copy).toContain('An unassigned whole-workout speed threshold is not copied across different sports');
     expect(copy).toContain('COROS GPX files can supply recorded heart-rate readings');
-    expect(copy).toContain('Readings alone do not supply the resting, threshold and maximum HR settings');
+    expect(copy).toContain('Readings alone do not supply the explicit threshold or other calibration');
     expect(copy).toContain('Daily monitoring FIT files are not workouts');
     expect(copy).toContain('Completed workout summaries, including Wahoo files without sensor readings, remain supported');
     expect(copy).toContain('when the file contains a recorded workout session');
@@ -155,6 +155,17 @@ describe('help.content', () => {
     expect(copy).toContain('another eligible method is used or load stays unavailable');
     expect(copy).toContain('File-imported scores remain unchanged');
     expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
+  });
+  it('explains sport-wide threshold HR estimates without changing calculation exclusions or calibration safeguards', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    for (const phrase of ['**HR · Banister**', '**HR · Threshold (estimate)**',
+      'When resting or maximum HR is missing but a valid threshold is recorded',
+      'This includes walking, hiking, swimming and strength training',
+      'Sports excluded from calculated TSS remain excluded',
+      'Conflicting or invalid calibration is not replaced with guessed settings',
+      'Older evaluations can show only **HR**', 'Reimport retains your overrides, exclusions and saved preferences']) {
+      expect(copy).toContain(phrase);
+    }
   });
   it('explains swimming threshold requirements, file-only fallbacks and imported-score preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
@@ -936,7 +947,14 @@ describe('help.content', () => {
     expect(healthSection?.content).not.toContain('**View options**');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('**Read Heart rate charts by their time period.**');
-    expect(healthSection?.content).toContain('unweighted arithmetic average');
+    expect(healthSection?.content).toContain('**Choose the measurement, then the source.**');
+    expect(healthSection?.content).toContain("Opening **View history** keeps the card's selected reading and source");
+    expect(healthSection?.content).toContain('does not import a separate Suunto resting-HR value');
+    expect(healthSection?.content).toContain('**Coverage belongs to each chart.**');
+    expect(healthSection?.content).toContain('**Heart-rate chart details.**');
+    expect(healthSection?.content).toContain('Suunto supplies the average HR for each short recording period');
+    expect(healthSection?.content).toContain('**Show details** explains how the source recorded it');
+    expect(healthSection?.content).toContain('giving each reading equal weight');
     expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
     expect(healthSection?.content).toContain('names the omitted source, returns an older saved 1-year selection to 90 days');
     expect(healthSection?.content).toContain('**Calculated by QS**');
@@ -959,9 +977,9 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('instead of implying that another Garmin account is connected');
     expect(healthSection?.content).toContain('not copied into Health storage');
     expect(healthSection?.content).toContain('omits workout IDs, names, locations, account IDs, and raw creator details');
-    expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
-    expect(healthSection?.content).toContain('source-specific 14-day trend');
-    expect(healthSection?.content).toContain('at least three observations');
+    expect(healthSection?.content).toContain('Sleep appears when a recorded Sleep session exists');
+    expect(healthSection?.content).toContain('14-day trend for each source');
+    expect(healthSection?.content).toContain('at least three readings');
     expect(healthSection?.content).toContain('60-day personal range');
     expect(healthSection?.content).toContain('Range on this date');
     expect(healthSection?.content).toContain('dates without enough baseline history stay unshaded');
@@ -972,14 +990,14 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('color is never the only signal');
     expect(healthSection?.content).toContain('average or overnight HRV');
     expect(healthSection?.content).toContain('even if no standalone Health HRV record exists');
-    expect(healthSection?.content).toContain('read average and overnight HRV directly at display time');
-    expect(healthSection?.content).toContain('never averaged with standalone HRV');
-    expect(healthSection?.content).toContain('equivalent typed Sleep reference is already present');
+    expect(healthSection?.content).toContain('show average and overnight HRV available only in your sleep history');
+    expect(healthSection?.content).toContain('never averaged with other HRV measurements');
+    expect(healthSection?.content).toContain('same Sleep reading is already shown');
     expect(healthSection?.content).toContain('show the matching reading once under the same connected account');
     expect(healthSection?.content).toContain('Independently recorded Sleep HRV remains separate');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
-    expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');
+    expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed readings');
     expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries');
     expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
     expect(healthSection?.content).toContain('selected metric and range are saved to your account');
@@ -997,10 +1015,10 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Retry** from both overview and history');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, 30-day, and 90-day windows');
+    expect(healthSection?.content).toContain('Detailed charts are available for 1d, 14-day, 30-day, and 90-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
-    expect(healthSection?.content).toContain('normalized Sleep model');
-    expect(healthSection?.content).toContain('Expand **Source observations**');
+    expect(healthSection?.content).toContain('your recorded Sleep sessions');
+    expect(healthSection?.content).toContain('Expand **Recorded readings**');
     expect(healthSection?.content).toContain('**Sources** sheet shows each provider\'s recency');
     expect(healthSection?.content).toContain('Connectivity** for connection and import management');
     expect(healthSection?.content).not.toContain('**Import history**');
@@ -1216,6 +1234,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('atomic add/remove tag changes in bulk');
     expect(gettingStartedSection?.content).toContain('tags are visible on public event and comparison links');
     expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('**Last 7 days** (7d), **30d**, and **Last month**');
+    expect(gettingStartedSection?.content).toContain('complete previous calendar month in your local time');
+    expect(gettingStartedSection?.content).toContain('Each tile saves its own selection independently from the activity table');
     expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
@@ -1628,12 +1649,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Total strokes**');
     expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
     expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
-    expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('Swimming performance averages exclude rest');
     expect(gettingStartedSection?.content).toContain('touching, non-overlapping recorded times');
     expect(gettingStartedSection?.content).toContain('positive recorded active-length count');
     expect(gettingStartedSection?.content).toContain('sums its original lap durations once');
     expect(gettingStartedSection?.content).toContain('estimate weighted by recorded lap duration');
-    expect(gettingStartedSection?.content).toContain('**Selected avg** still averages the original selected laps');
+    expect(gettingStartedSection?.content).toContain('**Selected summary** uses the original selected laps, including rest for **Max HR**');
     expect(gettingStartedSection?.content).toContain('not divided into invented splits');
     expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
     expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
@@ -1689,10 +1710,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('search or restore older choices');
     expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
-    expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Avg** row directly below its headers');
+    expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Summary** row directly below its headers');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');
     expect(gettingStartedSection?.content).toContain('checkboxes beside lap rows');
-    expect(gettingStartedSection?.content).toContain('**Selected avg · N** footer');
+    expect(gettingStartedSection?.content).toContain('**Selected summary · N** footer');
+    expect(gettingStartedSection?.content).toContain('**Max HR** is the whole-session peak, including rest');
+    expect(gettingStartedSection?.content).toContain('unweighted mean of available active-lap average heart rates');
+    expect(gettingStartedSection?.content).toContain('unselected laps and the session peak do not contribute');
+    expect(gettingStartedSection?.content).toContain('never borrows a cross-sport context lap');
     expect(gettingStartedSection?.content).toContain('distance-weighted pace and duration-weighted speed');
     expect(gettingStartedSection?.content).toContain('A saved lap column stays selected even when the current laps do not contain that metric');
     expect(gettingStartedSection?.content).toContain('available in only some of the current lap tables');
@@ -2090,10 +2115,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
-    expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
+    expect(serviceConnectionsSection?.content).toContain('Sleep is synced automatically from your connected services');
     expect(serviceConnectionsSection?.content).toContain('automatically importing daily Health and sleep data from a rolling recent window');
     expect(serviceConnectionsSection?.content).toContain('importing available COROS Sleep and Health history from the last three months');
-    expect(serviceConnectionsSection?.content).toContain('the COROS API does not expose sleep stages');
+    expect(serviceConnectionsSection?.content).toContain('COROS does not send sleep stages through this connection');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
     expect(serviceConnectionsSection?.content).toContain('overlays available vitals');
@@ -2105,11 +2130,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Import Sleep history');
     expect(serviceConnectionsSection?.content).toContain('Sleep & 24/7 Health history');
     expect(serviceConnectionsSection?.content).toContain('Sleep & available Health history');
-    expect(serviceConnectionsSection?.content).toContain('available detailed HRV samples in the unified Health model');
+    expect(serviceConnectionsSection?.content).toContain('available HRV readings in Health');
     expect(serviceConnectionsSection?.content).toContain('Connected Suunto users see **Sleep & 24/7 Health history**');
     expect(serviceConnectionsSection?.content).toContain('Body Energy Balance');
     expect(serviceConnectionsSection?.content).toContain('separate from workout FIT metrics and Sleep sessions');
-    expect(serviceConnectionsSection?.content).toContain('raw webhook samples');
+    expect(serviceConnectionsSection?.content).toContain('without keeping the full content of incoming notifications');
     expect(serviceConnectionsSection?.content).toContain('import the available last three months');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2000');
     expect(serviceConnectionsSection?.content).toContain('up to the latest rolling five years');
@@ -2472,11 +2497,13 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('without affecting your other MCP clients');
   });
 
-  it('directs account deletion to the Account settings section', () => {
+  it('directs account deletion to Data management and its confirmation dialog', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
-    expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> Danger Zone**');
-    expect(dataAndPrivacySection?.content).not.toContain('**Settings -> Profile -> Danger Zone**');
+    expect(dataAndPrivacySection?.content).toContain('[Settings → Data management](/settings?section=data-management)');
+    expect(dataAndPrivacySection?.content).toContain('choose **Delete account…**');
+    expect(dataAndPrivacySection?.content).toContain('Review the consequences and confirm in the dialog');
+    expect(dataAndPrivacySection?.content).not.toContain('Danger Zone');
   });
 
   it('should explain public event and comparison sharing exposure', () => {

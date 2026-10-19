@@ -19,6 +19,11 @@ describe('function target loader', () => {
       'processGarminHealthBackfillTask',
       'dispatchSleepSyncQueue',
       'processWorkoutTask',
+      'processSportsLibReparseTask',
+      'processSportsLibReparseHeavyTask',
+      'processSportsLibRouteReparseTask',
+      'scheduleSportsLibReparseScan',
+      'scheduleSportsLibRouteReparseScan',
       'parseGarminAPIActivityQueue',
       'parseSuuntoAppActivityQueue',
       'parseCOROSAPIWorkoutQueue',
@@ -101,6 +106,7 @@ describe('function target loader', () => {
       'onDashboardDerivedMetricsHealthWrite',
       'processDerivedMetricsTask',
       'processDerivedMetricsIngressTask',
+      'observeDerivedMetricsHealth',
     ]);
   });
 

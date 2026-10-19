@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as logger from 'firebase-functions/logger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
 const taskDispatchRegistration = vi.hoisted(() => ({
@@ -69,6 +70,27 @@ describe('processDerivedMetricsIngressTask', () => {
             timeoutSeconds: 120,
             region: 'europe-west2',
         }));
+    });
+
+    it.each([
+        { accepted: true, queued: true, generation: 12, outcome: 'queued' },
+        { accepted: true, queued: false, generation: 12, outcome: 'coalesced' },
+        { accepted: false, queued: false, generation: null, outcome: 'not_admitted' },
+        { accepted: false, queued: false, generation: 12, outcome: 'not_admitted' },
+    ])('reports admission truthfully without calling rejected enqueue attempts lifecycle exclusions: $outcome / $generation', async result => {
+        const { outcome, ...admission } = result;
+        hoisted.markDerivedMetricsDirtyAndMaybeQueue.mockResolvedValueOnce({ ...admission, metricKinds: [DERIVED_METRIC_KINDS.Form] });
+        const run = processDerivedMetricsIngressTask as unknown as (request: { data: { uid: string } }) => Promise<void>;
+        if (!admission.accepted && admission.generation !== null) {
+            await expect(run({ data: { uid: 'PRIVATE_OWNER' } })).rejects.toThrow('derived_metrics_ingress_enqueue_failed');
+            expect(logger.info).toHaveBeenCalledWith('[DerivedMetrics]', expect.objectContaining({
+                event: 'worker_attempt', stage: 'ingress', outcome: 'failed',
+            }));
+        } else {
+            await expect(run({ data: { uid: 'PRIVATE_OWNER' } })).resolves.toBeUndefined();
+        }
+        const observations = vi.mocked(logger.info).mock.calls.filter(([message, fields]) => message === '[DerivedMetrics]' && fields.event === 'ingress');
+        expect(observations).toEqual([['[DerivedMetrics]', { telemetryVersion: 1, event: 'ingress', outcome }]]);
     });
 
     it('marks derived metrics dirty with event mutation increment', async () => {

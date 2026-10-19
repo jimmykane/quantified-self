@@ -524,7 +524,7 @@ describe('dashboard chart source interactions', () => {
     expect(host.querySelector('.health-evidence-text')?.textContent).toContain('No trend inferred');
     fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
     expect(host.querySelector('.health-thumbnail-source')?.textContent).toContain('Suunto');
-    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('Minimum heart rate');
+    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('Minimum sleep HR');
     expect(host.querySelector('.health-thumbnail-value')?.textContent).toBe('57 bpm');
     expect(watch).toHaveBeenCalledOnce();
     expect(haptics.selection).not.toHaveBeenCalled();

@@ -102,6 +102,13 @@ Suunto Health history adapts to item-count limits by halving oversized target wi
 
 Suunto Health failure logs retain allowlisted operation stages and error classifications before raw errors are sanitized for retry storage. Distinguish worker HTTP 500s from validated upstream status codes; RPC, transport, validation and unknown failures have separate safe diagnostics. See [backfill diagnostic fields](health-backfill-operations.md#verification). Do not add raw provider responses, exception messages, stacks, credential URLs or account identifiers to those fields.
 
+Garmin Health failures likewise classify the original exception with safe stages, elapsed time and HTTP/transport/RPC
+codes before retry-storage sanitization; unknown internal errors are not labelled as confirmed provider HTTP failures.
+The shared Health failure-state write error separately retains its queue ID, provider and allowlisted diagnostics.
+Both remain ERROR logs, without raw error text, payloads or credentials. Monitoring is **unchanged**: #830 uses existing
+worker/committed-transition events, not these diagnostic messages or queue IDs. Requests, retries and lifecycle guards
+are unchanged; release requires separate approval for only `processSleepSyncTask`. Existing Help and MCP are unaffected.
+
 Suunto workout downloads, activity-history reads, and Health pulls allow one same-account forced token refresh and
 read retry after HTTP 401 or 403. Health shares that recovery budget across all feeds/subrequests in one invocation;
 its existing durable queue retry policy remains unchanged. Never select another connected account to recover old work.
@@ -1452,6 +1459,28 @@ Explicit user disconnects disable every activity-sync and saved-route direction 
 
 Credential removal and a server-only `serviceDisconnectCleanup/{opaqueUserOperationAccountHash}` intent commit atomically. The intent contains only the Firebase owner, provider lookup identity, lifecycle fence, server-timestamp cutoff and pagination/lease state—not credentials, callback URLs, raw payloads, state or PKCE. It is denied to browser clients by the existing Rules. Imported activities, saved routes, Health and Sleep history are not cleanup targets.
 
+Garmin recorded-activity workers also distinguish a confirmed completed disconnect from an unexplained missing
+credential when cleanup races queued work. Owner-pinned token lookup plus a cleared, generated lifecycle and an
+explicit revisioned empty account projection allow a deletion/queue-identity-guarded terminal skip at INFO, counted
+only after commit by existing import-skip telemetry. Missing tokens alone must not hide a connection fault; unknown
+state retains the existing warning/DLQ path. Never borrow another owner's token or reopen a completed skip on
+reconnect. See [Garmin identity and lifecycle](garmin-integration.md#identity-and-lifecycle) for the precise boundary
+and affected rollout targets. Existing product Help remains accurate: disconnect stops future imports and retains history.
+
+COROS Health/Sleep polls use the same confirmed-disconnect classification, with the additional requirement that the
+original owner's token root is absent. COROS active-account lookup also rejects account and credential-generation
+mismatches, so a missing-token error alone must never silence those failures. The existing Sleep completion helper
+owns deletion/revision/lease checks and post-commit skip telemetry; no new lifecycle or recovery mechanism is added.
+See [COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) and the
+[Sleep operations runbook](sleep-sync-operations.md#queued-coros-polls-after-disconnect).
+
+Owned Suunto workout and Sleep/Health jobs use the same confirmed-disconnect skip, requiring a cleared generated
+lifecycle, revisioned empty account projection and no remaining token children for that Firebase owner. An empty
+OAuth root may remain; a missing exact-account token while another credential exists is not a completed disconnect.
+Legacy unowned jobs and unknown/reconnect-required/pending state retain existing failure handling. Completion uses
+the existing deletion/queue-identity guards and post-commit skip telemetry. Routes already skip unavailable sources
+and are unchanged. See [Suunto queued disconnects](suunto-integration.md#queued-work-after-disconnect).
+
 The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten cleanup tasks concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle for an active user, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup for an active user. Transient failures retain the intent without a finite event-retry or TTL deadline.
 
 Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the same bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.
@@ -1553,6 +1582,26 @@ history dialog remains availability-aware and falls back to Sleep-only wording w
 Use `app-service-source-icon` and the shared presentation helpers. Imported activity surfaces use source attribution; connection and destination surfaces use destination branding. See [connected-provider attribution audit](connected-provider-attribution-audit.md).
 
 ## 10. Admin and operational coverage
+
+Account cleanup and disconnect recovery monitoring (#836) is deployed and enabled in
+the independent `tools/cleanup-monitoring/` bundle: nine fixed-label metrics, seven policies
+and the **QS Account Cleanup & Disconnect Recovery** dashboard. It reuses existing
+30-minute recovery page reads and committed lifecycle outcomes, with no extra Firestore
+reads/writes, index, collection, observer Function or schedule. Local completion, Auth
+handler ACK, remote-unconfirmed revocation and independently unfinished extension cleanup
+are not interchangeable. Completed deletion tombstones are not backlog, and bounded-page
+deferrals/stale generations do not count as failures. A dedicated first-observation email
+policy covers failed/unconfirmed partner revocation for all four providers, even if local
+credentials are subsequently removed; it does not claim the partner is definitely active
+or change retry/token-retention behavior. Existing #655 Training cleanup alerts
+remain unchanged. Help, provider behavior, deletion fences, recursion and MCP/Assistant
+contracts are unchanged. The owner approved deployment and activation on 19 October
+2026; twelve existing Functions are ACTIVE and all 29 chart/condition queries passed
+live readback. The natural 11:07 UTC recovery run acknowledged with all thirteen
+uncapped idle pages, and positive post-correction Monitoring heartbeat/page series
+were verified at 11:08–11:09 UTC. No destructive QA or test mail was needed; this
+completes #836's approved operational verification, not actual deletion/revocation
+proof. See [the cleanup monitoring runbook](account-cleanup-monitoring.md).
 
 Email/marketing monitoring (#835) is implemented locally through the existing Firestore `mail` outbox and Trigger Email
 extension, separately from fitness-provider queues. New mail initializes supported PENDING metadata in its original
@@ -1900,6 +1949,20 @@ Failed late staging writes rearm retired cleanup after save or metadata errors, 
 Saved recording review distinguishes known ineligibility from temporary read failures. Missing/invalid originals remain exclusions; unavailable reads pause preparation and retain the private criteria, cursor and reviewed rows for continuation. This command creates no provider work. Monitoring is **unchanged**: delivery queues, backlog/worker outcomes, retry/lease policy and fixed telemetry labels are unaffected. MCP and Training contracts are unchanged.
 
 Stopping closes retry authority for provider-confirmed processing failures and releases their private temporary files/quota while preserving the failed result and operation identifiers. Finished retryable batches retain the Stop control, including after Pro lapse. Active/uncertain operations retain their sources; saved archive files are never deleted. Cleanup failures remain resumable through the existing Stop cursor and operation trigger. A later confirmed failure after Stop completes releases its source through the existing retry-enabled delivery projection; open failures keep their retry source. Monitoring is **unchanged**: native admission/projection-trigger error/latency diagnostics and the existing hourly cleanup failure/heartbeat fallback cover these release paths, with no new scheduler, queue outcome, worker retry policy or telemetry label. MCP and Training contracts are unaffected.
+
+### Original-file reprocessing monitoring (#834)
+
+Original-file reprocessing monitoring is independently tracked in [#834](https://github.com/jimmykane/quantified-self/issues/834)
+and the [reprocessing monitoring runbook](reparse-monitoring.md). It uses existing normal/heavy/route workers
+and ten-minute scanners with bounded read-only job observations only on the hourly scheduled tick;
+empty queues need one query per collection and progress is read only for eligible outstanding tiers.
+There is no new scheduler, provider call, queue state, reparse, admission cap, retention,
+retry or MCP contract change. Fixed-label telemetry separates accepted task
+admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
+review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
+five existing Function updates and dashboard/metrics/policies were deployed/activated with owner approval
+on 19 October 2026; exact live evidence and remaining route/batch checks are in the runbook.
+Future production changes still require separate approval; #543 owns the heavy backlog cap.
 
 ### Suunto EnergySense parser support
 

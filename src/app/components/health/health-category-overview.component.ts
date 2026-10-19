@@ -18,6 +18,7 @@ import type { DashboardHealthContext } from '../../helpers/dashboard-health-cont
 import type { HealthChangeSignal } from '../../helpers/health-change-summary.helper';
 import { HealthChangeSummaryComponent } from '../shared/health-change-summary/health-change-summary.component';
 import { normalizeHealthMetricSources } from '../../helpers/health-highlight-preferences.helper';
+import { healthMetricReadingTitle } from '../../helpers/chart-source.helper';
 
 export interface HealthMetricSourceSelection {
   uid: string;
@@ -50,11 +51,13 @@ export class HealthCategoryOverviewComponent {
   readonly metricSelected = output<HealthWorkspaceMetricSelection>();
   readonly providersObserved = output<{ uid: string; providers: HealthProvider[] }>();
   readonly sourceSelected = output<HealthMetricSourceSelection>();
+  readonly readingOpened = output<HealthMetricSourceSelection>();
   private readonly owner = computed(() => this.user().uid);
   private readonly haptics = inject(AppHapticsService);
   private readonly category = signal<HealthOverviewCategoryId | 'all'>('all');
   private readonly sourceSettings = signal<Partial<Record<HealthWorkspaceMetricSelection, AppDashboardHealthMetricSettings>>>({});
   private readonly observedAvailability = signal<Partial<Record<HealthWorkspaceMetricSelection, { scope: string; empty: boolean }>>>({});
+  private readonly observedReadings = signal<Partial<Record<HealthWorkspaceMetricSelection, { scope: string; key: string | null; title: string | null }>>>({});
   private readonly availabilityScope = computed(() => JSON.stringify([
     this.owner(), this.referenceDate(), [...this.providerFilter()].sort(),
   ]));
@@ -76,7 +79,10 @@ export class HealthCategoryOverviewComponent {
     const preferred = normalizeHealthMetricSources(this.preferredSources() ?? this.user().settings?.appSettings?.healthWorkspace?.metricSources);
     const availability = this.observedAvailability();
     const scope = this.availabilityScope();
-    return metrics.map(metric => ({ ...metric, icon: healthMetricIcon(metric.id),
+    const readings = this.observedReadings();
+    return metrics.map(metric => ({ ...metric,
+      label: readings[metric.id]?.scope === scope ? readings[metric.id].title || metric.label : metric.label,
+      icon: healthMetricIcon(metric.id),
       settings: settings[metric.id] || { metric: metric.id, range: '30d' as const,
         ...(preferred[metric.id] ? { sourceKey: preferred[metric.id] } : {}) },
       hidden: this.selectedCategory() === 'all' && !this.exampleOnly()
@@ -92,6 +98,7 @@ export class HealthCategoryOverviewComponent {
       this.owner();
       this.sourceSettings.set({});
       this.observedAvailability.set({});
+      this.observedReadings.set({});
       this.category.set('all');
     });
   }
@@ -119,9 +126,22 @@ export class HealthCategoryOverviewComponent {
     } }));
   }
 
+  openHistory(metric: HealthWorkspaceMetricSelection): void {
+    const reading = this.observedReadings()[metric];
+    if (!this.exampleOnly() && reading?.scope === this.availabilityScope() && reading.key) {
+      const sourceKey = metric === 'sleep' ? opaqueHealthSeriesId(reading.key) : reading.key;
+      this.readingOpened.emit({ uid: this.owner(), metric, sourceKey });
+    }
+    this.metricSelected.emit(metric);
+  }
+
   observeSources(context: DashboardHealthContext): void {
     this.providersObserved.emit({ uid: this.owner(), providers: [...new Set(context.sources.map(source => source.provider))] });
     if (context.window.range !== '30d' || this.referenceDate() && context.window.endDate !== this.referenceDate()) return;
+    this.observedReadings.update(current => ({ ...current, [context.window.metric]: {
+      scope: this.availabilityScope(), key: context.selectedKey,
+      title: healthMetricReadingTitle(context.window.metric, context.selected?.model.series),
+    } }));
     // Keep readers mounted so a refresh can reveal new data. Category browsing,
     // failed/partial loads and a missing chosen source retain their existing states.
     this.observedAvailability.update(current => ({ ...current, [context.window.metric]: {

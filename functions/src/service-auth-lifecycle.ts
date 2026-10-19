@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { cleanupObservation, cleanupProvider } from './cleanup-monitoring';
 import {
   Auth2ServiceTokenInterface,
   ServiceNames,
@@ -62,6 +63,22 @@ export const SERVICE_AUTH_CLEANUP_REASONS = {
 } as const;
 
 export type ServiceAuthCleanupReason = typeof SERVICE_AUTH_CLEANUP_REASONS[keyof typeof SERVICE_AUTH_CLEANUP_REASONS];
+
+/** Record before local cleanup/metadata writes can fail or remove the last credential. */
+function observePartnerRevocationFailure(serviceName: ServiceNames, reason: ServiceAuthCleanupReason): void {
+  switch (reason) {
+    case SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion:
+      cleanupObservation('account', cleanupProvider(serviceName), 'remote_unconfirmed');
+      break;
+    case SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect:
+    case SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement:
+    case SERVICE_AUTH_CLEANUP_REASONS.TerminalAuthFailure:
+      cleanupObservation('disconnect', cleanupProvider(serviceName), 'remote_unconfirmed',
+        reason === SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect ? 'explicit'
+          : reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement ? 'subscription' : 'scheduler');
+      break;
+  }
+}
 export type MissingTokensBehavior = 'throw' | 'ignore';
 
 export interface RefreshFailureDetails {
@@ -1207,6 +1224,7 @@ export async function cleanupServiceConnectionForUser(
           tokenSnapshotForCleanup = currentResolvedSnapshot;
         }
       } catch (error: any) {
+        if (!isPendingDisconnectTokenUseSkip(error)) observePartnerRevocationFailure(serviceName, reason);
         const statusCode = getErrorStatusCode(error);
         if (reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion && isRetryableAccountDeletionPartnerFailure(statusCode)) {
           addAccountDeletionTokenArchive(
@@ -1251,6 +1269,7 @@ export async function cleanupServiceConnectionForUser(
           await adapter.deauthorize(serviceToken);
           logger.info(`Deauthorized ${serviceName} token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
         } catch (apiError: any) {
+          observePartnerRevocationFailure(serviceName, reason);
           const statusCode = getErrorStatusCode(apiError);
           const shouldRetainTokenForAccountDeletionRetry = reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
             && isRetryableAccountDeletionPartnerFailure(statusCode);

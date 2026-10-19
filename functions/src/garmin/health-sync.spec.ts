@@ -14,7 +14,8 @@ vi.mock('../tokens', () => ({
   getTokenData: hoisted.getTokenData,
 }));
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+  ...(await importOriginal<typeof import('../request-helper')>()),
   get: hoisted.requestGet,
 }));
 
@@ -37,8 +38,11 @@ import {
   GARMIN_HEALTH_MAX_RESPONSE_BYTES,
   GARMIN_HEALTH_REQUEST_TIMEOUT_MS,
   GarminHealthPermissionError,
+  GarminHealthRequestError,
+  getGarminHealthFailureTelemetry,
   processGarminHealthQueueItem,
 } from './health-sync';
+import { ResponseBodyTooLargeError } from '../request-helper';
 import { GarminHealthAccountValidationError } from './health-lifecycle';
 
 function lifecycleGuards(providerIdentityPinned = true) {
@@ -91,6 +95,30 @@ function queueItem() {
 }
 
 describe('Garmin Health callback synchronization', () => {
+  it('distinguishes HTTP, transport, response-limit and internal errors without raw details', () => {
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(503), 'callback_request', 12))
+      .toMatchObject({ errorCode: 'garmin_health_request_failed', providerStatusCode: 503,
+        failureCategory: 'provider_http_error', failureStage: 'callback_request', processingElapsedMs: 12 });
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(null, 'ETIMEDOUT'), 'identity_request', 12))
+      .toMatchObject({ transportCode: 'ETIMEDOUT', failureCategory: 'transport_error' });
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(null, undefined, true), 'callback_request', 12))
+      .toMatchObject({ failureCategory: 'response_byte_limit' });
+    const error = Object.assign(new Error('private-token/private-health'), { code: 10, details: 'private-path' });
+    expect(getGarminHealthFailureTelemetry(error, 'health_write', 12)).toMatchObject({
+      errorCode: 'garmin_health_processing_failed', failureCategory: 'rpc_error', rpcStatusCode: 10,
+    });
+    expect(JSON.stringify(getGarminHealthFailureTelemetry(error, 'health_write', 12))).not.toContain('private');
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(700, 'private-token'), 'callback_request', 12))
+      .not.toHaveProperty('providerStatusCode');
+    expect(JSON.stringify(getGarminHealthFailureTelemetry(new GarminHealthRequestError(700, 'private-token'), 'callback_request', 12)))
+      .not.toContain('private');
+    const hostile = Object.defineProperty(new GarminHealthRequestError(), 'statusCode', {
+      get() { throw new Error('private-getter'); },
+    });
+    expect(getGarminHealthFailureTelemetry(hostile, 'callback_request', 12))
+      .toMatchObject({ failureCategory: 'unclassified' });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.getTokenData.mockResolvedValue({
@@ -272,6 +300,37 @@ describe('Garmin Health callback synchronization', () => {
       message: 'Garmin Health callback request failed.',
       statusCode: 503,
     });
+  });
+
+  it.each([true, false])('retains safe request diagnostics and stages (identity pinned: %s)', async pinned => {
+    hoisted.captureGuards.mockResolvedValue(lifecycleGuards(pinned));
+    for (const error of [Object.assign(new Error('private-response'), { statusCode: 503 }),
+      Object.assign(new Error('private-token'), { code: 'ETIMEDOUT' }), new ResponseBodyTooLargeError(10, 11),
+      new DOMException('private-deadline', 'AbortError')]) {
+      hoisted.requestGet.mockRejectedValueOnce(error);
+      const onStage = vi.fn();
+      const failure = await processGarminHealthQueueItem(
+        queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards(pinned), undefined, onStage,
+      ).catch(caught => caught);
+      expect(failure).toBeInstanceOf(GarminHealthRequestError);
+      expect(onStage.mock.calls.map(([stage]) => stage)).toEqual(['token_refresh', pinned ? 'callback_request' : 'identity_request']);
+      const telemetry = getGarminHealthFailureTelemetry(failure, onStage.mock.lastCall![0], 10);
+      expect(telemetry.failureCategory).toBe(error instanceof ResponseBodyTooLargeError ? 'response_byte_limit'
+        : 'statusCode' in error ? 'provider_http_error' : 'transport_error');
+      expect(JSON.stringify(failure)).not.toContain('private');
+      expect(JSON.stringify(telemetry)).not.toContain('private');
+    }
+  });
+
+  it('keeps successful processing unchanged when a diagnostic observer throws', async () => {
+    const onStage = vi.fn((stage: string) => { throw new Error('diagnostic failure at ' + stage); });
+    await expect(processGarminHealthQueueItem(
+      queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards(), undefined, onStage,
+    )).resolves.toMatchObject({ healthResults: [] });
+    expect(onStage.mock.calls.map(([stage]) => stage)).toEqual([
+      'token_refresh', 'callback_request', 'callback_mapping', 'result_assembly',
+    ]);
+    expect(hoisted.requestGet).toHaveBeenCalledOnce();
   });
 
   it('maps Garmin 412 callback responses to a non-retryable permission state', async () => {

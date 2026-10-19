@@ -224,6 +224,7 @@ import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classi
 import { getEventTags } from '../../../shared/event-tags';
 import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
+import { recordDerivedMetricCommit } from './monitoring';
 import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
@@ -5532,7 +5533,7 @@ async function markDerivedMetricsEnqueueFailed(
     fallbackError: string,
 ): Promise<void> {
     const coordinatorRef = getCoordinatorDocRef(uid);
-    await admin.firestore().runTransaction(async (transaction) => {
+    const committedKinds = await admin.firestore().runTransaction(async (transaction) => {
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             return;
@@ -5552,7 +5553,9 @@ async function markDerivedMetricsEnqueueFailed(
             lastError: toSafeString((error as { message?: unknown } | null)?.message) || fallbackError,
             updatedAtMs: Date.now(),
         }, { merge: true });
+        return coordinator.dirtyMetricKinds;
     });
+    if (committedKinds) recordDerivedMetricCommit('coordinator_commit', 'enqueue_failed', committedKinds);
 }
 
 async function readDerivedMetricsWriteBlocked(
@@ -6227,7 +6230,7 @@ export async function completeDerivedMetricsProcessing(
         dirtyMetricKinds: [],
     };
 
-    await admin.firestore().runTransaction(async (transaction) => {
+    const observation = await admin.firestore().runTransaction(async (transaction) => {
         // Firestore may retry after another attempt completes or replaces this claim.
         completion = { requeued: false, nextGeneration: null, dirtyMetricKinds: [] };
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
@@ -6267,7 +6270,7 @@ export async function completeDerivedMetricsProcessing(
                 nextGeneration,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
             };
-            return;
+            return { outcome: 'requeued' as const, kinds: pendingDirtyMetricKinds };
         }
 
         transaction.set(coordinatorRef, {
@@ -6286,7 +6289,10 @@ export async function completeDerivedMetricsProcessing(
             nextGeneration: null,
             dirtyMetricKinds: [],
         };
+        return { outcome: 'settled' as const,
+            kinds: coordinatorSnapshot.data()?.processingMetricKinds };
     });
+    if (observation) recordDerivedMetricCommit('coordinator_commit', observation.outcome, observation.kinds);
 
     if (completion.requeued && completion.nextGeneration !== null) {
         try {
@@ -6515,7 +6521,7 @@ export async function failDerivedMetricsProcessing(
     const nowMs = Date.now();
     const errorMessage = toSafeString((error as { message?: unknown } | null)?.message) || toSafeString(error) || 'unknown_error';
 
-    await admin.firestore().runTransaction(async (transaction) => {
+    const committedKinds = await admin.firestore().runTransaction(async (transaction) => {
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             return;
@@ -6542,7 +6548,9 @@ export async function failDerivedMetricsProcessing(
             lastError: errorMessage,
             updatedAtMs: nowMs,
         }, { merge: true });
+        return normalizeDerivedMetricKindsStrict(processedMetricKinds);
     });
+    if (committedKinds) recordDerivedMetricCommit('coordinator_commit', 'failed', committedKinds);
 }
 
 async function commitDerivedMetricSnapshotWrites(
@@ -6550,7 +6558,7 @@ async function commitDerivedMetricSnapshotWrites(
     writes: readonly { metricKind: DerivedMetricKind; data: Record<string, unknown> }[],
     claim?: DerivedMetricsProcessingClaim,
 ): Promise<boolean> {
-    return admin.firestore().runTransaction(async transaction => {
+    const committed = await admin.firestore().runTransaction(async transaction => {
         if (claim) {
             const coordinator = await transaction.get(getCoordinatorDocRef(uid));
             if (!coordinator.exists || !matchesProcessingClaim(coordinator.data(), claim)) return false;
@@ -6562,6 +6570,13 @@ async function commitDerivedMetricSnapshotWrites(
         }
         return true;
     });
+    if (committed) {
+        for (const outcome of ['ready', 'failed'] as const) {
+            const kinds = writes.filter(write => write.data.status === outcome).map(write => write.metricKind);
+            if (kinds.length) recordDerivedMetricCommit('snapshot_commit', outcome, kinds);
+        }
+    }
+    return committed;
 }
 
 export async function markDerivedMetricSnapshotsBuilding(

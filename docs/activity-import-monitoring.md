@@ -108,6 +108,18 @@ BulkWriter submissions are not counted before their commit. Logs are best effort
 so an invocation crash between commit and emission can undercount. Logger failure
 must never undo an import or cause provider work to replay.
 
+Garmin activity jobs skipped after a confirmed completed disconnect use the existing committed `skipped` outcome,
+not `imported` or `dead_lettered`. Their INFO diagnostic contains the opaque queue ID and fixed
+`service_disconnected` reason, without credentials or provider payloads. Stale/deletion-denied completions emit no
+committed skip. Unknown connection state still uses the existing missing-token warning/DLQ path. Coverage decision:
+the existing skip, new-dead-letter and worker-attempt metrics already cover this classification; no metric, policy,
+threshold or dashboard change is required. See [Garmin lifecycle](garmin-integration.md#identity-and-lifecycle).
+
+Owned Suunto imports after a confirmed completed disconnect use that same committed `skipped` outcome and fixed INFO
+diagnostic, not a new dead letter. Coverage is **covered/unchanged** by the existing `suunto` provider filters, skip,
+worker-attempt and new-dead-letter signals. Unknown state or another retained account remains a failure; stale or
+deletion-denied completion emits no committed skip. See [Suunto lifecycle](suunto-integration.md#queued-work-after-disconnect).
+
 ## Initial alert policies
 
 All thresholds are initial operating values, not production volume guarantees. Tune

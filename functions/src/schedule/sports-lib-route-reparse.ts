@@ -1,4 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { monitorReparseAttempt, monitorReparseEnqueue } from '../reparse/monitoring';
+import { afterReparseScan, observeReparseQueue } from '../reparse/monitoring-probe';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -358,9 +360,9 @@ async function processRouteDocument(
             options.enqueueSpreadSeconds,
         );
         const nextEnqueueAttemptSequence = options.enqueueAttemptSequence + 1;
-        const taskCreated = enqueueDelaySeconds > 1
-            ? await enqueueSportsLibRouteReparseTask(jobId, enqueueDelaySeconds)
-            : await enqueueSportsLibRouteReparseTask(jobId);
+        const taskCreated = await monitorReparseEnqueue('route', () => enqueueDelaySeconds > 1
+            ? enqueueSportsLibRouteReparseTask(jobId, enqueueDelaySeconds)
+            : enqueueSportsLibRouteReparseTask(jobId));
 
         if (taskCreated) {
             return {
@@ -412,12 +414,7 @@ async function processRouteDocument(
     }
 }
 
-export const scheduleSportsLibRouteReparseScan = onSchedule({
-    region: FUNCTIONS_MANIFEST.scheduleSportsLibRouteReparseScan.region,
-    schedule: 'every 10 minutes',
-    memory: '512MiB',
-    timeoutSeconds: 300,
-}, async () => {
+async function scanSportsLibRouteReparse(): Promise<void> {
     const settings = getCurrentSettings();
     if (!settings.enabled) {
         logger.info('[sports-lib-route-reparse] Scheduler disabled (SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.enabled=false).');
@@ -655,4 +652,17 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
         cursorProcessingDocPath: canPersistCursor ? lastProcessingDocPath : null,
         cursorProcessingVersionCode: canPersistCursor ? lastProcessingVersionCode : null,
     });
-});
+}
+
+export const scheduleSportsLibRouteReparseScan = onSchedule({
+    region: FUNCTIONS_MANIFEST.scheduleSportsLibRouteReparseScan.region,
+    schedule: 'every 10 minutes',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+}, async event => afterReparseScan(
+    () => monitorReparseAttempt('route', 'scan_attempt', scanSportsLibRouteReparse),
+    () => observeReparseQueue(admin.firestore(), {
+        collection: SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION, target: resolveRouteReparseTargetSportsLibVersion(),
+        terminal: isSportsLibRouteReparseTerminalFailureMessage, hasSource: data => !!extractPrimaryRouteSourceFile(data),
+    }), ['route'], event.scheduleTime,
+));

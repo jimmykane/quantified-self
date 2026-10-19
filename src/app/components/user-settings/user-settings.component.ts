@@ -58,7 +58,7 @@ import {
   normalizeAppFormatLocalePreference,
 } from '../../shared/adapters/app-locale';
 
-type SettingsSectionId = 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
+type SettingsSectionId = 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account' | 'data-management';
 
 interface SettingsSectionOption {
   id: SettingsSectionId;
@@ -97,6 +97,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     'map',
     'privacy',
     'account',
+    'data-management',
   ];
   public readonly settingsSectionOptions: SettingsSectionOption[] = [
     {
@@ -138,8 +139,14 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     {
       id: 'account',
       label: 'Account',
-      description: 'Profile details, plan, and account deletion',
+      description: 'Profile details and plan',
       icon: 'account_circle',
+    },
+    {
+      id: 'data-management',
+      label: 'Data management',
+      description: 'Delete your account and associated data',
+      icon: 'storage',
     },
   ];
   public readonly settingsGroups = [
@@ -744,7 +751,12 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   private applySectionParam(section: unknown): void {
-    if (section === 'delete-account' || section === 'profile') {
+    if (section === 'delete-account') {
+      this.activeSection = 'data-management';
+      return;
+    }
+
+    if (section === 'profile') {
       this.activeSection = 'account';
       return;
     }
@@ -841,6 +853,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     const stripeRole = (this.user as any).stripeRole;
     const hasActiveSubscription = stripeRole === 'pro' || stripeRole === 'basic';
 
+    this.hapticsService.selection();
     const dialogRef = this.dialog.open(DeleteAccountDialogComponent, {
       data: {
         displayName: this.user.displayName,

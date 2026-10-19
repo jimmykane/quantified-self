@@ -2,6 +2,8 @@
   display: block;
   min-width: 0;
 }
+.health-reading-controls { margin-block-end:1rem; min-width:0; }
+.health-reading-controls p { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); margin-block:8px; }
 
 .health-chart-grid {
   display: grid;
@@ -15,6 +17,7 @@
 
 // Only the desktop workspace opts in; previews and mobile stay content-sized.
 @media (min-width: 981px) {
+  :host(.health-metric-chart-fill-height.health-metric-chart-has-picker) { grid-template-rows:auto minmax(0, 1fr); }
   :host(.health-metric-chart-fill-height) {
     display: grid;
 
@@ -24,6 +27,14 @@
       flex: 1;
       min-height: 190px;
     }
+  }
+
+  // Recording details can have different lengths. Size these plots together
+  // from the viewport so opening one disclosure cannot shrink only its chart.
+  :host(.health-metric-chart-fill-height.health-metric-chart-has-picker) app-health-metric-series-chart {
+    --health-metric-series-chart-height: clamp(210px, 32vh, 360px);
+
+    flex: 0 0 auto;
   }
 }
 
@@ -48,3 +59,8 @@
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
+
+.health-chart-evidence, .health-chart-details { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); overflow-wrap:anywhere; }
+.health-chart-details p { margin-block:0.5rem; }
+
+.health-chart-details-trigger { align-self:flex-start; }

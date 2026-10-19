@@ -74,6 +74,15 @@ jobs:
       - name: Test email delivery and marketing monitoring configuration
         run: npm run test:email-monitoring
 
+      - name: Test derived-metric ingress and calculation monitoring configuration
+        run: npm run test:derived-metrics-monitoring
+
+      - name: Test Sports Lib activity and route reprocessing monitoring configuration
+        run: npm run test:reparse-monitoring
+
+      - name: Test account cleanup and disconnect recovery monitoring configuration
+        run: npm run test:cleanup-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture

@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
+import { cleanupObservation, cleanupProvider } from './cleanup-monitoring';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   getServiceTokenRootDocumentRef,
@@ -308,6 +309,7 @@ export async function recordServiceDisconnectRetryFailure(
       attemptCount: retryUpdate.finalData.disconnectAttemptCount,
       retryExpiresAt: timestampToISOString(retryUpdate.finalData.disconnectRetryExpiresAt),
     });
+    cleanupObservation('disconnect', cleanupProvider(serviceName), 'manual_review', 'subscription');
   }
   return true;
 }

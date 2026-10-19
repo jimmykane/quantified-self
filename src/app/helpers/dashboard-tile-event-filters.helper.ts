@@ -30,6 +30,8 @@ export const DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE = DateRanges.thisWeek;
 export const DASHBOARD_TILE_EVENT_RANGE_OPTIONS: ReadonlyArray<DashboardTileEventRangeOption> = [
   { range: 'thisWeek', label: 'This week', buttonLabel: 'Week', shortLabel: 'W' },
   { range: 'thisMonth', label: 'This month', buttonLabel: 'Month', shortLabel: 'M' },
+  { range: 'lastMonth', label: 'Last month', buttonLabel: 'Last month', shortLabel: 'Last mo' },
+  { range: '7d', label: 'Last 7 days', buttonLabel: '7d', shortLabel: '7d', days: 7 },
   { range: '14d', label: '14d', buttonLabel: '14d', shortLabel: '14d', days: 14 },
   { range: '30d', label: '30d', buttonLabel: '30d', shortLabel: '30d', days: 30 },
   { range: '90d', label: '90d', buttonLabel: '90d', shortLabel: '90d', days: 90 },
@@ -112,11 +114,13 @@ export function resolveLegacyDashboardTileEventFilterRange(
     case DateRanges.thisMonth:
       return 'thisMonth';
     case DateRanges.lastSevenDays:
+      return '7d';
     case DateRanges.lastWeek:
       return '14d';
     case DateRanges.lastThirtyDays:
-    case DateRanges.lastMonth:
       return '30d';
+    case DateRanges.lastMonth:
+      return 'lastMonth';
     case DateRanges.thisYear:
     case DateRanges.lastYear:
       return '1y';
@@ -148,8 +152,12 @@ export function resolveDashboardTileEventWindow(
     return { range, startMs: null, endMs: null };
   }
 
-  if (range === 'thisWeek' || range === 'thisMonth') {
-    const resolvedDateRange = range === 'thisWeek' ? DateRanges.thisWeek : DateRanges.thisMonth;
+  if (range === 'thisWeek' || range === 'thisMonth' || range === 'lastMonth') {
+    const resolvedDateRange = {
+      thisWeek: DateRanges.thisWeek,
+      thisMonth: DateRanges.thisMonth,
+      lastMonth: DateRanges.lastMonth,
+    }[range];
     const resolved = getDatesForDateRange(resolvedDateRange, startOfTheWeek);
     return {
       range,
@@ -251,6 +259,9 @@ function resolveDurationRangeFromCustomDates(
   }
 
   const durationDays = Math.ceil((endMs - startMs) / (24 * 60 * 60 * 1000));
+  if (durationDays <= 7) {
+    return '7d';
+  }
   if (durationDays <= 14) {
     return '14d';
   }

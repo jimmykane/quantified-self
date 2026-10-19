@@ -1,5 +1,6 @@
 import { hasUnchangedNonActivitySources, isNonActivitySkipReason } from '../reparse/non-activity-sources';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
+import { emitReparseMonitoring, monitorReparseAttempt, monitorReparseEnqueue } from '../reparse/monitoring';
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -260,9 +261,9 @@ async function requeueHeavyFromNormalWorker(
             await deleteForUserDeletion('before_heavy_task_enqueue');
             return;
         }
-        taskCreated = job.sourceRetryGeneration
-            ? await enqueueSportsLibReparseHeavyTask(jobId, { taskNameSuffix: `source-${job.sourceRetryGeneration}` })
-            : await enqueueSportsLibReparseHeavyTask(jobId);
+        taskCreated = await monitorReparseEnqueue('heavy', () => job.sourceRetryGeneration
+            ? enqueueSportsLibReparseHeavyTask(jobId, { taskNameSuffix: `source-${job.sourceRetryGeneration}` })
+            : enqueueSportsLibReparseHeavyTask(jobId));
     } catch (error) {
         const errorMessage = getErrorMessage(error);
         await markJobFailed(jobRef, errorMessage, { clearEnqueuedAt: true });
@@ -411,6 +412,7 @@ async function processSportsLibReparseTaskRequest(
 
     if (versionDisposition === 'target_superseded') {
         await markJobSuperseded(jobRef, runtimeSportsLibVersion);
+        emitReparseMonitoring({ tier: workerTier, event: 'job_commit', outcome: 'superseded' });
         logger.info('[sports-lib-reparse-worker] Job superseded by newer sports-lib runtime.', {
             jobId,
             uid: job.uid,
@@ -466,6 +468,7 @@ async function processSportsLibReparseTaskRequest(
                 lastError: FieldValue.delete(), failureReason: FieldValue.delete(),
                 terminalFailure: FieldValue.delete(), terminalFailureAt: FieldValue.delete(),
             }, { merge: true });
+            emitReparseMonitoring({ tier: workerTier, event: 'job_commit', outcome: 'skipped' });
             logger.info('[sports-lib-reparse-worker] Recovered committed non-activity skip.', { jobId, reason: savedStatus?.reason });
             return;
         }
@@ -607,6 +610,7 @@ async function processSportsLibReparseTaskRequest(
             terminalFailureAt: FieldValue.delete(),
         }, { merge: true });
 
+        emitReparseMonitoring({ tier: workerTier, event: 'job_commit', outcome: reparseResult.status === 'skipped' ? 'skipped' : 'completed' });
         logger.info('[sports-lib-reparse-worker] Job completed.', {
             jobId,
             uid: job.uid,
@@ -701,11 +705,11 @@ export const processSportsLibReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
     ...REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
     region: FUNCTIONS_MANIFEST.processSportsLibReparseTask.region,
-}, async (request) => processSportsLibReparseTaskRequest(request, 'normal'));
+}, async (request) => monitorReparseAttempt('normal', 'worker_attempt', () => processSportsLibReparseTaskRequest(request, 'normal')));
 
 export const processSportsLibReparseHeavyTask = onTaskDispatched({
     retryConfig: REPARSE_HEAVY_TASK_RETRY_CONFIG,
     rateLimits: REPARSE_PROCESSING_HEAVY_TASK_RATE_LIMITS,
     ...REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     region: FUNCTIONS_MANIFEST.processSportsLibReparseHeavyTask.region,
-}, async (request) => processSportsLibReparseTaskRequest(request, 'heavy'));
+}, async (request) => monitorReparseAttempt('heavy', 'worker_attempt', () => processSportsLibReparseTaskRequest(request, 'heavy')));

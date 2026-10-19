@@ -54,6 +54,16 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./sleep/dispatcher') as FunctionModule,
   processWorkoutTask:
     () => module.require('./tasks/workout-processor') as FunctionModule,
+  processSportsLibReparseTask:
+    () => module.require('./tasks/sports-lib-reparse-worker') as FunctionModule,
+  processSportsLibReparseHeavyTask:
+    () => module.require('./tasks/sports-lib-reparse-worker') as FunctionModule,
+  processSportsLibRouteReparseTask:
+    () => module.require('./tasks/sports-lib-route-reparse-worker') as FunctionModule,
+  scheduleSportsLibReparseScan:
+    () => module.require('./schedule/sports-lib-reparse') as FunctionModule,
+  scheduleSportsLibRouteReparseScan:
+    () => module.require('./schedule/sports-lib-route-reparse') as FunctionModule,
   parseGarminAPIActivityQueue: loadActivityImportDispatchers,
   parseSuuntoAppActivityQueue: loadActivityImportDispatchers,
   parseCOROSAPIWorkoutQueue: loadActivityImportDispatchers,
@@ -167,6 +177,8 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./tasks/derived-metrics-worker') as FunctionModule,
   processDerivedMetricsIngressTask:
     () => module.require('./tasks/derived-metrics-ingress-worker') as FunctionModule,
+  observeDerivedMetricsHealth:
+    () => module.require('./derived-metrics/monitoring-schedule') as FunctionModule,
 });
 
 export const OPTIMIZED_FUNCTION_TARGETS = Object.freeze(Object.keys(TARGET_LOADERS));

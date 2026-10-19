@@ -10,7 +10,8 @@ import {
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   HealthChartSeriesModel,
   HealthChartStatusOverlay,
@@ -63,9 +64,11 @@ function series(deviceLabel: string | null): HealthWorkspaceSeries {
 
 describe('HealthMetricChartComponent', () => {
   let fixture: ComponentFixture<HealthMetricChartComponent>;
+  let haptics: { selection: ReturnType<typeof vi.fn> };
 
   async function render(deviceLabel: string | null): Promise<HTMLElement> {
-    await TestBed.configureTestingModule({ imports: [HealthMetricChartComponent] })
+    haptics = { selection: vi.fn() };
+    await TestBed.configureTestingModule({ imports: [HealthMetricChartComponent], providers: [{ provide: AppHapticsService, useValue: haptics }] })
       .overrideComponent(HealthMetricChartComponent, {
         remove: { imports: [HealthMetricSeriesChartComponent] },
         add: { imports: [HealthMetricSeriesChartStubComponent] },
@@ -129,13 +132,55 @@ describe('HealthMetricChartComponent', () => {
     expect(host.querySelector('.compact-row-host--fill-height')).toBeNull();
   });
 
-  it('names the Heart rate reading prominently and keeps the provider attributed underneath', async () => {
+  it('names the provider and shows the latest value without recording-method jargon', async () => {
     const host = await render(null);
     fixture.componentRef.setInput('series', [{ ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate,
       semanticLabel: '7-day average · Provider reported', semanticVariant: 'rolling_7_day_average' }]);
     fixture.detectChanges();
-    expect(host.querySelector('h3')?.textContent).toBe('7-day average');
-    expect(host.textContent).toContain('Garmin · Provider reported');
+    expect(host.querySelector('h3')?.textContent).toBe('Garmin');
+    expect(host.querySelector('.compact-row__summary')?.textContent).toContain('Latest 50 bpm');
+    expect(host.querySelector('.health-reading-controls')?.textContent).toContain('7-day average HR');
+  });
+  it('keeps recording details behind an accessible, source-specific disclosure', async () => {
+    const host = await render(null);
+    fixture.componentRef.setInput('series', [{ ...series('Watch'), metricId: HEALTH_METRIC_IDS.HeartRate,
+      semanticVariant: 'activity_interval_average', sourceLabel: 'Suunto' }]);
+    fixture.detectChanges();
+    const button = host.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+    const details = host.querySelector<HTMLElement>('.health-chart-details')!;
+    expect(button.getAttribute('aria-label')).toBe('Show Suunto recording details');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(button.getAttribute('aria-controls')).toBe(details.id);
+    expect(details.hidden).toBe(true);
+    expect(details.textContent).toContain('average heart rate for each short recording period');
+    expect(host.querySelector('.compact-row__summary')?.textContent).not.toMatch(/interval|15-second|unknown|points shown/i);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    button.click(); fixture.detectChanges();
+    expect(details.hidden).toBe(false); expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.toggleDetails('missing'); expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('series', []); fixture.detectChanges();
+    expect(fixture.componentInstance.expandedDetails().size).toBe(0);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the selected daytime source first and separates sleep and rolling measurements', async () => {
+    const host = await render(null);
+    const heart = { ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate };
+    const garmin = { ...heart, id: 'garmin-day', semanticVariant: 'daily_15_second' };
+    const suunto = { ...heart, id: 'suunto-day', provider: HEALTH_PROVIDERS.SuuntoApp, sourceLabel: 'Suunto', semanticVariant: 'activity_interval_average' };
+    fixture.componentRef.setInput('series', [
+      { ...heart, id: 'rolling', semanticVariant: 'rolling_7_day_average' },
+      { ...heart, id: 'sleep', semanticVariant: 'sleep_session_average_heart_rate' }, garmin, suunto,
+    ]);
+    fixture.componentRef.setInput('selectedSourceKey', 'suunto-day'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['suunto-day', 'garmin-day']);
+    expect(host.querySelectorAll('app-health-metric-series-chart')).toHaveLength(2);
+    fixture.componentRef.setInput('selectedSourceKey', 'sleep'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['sleep']);
+    fixture.componentRef.setInput('selectedSourceKey', 'not-in-period'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels()).toEqual([]);
+    expect(host.textContent).toContain('no readings in this period');
   });
 
   it('uses flat shared rows while preserving source separation and status labels', async () => {
@@ -148,8 +193,8 @@ describe('HealthMetricChartComponent', () => {
     expect(host.querySelector('mat-card')).toBeNull();
     expect(host.querySelectorAll('app-compact-row .compact-row--stacked.compact-row--compact')).toHaveLength(2);
     expect(Array.from(host.querySelectorAll('h3')).map(heading => heading.textContent)).toEqual(['Garmin', 'Suunto']);
-    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Native only');
-    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Conflict');
+    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Original format');
+    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Readings differ');
     expect(fixture.debugElement.queryAll(By.directive(HealthMetricSeriesChartStubComponent))).toHaveLength(2);
   });
 

@@ -10,6 +10,8 @@ import {
   DataEHPE,
   DataEVPE,
   DataHeartRateAvg,
+  DataHeartRate,
+  DataActiveLap,
   DataHeartRateMax,
   DataHeartRateMin,
   DataJumpHangTimeMax,
@@ -68,6 +70,103 @@ const unitSettings: UserUnitSettingsInterface = {
 } as UserUnitSettingsInterface;
 
 describe('event lap table columns helper', () => {
+  const hrLap = (maximum: number | undefined, average = 100, rest = false): LapInterface => ({
+    getDuration: () => new DataDuration(rest ? 120 : 30),
+    getDistance: () => new DataDistance(rest ? 0 : 25),
+    getStat: (type: string) => type === DataHeartRateMax.type && maximum !== undefined ? new DataHeartRateMax(maximum)
+      : type === DataHeartRateAvg.type ? new DataHeartRateAvg(average)
+        : type === DataActiveLap.type ? new DataActiveLap(!rest) : undefined,
+  } as LapInterface);
+  const hrActivity = (laps: LapInterface[], maximum?: number, samples: (number | null)[] = []): ActivityInterface => ({
+    type: 'Swimming', getLaps: () => laps, getSwimLengths: () => [],
+    getStat: (type: string) => type === DataHeartRateMax.type && maximum !== undefined ? new DataHeartRateMax(maximum) : undefined,
+    hasStreamData: (type: string) => type === DataHeartRate.type && samples.length > 0,
+    getStreamData: () => samples,
+  } as unknown as ActivityInterface);
+
+  it.each([undefined, unitSettings])('uses the whole-session HR peak including rest with units %j', units => {
+    const laps = [hrLap(110, 90), hrLap(137, 130), hrLap(165, 180, true)];
+    laps[1].getDuration = () => new DataDuration(90);
+    const activity = hrActivity(laps, 155, [null, 0, 150, 170, Number.NaN, Number.POSITIVE_INFINITY]);
+    expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type, DataHeartRateAvg.type], units, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '170 bpm' }, { type: DataHeartRateAvg.type, display: '110 bpm' }]);
+    expect(getAverageEventLapMetrics([laps[0]], [DataHeartRateMax.type], units, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '170 bpm' }]);
+  });
+
+  it('retains a higher native peak and falls back to valid lap peaks without samples', () => {
+    const laps = [hrLap(137), hrLap(165, 130, true)];
+    for (const [native, expected] of [[175, '175 bpm'], [155, '165 bpm'], [undefined, '165 bpm']] as const) {
+      expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type], undefined, 'Swimming', hrActivity(laps, native)))
+        .toEqual([{ type: DataHeartRateMax.type, display: expected }]);
+    }
+    expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type], undefined, 'Swimming'))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm' }]);
+  });
+
+  it('supports a native-only or sample-only peak without manufacturing an empty lap table', () => {
+    const laps = [hrLap(undefined)];
+    for (const activity of [hrActivity(laps, 160), hrActivity(laps, undefined, [160])]) {
+      expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type], undefined, 'Swimming', activity))
+        .toEqual([{ type: DataHeartRateMax.type, display: '160 bpm' }]);
+      expect(getAverageEventLapMetrics([], [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+    }
+  });
+
+  it.each([undefined, unitSettings])('discovers summary-only Max HR before column selection with units %j', units => {
+    const lap = hrLap(undefined);
+    const otherTabLap = hrLap(165, 130, true);
+    const types = [DataHeartRateMax.type, DataPowerMax.type];
+    for (const activity of [hrActivity([lap], 160), hrActivity([lap], undefined, [170]), hrActivity([lap, otherTabLap])]) {
+      expect(getAvailableEventLapMetricTypes(activity, [lap], types, units))
+        .toEqual(new Set([DataHeartRateMax.type]));
+      expect(getAvailableEventLapMetricTypes(activity, [], types, units)).toEqual(new Set());
+    }
+    expect(getAvailableEventLapMetricTypes(hrActivity([lap], 0, [null, 0, -1, Number.NaN]), [lap], types, units))
+      .toEqual(new Set());
+  });
+
+  it('excludes cross-leg context laps from the session peak across lap tabs', () => {
+    const lap = { ...hrLap(140), startDate: new Date(0), endDate: new Date(30_000) } as LapInterface;
+    const rest = { ...hrLap(165, 130, true), startDate: new Date(30_000), endDate: new Date(60_000) } as LapInterface;
+    const crossLeg = { ...hrLap(220), startDate: new Date(0), endDate: new Date(120_000) } as LapInterface;
+    const activity = { ...hrActivity([lap, rest, crossLeg]), startDate: new Date(0), endDate: new Date(60_000) } as ActivityInterface;
+    const sibling = { type: 'Cycling', startDate: new Date(60_000), endDate: new Date(120_000) } as ActivityInterface;
+    expect(getAverageEventLapMetrics([lap], [DataHeartRateMax.type], undefined, 'Swimming', activity, [activity, sibling]))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm' }]);
+  });
+
+  it('does not discover a summary-only peak in a context-only lap table', () => {
+    const lap = { ...hrLap(undefined), startDate: new Date(0), endDate: new Date(120_000) } as LapInterface;
+    const activity = { ...hrActivity([lap], 170), startDate: new Date(0), endDate: new Date(60_000) } as ActivityInterface;
+    const sibling = { type: 'Cycling', startDate: new Date(60_000), endDate: new Date(120_000) } as ActivityInterface;
+    expect(getAvailableEventLapMetricTypes(activity, [lap], [DataHeartRateMax.type], undefined, [activity, sibling]))
+      .toEqual(new Set());
+  });
+
+  it('keeps selected peaks inside selected original laps and counts valid rest readings', () => {
+    const active = hrLap(137), rest = hrLap(165, 130, true), missing = hrLap(undefined);
+    const activity = hrActivity([active, rest, missing, hrLap(190)], 200, [210]);
+    expect(getSelectedEventLapSummaryMetrics([active, rest, missing], [DataHeartRateMax.type], undefined, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm', availableCount: 2, selectedCount: 3 }]);
+    expect(getSelectedEventLapSummaryMetrics([rest], [DataHeartRateMax.type], undefined, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm', availableCount: 1, selectedCount: 1 }]);
+    expect(getSelectedEventLapSummaryMetrics([active], [DataHeartRateMax.type], undefined, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '137 bpm', availableCount: 1, selectedCount: 1 }]);
+    expect(getSelectedEventLapSummaryMetrics([], [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+  });
+
+  it('keeps missing, non-finite and nonpositive HR unavailable and handles long streams', () => {
+    const invalid = [undefined, Number.NaN, Number.POSITIVE_INFINITY, 0, -1].map(value => hrLap(value));
+    const activity = hrActivity(invalid, 0, [null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]);
+    expect(getAverageEventLapMetrics(invalid, [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+    expect(getSelectedEventLapSummaryMetrics(invalid, [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+    const samples = Array<number>(200_000).fill(120);
+    samples[100_000] = 180;
+    expect(getAverageEventLapMetrics(invalid, [DataHeartRateMax.type], undefined, 'Swimming', hrActivity(invalid, undefined, samples)))
+      .toEqual([{ type: DataHeartRateMax.type, display: '180 bpm' }]);
+  });
+
   it('focuses swimming choices while keeping the full catalog recoverable and other sports unchanged', () => {
     const normal = getEventLapMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
     const additional = getEventLapAdditionalMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
@@ -397,7 +496,7 @@ describe('event lap table columns helper', () => {
       },
       {
         type: DataHeartRateMax.type,
-        display: formatEventLapMetric(new DataHeartRateMax(170), DataHeartRateMax.type, unitSettings, 'Running'),
+        display: formatEventLapMetric(new DataHeartRateMax(180), DataHeartRateMax.type, unitSettings, 'Running'),
         availableCount: 2,
         selectedCount: 2,
       },

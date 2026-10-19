@@ -4,6 +4,8 @@ import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { cleanupAge, cleanupObservation, cleanupProvider } from './cleanup-monitoring';
+import { ServiceRecoveryDeferredError } from './shared/service-recovery-deferral';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   HEALTH_PROVIDERS,
@@ -26,6 +28,7 @@ import {
   restoreActivitySyncRoutesForPendingDisconnectClear,
 } from './activity-sync/route-cleanup';
 import {
+  DeferredQueueReleaseIncompleteError,
   releaseQueueItemsDeferredForPendingDisconnect,
 } from './queue/pending-disconnect-release';
 import { releaseQueueItemsDeferredForRouteRestore } from './queue/sync-route-eligibility';
@@ -345,7 +348,7 @@ export async function restoreRoutesAndReleaseDeferredWork(
         : null,
     )
   ) {
-    throw new Error(`Cannot restore ${serviceName} routes while disconnect is still active.`);
+    throw new ServiceRecoveryDeferredError(`Cannot restore ${serviceName} routes while disconnect is still active.`);
   }
   const restoreOptions = {
     requireServiceConnected,
@@ -378,7 +381,7 @@ export async function restoreRoutesAndReleaseDeferredWork(
     disconnectLifecycleGuard,
   );
   if (!parkingClosed) {
-    throw new Error(`Route restoration for ${serviceName} was superseded before its release barrier closed.`);
+    throw new ServiceRecoveryDeferredError(`Route restoration for ${serviceName} was superseded before its release barrier closed.`);
   }
   await releaseQueueItemsDeferredForRouteRestore(
     userID,
@@ -398,7 +401,7 @@ export async function restoreRoutesAndReleaseDeferredWork(
     disconnectLifecycleGuard,
   );
   if (!restorationCompleted) {
-    throw new Error(`Route restoration for ${serviceName} was superseded before its marker was cleared.`);
+    throw new ServiceRecoveryDeferredError(`Route restoration for ${serviceName} was superseded before its marker was cleared.`);
   }
 }
 
@@ -736,11 +739,15 @@ export async function retryPendingDisconnectQueueRelease(
     );
   } catch (error) {
     try {
-      await notePendingDisconnectQueueReleaseRepairAttempt(
+      const recorded = await notePendingDisconnectQueueReleaseRepairAttempt(
         userID,
         serviceName,
         pendingDisconnectGeneration,
       );
+      if (recorded && !(error instanceof DeferredQueueReleaseIncompleteError)) {
+        cleanupObservation('recovery', cleanupProvider(serviceName), 'retry', 'queue_release',
+          cleanupAge(meta.pendingDisconnectQueueReleaseLastAttemptAt));
+      }
     } catch (attemptError) {
       logger.error('[ServiceConnectionMeta] Failed to record pending-disconnect queue release repair attempt.', {
         userID,
@@ -765,6 +772,7 @@ export async function retryPendingDisconnectQueueRelease(
   } catch (error) {
     // The release is already complete. Retaining the marker only schedules an
     // idempotent retry, so do not report a failed recovery to the scheduler.
+    cleanupObservation('recovery', cleanupProvider(serviceName), 'partial', 'queue_release');
     logger.error('[ServiceConnectionMeta] Failed to clear pending-disconnect queue release repair marker.', {
       userID,
       serviceName,

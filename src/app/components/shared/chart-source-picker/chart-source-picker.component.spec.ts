@@ -4,6 +4,7 @@ import { OverlayContainer } from '@angular/cdk/overlay';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartSourcePickerComponent } from './chart-source-picker.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import type { ChartSourceChoice } from '../../../helpers/chart-source.helper';
 
 describe('compact chart source picker', () => {
   const haptics = { selection: vi.fn() };
@@ -13,11 +14,29 @@ describe('compact chart source picker', () => {
     vi.clearAllMocks();
     TestBed.configureTestingModule({ imports: [ChartSourcePickerComponent, NoopAnimationsModule], providers: [{ provide: AppHapticsService, useValue: haptics }] });
   });
-  function create(options = choices, key: string | null = '0') {
+  function create(options: ChartSourceChoice[] = choices, key: string | null = '0') {
     const fixture = TestBed.createComponent(ChartSourcePickerComponent);
     fixture.componentRef.setInput('choices', options); fixture.componentRef.setInput('selectedKey', key);
     fixture.componentRef.setInput('chartTitle', 'Sleep duration'); fixture.detectChanges(); return fixture;
   }
+  it('chooses a measurement first and offers only matching providers in its source menu', async () => {
+    const daytime = choices.map(choice => ({ ...choice, readingKey: 'daytime', readingLabel: 'Throughout the day', readingMethod: 'Recorded intervals' }));
+    const fixture = create([...daytime, { ...choices[0], key: 'sleep', readingKey: 'sleep-average', readingLabel: 'Average sleep HR' }]);
+    const changed = vi.fn(); fixture.componentInstance.selected.subscribe(changed);
+    expect(fixture.nativeElement.querySelector('mat-select')?.getAttribute('aria-label')).toBe('Heart rate measurement');
+    expect(fixture.componentInstance.sourceChoices().map(choice => choice.key)).toEqual(['0', '1']);
+    expect(fixture.nativeElement.querySelector('mat-select').compareDocumentPosition(fixture.nativeElement.querySelector('button')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fixture.nativeElement.querySelector('button').click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(TestBed.inject(OverlayContainer).getContainerElement().querySelectorAll('[role="menuitemradio"]')).toHaveLength(2);
+    fixture.componentInstance.choose('sleep');
+    expect(changed).not.toHaveBeenCalled();
+    fixture.componentInstance.chooseMeasurement('sleep-average');
+    expect(changed).toHaveBeenCalledExactlyOnceWith('sleep');
+    fixture.componentRef.setInput('selectedKey', 'sleep'); fixture.detectChanges();
+    expect(fixture.componentInstance.sourceChoices().map(choice => choice.key)).toEqual(['sleep']);
+    fixture.componentInstance.chooseMeasurement('sleep-average'); fixture.componentInstance.chooseMeasurement('unknown');
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
   it('shows attribution without a redundant control when only one reading is available', () => {
     const fixture = create(choices.slice(0, 1));
     expect(fixture.nativeElement.textContent).toContain('Suunto · Main sleep');

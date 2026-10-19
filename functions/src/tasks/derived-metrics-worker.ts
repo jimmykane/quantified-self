@@ -30,6 +30,7 @@ import {
     writeDerivedMetricSnapshotsReady,
 } from '../derived-metrics/derived-metrics.service';
 import { trainingBuildSettingsKey } from '../derived-metrics/training-build-workout-seed';
+import { observeDerivedMetricAttempt } from '../derived-metrics/monitoring';
 
 interface DerivedMetricsTaskPayload {
     uid: string;
@@ -42,7 +43,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
     memory: '2GiB',
     timeoutSeconds: 540,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
-}, async (request) => {
+}, async (request) => observeDerivedMetricAttempt('calculation', async () => {
     const payload = request.data as DerivedMetricsTaskPayload;
     const uid = `${payload?.uid || ''}`.trim();
     const generation = Number(payload?.generation);
@@ -295,4 +296,4 @@ export const processDerivedMetricsTask = onTaskDispatched({
         }
         throw processingError;
     }
-});
+}));

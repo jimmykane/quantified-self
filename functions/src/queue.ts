@@ -92,7 +92,8 @@ import {
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { ResponseBodyTooLargeError } from './request-helper';
 import { SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT } from './suunto/constants';
-import { observeImportQueue, recordImportDispatch, recordImportQueueUnavailable } from './queue/import-monitoring';
+import { observeImportQueue, recordImportCompletion, recordImportDispatch, recordImportQueueUnavailable } from './queue/import-monitoring';
+import { isSuuntoImportDisconnected } from './suunto/disconnected-import';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -870,8 +871,38 @@ async function parseHistoryGuardedWorkoutQueueItem(
     )
     : tokenQuerySnapshots.docs;
 
-  // If there is no token for the bound user, give them a few chances to reconnect.
+  // Only a confirmed completed disconnect turns missing credentials into a skip.
   if (!tokenQueryDocuments.length) {
+    const expected = { ...queueItem } as SuuntoAppWorkoutQueueItemInterface;
+    const owner = expected.firebaseUserID;
+    if (serviceName === ServiceNames.SuuntoApp && owner
+      && await isSuuntoImportDisconnected(owner)) {
+      if (!expected.ref) throw new Error('Missing Suunto queue document reference.');
+      const completion = { processed: true, processedAt: Date.now(), resultStatus: 'skipped', skippedReason: 'service_disconnected' };
+      const result = await updateQueueItemIfUserActive({
+        queueItemDocument: expected.ref,
+        queueItemId: expected.id,
+        userID: owner,
+        phase: 'suunto_disconnected_import',
+        logPrefix: 'SuuntoWorkoutQueue',
+        actionDescription: 'disconnected import skip',
+        updateData: completion,
+        cleanupOnDeletedUser: false,
+        isCurrent: current => current.processed !== true
+          && current.firebaseUserID === owner
+          && current.userName === expected.userName
+          && current.workoutID === expected.workoutID
+          && current.dateCreated === expected.dateCreated
+          && current.queueRevision === expected.queueRevision,
+      });
+      if (result === QueueItemUserGuardedUpdateResult.Updated) {
+        recordImportCompletion(expected.ref.parent.id, completion);
+        logger.info('[SuuntoWorkoutQueue] Import skipped after completed disconnect.', {
+          queueItemId: expected.id, reason: 'service_disconnected',
+        });
+      }
+      return QueueResult.Processed;
+    }
     logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
     // return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');

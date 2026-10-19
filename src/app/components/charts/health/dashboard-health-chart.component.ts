@@ -20,6 +20,7 @@ import { HealthMetricSeriesChartComponent } from '../../health/health-metric-ser
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
 import { chartViewportObserverOptions, shouldPreloadChartInBackground } from '../../../helpers/chart-viewport-queue';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { healthMetricReadingTitle, restingHeartRateSupportNote } from '../../../helpers/chart-source.helper';
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
     imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
@@ -72,7 +73,9 @@ export class DashboardHealthChartComponent {
         tile: { ...buildDashboardManagerPresetTile({ presetId: 'curated-sleep', order: 0, size: { columns: 1, rows: 1 } }), sleepTrend: this.displayContext()?.sleep },
         source: 'user', loading: false, note: '', calendarEvents: [], anchorMs: Date.now(),
     }) as DashboardChartPreview);
-    readonly title = computed(() => this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health');
+    readonly title = computed(() => healthMetricReadingTitle(this.settings().metric, this.displayContext()?.selected?.model.series)
+        || (this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health'));
+    readonly supportNote = computed(() => this.overview() ? restingHeartRateSupportNote(this.settings().metric) : null);
     readonly recordedDate = computed(() => {
         const context = this.displayContext();
         if (context?.selected) return context.selected.model.recordedDateText;

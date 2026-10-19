@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 
 const hoisted = vi.hoisted(() => ({
   collection: vi.fn(),
@@ -425,6 +427,22 @@ describe('retry-pending-service-disconnects', () => {
       ServiceNames.SuuntoApp,
     );
     expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])('distinguishes expected route deferral (%s) from a real recovery failure', async expected => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(), orderBy: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ docs: [{ id: ServiceNames.SuuntoApp,
+        ref: buildUserServiceMetaRef('PRIVATE_UID', ServiceNames.SuuntoApp) }] }),
+    });
+    hoisted.retryPendingServiceRouteRestore.mockRejectedValueOnce(expected
+      ? new ServiceRecoveryDeferredError('PRIVATE_EXPECTED_WAIT') : Error('PRIVATE_DATABASE_FAILURE'));
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingServiceRouteRestorations()).resolves.toBe(0);
+    expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({
+      flow: 'recovery', provider: 'SuuntoApp', lane: 'route_restore', outcome: expected ? 'deferred' : 'failed',
+    }));
+    const telemetry = vi.mocked(logger.info).mock.calls.filter(call => call[0] === '[CleanupHealth]');
+    expect(JSON.stringify(telemetry)).not.toContain('PRIVATE_');
   });
 
   it('retries COROS and Suunto Health lifecycle projection markers', async () => {

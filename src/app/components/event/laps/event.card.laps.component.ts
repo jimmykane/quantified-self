@@ -24,6 +24,7 @@ import {
   DataDistance,
   EventInterface,
   DataHeartRateAvg,
+  DataHeartRateMax,
   LapInterface,
   LapTypes,
   UserUnitSettingsInterface,
@@ -166,6 +167,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   @Input() canCustomize = false;
 
   public readonly swolfColumn = EVENT_LAP_SWOLF_COLUMN;
+  public readonly maximumHeartRateType = DataHeartRateMax.type;
   public readonly hasRecordedLengths = (_index: number, row: LapTableRow): boolean => !!row.hasLengths || !!row.members?.length;
   public swolfColumnLabel = '';
   private readonly expandedLapKeys = new Set<string>();
@@ -385,15 +387,22 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
     const displayRows = swimming ? this.groupRestRows(activity, lapRows, metricTypes) : lapRows;
     const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, this.event?.getActivities?.() || this.selectedActivities));
-    const averageMetrics = getAverageEventLapMetrics(localLaps, metricTypes, this.unitSettings, activity.type, activity);
+    const averageMetrics = getAverageEventLapMetrics(localLaps, metricTypes, this.unitSettings, activity.type, activity,
+      this.event?.getActivities?.() || this.selectedActivities);
     if (averageMetrics.length === 0) {
       return displayRows;
     }
 
     const averageRow: LapTableRow = {
-      '#': 'Avg',
+      '#': 'Summary',
       isLapAverage: true,
     };
+    Object.defineProperty(averageRow, 'metricNotes', { value: {
+      [DataHeartRateMax.type]: 'Whole-session peak, including rest, from available session, lap and heart-rate sample values.',
+      [DataHeartRateAvg.type]: swimming
+        ? 'Mean of available active-lap average heart rates; excludes rest.'
+        : 'Mean of available lap average heart rates.',
+    } });
     averageMetrics.forEach(({ type, display }) => {
       averageRow[type] = display;
     });
@@ -806,6 +815,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       this.getSelectableRows(table.dataSource.data).flatMap(row => row.lap ? [row.lap] : []),
       metricTypes,
       this.unitSettings,
+      this.event?.getActivities?.() || this.selectedActivities,
     ) : new Set(table.columns));
 
     return Object.fromEntries(metricGroups
@@ -814,8 +824,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         const availableTableCount = availableMetricTypesByTable.filter(types => types.has(type)).length;
         const label = !selectedMetricTypes.has(type)
           ? family === 'swimming' && availableTableCount > 0
-            ? availableTableCount === tableCount ? 'Recorded in current laps'
-              : `Recorded in ${availableTableCount} of ${tableCount} lap tables`
+            ? availableTableCount === tableCount
+              ? type === DataHeartRateMax.type ? 'Available in current lap tables' : 'Recorded in current laps'
+              : `${type === DataHeartRateMax.type ? 'Available' : 'Recorded'} in ${availableTableCount} of ${tableCount} lap tables`
             : null
           : availableTableCount === 0
           ? 'No data in current laps — hidden from the table'
@@ -871,7 +882,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
     table.selectedCount = selectedCount;
     table.selectedSummary = summary;
-    table.selectedSummaryLabel = selectedCount > 0 ? `Selected avg · ${selectedCount}` : '';
+    table.selectedSummaryLabel = selectedCount > 0 ? `Selected summary · ${selectedCount}` : '';
     table.allLapRowsSelected = selectableRows.length > 0 && selectedCount === selectableRows.length;
     table.someLapRowsSelected = selectedCount > 0 && !table.allLapRowsSelected;
   }

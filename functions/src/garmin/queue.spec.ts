@@ -30,6 +30,9 @@ const {
     MockTokenRefreshInProgressError,
     mockShouldSkipQueueWorkForDeletedUser,
     mockRetainGarminFITWorkoutReferences,
+    mockGetServiceConnectionMeta,
+    mockUpdateQueueItemIfUserActive,
+    mockRecordImportCompletion,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
@@ -68,8 +71,26 @@ const {
         MockTokenRefreshInProgressError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
         mockRetainGarminFITWorkoutReferences: vi.fn().mockResolvedValue(true),
+        mockGetServiceConnectionMeta: vi.fn(),
+        mockUpdateQueueItemIfUserActive: vi.fn(),
+        mockRecordImportCompletion: vi.fn(),
     };
 });
+
+vi.mock('../service-connection-meta', async importOriginal => ({
+    ...await importOriginal<typeof import('../service-connection-meta')>(),
+    getServiceConnectionMeta: mockGetServiceConnectionMeta,
+}));
+
+vi.mock('../queue/dispatch-marker', async importOriginal => ({
+    ...await importOriginal<typeof import('../queue/dispatch-marker')>(),
+    updateQueueItemIfUserActive: mockUpdateQueueItemIfUserActive,
+}));
+
+vi.mock('../queue/import-monitoring', async importOriginal => ({
+    ...await importOriginal<typeof import('../queue/import-monitoring')>(),
+    recordImportCompletion: mockRecordImportCompletion,
+}));
 
 vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
@@ -218,6 +239,8 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         // Reset call history but keep implementations if needed, OR re-implement
         vi.clearAllMocks();
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        mockGetServiceConnectionMeta.mockResolvedValue(null);
+        mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
 
         // Default: Mock Where returning Get
         mockWhere.mockReturnValue({ get: mockGet, limit: vi.fn().mockReturnValue({ get: mockGet }) });
@@ -240,6 +263,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         mockWhereReturn.where.mockReturnValue(mockWhereReturn);
 
         mockCollectionGroup.mockReturnValue({ where: vi.fn().mockReturnValue(mockWhereReturn) });
+        mockSubCollection.mockReturnValue({ where: vi.fn().mockReturnValue(mockWhereReturn) });
 
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
         mockResolveFirebaseUserIDForGarminUserID.mockResolvedValue('firebase-user-id');
@@ -799,6 +823,169 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 undefined,
                 'NO_TOKEN_FOUND'
             );
+            expect(mockGetServiceConnectionMeta).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('still imports from the recorded owner when credentials exist (cached: %s)', async cached => {
+            queueItem.firebaseUserID = firebaseUserID;
+            const cache = cached ? new Map<string, Promise<admin.firestore.QuerySnapshot>>() : undefined;
+            await expect(processGarminAPIActivityQueueItem(queueItem, undefined, cache)).resolves.toBe('PROCESSED');
+            expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
+            expect(mockCollection.mock.results[0].value.doc).toHaveBeenCalledWith(firebaseUserID);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(mockGetTokenData).toHaveBeenCalledOnce();
+            expect(mockSetEvent).toHaveBeenCalledOnce();
+            expect(mockSetEvent.mock.calls[0][0]).toBe(firebaseUserID);
+            expect(mockGetServiceConnectionMeta).not.toHaveBeenCalled();
+            expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+            if (cache) expect(cache.has(`GarminAPI:${queueItem.userID}:${firebaseUserID}`)).toBe(true);
+        });
+
+        describe('owned imports after disconnect', () => {
+            const disconnectedMeta = {
+                connectionStateGeneration: 'cleared-generation',
+                connectionAccountsRevisionKey: 'confirmed-empty-accounts',
+                connectionAccounts: [],
+            };
+
+            beforeEach(() => {
+                queueItem.firebaseUserID = firebaseUserID;
+                queueItem.dateCreated = 1234;
+                queueItem.ref = { parent: { id: 'garminAPIActivityQueue' } };
+                mockGet.mockResolvedValue({ size: 0, docs: [] });
+                mockGetServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            });
+
+            it.each([false, true])('commits an info-only skip without retry or DLQ (cached: %s)', async cached => {
+                const cache = cached ? new Map() : undefined;
+                await expect(processGarminAPIActivityQueueItem(queueItem, undefined, cache)).resolves.toBe('PROCESSED');
+                expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(firebaseUserID, ServiceNames.GarminAPI);
+                expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
+                expect(mockCollection.mock.results[0].value.doc).toHaveBeenCalledWith(firebaseUserID);
+                expect(mockCollectionGroup).not.toHaveBeenCalled();
+                expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+                    queueItemDocument: queueItem.ref,
+                    userID: firebaseUserID,
+                    updateData: expect.objectContaining({
+                        processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                        callbackURL: expect.anything(),
+                    }),
+                }));
+                expect(mockRecordImportCompletion).toHaveBeenCalledWith('garminAPIActivityQueue', expect.objectContaining({ resultStatus: 'skipped' }));
+                expect(logger.info).toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', {
+                    queueItemId: queueItem.id, reason: 'service_disconnected',
+                });
+                expect(logger.warn).not.toHaveBeenCalled();
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+                expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+                expect(mockGetTokenData).not.toHaveBeenCalled();
+                expect(mockRequestGet).not.toHaveBeenCalled();
+                expect(mockSetEvent).not.toHaveBeenCalled();
+            });
+
+            it.each([
+                null,
+                {},
+                { ...disconnectedMeta, connectionState: 'connected' },
+                { ...disconnectedMeta, connectionState: 'reconnect_required' },
+                { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+                { ...disconnectedMeta, connectionStateGeneration: undefined },
+                { ...disconnectedMeta, connectionStateGeneration: 42 },
+                { ...disconnectedMeta, connectionStateGeneration: ' ' },
+                { ...disconnectedMeta, connectionAccountsRevisionKey: undefined },
+                { ...disconnectedMeta, connectionAccountsRevisionKey: 42 },
+                { ...disconnectedMeta, connectionAccountsRevisionKey: ' ' },
+                { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'garmin-user-id' }] },
+                { ...disconnectedMeta, connectionAccounts: undefined },
+            ])('preserves missing-token failure handling without confirmed disconnect: %j', async meta => {
+                mockGetServiceConnectionMeta.mockResolvedValue(meta);
+                await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+                expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+                expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, expect.any(Error), undefined, 'NO_TOKEN_FOUND');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+            });
+
+            it('does not borrow a cached credential from an earlier owner', async () => {
+                const cache = new Map<string, Promise<admin.firestore.QuerySnapshot>>([
+                    ['GarminAPI:garmin-user-id:another-owner', Promise.resolve({ size: 1, docs: [] } as unknown as admin.firestore.QuerySnapshot)],
+                ]);
+                await expect(processGarminAPIActivityQueueItem(queueItem, undefined, cache)).resolves.toBe('PROCESSED');
+                expect(mockGet).toHaveBeenCalledOnce();
+                expect(mockGetTokenData).not.toHaveBeenCalled();
+                expect(mockCollectionGroup).not.toHaveBeenCalled();
+            });
+
+            it('guards completion against replaced, completed or removed queue rows', async () => {
+                await processGarminAPIActivityQueueItem(queueItem);
+                const { isCurrent } = mockUpdateQueueItemIfUserActive.mock.calls[0][0];
+                expect(isCurrent({ ...queueItem, processed: false })).toBe(true);
+                for (const replacement of [
+                    { processed: true }, { firebaseUserID: 'replacement-owner' }, { userID: 'replacement-provider' },
+                    { dateCreated: 5678 }, { queueRevision: 'replacement-revision' },
+                ]) expect(isCurrent({ ...queueItem, ...replacement })).toBe(false);
+                for (const refresh of [
+                    { callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=file-id&token=fresh' },
+                    { token: 'fresh-pull-token' }, { userAccessToken: 'fresh-access-token' },
+                    { activityFileType: 'GPX' }, { startTimeInSeconds: 67890 },
+                ]) expect(() => isCurrent({ ...queueItem, ...refresh })).toThrow('Garmin queue payload changed during disconnect check.');
+            });
+
+            it('does not close a duplicate webhook payload refreshed while reading disconnect state', async () => {
+                const current = { ...queueItem };
+                mockGetServiceConnectionMeta.mockImplementationOnce(async () => {
+                    current.callbackURL = `${current.callbackURL}-fresh`;
+                    return disconnectedMeta;
+                });
+                mockUpdateQueueItemIfUserActive.mockImplementationOnce(async ({ isCurrent }) =>
+                    isCurrent(current) ? 'updated' : 'not_current');
+
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toThrow('Garmin queue payload changed during disconnect check.');
+
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', expect.anything());
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+                // The same Cloud Task can retry the still-dispatched row, now
+                // with the refreshed payload and its owner's available credential.
+                mockGet.mockResolvedValue({
+                    size: 1,
+                    docs: [{ ref: { parent: { parent: { id: firebaseUserID } } }, data: () => ({}) }],
+                });
+                await expect(processGarminAPIActivityQueueItem(current)).resolves.toBe('PROCESSED');
+                expect(mockRequestGet).toHaveBeenCalledWith(expect.objectContaining({ url: current.callbackURL }));
+                expect(mockSetEvent).toHaveBeenCalledOnce();
+            });
+
+            it('captures the attempted payload before asynchronous disconnect reads', async () => {
+                mockGetServiceConnectionMeta.mockImplementationOnce(async () => {
+                    queueItem.callbackURL = `${queueItem.callbackURL}-fresh`;
+                    return disconnectedMeta;
+                });
+                mockUpdateQueueItemIfUserActive.mockImplementationOnce(async ({ isCurrent }) =>
+                    isCurrent(queueItem) ? 'updated' : 'not_current');
+
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toThrow('Garmin queue payload changed during disconnect check.');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+            });
+
+            it.each(['not_current', 'skipped_deleted_user'])('does not claim a committed skip after %s', async result => {
+                mockUpdateQueueItemIfUserActive.mockResolvedValue(result);
+                await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('PROCESSED');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', expect.anything());
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            });
+
+            it.each(['token_query', 'connection_read', 'completion'])('keeps %s failures retryable instead of claiming a disconnect skip', async stage => {
+                const error = new Error('temporary Firestore failure');
+                if (stage === 'token_query') mockGet.mockRejectedValueOnce(error);
+                if (stage === 'connection_read') mockGetServiceConnectionMeta.mockRejectedValueOnce(error);
+                if (stage === 'completion') mockUpdateQueueItemIfUserActive.mockRejectedValueOnce(error);
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toBe(error);
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(mockRequestGet).not.toHaveBeenCalled();
+            });
         });
 
         it('should retry if getTokenData fails', async () => {

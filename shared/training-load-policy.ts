@@ -4,6 +4,8 @@ import { resolveTrainingDisciplineFromActivityType, type TrainingSportId } from 
 export const TRAINING_LOAD_METADATA_ID = 'trainingLoad';
 export const TRAINING_LOAD_POLICY_VERSION = 1;
 export type TrainingLoadMethod = TrainingStressScorePreference;
+/** Compatible with legacy evaluations that do not identify their HR formula. */
+export type TrainingLoadHrAlgorithm = 'BANISTER' | 'THRESHOLD';
 export interface TrainingLoadPolicy {
   method: TrainingLoadMethod;
   included: boolean;
@@ -64,7 +66,16 @@ export interface EffectiveTrainingLoad {
   status: 'available' | 'partial' | 'unavailable' | 'excluded';
   method: string | null;
   estimated: boolean;
+  hrAlgorithm?: TrainingLoadHrAlgorithm;
   reasons: string[];
+}
+
+/** Accept only known calculated HR algorithms; never infer one for legacy/imported scores. */
+function evaluationHrAlgorithm(value: unknown): TrainingLoadHrAlgorithm | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const result = value as Record<string, unknown>;
+  return result.method === 'HR' && result.provenance === 'calculated' &&
+    (result.hrAlgorithm === 'BANISTER' || result.hrAlgorithm === 'THRESHOLD') ? result.hrAlgorithm : undefined;
 }
 export const DEFAULT_TRAINING_LOAD_POLICY: Readonly<TrainingLoadPolicy> = { method: 'AUTOMATIC', included: true };
 
@@ -137,8 +148,10 @@ export function resolveEffectiveTrainingLoad(
     const evaluations = entry?.[1].evaluations;
     if (evaluations) {
       const result = evaluations[method === 'HR' ? 'hr' : method === 'MET' ? 'met' : 'automatic'];
+      const hrAlgorithm = evaluationHrAlgorithm(result);
       return { score: result.score, status: result.score === null ? 'unavailable' : 'available',
-        method: result.method, estimated: result.estimated, reasons: [...result.reasons] };
+        method: result.method, estimated: result.estimated, reasons: [...result.reasons],
+        ...(result.score !== null && hrAlgorithm ? { hrAlgorithm } : {}) };
     }
     if (method !== 'AUTOMATIC') return unavailable('reparse-required');
     const score = entry ? entry[1].recordedTss : activity ? recordedTrainingStressScore(activity) : null;
@@ -176,6 +189,7 @@ export function resolveEffectiveTrainingLoad(
   return { score,
     status: results.some(result => result.status === 'unavailable') ? 'partial' : 'available',
     method: covered.length === 1 ? covered[0].method : 'SUM', estimated: covered.some(result => result.estimated),
+    ...(covered.length === 1 && covered[0].hrAlgorithm ? { hrAlgorithm: covered[0].hrAlgorithm } : {}),
     reasons: [...new Set(results.flatMap(result => result.reasons))].sort() };
 }
 

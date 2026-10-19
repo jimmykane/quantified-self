@@ -4,28 +4,52 @@ import { healthChartSourceChoice } from './chart-source.helper';
 describe('compact chart source attribution', () => {
   const series = { id: 'stable-key', sourceLabel: 'Suunto · Account 2', aggregation: 'average', nativeOnly: false,
     semanticVariant: 'sleep_session_average_hrv', semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated' };
+  it('groups comparable daytime readings while separating rolling, sleep and nap measurements', () => {
+    const choice = (semanticVariant: string) => healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant });
+    expect(choice('daily_15_second').readingKey).toBe('daytime');
+    expect(choice('activity_interval_average').readingKey).toBe('daytime');
+    expect(choice('daily_15_second').readingMethod).toBe('Recorded by your watch');
+    expect(choice('activity_interval_average').readingMethod).toBe('Recorded by your watch');
+    expect(choice('activity_interval_average').readingDescription).toContain('average heart rate for each short recording period');
+    expect(choice('rolling_7_day_average').readingKey).not.toBe('daytime');
+    expect(choice('sleep_session_average_heart_rate').readingKey).toBe('sleep-average');
+    expect(choice('qs_sleep_session_average_heart_rate').readingKey).toBe('sleep-average');
+    expect(choice('sleep_session_minimum_heart_rate').readingKey).toBe('sleep-minimum');
+    expect(choice('nap_average_heart_rate').readingKey).toBe('nap-average');
+    expect(choice('unknown_provider_variant').readingKey).toContain('unknown_provider_variant');
+    const calculated = healthChartSourceChoice({ ...series, semanticVariant: 'qs_sleep_session_average_heart_rate',
+      semanticLabel: 'Average heart rate · Sleep session · Calculated by QS from recorded heart rate' });
+    expect(calculated.detail).toBe('Average sleep HR · Calculated by QS');
+    expect(calculated.key).toBe(series.id);
+    const future = healthChartSourceChoice({ ...series, semanticVariant: 'new_average', origin: 'quantified_self_derived',
+      semanticLabel: 'Average · New reading · Quantified self derived' });
+    expect(future.detail).toBe('New reading · Calculated by QS');
+    expect(future.shortLabel).toContain('Calculated by QS');
+  });
   it('keeps account and reading meaning while moving provenance to expanded details', () => {
     const choice = healthChartSourceChoice(series);
     expect(choice.key).toBe(series.id);
     expect(choice.shortLabel).toBe('Suunto · Account 2 · Average sleep HRV');
-    expect(choice.detail).toBe(series.semanticLabel);
-    expect(choice.label).toBe(`${series.sourceLabel} · ${series.semanticLabel}`);
+    expect(choice.detail).toBe('Average sleep HRV');
+    expect(choice.label).toBe(`${series.sourceLabel} · Average sleep HRV`);
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'sleep_overnight_hrv' }).shortLabel).toContain('Overnight HRV');
   });
   it('keeps new Sleep vital labels compact without disguising minimums, maximums or naps', () => {
     for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Minimum sleep HR'], ['sleep_session_maximum_spo2', 'Maximum sleep SpO₂'],
-      ['sleep_session_resting_heart_rate', 'Sleep resting HR'], ['nap_average_respiration', 'Nap average']]) {
+      ['sleep_session_resting_heart_rate', 'Sleep resting HR'], ['nap_average_respiration', 'Average nap breathing rate'],
+      ['sleep_session_average_respiration', 'Average sleep breathing rate'], ['nap_maximum_spo2', 'Maximum nap SpO₂'],
+      ['nap_average_heart_rate', 'Average nap HR'], ['nap_minimum_heart_rate', 'Minimum nap HR'], ['nap_resting_heart_rate', 'Nap resting HR']]) {
       const choice = healthChartSourceChoice({ ...series, semanticVariant: variant });
       expect(choice.shortLabel).toBe(`Suunto · Account 2 · ${label}`);
-      expect(choice.detail).toBe(series.semanticLabel);
+      expect(choice.detail).toBe(label);
     }
   });
   it('preserves daily and rolling statistics, unknown semantics and native scales', () => {
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'rolling_7_day_average' }).shortLabel).toContain('7-day average');
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'daily_resting', semanticLabel: 'Average · Daily resting · Provider summary · Provider calculated' }).shortLabel).toContain('Daily resting');
     const native = healthChartSourceChoice({ ...series, semanticVariant: 'provider_new_reading', semanticLabel: 'Special reading · Recorded · Device', nativeOnly: true });
-    expect(native.shortLabel).toContain('Special reading · Provider scale');
-    expect(native.detail).toBe('Special reading · Recorded · Device · Native provider scale');
+    expect(native.shortLabel).toContain('Special reading · Source format');
+    expect(native.detail).toBe('Special reading · Original source format');
   });
 
   it('distinguishes daily resting heart rate from sleep average and minimum heart rate in the visible label', () => {

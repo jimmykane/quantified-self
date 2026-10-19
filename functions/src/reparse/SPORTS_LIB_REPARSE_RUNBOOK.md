@@ -7,6 +7,23 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.1.0 threshold-HR calculation update
+
+Root and Functions pin published sports-lib 23.1.0 with matching lockfile integrity. The runtime target follows that
+installed package, with strict version mismatch checks. The compatible editor/shared resolver understands optional
+private `hrAlgorithm` evaluations; older evaluations remain readable without an inferred algorithm.
+
+Every sport already eligible for calculated TSS can use the threshold-HR estimate when resting or maximum HR is
+missing but the original supplies a valid threshold and usable recorded HR. This includes walking/hiking, swimming
+and strength training; the existing calculated-load exclusions remain unchanged. Full calibration keeps Banister;
+imported scores and eligible power keep priority. Invalid/conflicting calibration still fails closed. The exact
+threshold enters the 100 TSS/hour band; for threshold 165, one hour at 164/165/166 bpm yields 80/100/100 TSS.
+Historical values need the existing authorized original-file reparse and normal Training refresh.
+JSON hydration or a Training rebuild cannot recover discarded calibration. Reparse refreshes candidates while keeping
+saved policy snapshots and latest controls through strict identity matching, source reservations, retries and deletion
+guards. No new persistence path, derived schema bump, route migration, queue or automatic reparse campaign is required.
+See the [Training contract](../../../docs/training-workspace.md#file-only-tss-evaluation-and-owner-load-controls).
+
 ### Sports Lib 23.0.0 provider sport catalog adoption
 
 Benchmark source writes now set a server-owned pending barrier before activity persistence. The existing source
@@ -878,6 +895,13 @@ Cloud Tasks can briefly deliver jobs created by one functions revision to anothe
 The scheduler treats `superseded` as settled. A later candidate scan can create the version-specific job ID for the current target if the event still needs reparsing.
 
 ## Observability
+The separately owned [Cloud Monitoring runbook](../../../docs/reparse-monitoring.md) covers
+normal/heavy/route attempt, committed-outcome and bounded pending-progress observations.
+It reuses the two existing ten-minute scanners with hourly observations and an empty-queue
+fast path, adds no scheduler or monitoring state, and does not enable discovery or change
+reparse limits. Activation and live evidence are tracked
+in #834; the heavy admission cap remains #543. Admin queue inspection below remains independent.
+
 Check:
 - scheduler checkpoint: `systemJobs/sportsLibReparse`
 - job outcomes: `sportsLibReparseJobs`
@@ -902,6 +926,12 @@ The attention/history table always includes up to ten current-target failures be
 Complete function registry exports in `functions/src/full-entrypoint.ts`, served through `functions/src/index.ts`:
 - `scheduleSportsLibReparseScan`
 - `processSportsLibReparseTask`
+- `processSportsLibReparseHeavyTask`
+- `scheduleSportsLibRouteReparseScan`
+- `processSportsLibRouteReparseTask`
+
+All five runtime targets use owning-module isolated loaders; full discovery exports and
+Gen2 resources, schedules, native retries and heavy single-concurrency remain unchanged.
 
 Local npm commands in `functions/package.json`:
 - `reparse-sports-lib-events`
