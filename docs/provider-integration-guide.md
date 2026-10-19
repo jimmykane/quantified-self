@@ -1977,11 +1977,13 @@ runs. Exact scope, native-metric limitations and verification are in the runbook
 Future production changes still require separate approval; #543 owns the heavy backlog cap.
 
 A subsequent observation-health email exposed hourly checks starved behind long discovery
-passes. The local follow-up runs the existing five-second-bounded check before discovery
+passes. The follow-up runs the existing five-second-bounded check before discovery
 in both scanners, retaining the hourly cadence, read caps, deletion/privacy fences and
-all alert thresholds. It is not yet deployed: only the two existing scanner Functions
-need separately approved deployment and natural-sample verification. No monitoring bundle,
-index, Rule, provider behavior or MCP contract changes. See the runbook's starvation follow-up.
+all alert thresholds. With separate owner approval, only the two scanner Functions were
+deployed and independently verified ACTIVE at 13:51 UTC on 19 October 2026, preserving
+resource/schedule/queue controls and all monitoring. Natural-sample verification is pending
+for 17:06 Helsinki (route) and 17:08 (normal/heavy), allowing ingestion. No monitoring bundle,
+index, Rule, worker, provider behavior or MCP contract changes. See the runbook's starvation follow-up.
 
 ### Suunto EnergySense parser support
 

@@ -52,19 +52,20 @@ enqueue exception. Metrics count observations/attempts, not distinct jobs or ath
 ## Bounded observations, progress and cost
 
 Each existing scanner observes its queue **hourly**, only on its scheduled tick in the
-first ten minutes of each hour. Interval jobs can have a non-zero minute phase: the live
-activity job runs at :00/:10/etc., while the route job runs at :06/:16/etc. The Scheduler
+first ten minutes of each hour. Interval jobs can have a non-zero minute phase: the initial
+activity cadence was :00/:10/etc., while the route job runs at :06/:16/etc. The Scheduler
 event's `scheduleTime`, not the Function's wall-clock start time, owns that decision so
 late delivery does not shift the observation slot. The other five
 ten-minute ticks still run discovery and emit its existing outcome telemetry, but perform
 no monitoring queries. There is no new schedule, timer, persisted throttle or monitoring
 record. Missing/invalid scheduled time reports unavailable observation without querying.
 
-The local starvation-fix candidate runs the existing bounded observation **before
+The deployed starvation fix runs the existing bounded observation **before
 discovery** on that hourly tick. A busy discovery pass can no longer consume its
 budget first. Observation failure/timeout is still unavailable, never healthy zero,
 and does not prevent discovery or replace its original error. This ordering change
-is not yet deployed; see the follow-up evidence below. The sample describes existing
+was deployed on 19 October 2026; its next natural hourly proof is pending as recorded
+below. The sample describes existing
 queued work at the start of the tick, not the outcome of newly discovered work.
 
 Hourly observation still runs when **new discovery is disabled**, because turning
@@ -86,8 +87,8 @@ collection, not user histories, activity bodies, Storage, provider APIs or Cloud
   event/route original-file references. A changed job is unknown; missing/deleting owners,
   deleted sources or absent original-file references are excluded. No original file is read.
 - Five-second cooperative observation deadline; late reads cannot emit healthy samples or
-  start further reads. In-flight reads are not forcibly cancelled. The starvation-fix
-  candidate gives this bounded check its turn before discovery, removing the old
+  start further reads. In-flight reads are not forcibly cancelled. The starvation
+  fix gives this bounded check its turn before discovery, removing the old
   post-discovery 290-second skip. The existing native request deadline remains 300 seconds
   including the observation; this does not extend discovery's execution budget or solve
   every slow discovery pass.
@@ -262,8 +263,8 @@ health; see the native timeout and unavailable-sample evidence below. This corre
 required no additional Functions, index or Rules deployment.
 
 The subsequent 13:10 UTC observation-health email exposed starvation of the hourly
-check behind long discovery passes. The local follow-up below corrects that placement;
-its two existing scanner Function updates still require separate deployment approval.
+check behind long discovery passes. The follow-up below corrects that placement;
+the owner-approved two-scanner deployment is complete, with natural hourly readback pending.
 The active monitoring policies remain unchanged and enabled.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
@@ -482,7 +483,7 @@ runs. Further runtime investigation/tuning is separate from monitoring activatio
 #543's heavy admission-cap scope/status remains unchanged. No scanner/worker was
 manually invoked, no source data was written/deleted and no provider call was made.
 
-## Hourly observation starvation follow-up — 19 October 2026 (local, not deployed)
+## Hourly observation starvation follow-up — 19 October 2026
 
 The owner reported a real observation-health email at 13:10 UTC, with heavy-tier
 `qs_reparse_probe_failures_v1` count two above threshold one. Bounded, uncapped read-only
@@ -523,12 +524,48 @@ secret-binding checks passed. Focused non-mutating lint had zero errors and the
 74 pre-existing legacy-spec `any` warnings; diff checks passed. Review found no
 additional issue in the changed ordering, error propagation or read boundaries.
 
-Monitoring coverage is **covered** with a local runtime correction; no alert weakening
+Monitoring coverage is **covered** with this runtime correction; no alert weakening
 or bundle reapplication is required. MCP/Assistant and Help review remains no impact:
 no exposed tool, schema, metric, scope, permission, consent or user action changes.
-No production change is included here. After separate approval, deploy only
-`scheduleSportsLibReparseScan` and `scheduleSportsLibRouteReparseScan`, then verify
-natural hourly samples from the corrected revisions. Existing three-hour warning
+The owner subsequently approved pushing and deploying only the two scanners, followed
+by next-natural-heartbeat verification. Deployment and remaining proof are recorded below.
+Existing three-hour warning
 counts can remain until old unavailable observations leave the window; do not clear
 or disable the policy, reset metrics, or force a run to manufacture recovery evidence.
 #543 remains unchanged; this fix does not tune discovery throughput or admission.
+
+### Approved two-scanner deployment — 19 October 2026, 16:51 Helsinki / 13:51 UTC
+
+`develop` is pushed through `f5de83391`. Firebase deployment selected exactly the two
+existing scanner Functions, and both updates completed successfully. Independent API
+readback confirmed:
+
+- `scheduleSportsLibReparseScan`: ACTIVE revision
+  `schedulesportslibreparsescan-00162-vav`.
+- `scheduleSportsLibRouteReparseScan`: ACTIVE revision
+  `schedulesportslibroutereparsescan-00113-wij`.
+- Both retain Gen2 / Node 22, 512 MiB, 300 seconds, their isolated entrypoints and all
+  prior resource/secret/service controls. The three reparse worker revisions/configurations,
+  both enabled ten-minute schedule controls, all three queue controls and persisted
+  discovery configuration are hash-verified unchanged.
+- All monitoring remains unchanged: 125 total metrics, 69 policies, 11 dashboards and
+  four channels, including ten owned reparse metrics, seven enabled policies/eight
+  conditions and all 28 valid chart/condition queries. No bundle was reapplied.
+- The deployment rebuilt Functions and reran 180-endpoint / 99-isolated-target and
+  70-secret-endpoint checks. Fresh 97-test scanner/helper verification passed; the
+  prior complete 501-test demo-emulator group covers the identical deployed commit.
+  No indexes, Rules, Hosting, workers, provider resources or other Functions were deployed.
+
+**Remaining: natural hourly verification, not another deployment.** Scheduler readback
+at 13:51 UTC gives the next route tick at 13:56 and activity tick at 13:58. The first
+eligible hourly slots are therefore **17:06 Helsinki / 14:06 UTC (route)** and
+**17:08 Helsinki / 14:08 UTC (normal/heavy)**. Read the live `scheduleTime` rather than
+assuming minute zero; the ten-minute cadence/control configuration has not changed.
+The earlier 17:00 activity estimate is superseded by this actual readback.
+
+Await natural `queue_sample` logs and positive sample series from these exact corrected
+revisions, followed by whole-attempt/native HTTP results; allow for Monitoring ingestion.
+A positive queue-sample metric alone is insufficient because it also counts explicitly
+unavailable observations. Do not call capped/unknown samples healthy or erase the older
+three-hour warning counts. No manual scanner invocation, provider call, source write,
+queue replay, alert reset, test email or resource deletion was performed.

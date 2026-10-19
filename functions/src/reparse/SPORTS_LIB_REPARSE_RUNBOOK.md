@@ -899,9 +899,10 @@ The separately owned [Cloud Monitoring runbook](../../../docs/reparse-monitoring
 normal/heavy/route attempt, committed-outcome and bounded pending-progress observations.
 It reuses the two existing ten-minute scanners with hourly observations and an empty-queue
 fast path, adds no scheduler or monitoring state, and does not enable discovery or change
-reparse limits. The local starvation correction performs that bounded hourly observation
-before discovery, retaining its five-second deadline; its two-scanner deployment and
-natural-sample readback remain separately approved steps in the monitoring runbook.
+reparse limits. The starvation correction performs that bounded hourly observation
+before discovery, retaining its five-second deadline. The owner-approved two-scanner
+deployment completed on 19 October 2026; next-natural-sample readback remains pending
+as recorded in the monitoring runbook.
 Activation and live evidence are tracked
 in #834; the heavy admission cap remains #543. Admin queue inspection below remains independent.
 
