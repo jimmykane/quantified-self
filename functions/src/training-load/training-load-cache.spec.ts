@@ -28,6 +28,18 @@ describe('compact private Training load summaries', () => {
     expect(summary).not.toHaveProperty('controls'); expect(summary).not.toHaveProperty('policy');
     expect(JSON.stringify(summary)).not.toContain('evaluations');
   });
+  it('retains the private HR algorithm in compact summaries while preserving override semantics', () => {
+    const hr = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 70, estimated: true,
+      provenance: 'calculated' as const, reasons: [], hrAlgorithm: 'THRESHOLD' as const };
+    const saved: TrainingLoadMetadata = { ...metadata, controls: {}, legs: { leg: { ...metadata.legs!.leg,
+      evaluations: { version: 1, automatic: hr, hr: { ...hr, preference: 'HR' },
+        met: { ...hr, preference: 'MET', method: 'MET', score: 9 } } } } };
+    const summary = JSON.parse(JSON.stringify(summarizeTrainingLoad('event', parent, saved)));
+    expect(summary.legs.activity.load).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD', estimated: true });
+    expect(summary.load).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD' });
+    saved.controls.leg = { override: 0 };
+    expect(summarizeTrainingLoad('event', parent, saved)?.load).not.toHaveProperty('hrAlgorithm');
+  });
   it('keeps the legacy parent total when the editor saves neutral preferences', () => {
     const saved: TrainingLoadMetadata = { version: 1, revision: 1, excluded: false,
       controls: { walk: { method: 'AUTOMATIC', included: true } } };

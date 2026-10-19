@@ -14,6 +14,25 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('carries the selected HR algorithm through private load resolution without labelling overrides or multisport totals', () => {
+    const data = metadata();
+    const candidate = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 70,
+      estimated: true, provenance: 'calculated' as const, reasons: [], hrAlgorithm: 'THRESHOLD' as const };
+    data.legs!.ride.evaluations = { version: 1, automatic: candidate, hr: { ...candidate, preference: 'HR' },
+      met: { ...candidate, preference: 'MET', method: 'MET', score: 9 } };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'ride')).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD' });
+    expect(resolveEffectiveTrainingLoad(source, JSON.parse(JSON.stringify(data)), activities, 'ride')).toMatchObject({ hrAlgorithm: 'THRESHOLD' });
+    expect(resolveEffectiveTrainingLoad(source, data)).not.toHaveProperty('hrAlgorithm');
+    data.controls.walk = { included: false };
+    expect(resolveEffectiveTrainingLoad(source, data)).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD' });
+    for (const control of [{ override: 0 }, { included: false }, { method: 'MET' as const }]) {
+      data.controls.ride = control;
+      expect(resolveEffectiveTrainingLoad(source, data, activities, 'ride')).not.toHaveProperty('hrAlgorithm');
+    }
+    data.controls = {};
+    delete (candidate as { hrAlgorithm?: string }).hrAlgorithm;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'ride')).not.toHaveProperty('hrAlgorithm');
+  });
   it('keeps pending imports unavailable consistently while honoring whole-workout exclusion', () => {
     const data = metadata(); data.sourceWritePending = true; data.controls.walk = { override: 0 };
     expect(resolveEffectiveTrainingLoad(source, data)).toMatchObject({ score: null, reasons: ['source-updating'] });
