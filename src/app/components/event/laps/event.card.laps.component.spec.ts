@@ -14,6 +14,7 @@ import {
     DataActiveLengths,
     DataDuration,
     DataHeartRateMax,
+    DataHeartRate,
     DataPowerAvg,
     DataJumpHangTimeMax,
     DataHeartRateAvg,
@@ -33,6 +34,7 @@ import {
     LapTypes,
     Privacy,
     SpeedUnits,
+    Stream,
     SwimPaceUnits,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
@@ -206,7 +208,7 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('.lap-length-detail-row:not([hidden])')).toBeNull();
         expect(haptics.selection).toHaveBeenCalledTimes(3);
-        component.toggleLapLengths({ '#': 'Avg', isLapAverage: true });
+        component.toggleLapLengths({ '#': 'Summary', isLapAverage: true });
         expect(haptics.selection).toHaveBeenCalledTimes(3);
     });
 
@@ -507,14 +509,74 @@ describe('EventCardLapsComponent', () => {
         expect(updateLapTableColumns).not.toHaveBeenCalled();
     });
 
+    it('uses one session peak across lap tabs, keeps selections local and never adds an empty activity table', () => {
+        const activity = createRestActivity([30, 30, 10], [100, 110, 130]);
+        const laps = activity.getLaps();
+        for (const [index, maximum] of [110, 137, 165].entries()) {
+            laps[index].addStat(new DataHeartRateMax(maximum));
+            if (index < 2) {
+                laps[index].addStat(new DataActiveLap(true));
+                laps[index].addStat(new DataDistance(25));
+            }
+            if (index > 0) laps[index].type = LapTypes.AutoLap;
+        }
+        activity.addStat(new DataHeartRateMax(155));
+        const samples = Array<number>(71).fill(120);
+        samples[65] = 170;
+        activity.addStream(new Stream(DataHeartRate.type, samples));
+        const empty = { ...createActivity([]), getID: () => 'empty', getStat: () => new DataHeartRateMax(210) } as ActivityInterface;
+        component.selectedActivities = [activity, empty];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const tables = component.lapTableGroups.flatMap(group => group.tables);
+        expect(tables).toHaveLength(2);
+        for (const table of tables) {
+            expect(table.activity).toBe(activity);
+            expect(table.dataSource.data[0]).toMatchObject({ '#': 'Summary', [DataHeartRateMax.type]: '170 bpm' });
+            expect(table.dataSource.data[0].metricNotes?.[DataHeartRateMax.type]).toContain('including rest');
+            expect(table.dataSource.data[0].metricNotes?.[DataHeartRateAvg.type]).toContain('excludes rest');
+        }
+        const automatic = tables.find(table => table.dataSource.data.some(row => row.lap === laps[2]))!;
+        component.toggleLapSelection(automatic, automatic.dataSource.data.find(row => row.lap === laps[2])!);
+        fixture.detectChanges();
+        expect(automatic.selectedSummaryLabel).toBe('Selected summary · 1');
+        expect(automatic.selectedSummary[DataHeartRateMax.type]).toBe('165 bpm · 1/1');
+        expect(fixture.nativeElement.textContent).toContain('Selected summary · 1');
+        expect(activity.getStat(DataHeartRateMax.type)?.getValue()).toBe(155);
+        expect(activity.getStreamData(DataHeartRate.type)).toEqual(samples);
+    });
+
+    it('does not promote a cross-sport context peak through another lap tab', () => {
+        const activity = createRestActivity([30, 30, 10]);
+        activity.getLaps()[0].addStat(new DataActiveLap(true));
+        activity.getLaps()[0].addStat(new DataDistance(25));
+        const context = activity.getLaps()[2];
+        context.type = LapTypes.AutoLap;
+        context.startDate = new Date(0);
+        context.endDate = new Date(120_000);
+        context.addStat(new DataHeartRateMax(220));
+        const sibling = { ...createActivity([]), type: 'Cycling', getID: () => 'next-leg',
+            startDate: new Date(70_000), endDate: new Date(120_000) } as ActivityInterface;
+        component.selectedActivities = [activity, sibling];
+        component.event = { getActivities: () => [activity, sibling] } as EventInterface;
+        component.ngOnChanges();
+        const manual = component.getDataSource(activity, LapTypes.Manual)!;
+        expect(manual.data[0]).toMatchObject({ '#': 'Summary', [DataHeartRateMax.type]: '151 bpm' });
+        const automatic = component.getDataSource(activity, LapTypes.AutoLap)!;
+        expect(automatic.data).toHaveLength(1);
+        expect(automatic.data[0].contextLabel).toBe('Multisport lap');
+    });
+
     it('renders a rest block with total time, weighted HR, original lap expansion and partial selection', () => {
         const activity = createRestActivity([10, 30], [100, 140]);
         component.selectedActivities = [activity];
         component.ngOnChanges();
         fixture.detectChanges();
         let table = component.lapTableGroups[0].tables[0];
-        const block = table.dataSource.data[0];
-        expect(table.dataSource.data).toHaveLength(1);
+        const block = table.dataSource.data.find(row => row.members)!;
+        expect(table.dataSource.data).toHaveLength(2);
+        expect(table.dataSource.data[0]).toMatchObject({ '#': 'Summary', [DataHeartRateMax.type]: '151 bpm' });
         expect(block).toMatchObject({ '#': '1–2', Duration: '0:40.00', Distance: '0 m',
             [DataHeartRateAvg.type]: '130 bpm', [DataHeartRateMax.type]: '151 bpm' });
         expect(block.members?.map(row => row.lap)).toEqual(activity.getLaps());
@@ -532,6 +594,7 @@ describe('EventCardLapsComponent', () => {
         expect(block.isPartiallySelected).toBe(true);
         expect(table.someLapRowsSelected).toBe(true);
         expect(table.selectedCount).toBe(1);
+        expect(table.selectedSummary[DataHeartRateMax.type]).toBe('150 bpm · 1/1');
         const blockCheckbox = fixture.nativeElement.querySelector('input[aria-label="Select laps 1–2"]');
         expect(blockCheckbox.indeterminate).toBe(true);
         blockCheckbox.click();
@@ -539,6 +602,7 @@ describe('EventCardLapsComponent', () => {
         expect(table.selectedCount).toBe(2);
         expect(table.allLapRowsSelected).toBe(true);
         expect(table.selectedSummary.Duration).toBe('0:20.00 · 2/2');
+        expect(table.selectedSummary[DataHeartRateMax.type]).toBe('151 bpm · 2/2');
         expect(block.isPartiallySelected).toBe(false);
         component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
         component.ngOnChanges();
@@ -546,12 +610,12 @@ describe('EventCardLapsComponent', () => {
         table = component.lapTableGroups[0].tables[0];
         expect(table.selectedCount).toBe(2);
         expect(table.allLapRowsSelected).toBe(true);
-        expect(table.dataSource.data[0].lengthsExpanded).toBe(true);
-        expect(table.dataSource.data[0].Distance).toBe('0 yd');
+        expect(table.dataSource.data.find(row => row.members)!.lengthsExpanded).toBe(true);
+        expect(table.dataSource.data.find(row => row.members)!.Distance).toBe('0 yd');
         fixture.nativeElement.querySelector('input[aria-label="Select all laps in this table"]').click();
         fixture.detectChanges();
         expect(table.selectedCount).toBe(0);
-        expect(table.dataSource.data[0].isSelected).toBe(false);
+        expect(table.dataSource.data.find(row => row.members)!.isSelected).toBe(false);
         expect(haptics.selection).toHaveBeenCalledTimes(4);
     });
 
@@ -591,7 +655,7 @@ describe('EventCardLapsComponent', () => {
         component.selectedActivities = [activity];
         component.ngOnChanges();
         const table = component.lapTableGroups[0].tables[0];
-        const block = table.dataSource.data[0];
+        const block = table.dataSource.data.find(row => row.members)!;
         expect(block.Duration).toBe('2:13.83');
         expect(new Set(block.members!.map(row => row.selectionKey)).size).toBe(5);
         component.toggleLapSelection(table, block);
@@ -609,8 +673,8 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
         expect(component.lapTableGroups[0].tables).toHaveLength(2);
         const [a, b] = component.lapTableGroups[0].tables;
-        expect(a.dataSource.data[0][DataHeartRateAvg.type]).toBe('100 bpm · 1/2 laps');
-        component.toggleLapSelection(a, a.dataSource.data[0]);
+        expect(a.dataSource.data.find(row => row.members)![DataHeartRateAvg.type]).toBe('100 bpm · 1/2 laps');
+        component.toggleLapSelection(a, a.dataSource.data.find(row => row.members)!);
         expect(a.selectedCount).toBe(2);
         expect(b.selectedCount).toBe(0);
     });
@@ -632,7 +696,7 @@ describe('EventCardLapsComponent', () => {
         const activity = createRestActivity([10, 30], [], true);
         component.selectedActivities = [activity];
         component.ngOnChanges();
-        let block = component.lapTableGroups[0].tables[0].dataSource.data[0];
+        let block = component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.members)!;
         expect(block.members?.map(row => row.hasLengths)).toEqual([true, true]);
         component.toggleLapLengths(block);
         component.toggleLapLengths(block.members![1]);
@@ -641,7 +705,7 @@ describe('EventCardLapsComponent', () => {
         component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
         component.ngOnChanges();
         fixture.detectChanges();
-        block = component.lapTableGroups[0].tables[0].dataSource.data[0];
+        block = component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.members)!;
         expect(block.lengthsExpanded).toBe(true);
         expect(block.members![1].lengthsExpanded).toBe(true);
         expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
@@ -943,7 +1007,7 @@ describe('EventCardLapsComponent', () => {
         expect(component.getColumns(activity, LapTypes.Manual)).toContain(DataPaceAvg.type);
         const rows = component.getDataSource(activity, LapTypes.Manual)?.data;
         expect(rows?.[0]).toMatchObject({
-            '#': 'Avg',
+            '#': 'Summary',
             isLapAverage: true,
             [DataPaceAvg.type]: '03:45 min/km',
         });
@@ -962,7 +1026,7 @@ describe('EventCardLapsComponent', () => {
 
         const rows = component.getDataSource(activity, LapTypes.Manual)?.data;
         expect(rows?.[0]).toMatchObject({
-            '#': 'Avg',
+            '#': 'Summary',
             isLapAverage: true,
             [DataPaceAvg.type]: '05:15 min/km',
         });
@@ -983,7 +1047,7 @@ describe('EventCardLapsComponent', () => {
 
         const averageRow = component.getDataSource(activity, LapTypes.Manual)?.data[0];
         expect(averageRow).toMatchObject({
-            '#': 'Avg',
+            '#': 'Summary',
             [DataPaceAvg.type]: '05:15 min/km',
         });
         expect(averageRow).not.toHaveProperty(DataDuration.type);
@@ -1007,12 +1071,12 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
 
         expect(component.getDataSource(running, LapTypes.Manual)?.data[0]).toMatchObject({
-            '#': 'Avg',
+            '#': 'Summary',
             isLapAverage: true,
             [DataPaceAvg.type]: '05:00 min/km',
         });
         expect(component.getDataSource(cycling, LapTypes.Manual)?.data[0]).toMatchObject({
-            '#': 'Avg',
+            '#': 'Summary',
             isLapAverage: true,
             [DataSpeedAvg.type]: '18.00 km/h',
         });
@@ -1129,7 +1193,7 @@ describe('EventCardLapsComponent', () => {
         ]);
         expect(component.getDataSource(activity, LapTypes.Manual)?.data).toEqual([
             {
-                '#': 'Avg',
+                '#': 'Summary',
                 isLapAverage: true,
                 [DataSpeedAvg.type]: '18.00 km/h',
                 [DataSpeedMin.type]: '3.60 km/h',
@@ -1590,7 +1654,7 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
 
         expect(table.selectedCount).toBe(1);
-        expect(table.selectedSummaryLabel).toBe('Selected avg · 1');
+        expect(table.selectedSummaryLabel).toBe('Selected summary · 1');
         expect(table.selectedSummary[DataDuration.type]).toContain(' · 1/1');
         expect(table.allLapRowsSelected).toBe(false);
         expect(table.someLapRowsSelected).toBe(true);

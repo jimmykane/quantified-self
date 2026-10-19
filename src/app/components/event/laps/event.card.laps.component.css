@@ -11,9 +11,9 @@
 }
 
 .lap-index-cell {
-  flex: 0 0 48px;
-  width: 48px;
-  max-width: 48px;
+  flex: 0 0 88px;
+  width: 88px;
+  max-width: 88px;
 }
 
 /* Cross-leg context needs a readable label while retaining the table's shared horizontal scroll. */
@@ -231,11 +231,11 @@
 }
 
 .lap-selected-summary-label {
-  flex: 0 0 96px;
+  flex: 0 0 136px;
   justify-content: flex-start;
-  max-width: 96px;
+  max-width: 136px;
   white-space: nowrap;
-  width: 96px;
+  width: 136px;
 }
 
 .lap-selected-summary-index-spacer {

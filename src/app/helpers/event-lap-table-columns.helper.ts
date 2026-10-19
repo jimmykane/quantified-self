@@ -23,6 +23,7 @@ import {
   DataEVPEMax,
   DataEVPEMin,
   DataHeartRateAvg,
+  DataHeartRate,
   DataHeartRateMax,
   DataHeartRateMin,
   DataInterface,
@@ -79,6 +80,7 @@ import {
   getSwimLapAnalytics, getSwimLapDisplayMetric, isRestSwimLap, SwimLapAnalytics,
 } from './event-swim-analytics.helper';
 import { getSwimLapStrokeLabels } from './event-swim-length.helper';
+import { getEventLapContextLabel } from './event-lap-type.helper';
 
 export interface EventLapMetricOption {
   type: string;
@@ -577,14 +579,18 @@ interface LapSummaryContext {
   swimming: boolean;
   analytics: Map<LapInterface, SwimLapAnalytics>;
   nominalDistanceDisplay: NominalSwimDistanceDisplayContext | null;
+  activity?: ActivityInterface;
+  eventActivities: readonly ActivityInterface[];
 }
 
 const createSummaryContext = (
   activityType: unknown, activity: ActivityInterface | undefined, units: UserUnitSettingsInterface | null | undefined,
+  eventActivities: readonly ActivityInterface[] = [],
 ): LapSummaryContext => {
   const swimming = resolveEventLapSportFamily(activityType) === 'swimming';
   return { swimming, analytics: swimming && activity ? getSwimLapAnalytics(activity, units) : new Map(),
-    nominalDistanceDisplay: swimming ? getNominalSwimDistanceDisplayContext(activity) : null };
+    nominalDistanceDisplay: swimming ? getNominalSwimDistanceDisplayContext(activity) : null,
+    activity, eventActivities };
 };
 
 const getNominalSelectionDistanceDisplay = (laps: readonly LapInterface[], context: LapSummaryContext): number | undefined => {
@@ -608,9 +614,43 @@ const getSummaryStat = (type: string, value: number): DataInterface => (
       : DynamicDataLoader.getDataInstanceFromDataType(type, value)
 );
 
+const getHeartRatePeak = (
+  laps: readonly LapInterface[], context: LapSummaryContext, selected: boolean,
+): { value: number; availableCount: number } | null => {
+  let peak: number | null = null;
+  let availableCount = 0;
+  const include = (value: unknown): boolean => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return false;
+    peak = peak === null ? value : Math.max(peak, value);
+    return true;
+  };
+  laps.forEach(lap => {
+    if (include(getFiniteEventLapMetricValue(lap, DataHeartRateMax.type, context))) availableCount++;
+  });
+  // A selection describes only its contributing original laps, including rest.
+  // The persistent summary uses the whole activity, independently of the lap tab.
+  if (!selected && context.activity) {
+    const activity = context.activity;
+    const nativeMaximum = activity.getStat?.(DataHeartRateMax.type);
+    if (nativeMaximum) include(nativeMaximum.getValue());
+    (activity.getLaps?.() || []).forEach(lap => {
+      if (!getEventLapContextLabel(activity, lap, context.eventActivities)) {
+        include(getFiniteEventLapMetricValue(lap, DataHeartRateMax.type, context));
+      }
+    });
+    if (activity.hasStreamData?.(DataHeartRate.type)) {
+      // Inspect full hydrated samples, never downsampled chart points. Iterate to
+      // keep long recordings safe from the argument limit of Math.max(...values).
+      activity.getStreamData(DataHeartRate.type).forEach(include);
+    }
+  }
+  return peak === null ? null : { value: peak, availableCount };
+};
+
 const getEventLapSummaryValue = (
   laps: readonly LapInterface[], metricType: string, context: LapSummaryContext, selected: boolean,
 ): { value: number; availableCount: number } | null => {
+  if (metricType === DataHeartRateMax.type) return getHeartRatePeak(laps, context, selected);
   // Keep accumulated selection averages (and their coverage) unchanged. Swim performance
   // averages use only recorded active rows, including zero-stroke drills.
   const eligibleLaps = context.swimming && !ACCUMULATED_LAP_METRIC_TYPES.has(metricType)
@@ -647,8 +687,10 @@ export const getAverageEventLapMetrics = (
   laps: readonly LapInterface[], metricTypes: readonly string[],
   unitSettings: UserUnitSettingsInterface | null | undefined, activityType: unknown,
   activity?: ActivityInterface,
+  eventActivities: readonly ActivityInterface[] = [],
 ): EventLapAverageMetric[] => {
-  const context = createSummaryContext(activityType, activity, unitSettings);
+  if (!laps.length) return [];
+  const context = createSummaryContext(activityType, activity, unitSettings, eventActivities);
   return metricTypes.reduce<EventLapAverageMetric[]>((averages, metricType) => {
     if (ACCUMULATED_LAP_METRIC_TYPES.has(metricType)) {
       return averages;
@@ -671,8 +713,8 @@ export const getAverageEventLapMetrics = (
 
 /**
  * Summarizes a temporary selection of rows in the Event Details Laps table.
- * Unlike the persistent all-laps Avg row, accumulated metrics are intentionally
- * included and every result reports how many selected laps contributed.
+ * Unlike the persistent Summary row, accumulated metrics are intentionally
+ * averaged. Max HR is the selected lap peak, and every result reports coverage.
  */
 export const getSelectedEventLapSummaryMetrics = (
   laps: readonly LapInterface[],
