@@ -107,11 +107,14 @@ Authenticated product workspaces, except Settings, use the shared `qs-workspace-
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
 Settings uses a centered 800 px overview, with **Preferences** followed by **Privacy & account** in one column
-on desktop and phones. Theme is directly editable above six sections: Units & formatting, Dashboard, Charts,
-Maps, Privacy & emails, and Account. Each section uses a surface-free Material button disclosure with
+on desktop and phones. Theme is directly editable above eight sections: Units & formatting, Dashboard, Training load,
+Charts, Maps, Privacy & emails, Account, and Data management. Each section uses a surface-free Material button disclosure with
 `aria-expanded` and `aria-controls`; all form panels remain mounted while collapsed. At most one section is open.
 An absent or invalid `section` query parameter shows the collapsed overview, and valid section links open their
-panel; legacy `profile` and `delete-account` links open Account, and `app` shows the inline Theme control. Closing a panel removes the section parameter.
+panel; legacy `profile` links open Account, `delete-account` opens Data management, and `app` shows the inline Theme control. Closing a panel removes the section parameter.
+Account contains profile details. Data management is the final section and contains the account-deletion action;
+its controls stay hidden when Account or the profile shortcut is open. Deletion uses a flat subsection with an
+explicit button and the existing confirmation dialog, without a Danger Zone card. Direct links use `section=data-management`.
 The group/disclosure/subsection heading levels are H2/H3/H4. Save changes is the only submit action; account deletion
 is an explicit button action and is blocked during saving. The overview is inert while saving or deleting so the
 loading shade cannot leave keyboard edits available; save progress remains outside that inert region.
