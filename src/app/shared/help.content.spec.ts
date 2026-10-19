@@ -953,7 +953,10 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Coverage belongs to each chart.**');
     expect(healthSection?.content).toContain('**Heart-rate chart details.**');
     expect(healthSection?.content).toContain('Suunto supplies the average HR for each short recording period');
-    expect(healthSection?.content).toContain('**Show details** explains how the source recorded it');
+    expect(healthSection?.content).toContain('**Recording details** explains how the source recorded it');
+    expect(healthSection?.content).toContain('**Compare sources**');
+    expect(healthSection?.content).toContain('**Hide comparison**');
+    expect(healthSection?.content).toContain('Missing readings and unknown completeness stay visible');
     expect(healthSection?.content).toContain('giving each reading equal weight');
     expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
     expect(healthSection?.content).toContain('names the omitted source, returns an older saved 1-year selection to 90 days');
@@ -1015,8 +1018,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Retry** from both overview and history');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed charts are available for 1d, 14-day, 30-day, and 90-day windows');
-    expect(healthSection?.content).toContain('does not imply that every metric is continuous');
+    expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries, including QS-calculated Heart rate summaries');
+    expect(healthSection?.content).toContain('A one-day view does not imply continuous recording');
     expect(healthSection?.content).toContain('your recorded Sleep sessions');
     expect(healthSection?.content).toContain('Expand **Recorded readings**');
     expect(healthSection?.content).toContain('**Sources** sheet shows each provider\'s recency');

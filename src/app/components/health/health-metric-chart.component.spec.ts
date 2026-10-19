@@ -132,13 +132,15 @@ describe('HealthMetricChartComponent', () => {
     expect(host.querySelector('.compact-row-host--fill-height')).toBeNull();
   });
 
-  it('names the provider and shows the latest value without recording-method jargon', async () => {
+  it('leads with the latest reading while keeping its provider in the compact picker', async () => {
     const host = await render(null);
     fixture.componentRef.setInput('series', [{ ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate,
       semanticLabel: '7-day average · Provider reported', semanticVariant: 'rolling_7_day_average' }]);
     fixture.detectChanges();
-    expect(host.querySelector('h3')?.textContent).toBe('Garmin');
-    expect(host.querySelector('.compact-row__summary')?.textContent).toContain('Latest 50 bpm');
+    expect(host.querySelector('h3')?.textContent).toBe('Latest reading');
+    expect(host.querySelector('app-chart-source-picker')?.textContent).toContain('Garmin');
+    expect(host.querySelector('.health-chart-reading-value')?.textContent).toBe('50 bpm');
+    expect(host.querySelector('.health-chart-recorded-date')?.textContent).toContain('1970');
     expect(host.querySelector('.health-reading-controls')?.textContent).toContain('7-day average HR');
   });
   it('keeps recording details behind an accessible, source-specific disclosure', async () => {
@@ -153,7 +155,8 @@ describe('HealthMetricChartComponent', () => {
     expect(button.getAttribute('aria-controls')).toBe(details.id);
     expect(details.hidden).toBe(true);
     expect(details.textContent).toContain('average heart rate for each short recording period');
-    expect(host.querySelector('.compact-row__summary')?.textContent).not.toMatch(/interval|15-second|unknown|points shown/i);
+    expect(host.querySelector('.health-chart-reading-header')?.textContent).not.toMatch(/interval|15-second|unknown|points shown/i);
+    expect(host.querySelector('.health-chart-coverage')?.textContent).toContain('1/14 days');
     expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); fixture.detectChanges();
     expect(details.hidden).toBe(false); expect(button.getAttribute('aria-expanded')).toBe('true');
@@ -174,13 +177,44 @@ describe('HealthMetricChartComponent', () => {
       { ...heart, id: 'sleep', semanticVariant: 'sleep_session_average_heart_rate' }, garmin, suunto,
     ]);
     fixture.componentRef.setInput('selectedSourceKey', 'suunto-day'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['suunto-day']);
+    expect(host.querySelectorAll('app-health-metric-series-chart')).toHaveLength(1);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const changedSource = vi.fn(); fixture.componentInstance.sourceSelected.subscribe(changedSource);
+    const compare = host.querySelector<HTMLButtonElement>('button[aria-controls="health-source-charts"]')!;
+    expect(compare.getAttribute('aria-expanded')).toBe('false');
+    compare.click(); fixture.detectChanges();
     expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['suunto-day', 'garmin-day']);
     expect(host.querySelectorAll('app-health-metric-series-chart')).toHaveLength(2);
+    expect(compare.getAttribute('aria-expanded')).toBe('true');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    compare.click(); fixture.detectChanges();
+    expect(host.querySelectorAll('app-health-metric-series-chart')).toHaveLength(1);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(changedSource).not.toHaveBeenCalled();
     fixture.componentRef.setInput('selectedSourceKey', 'sleep'); fixture.detectChanges();
     expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['sleep']);
     fixture.componentRef.setInput('selectedSourceKey', 'not-in-period'); fixture.detectChanges();
     expect(fixture.componentInstance.renderedModels()).toEqual([]);
     expect(host.textContent).toContain('no readings in this period');
+  });
+
+  it('keeps calculated attribution and recording explanations without hiding coverage', async () => {
+    const host = await render(null);
+    fixture.componentRef.setInput('series', [{ ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate,
+      semanticVariant: 'qs_sleep_session_average_heart_rate', origin: HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived,
+      recordingMethod: HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated }]);
+    fixture.componentRef.setInput('readingNotice', 'This explanation belongs to the selected measurement.');
+    fixture.detectChanges();
+    expect(host.querySelector('.health-chart-reading-header > div')?.firstElementChild?.textContent).toBe('Calculated by QS');
+    expect(host.querySelector('.health-chart-coverage')?.textContent).toContain('1/14 days');
+    const details = host.querySelector<HTMLElement>('.health-chart-details')!;
+    expect(details.hidden).toBe(true);
+    expect(details.textContent).toContain('This explanation belongs to the selected measurement.');
+    expect(host.querySelector('button[aria-controls="health-source-charts"]')).toBeNull();
+    fixture.componentInstance.toggleComparison();
+    expect(fixture.componentInstance.comparingSources()).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
 
   it('uses flat shared rows while preserving source separation and status labels', async () => {

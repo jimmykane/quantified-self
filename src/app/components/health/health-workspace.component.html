@@ -98,21 +98,11 @@
       <mat-icon aria-hidden="true">arrow_back</mat-icon>Back to overview
     </button>
 
-  <section class="health-explorer" aria-labelledby="health-explorer-title">
-    <div class="health-section-heading health-explorer-heading">
-      <div>
-        <p class="health-eyebrow">Measurement history</p>
-        <h2 id="health-explorer-title">Explore a metric</h2>
-      </div>
-      <p>Explore your history, or add a measurement above.</p>
-    </div>
-
-    <div class="health-explorer-layout">
+  <section class="health-explorer" aria-label="Measurement history">
       <article class="health-detail" aria-labelledby="health-detail-title">
         <header class="health-detail-header">
           <div class="health-detail-heading">
             <h2 #metricDetail id="health-detail-title" tabindex="-1">
-              <span class="health-desktop-metric-title">{{ detailTitle() }}</span>
               <button mat-button type="button" class="health-mobile-metric-title"
                 [disabled]="!hasAvailableMetricSelections()"
                 [attr.aria-label]="'Choose metric: ' + detailTitle()" aria-haspopup="dialog"
@@ -123,13 +113,15 @@
             @if (!hasAvailableMetricSelections()) {
               <p class="health-mobile-metric-empty" role="status">No imported Health metrics yet.</p>
             }
+            <button mat-icon-button type="button" class="health-dashboard-action"
+              [attr.aria-label]="metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
+              [matTooltip]="metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
+              [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()">
+              <mat-icon>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon>
+            </button>
           </div>
           <div class="health-detail-controls">
-          <button mat-button type="button" class="health-dashboard-action"
-            [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()">
-            <span>{{ metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard' }}</span>
-            <mat-icon iconPositionEnd>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon>
-          </button>
+
           <div class="health-window-navigation" aria-label="Health data window">
             <button
               mat-icon-button
@@ -215,13 +207,7 @@
             <span>{{ omittedSampleSourceNotice() }}</span>
           </div>
         }
-        @if (heartRateReadingNotice()) {
-          <div class="health-notice" role="note">
-            <mat-icon aria-hidden="true">info</mat-icon>
-            <span>{{ heartRateReadingNotice() }}</span>
-          </div>
-        }
-        @if (partialCoverageNotice()) {
+        @if (partialCoverageNotice() && routeState().metric !== 'heart_rate') {
           <div class="health-notice" role="status">
             <mat-icon aria-hidden="true">data_usage</mat-icon>
             <span>{{ partialCoverageNotice() }}</span>
@@ -345,6 +331,7 @@
           </section>
         } @else {
           <app-health-metric-chart
+            [readingNotice]="heartRateReadingNotice()"
             [selectedSourceKey]="preferredMetricSources()[routeState().metric] || null"
             (sourceSelected)="selectDetailSource($event)"
             [fillHeight]="true"
@@ -370,7 +357,6 @@
           </app-health-source-observation-table>
         }
       </article>
-    </div>
   </section>
   </div>
 </main>

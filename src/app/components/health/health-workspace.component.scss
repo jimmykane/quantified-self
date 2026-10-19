@@ -22,15 +22,6 @@
   min-width: 0;
 }
 
-.health-section-heading {
-  align-items: end;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.health-section-heading h2,
 .health-detail-header h2 {
   font: var(--mat-sys-title-large);
   font-weight: 600;
@@ -42,19 +33,10 @@
   scroll-margin-block-start: 1rem;
 }
 
-.health-section-heading > p,
 .health-detail-header p {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
   margin: 0;
-}
-
-.health-eyebrow {
-  color: var(--mat-sys-primary);
-  font: var(--mat-sys-label-small);
-  letter-spacing: 0.045em;
-  margin: 0 0 0.1rem;
-  text-transform: uppercase;
 }
 
 .health-explorer {
@@ -62,15 +44,6 @@
   padding-top: 0.75rem;
 }
 
-.health-explorer-layout {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
-}
-
-.health-desktop-metric-title { display: none; }
-.health-mobile-metric-empty { display: block; }
 .health-mobile-metric-title {
   display: inline-flex;
   --mat-button-text-container-height: auto;
@@ -82,7 +55,7 @@
   text-align: left;
   justify-content: flex-start;
 }
-.health-back-overview { margin-bottom: 0.75rem; }
+.health-back-overview { margin-bottom: 0.25rem; }
 
 .health-metric-title-content {
   display: flex;
@@ -335,7 +308,7 @@
   padding: 0;
 }
 
-@media (min-width: 981px) {
+@media (min-width: 960px) {
   .health-detail {
     display: flex;
     flex-direction: column;
@@ -346,37 +319,19 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 599px) {
   .health-workspace {
     gap: 0.75rem;
   }
 
-  .health-header-actions a span {
-    display: none;
-  }
-
-  .health-header-actions a {
-    height: 44px;
-    min-width: 44px;
-    padding-inline: 0;
-    width: 44px;
-  }
-
-  .health-header-actions mat-icon {
-    margin-inline: 0;
-  }
-
-  .health-section-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .health-detail-header {
-    // The metric name gets its own row; actions must not squeeze it into a
-    // narrow column or split their labels when the range controls are visible.
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.25rem;
   }
+
+  .health-detail-heading { flex: 1 1 180px; }
+  .health-detail-window { flex-basis: 100%; }
 
   .health-detail-header h2 {
     font: var(--mat-sys-title-medium);
@@ -387,16 +342,13 @@
     flex-wrap: wrap;
     justify-content: space-between;
     gap: 0.25rem;
+    margin-inline-start: auto;
   }
 
-  .health-dashboard-action,
   .health-add-measurement {
     --mat-button-text-container-height: 44px;
   }
 
-  .health-dashboard-action {
-    padding-inline: 0.5rem;
-  }
 
   .health-add-measurement-label {
     display: none;
@@ -404,10 +356,6 @@
 
   .health-add-measurement-label-compact {
     display: inline;
-  }
-
-  .health-section-heading > p {
-    display: none;
   }
 
   .health-window-navigation {
@@ -445,10 +393,14 @@
 
 }
 
-@media (max-width: 480px) {
+@media (max-width: 599px) {
   .health-detail-state {
     align-items: flex-start;
     flex-direction: column;
     min-height: 170px;
   }
 }
+
+.health-detail-heading h2 { min-width:0; }
+.health-metric-title-content > span { min-width:0; overflow-wrap:anywhere; }
+.health-dashboard-action { margin-inline-start:0.25rem; }

@@ -37,6 +37,17 @@ describe('compact chart source picker', () => {
     fixture.componentInstance.chooseMeasurement('sleep-average'); fixture.componentInstance.chooseMeasurement('unknown');
     expect(changed).toHaveBeenCalledTimes(1);
   });
+  it('compacts Health history labels without losing measurement controls or accessible attribution', () => {
+    const daytime = choices.map(choice => ({ ...choice, readingKey: 'daytime', readingLabel: 'Throughout the day', readingMethod: 'Recorded by your watch' }));
+    const fixture = create([...daytime, { ...choices[0], key: 'sleep', readingKey: 'sleep-average', readingLabel: 'Average sleep HR' }]);
+    expect(fixture.nativeElement.querySelector('.chart-reading-method')?.textContent).toBe('Recorded by your watch');
+    fixture.componentRef.setInput('compact', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.chart-reading-method')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.chart-reading-picker > span')?.classList.contains('cdk-visually-hidden')).toBe(true);
+    expect(fixture.nativeElement.querySelector('mat-select')?.getAttribute('aria-label')).toBe('Heart rate measurement');
+    expect(fixture.nativeElement.querySelector('button')?.getAttribute('aria-label')).toContain('Suunto');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('shows attribution without a redundant control when only one reading is available', () => {
     const fixture = create(choices.slice(0, 1));
     expect(fixture.nativeElement.textContent).toContain('Suunto · Main sleep');

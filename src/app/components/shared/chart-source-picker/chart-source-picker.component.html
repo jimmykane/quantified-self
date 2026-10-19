@@ -1,6 +1,6 @@
 @if (measurements().length > 1 || measurements().length && !choice()) {
   <div class="chart-reading-picker">
-    <span>Measurement</span>
+    <span [class.cdk-visually-hidden]="compact()">Measurement</span>
     <mat-select aria-label="Heart rate measurement" [value]="choice()?.readingKey" [disabled]="disabled()"
       (selectionChange)="chooseMeasurement($event.value)">
       @for (reading of measurements(); track reading.key) {
@@ -9,6 +9,7 @@
     </mat-select>
   </div>
 }
+<div class="chart-source-row">
 @if (canChoose()) {
   <button mat-button type="button" class="chart-source-trigger" [disabled]="disabled()"
     [matMenuTriggerFor]="sourceMenu" (menuOpened)="opened()" [attr.aria-label]="ariaLabel()" [matTooltip]="description()">
@@ -17,6 +18,8 @@
 } @else {
   <span class="chart-source-caption" [matTooltip]="description()">{{ label() }}</span>
 }
+  <ng-content select="[chartSourceAction]"></ng-content>
+</div>
 <mat-menu #sourceMenu="matMenu" class="qs-menu-panel" xPosition="before">
   <div class="chart-source-menu-heading">{{ measurements().length ? 'Source' : 'Source and reading' }}</div>
   @if (selectedKey() && !choice()) {
@@ -30,4 +33,4 @@
     </button>
   }
 </mat-menu>
-@if (choice()?.readingMethod; as method) { <span class="chart-reading-method">{{ method }}</span> }
+@if (!compact() && choice()?.readingMethod; as method) { <span class="chart-reading-method">{{ method }}</span> }

@@ -11,6 +11,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
   selector: 'app-chart-source-picker', standalone: true,
   imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, MatSelectModule],
   templateUrl: './chart-source-picker.component.html', styleUrl: './chart-source-picker.component.scss',
+  host: { '[class.chart-source-picker-compact]': 'compact()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartSourcePickerComponent {
@@ -18,6 +19,7 @@ export class ChartSourcePickerComponent {
   readonly selectedKey = input<string | null>(null);
   readonly chartTitle = input.required<string>();
   readonly disabled = input(false);
+  readonly compact = input(false);
   readonly selected = output<string>();
   private readonly haptics = inject(AppHapticsService);
   private readonly trigger = viewChild(MatMenuTrigger);

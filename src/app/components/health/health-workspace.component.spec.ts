@@ -160,6 +160,7 @@ class ServiceSourceIconStubComponent {
   `,
 })
 class HealthMetricChartStubComponent {
+  @Input() readingNotice: string | null = null;
   @Input() selectedSourceKey: string | null = null;
   @Output() sourceSelected = new EventEmitter<string>();
   @Input() fillHeight = false;
@@ -2146,6 +2147,25 @@ describe('HealthWorkspaceComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it('compacts history chrome and passes heart-rate explanations into the recording details', async () => {
+    await createComponent(undefined, undefined, {}, HEALTH_METRIC_IDS.HeartRate);
+    const host = fixture.nativeElement as HTMLElement;
+    const chart = fixture.debugElement.query(By.directive(HealthMetricChartStubComponent)).componentInstance as HealthMetricChartStubComponent;
+    expect(chart.readingNotice).toBe(component.heartRateReadingNotice());
+    expect(chart.readingNotice).toContain('Readings recorded during the day');
+    expect(host.querySelector('.health-explorer-heading')).toBeNull();
+    expect(host.querySelector('.health-explorer')?.getAttribute('aria-label')).toBe('Measurement history');
+    expect(host.querySelector('.health-detail > .health-notice')?.textContent).not.toContain('Readings recorded during the day');
+    const shortcut = host.querySelector<HTMLButtonElement>('.health-dashboard-action')!;
+    expect(shortcut.hasAttribute('mat-icon-button')).toBe(true);
+    const openDashboard = vi.spyOn(component, 'addToDashboard').mockResolvedValue(undefined);
+    shortcut.click();
+    expect(openDashboard).toHaveBeenCalledOnce();
+    expect(['Add to dashboard', 'View on dashboard']).toContain(shortcut.getAttribute('aria-label'));
+    expect(host.querySelector('.health-window-navigation')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Show older Health data"]')).not.toBeNull();
+  });
+
   it('explains only the selected heart-rate measurement rather than unrelated provider summaries', async () => {
     await createComponent(metric => {
       const loaded = rangeLoad(metric);
@@ -2746,7 +2766,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(button.querySelector('.health-add-measurement-label')?.textContent).toBe('Add measurement');
     expect(button.querySelector('.health-add-measurement-label-compact')?.textContent).toBe('Add');
     const styles = readFileSync(resolve(process.cwd(), 'src/app/components/health/health-workspace.component.scss'), 'utf8');
-    const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 720px)'));
+    const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 599px)'));
     expect(mobileStyles).toMatch(/\.health-add-measurement-label\s*\{\s*display: none;/);
     expect(mobileStyles).toMatch(/\.health-add-measurement-label-compact\s*\{\s*display: inline;/);
     expect(mobileStyles).toContain('--mat-button-text-container-height: 44px;');
