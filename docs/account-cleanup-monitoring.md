@@ -15,6 +15,12 @@ Training plan/workout deletion is already covered by #655 and is not duplicated.
 Gen 1 migration remains #719; this change preserves existing runtime generations,
 memory, secrets, leases, cursors, retry policies and schedules.
 
+Runtime scope includes Gen 1/Gen 2 cleanup in `europe-west2` and the exact existing
+Gen 2 `onSubscriptionUpdated` service in `europe-west3`. The latter can complete
+disconnect/queue-release recovery when entitlement returns; its location must not
+silently exclude those observations. Unrelated west3 Functions remain outside the
+log metrics. No Function is relocated or added.
+
 The flows are intentionally different:
 
 | Flow | What the observation establishes | What it does not establish |

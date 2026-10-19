@@ -60,6 +60,20 @@ test('fixed categories, nine owned metrics, seven policies and mixed runtime bou
   const foreign = entry({ outcome: 'failed' }); foreign.resource.labels.location = 'us-central1';
   assert.equal(matches(metric('failures').filter, foreign), false);
 });
+test('subscription cleanup includes its existing west3 trigger but not unrelated west3 functions', () => {
+  const subscription = entry({ flow: 'recovery', outcome: 'partial', lane: 'queue_release' });
+  subscription.resource.labels.location = 'europe-west3';
+  subscription.resource.labels.service_name = 'onsubscriptionupdated';
+  assert.equal(matches(metric('failures').filter, subscription), true);
+  subscription.resource.labels.service_name = 'unrelated';
+  assert.equal(matches(metric('failures').filter, subscription), false);
+  subscription.resource.labels.service_name = 'onsubscriptionupdated';
+  subscription.resource.labels.location = 'us-central1';
+  assert.equal(matches(metric('failures').filter, subscription), false);
+  subscription.resource.type = 'cloud_function';
+  subscription.resource.labels.region = 'europe-west3';
+  assert.equal(matches(metric('failures').filter, subscription), false);
+});
 test('expected waits, stale/deleted no-ops, remote limitations and terminal review do not count as failures', () => {
   for (const outcome of ['acknowledged', 'completed', 'started', 'deferred', 'superseded', 'remote_unconfirmed', 'manual_review']) {
     assert.equal(selected('failures', { outcome }), false);

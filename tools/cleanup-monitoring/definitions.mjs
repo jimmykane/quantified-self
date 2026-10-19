@@ -11,7 +11,7 @@ export function buildCleanupMonitoring(project, channel) {
   validateTarget(project, channel);
   // The same lifecycle owner runs in Gen 1 disconnect/Auth endpoints and the
   // existing Gen 2 scheduler. No generic severity/raw-error matching.
-  const resources = '(resource.type="cloud_function" resource.labels.region="europe-west2" OR resource.type="cloud_run_revision" resource.labels.location="europe-west2")';
+  const resources = '(resource.type="cloud_function" resource.labels.region="europe-west2" OR resource.type="cloud_run_revision" (resource.labels.location="europe-west2" OR (resource.labels.location="europe-west3" resource.labels.service_name="onsubscriptionupdated")))';
   const base = `resource.labels.project_id="${project}" ${resources} jsonPayload.message="[CleanupHealth]" jsonPayload.telemetryVersion=1 jsonPayload.provider=${choices(PROVIDERS)} jsonPayload.flow=("account" OR "disconnect" OR "operational" OR "recovery") jsonPayload.lane=${choices(LANES)}`;
   const metrics = [];
   function metric(key, selection, description, labels = ['flow', 'provider', 'lane'], field) {
