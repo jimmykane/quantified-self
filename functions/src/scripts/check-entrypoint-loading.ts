@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 179;
+const EXPECTED_FULL_EXPORT_COUNT = 180;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -109,6 +109,7 @@ const RUNTIME_CONTRACT_TARGETS = [
   ...CONNECTION_HISTORY_TARGETS,
   ...Object.keys(GEN1_DISPATCHER_METADATA),
   'processGarminHealthBackfillTask',
+  'observeDerivedMetricsHealth',
 ];
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
@@ -183,9 +184,11 @@ const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
   timeoutSeconds: number;
   memoryMb?: number;
   schedule?: string;
+  timeZone?: string;
   maxInstances?: number;
   secrets?: readonly string[];
 }>> = {
+  observeDerivedMetricsHealth: { timeoutSeconds: 60, memoryMb: 512, schedule: '*/15 * * * *', timeZone: 'UTC', maxInstances: 1 },
   cleanupActivitySends: { timeoutSeconds: 300, memoryMb: 256, schedule: 'every 60 minutes' },
   scheduleSuuntoHealthSync: { timeoutSeconds: 300 },
   scheduleSuuntoSleepSync: { timeoutSeconds: 300 },
@@ -341,6 +344,12 @@ function probe(targetArgument: string): void {
   const mcpTarget = runtimeTarget === 'mcpApi';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
+    if (runtimeTarget === 'observeDerivedMetricsHealth' && (
+      path.includes('/node_modules/@sports-alliance/sports-lib/')
+      || path.includes('/node_modules/@google-cloud/tasks/')
+      || path.endsWith('/lib/functions/src/derived-metrics/derived-metrics.service.js')
+      || path.endsWith('/lib/functions/src/shared/cloud-tasks.js')
+    )) return true;
     if (runtimeTarget && DERIVED_SOURCE_TRIGGER_TARGETS.has(runtimeTarget) && (
       path.includes('/node_modules/@sports-alliance/sports-lib/')
       || path.includes('/node_modules/@google-cloud/tasks/')
@@ -724,7 +733,7 @@ async function check(): Promise<void> {
       `${target} instance settings changed.`);
       assert(arraysEqual(secretKeys, [...(expected.secrets || [])].sort()), `${target} secret bindings changed.`);
       assert(endpoint.scheduleTrigger?.schedule === (expected.schedule ?? 'every 30 minutes')
-        && endpoint.scheduleTrigger.timeZone === undefined
+        && endpoint.scheduleTrigger.timeZone === expected.timeZone
         && JSON.stringify(endpoint.scheduleTrigger.retryConfig) === '{}',
       `${target} schedule or retry configuration changed.`);
       assert(endpoint.callableTrigger === undefined

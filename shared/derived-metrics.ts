@@ -12,33 +12,11 @@ import type { SleepProvider } from './sleep';
 import type { HealthProvider } from './health';
 import type { ReadinessConfidence, ReadinessLabel, ReadinessHrvPersonalRange } from './readiness';
 
-export const DERIVED_METRIC_KINDS = {
-  Form: 'form',
-  RecoveryNow: 'recovery_now',
-  Acwr: 'acwr',
-  RampRate: 'ramp_rate',
-  MonotonyStrain: 'monotony_strain',
-  FormNow: 'form_now',
-  FormPlus7d: 'form_plus_7d',
-  EasyPercent: 'easy_percent',
-  HardPercent: 'hard_percent',
-  EfficiencyDelta4w: 'efficiency_delta_4w',
-  FreshnessForecast: 'freshness_forecast',
-  IntensityDistribution: 'intensity_distribution',
-  EfficiencyTrend: 'efficiency_trend',
-  TrainingSummary: 'training_summary',
-  TrainingCapacity: 'training_capacity',
-  TrainingPowerSystems: 'training_power_systems',
-  PowerCurve: 'power_curve',
-  TrainingExplanation: 'training_explanation',
-  TrainingDurability: 'training_durability',
-  TrainingBuildComparison: 'training_build_comparison',
-  TrainingReadiness: 'training_readiness',
-  BodyWeightTrend: 'body_weight_trend',
-  TrainingSwimPerformance: 'training_swim_performance',
-} as const;
-
-export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
+import { DERIVED_METRIC_KINDS, DERIVED_METRICS_ENTRY_TYPES, normalizeDerivedMetricKindsStrict,
+  type DerivedMetricKind } from './derived-metric-kinds';
+export { DERIVED_METRIC_KINDS, DERIVED_METRICS_COLLECTION_ID, DERIVED_METRICS_COORDINATOR_DOC_ID,
+  DERIVED_METRICS_ENTRY_TYPES, isDerivedMetricKind, normalizeDerivedMetricKindsStrict,
+  type DerivedMetricKind } from './derived-metric-kinds';
 
 export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.Form,
@@ -92,8 +70,6 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
-export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
-export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
 // Refresh existing snapshots after canonical sport membership changes.
 export const DERIVED_METRIC_SCHEMA_VERSION = 22;
 export const DERIVED_FORM_PAYLOAD_VERSION = 2;
@@ -101,11 +77,6 @@ export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
   DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS + DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS;
-
-export const DERIVED_METRICS_ENTRY_TYPES = {
-  Coordinator: 'coordinator',
-  Snapshot: 'snapshot',
-} as const;
 
 export type DerivedMetricsEntryType = typeof DERIVED_METRICS_ENTRY_TYPES[keyof typeof DERIVED_METRICS_ENTRY_TYPES];
 
@@ -1240,18 +1211,6 @@ export interface EnsureDerivedMetricsResponse {
   queued: boolean;
   generation: number | null;
   metricKinds: DerivedMetricKind[];
-}
-
-export function isDerivedMetricKind(value: unknown): value is DerivedMetricKind {
-  return Object.values(DERIVED_METRIC_KINDS).includes(`${value}` as DerivedMetricKind);
-}
-
-export function normalizeDerivedMetricKindsStrict(metricKinds: readonly unknown[] | null | undefined): DerivedMetricKind[] {
-  return Array.from(new Set(
-    (metricKinds || [])
-      .filter(isDerivedMetricKind)
-      .map(metricKind => `${metricKind}` as DerivedMetricKind),
-  ));
 }
 
 export function normalizeDerivedMetricKinds(metricKinds: readonly unknown[] | null | undefined): DerivedMetricKind[] {
