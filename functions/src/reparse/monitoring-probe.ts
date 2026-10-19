@@ -123,20 +123,16 @@ export async function observeReparseQueue(db: FirebaseFirestore.Firestore, profi
 
 /** Observe the scheduled tick in the first ten minutes of each hour, not wall-clock start time.
  * Interval schedulers can have a non-zero minute phase; delivery can also be late.
- * No timer/cursor or schedule change; preserve scanner success/error and its existing deadline.
+ * Run the existing five-second-bounded observation before discovery can consume the
+ * request budget. Observation failures never suppress discovery or replace its error.
+ * No additional timer/cursor or change to hourly read limits or schedule.
  */
-export async function afterReparseScan(operation: () => Promise<void>, observe: () => Promise<void>,
-  tiers: ReparseTier[], scheduleTime: string | undefined, clock = Date.now): Promise<void> {
-  const start = clock();
-  try { await operation(); }
-  finally {
-    const scheduledAt = typeof scheduleTime === 'string' ? Date.parse(scheduleTime) : NaN;
-    if (!Number.isFinite(scheduledAt)) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
-    else if (new Date(scheduledAt).getUTCMinutes() < 10) {
-      if (clock() - start >= 290_000) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
-      else {
-        try { await observe(); } catch { tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier })); }
-      }
-    }
+export async function beforeReparseScan(operation: () => Promise<void>, observe: () => Promise<void>,
+  tiers: ReparseTier[], scheduleTime: string | undefined): Promise<void> {
+  const scheduledAt = typeof scheduleTime === 'string' ? Date.parse(scheduleTime) : NaN;
+  if (!Number.isFinite(scheduledAt)) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
+  else if (new Date(scheduledAt).getUTCMinutes() < 10) {
+    try { await observe(); } catch { tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier })); }
   }
+  await operation();
 }

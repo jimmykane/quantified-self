@@ -492,6 +492,8 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(observeReparseQueue).toHaveBeenCalledExactlyOnceWith(expect.anything(), expect.objectContaining({
             collection: 'sportsLibReparseJobs', target: TARGET_SPORTS_LIB_VERSION,
         }));
+        expect(vi.mocked(observeReparseQueue).mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.checkpointGet.mock.invocationCallOrder[0]);
     });
 
     it('does not scan when the runtime checkpoint cannot be read', async () => {

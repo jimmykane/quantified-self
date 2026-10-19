@@ -1976,6 +1976,13 @@ acceptance criteria are complete; no further Functions deployment was needed. Th
 runs. Exact scope, native-metric limitations and verification are in the runbook.
 Future production changes still require separate approval; #543 owns the heavy backlog cap.
 
+A subsequent observation-health email exposed hourly checks starved behind long discovery
+passes. The local follow-up runs the existing five-second-bounded check before discovery
+in both scanners, retaining the hourly cadence, read caps, deletion/privacy fences and
+all alert thresholds. It is not yet deployed: only the two existing scanner Functions
+need separately approved deployment and natural-sample verification. No monitoring bundle,
+index, Rule, provider behavior or MCP contract changes. See the runbook's starvation follow-up.
+
 ### Suunto EnergySense parser support
 
 Sports Lib 23.0.0 retains the mapping introduced in 22.0.0 from Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance

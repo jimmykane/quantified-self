@@ -60,6 +60,13 @@ ten-minute ticks still run discovery and emit its existing outcome telemetry, bu
 no monitoring queries. There is no new schedule, timer, persisted throttle or monitoring
 record. Missing/invalid scheduled time reports unavailable observation without querying.
 
+The local starvation-fix candidate runs the existing bounded observation **before
+discovery** on that hourly tick. A busy discovery pass can no longer consume its
+budget first. Observation failure/timeout is still unavailable, never healthy zero,
+and does not prevent discovery or replace its original error. This ordering change
+is not yet deployed; see the follow-up evidence below. The sample describes existing
+queued work at the start of the tick, not the outcome of newly discovered work.
+
 Hourly observation still runs when **new discovery is disabled**, because turning
 discovery off does not cancel tasks already admitted. It queries only its root job
 collection, not user histories, activity bodies, Storage, provider APIs or Cloud Tasks:
@@ -79,8 +86,11 @@ collection, not user histories, activity bodies, Storage, provider APIs or Cloud
   event/route original-file references. A changed job is unknown; missing/deleting owners,
   deleted sources or absent original-file references are excluded. No original file is read.
 - Five-second cooperative observation deadline; late reads cannot emit healthy samples or
-  start further reads. In-flight reads are not forcibly cancelled. If discovery already used
-  290 seconds, observation is skipped rather than extending the existing 300-second budget.
+  start further reads. In-flight reads are not forcibly cancelled. The starvation-fix
+  candidate gives this bounded check its turn before discovery, removing the old
+  post-discovery 290-second skip. The existing native request deadline remains 300 seconds
+  including the observation; this does not extend discovery's execution budget or solve
+  every slow discovery pass.
 - Empty queues require **one query per collection per hour**, no progress or candidate
   validation reads: 48 query-minimum document reads per day across both scanners, down
   from 720. At most five queue/progress queries and eighty candidate-validation document
@@ -250,6 +260,11 @@ live readback at 12:28–12:32 UTC on 19 October 2026. #834's monitoring accepta
 criteria are complete. Structured attempt ACKs alone still do not establish scanner
 health; see the native timeout and unavailable-sample evidence below. This correction
 required no additional Functions, index or Rules deployment.
+
+The subsequent 13:10 UTC observation-health email exposed starvation of the hourly
+check behind long discovery passes. The local follow-up below corrects that placement;
+its two existing scanner Function updates still require separate deployment approval.
+The active monitoring policies remain unchanged and enabled.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -466,3 +481,54 @@ delivery, not the historical runtime timeout or unavailable observation as succe
 runs. Further runtime investigation/tuning is separate from monitoring activation;
 #543's heavy admission-cap scope/status remains unchanged. No scanner/worker was
 manually invoked, no source data was written/deleted and no provider call was made.
+
+## Hourly observation starvation follow-up — 19 October 2026 (local, not deployed)
+
+The owner reported a real observation-health email at 13:10 UTC, with heavy-tier
+`qs_reparse_probe_failures_v1` count two above threshold one. Bounded, uncapped read-only
+queries at 13:24 UTC confirmed unavailable normal/heavy samples at **12:09:52** and
+**13:04:54 UTC**, following discovery attempts lasting **290,865** and **293,441 ms**.
+The old wrapper deliberately skipped its post-discovery probe at 290 seconds. Both
+requests returned HTTP 200, but neither established queue observation health. A
+separate route sample at 13:06:03 UTC was healthy. The warning accurately exposed
+two missing observations; it did not mean two recordings failed to reparse.
+
+The fix moves the same hourly read-only probe before discovery in both existing
+scanners, using the renamed internal `beforeReparseScan` wrapper. It retains:
+
+- The scheduled-time gate, all ten interval phases and late-delivery behavior; no
+  process-local throttle, new timer, persisted state or additional schedule.
+- The same five-second observation deadline, candidate/progress read caps, privacy
+  fields, deletion/source validation, idle fast path and ordinary retry exclusions.
+  Previously skipped observations now consume their intended bounded read budget;
+  this restores coverage, not a claim of zero additional reads versus skipped work.
+- Discovery after observer failure/timeout, original discovery exceptions and attempt
+  telemetry. Late read completion cannot fabricate a healthy sample or start more reads.
+- Existing 512 MiB / 300-second isolated scanners, discovery settings, worker resources,
+  native retries, indexes, Rules and all monitoring filters/thresholds/identities.
+
+The ordering regression fails on the old implementation and passes on the fix.
+Focused tests cover the three observed long durations (290,865 / 293,441 / 628,888 ms),
+five-second probe timeout/recovery, late-read suppression, entrypoint ordering, invalid
+and late scheduled time, and unchanged hourly frequency. Real demo-emulator cases
+exercise both collection profiles and verify observations precede discovery without
+job writes. Existing monitoring and lifecycle suites remain part of verification.
+
+Local verification passed: fifteen focused Functions suites / **419 tests**; the
+complete isolated `mcp-data` emulator group / **20 files, 501 tests**, including all
+14 reparse cases, with none skipped; all **101** offline monitoring tests; and all
+14 emulator-coverage guards. Functions build and final TypeScript no-emit checks,
+180-endpoint / 99-isolated-target runtime contracts, deployment-source and 70-endpoint
+secret-binding checks passed. Focused non-mutating lint had zero errors and the
+74 pre-existing legacy-spec `any` warnings; diff checks passed. Review found no
+additional issue in the changed ordering, error propagation or read boundaries.
+
+Monitoring coverage is **covered** with a local runtime correction; no alert weakening
+or bundle reapplication is required. MCP/Assistant and Help review remains no impact:
+no exposed tool, schema, metric, scope, permission, consent or user action changes.
+No production change is included here. After separate approval, deploy only
+`scheduleSportsLibReparseScan` and `scheduleSportsLibRouteReparseScan`, then verify
+natural hourly samples from the corrected revisions. Existing three-hour warning
+counts can remain until old unavailable observations leave the window; do not clear
+or disable the policy, reset metrics, or force a run to manufacture recovery evidence.
+#543 remains unchanged; this fix does not tune discovery throughput or admission.

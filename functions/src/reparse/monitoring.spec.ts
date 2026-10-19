@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as logger from 'firebase-functions/logger';
-import { afterReparseScan, observeReparseQueue, reparseCandidate, REPARSE_PROBE_TIMEOUT_MS, type ReparseProbeProfile } from './monitoring-probe';
+import { beforeReparseScan, observeReparseQueue, reparseCandidate, REPARSE_PROBE_TIMEOUT_MS, type ReparseProbeProfile } from './monitoring-probe';
 import { emitReparseMonitoring, monitorReparseAttempt, monitorReparseEnqueue } from './monitoring';
 
 const now = 100_000_000;
@@ -34,18 +34,75 @@ describe('reparse observability boundary', () => {
     await expect(monitorReparseEnqueue('normal', async () => { throw error; })).rejects.toBe(error);
     expect(vi.mocked(logger.info).mock.calls.map(call => call[1]?.outcome)).toEqual(['queued', 'deduplicated', 'failed']);
   });
-  it('keeps scanner results even when observation fails and avoids probing near the deadline', async () => {
-    const error = new Error('original'); const observe = vi.fn().mockRejectedValue(new Error('probe'));
-    await expect(afterReparseScan(async () => { throw error; }, observe, ['normal', 'heavy'], '2026-10-19T09:00:00Z')).rejects.toBe(error);
-    expect(observe).toHaveBeenCalledOnce(); observe.mockClear();
-    const clock = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(290_000);
-    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T09:00:00Z', clock);
-    expect(observe).not.toHaveBeenCalled();
+  it('observes the hourly queue before discovery can consume its time budget', async () => {
+    const order: string[] = [];
+    const operation = vi.fn(async () => { order.push('discovery'); });
+    const observe = vi.fn(async () => { order.push('observation'); });
+    await beforeReparseScan(operation, observe, ['normal', 'heavy'], '2026-10-19T13:00:01Z');
+    expect(order).toEqual(['observation', 'discovery']);
+    expect(operation).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledOnce();
+  });
+  it('keeps discovery successes and the exact original error even when observation fails first', async () => {
+    const error = new Error('original'); const order: string[] = [];
+    const observe = vi.fn(async () => { order.push('observation'); throw new Error('PRIVATE probe'); });
+    const operation = vi.fn(async () => { order.push('discovery'); throw error; });
+    await expect(beforeReparseScan(operation, observe, ['normal', 'heavy'], '2026-10-19T09:00:00Z')).rejects.toBe(error);
+    expect(order).toEqual(['observation', 'discovery']);
+    expect(operation).toHaveBeenCalledOnce();
+    expect(vi.mocked(logger.info).mock.calls.map(call => call[1]?.tier)).toEqual(['normal', 'heavy']);
+    const successfulDiscovery = vi.fn().mockResolvedValue(undefined);
+    await expect(beforeReparseScan(successfulDiscovery, observe, ['route'], '2026-10-19T09:00:00Z')).resolves.toBeUndefined();
+    expect(successfulDiscovery).toHaveBeenCalledOnce();
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('PRIVATE');
+  });
+  it.each([290_865, 293_441, 628_888])('does not starve hourly observation when discovery later takes %i ms', async durationMs => {
+    vi.useFakeTimers();
+    try {
+      const order: string[] = [];
+      const observe = vi.fn(async () => { order.push('observation'); });
+      const operation = vi.fn(async () => {
+        order.push('discovery');
+        await new Promise(resolve => setTimeout(resolve, durationMs));
+      });
+      const run = beforeReparseScan(operation, observe, ['normal', 'heavy'], '2026-10-19T13:00:01Z');
+      await vi.runAllTimersAsync();
+      await run;
+      expect(order).toEqual(['observation', 'discovery']);
+      expect(observe).toHaveBeenCalledOnce();
+      expect(operation).toHaveBeenCalledOnce();
+      expect(logger.info).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it('starts discovery after the existing probe deadline and rejects late healthy samples', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolve!: (snapshot: { docs: never[]; size: number }) => void;
+      const chain = { where: vi.fn(), orderBy: vi.fn(), select: vi.fn(), limitToLast: vi.fn(),
+        get: vi.fn(() => new Promise<{ docs: never[]; size: number }>(r => { resolve = r; })) };
+      for (const key of ['where', 'orderBy', 'select', 'limitToLast'] as const) chain[key].mockReturnValue(chain);
+      const db = { collection: vi.fn(() => chain), runTransaction: vi.fn() };
+      const operation = vi.fn().mockResolvedValue(undefined);
+      const run = beforeReparseScan(operation, () => observeReparseQueue(db as never, profile),
+        ['normal', 'heavy'], '2026-10-19T13:00:01Z');
+      expect(operation).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(REPARSE_PROBE_TIMEOUT_MS - 1);
+      expect(operation).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await run;
+      expect(operation).toHaveBeenCalledOnce();
+      resolve({ docs: [], size: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.mocked(logger.info).mock.calls.map(call => call[1]?.event)).toEqual(['queue_sample_unavailable', 'queue_sample_unavailable']);
+      expect(chain.get).toHaveBeenCalledOnce();
+      expect(db.runTransaction).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
   it.each(Array.from({ length: 10 }, (_, minute) => minute))('observes once per scheduled hour at minute phase %i without changing discovery', async phase => {
     const operation = vi.fn().mockResolvedValue(undefined); const observe = vi.fn().mockResolvedValue(undefined);
     for (let minute = phase; minute < 60; minute += 10) {
-      await afterReparseScan(operation, observe, ['normal', 'heavy'], `2026-10-19T09:${String(minute).padStart(2, '0')}:01.761483Z`);
+      await beforeReparseScan(operation, observe, ['normal', 'heavy'], `2026-10-19T09:${String(minute).padStart(2, '0')}:01.761483Z`);
     }
     expect(operation).toHaveBeenCalledTimes(6);
     expect(observe).toHaveBeenCalledOnce();
@@ -53,21 +110,24 @@ describe('reparse observability boundary', () => {
   });
   it('uses scheduled time for late delivery and needs no process-local hourly state', async () => {
     const observe = vi.fn().mockResolvedValue(undefined);
-    const lateClock = () => Date.parse('2026-10-19T10:20:00Z');
-    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T09:00:00Z', lateClock);
-    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T10:00:00Z', lateClock);
-    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T10:10:00Z', lateClock);
-    expect(observe).toHaveBeenCalledTimes(2);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-19T10:20:00Z'));
+      await beforeReparseScan(async () => undefined, observe, ['route'], '2026-10-19T09:00:00Z');
+      await beforeReparseScan(async () => undefined, observe, ['route'], '2026-10-19T10:00:00Z');
+      await beforeReparseScan(async () => undefined, observe, ['route'], '2026-10-19T10:10:00Z');
+      expect(observe).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
   });
   it.each([undefined, '', 'invalid'])('reports missing/invalid scheduled time (%s) without any observation reads', async scheduleTime => {
     const observe = vi.fn(); const error = new Error('original');
-    await expect(afterReparseScan(async () => { throw error; }, observe, ['normal', 'heavy'], scheduleTime)).rejects.toBe(error);
+    await expect(beforeReparseScan(async () => { throw error; }, observe, ['normal', 'heavy'], scheduleTime)).rejects.toBe(error);
     expect(observe).not.toHaveBeenCalled();
     expect(vi.mocked(logger.info).mock.calls.map(call => call[1]?.event)).toEqual(['queue_sample_unavailable', 'queue_sample_unavailable']);
   });
   it('preserves a discovery error on ticks that skip monitoring', async () => {
     const observe = vi.fn(); const error = new Error('original');
-    await expect(afterReparseScan(async () => { throw error; }, observe, ['route'], '2026-10-19T09:10:00Z')).rejects.toBe(error);
+    await expect(beforeReparseScan(async () => { throw error; }, observe, ['route'], '2026-10-19T09:10:00Z')).rejects.toBe(error);
     expect(observe).not.toHaveBeenCalled();
     expect(logger.info).not.toHaveBeenCalled();
   });
