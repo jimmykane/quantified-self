@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check stats index allowlist and rollout safety
+        run: npm run test:stats-indexes
+
       - name: Check emulator suite coverage and safety
         run: npm run test:emulator-coverage
 
