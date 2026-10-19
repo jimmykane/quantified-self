@@ -1216,6 +1216,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('atomic add/remove tag changes in bulk');
     expect(gettingStartedSection?.content).toContain('tags are visible on public event and comparison links');
     expect(gettingStartedSection?.content).toContain('Custom** charts use their own tile date-range and activity filters');
+    expect(gettingStartedSection?.content).toContain('**Last 7 days** (7d), **30d**, and **Last month**');
+    expect(gettingStartedSection?.content).toContain('complete previous calendar month in your local time');
+    expect(gettingStartedSection?.content).toContain('Each tile saves its own selection independently from the activity table');
     expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');

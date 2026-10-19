@@ -471,6 +471,27 @@ describe('AppUserUtilities', () => {
             expect(powerCurveTile).toBeUndefined();
         });
 
+        it.each(['7d', 'lastMonth'] as const)('preserves saved %s ranges when hydrating chart and activity map settings', range => {
+            const eventFilters = { range, activityTypes: [ActivityTypes.Running] };
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            { ...AppUserUtilities.getDefaultUserDashboardChartTile(), order: 0, eventFilters },
+                            { ...AppUserUtilities.getDefaultUserDashboardMapTile(), order: 1, eventFilters },
+                        ],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.tiles).toEqual([
+                expect.objectContaining({ eventFilters }),
+                expect.objectContaining({ eventFilters }),
+            ]);
+        });
+
         it('should add event filters to existing custom chart and map tiles from legacy dashboard filters', () => {
             const user = {
                 settings: {

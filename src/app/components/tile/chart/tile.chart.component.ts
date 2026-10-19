@@ -274,12 +274,15 @@ export class TileChartComponent extends TileAbstractDirective {
     shortLabel: option.shortLabel,
     menuLabel: option.menuLabel,
   }));
-  public readonly powerCurveRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_TILE_EVENT_RANGE_OPTIONS.map(option => ({
-    value: option.range,
-    label: option.label,
-    shortLabel: option.shortLabel,
-    menuLabel: option.label,
-  }));
+  // Power Curve reads prepared snapshots, which do not include these activity-query ranges.
+  public readonly powerCurveRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_TILE_EVENT_RANGE_OPTIONS
+    .filter(option => option.range !== '7d' && option.range !== 'lastMonth')
+    .map(option => ({
+      value: option.range,
+      label: option.label,
+      shortLabel: option.shortLabel,
+      menuLabel: option.label,
+    }));
   public readonly dashboardMobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
 
   get chartInfoTooltip(): string | null {
