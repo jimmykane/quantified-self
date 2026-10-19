@@ -1981,9 +1981,13 @@ passes. The follow-up runs the existing five-second-bounded check before discove
 in both scanners, retaining the hourly cadence, read caps, deletion/privacy fences and
 all alert thresholds. With separate owner approval, only the two scanner Functions were
 deployed and independently verified ACTIVE at 13:51 UTC on 19 October 2026, preserving
-resource/schedule/queue controls and all monitoring. Natural-sample verification is pending
-for 17:06 Helsinki (route) and 17:08 (normal/heavy), allowing ingestion. No monitoring bundle,
-index, Rule, worker, provider behavior or MCP contract changes. See the runbook's starvation follow-up.
+resource/schedule/queue controls and all monitoring. Read-only verification at 17:13–17:14
+Helsinki confirmed natural route and normal/heavy samples at 17:06 and 17:08 respectively:
+zero eligible sampled pending work, zero unknowns, no truncation or stall, positive sample
+series, whole-attempt ACKs and native HTTP 200 for both invocations. The older unavailable
+observations remain in the historical three-hour warning window; no CLOSED email is claimed.
+No monitoring bundle, index, Rule, worker, provider behavior or MCP contract changes.
+See the runbook's starvation follow-up for exact revisions, bounds and limitations.
 
 ### Suunto EnergySense parser support
 

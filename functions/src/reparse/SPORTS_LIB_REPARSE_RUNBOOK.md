@@ -901,8 +901,12 @@ It reuses the two existing ten-minute scanners with hourly observations and an e
 fast path, adds no scheduler or monitoring state, and does not enable discovery or change
 reparse limits. The starvation correction performs that bounded hourly observation
 before discovery, retaining its five-second deadline. The owner-approved two-scanner
-deployment completed on 19 October 2026; next-natural-sample readback remains pending
-as recorded in the monitoring runbook.
+deployment completed on 19 October 2026. Read-only verification confirmed the next natural
+route sample at 14:06 UTC and normal/heavy samples at 14:08 UTC: known idle values,
+positive sample series, whole-attempt ACKs and native HTTP 200 for both scanner requests.
+The older unavailable observations remain historical failures; this does not establish
+discovery-throughput or future deadline guarantees. Exact bounds and evidence are recorded
+in the monitoring runbook.
 Activation and live evidence are tracked
 in #834; the heavy admission cap remains #543. Admin queue inspection below remains independent.
 

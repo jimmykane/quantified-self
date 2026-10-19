@@ -64,9 +64,9 @@ The deployed starvation fix runs the existing bounded observation **before
 discovery** on that hourly tick. A busy discovery pass can no longer consume its
 budget first. Observation failure/timeout is still unavailable, never healthy zero,
 and does not prevent discovery or replace its original error. This ordering change
-was deployed on 19 October 2026; its next natural hourly proof is pending as recorded
-below. The sample describes existing
-queued work at the start of the tick, not the outcome of newly discovered work.
+was deployed on 19 October 2026; the next natural route and normal/heavy observations
+occurred at 14:06 and 14:08 UTC respectively and were verified below. The sample describes
+existing queued work at the start of the tick, not the outcome of newly discovered work.
 
 Hourly observation still runs when **new discovery is disabled**, because turning
 discovery off does not cancel tasks already admitted. It queries only its root job
@@ -264,7 +264,7 @@ required no additional Functions, index or Rules deployment.
 
 The subsequent 13:10 UTC observation-health email exposed starvation of the hourly
 check behind long discovery passes. The follow-up below corrects that placement;
-the owner-approved two-scanner deployment is complete, with natural hourly readback pending.
+the owner-approved two-scanner deployment and next-natural-hourly verification are complete.
 The active monitoring policies remain unchanged and enabled.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
@@ -556,16 +556,61 @@ readback confirmed:
   prior complete 501-test demo-emulator group covers the identical deployed commit.
   No indexes, Rules, Hosting, workers, provider resources or other Functions were deployed.
 
-**Remaining: natural hourly verification, not another deployment.** Scheduler readback
+**At deployment, natural hourly verification remained, not another deployment.** Scheduler readback
 at 13:51 UTC gives the next route tick at 13:56 and activity tick at 13:58. The first
 eligible hourly slots are therefore **17:06 Helsinki / 14:06 UTC (route)** and
 **17:08 Helsinki / 14:08 UTC (normal/heavy)**. Read the live `scheduleTime` rather than
 assuming minute zero; the ten-minute cadence/control configuration has not changed.
 The earlier 17:00 activity estimate is superseded by this actual readback.
 
-Await natural `queue_sample` logs and positive sample series from these exact corrected
-revisions, followed by whole-attempt/native HTTP results; allow for Monitoring ingestion.
+The follow-up required natural `queue_sample` logs and positive sample series from these
+exact corrected revisions, followed by whole-attempt/native HTTP results and allowing
+for Monitoring ingestion.
 A positive queue-sample metric alone is insufficient because it also counts explicitly
 unavailable observations. Do not call capped/unknown samples healthy or erase the older
 three-hour warning counts. No manual scanner invocation, provider call, source write,
 queue replay, alert reset, test email or resource deletion was performed.
+
+### Next natural hourly proof — 19 October 2026, 17:13–17:14 Helsinki / 14:13–14:14 UTC
+
+Bounded read-only queries scoped to the two corrected revisions and the fixed
+14:00–14:13:27.989 UTC window verified the first eligible hourly observations:
+
+- Route emitted `queue_sample` at **14:06:02.899 UTC / 17:06:02.899 Helsinki** on
+  `schedulesportslibroutereparsescan-00113-wij`.
+- Normal and heavy emitted `queue_sample` at **14:08:01.153 UTC / 17:08:01.153 Helsinki**
+  on `schedulesportslibreparsescan-00162-vav`. All three samples had **zero eligible
+  sampled pending work, zero unknowns, no truncation and no stall**. These are explicit
+  idle observations, not an inference from absent logs or a claim of successful parsing.
+- Positive `qs_reparse_queue_samples_v1` points exist for each corresponding tier and
+  revision after its scheduled slot: route at 14:07:27.989 UTC and normal/heavy at
+  14:09:27.989 UTC. Each positive count is one observation. The actual sample logs
+  distinguish these healthy observations from unavailable events, which the sample
+  metric also counts.
+- Both natural invocations emitted whole-attempt `scan_attempt:acknowledged`: route at
+  14:06:02.900 UTC and activity at 14:08:40.049 UTC. Their native requests returned
+  **HTTP 200**, with request latencies **0.904 s** and **39.132 s**, respectively.
+  Positive native HTTP 200 request-count and structured ACK series confirm both;
+  neither is a late application ACK following a 504.
+- The narrow 200-entry Logging query and all four 100-series Monitoring queries were
+  uncapped. No `queue_sample_unavailable`, failed structured attempt, native non-200
+  response or probe-failure series was observed for these revisions in that fixed window.
+  This is scoped recovery evidence, not a global absence-of-failure claim.
+- Independent readback at 14:14 UTC reconfirmed all five Functions ACTIVE, the exact
+  deployed revisions and unchanged resource/secret/service controls, both enabled
+  ten-minute schedules, all three task-queue controls and persisted discovery settings.
+  All ten owned metrics, seven enabled policies/eight conditions, the dashboard and
+  existing independent Alerts email channel match the approved post-deployment snapshot;
+  all 28 chart/condition queries remain valid. Totals stay 125 metrics / 69 policies /
+  11 dashboards / four channels, with unchanged unrelated-resource hashes.
+
+The next-natural-heartbeat verification is complete; #834 remains **Closed / Done**.
+The earlier 12:09:52 and 13:04:54 UTC unavailable observations remain historical failures
+and may still contribute to the three-hour warning window. No incident reset, policy
+change or CLOSED email is claimed. Reuse the existing #655 same-channel email proof.
+No scanner/worker was manually invoked, source data written/deleted, provider called,
+queue replayed, configuration applied, Function deployed or test email sent during this
+verification. This confirms observation recovery, not discovery throughput or future
+deadline guarantees; #543 and MCP/Assistant/Help contracts are unchanged.
+All 13 focused offline reparse-monitoring tests and `git diff --check` passed for
+these documentation-only completion notes; no runtime code changed in this follow-up.
