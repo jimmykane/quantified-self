@@ -73,7 +73,7 @@ import type {
   EventChartZoneColorPiece,
 } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
-import type { LineSeriesOption } from 'echarts/charts';
+import type { LineSeriesOption, CustomSeriesOption } from 'echarts/charts';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import {
   EChartsHorizontalTouchGestureController,
@@ -83,7 +83,7 @@ import {
 import { resolveEventChartPinchRange } from '../../../../helpers/event-chart-pinch-zoom.helper';
 import { resolveEventChartPanRange } from '../../../../helpers/event-chart-pan-range.helper';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
-import { buildEventPowerDisplay,
+import { buildEventPowerDisplay, buildEventPowerWhiskers, buildEventPowerWhiskerOption,
   type EventPowerDisplayMode, type EventPowerDisplayProjection } from '../../../../helpers/event-power-display.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -406,6 +406,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         useDirtyRect: true,
       },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      onContainerResize: () => {
+        if (this.isSmoothedPower) this.scheduleCanonicalAxisScaleUpdate();
+      },
     });
   }
 
@@ -886,7 +889,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionEnabled, this.isMobile);
 
-    const seriesOptions: ChartLineSeriesOption[] = [];
+    const seriesOptions: Array<ChartLineSeriesOption | CustomSeriesOption> = [];
     const seriesVisualMaps: Record<string, unknown>[] = [];
     panel.series.forEach((series) => {
       if (this.isAltitudeGradeColorSeries(series)) {
@@ -929,7 +932,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           ...(this.areaFillColor
             ? { color: this.areaFillColor }
             : (!useZoneColors ? { color: series.color } : {})),
-          opacity: seriesFillOpacity,
+          opacity: this.isSmoothedPower ? 0 : seriesFillOpacity,
           origin: primaryAreaFillOrigin,
         },
         emphasis: {
@@ -945,9 +948,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       if (useZoneColors) {
         seriesVisualMaps.push(this.buildZoneVisualMapOption(series, seriesIndex));
       }
+      if (this.isSmoothedPower) seriesOptions.push(this.buildPowerWhiskers(series, visibleRange));
     });
 
-    if (seriesOptions[0]) {
+    if (seriesOptions[0]?.type === 'line') {
       seriesOptions[0].markLine = this.buildMarkerMarkLine(chartStyle);
     }
 
@@ -1114,6 +1118,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       timeValues: series.timeValues ?? Float64Array.from((series.points ?? []).map(point => point.time)),
       pointCount: getEventChartSeriesPointCount(series),
     }))] };
+  }
+
+  private buildPowerWhiskers(series: EventChartPanelSeries, range: EventChartRange): CustomSeriesOption {
+    const width = this.chartHost.getChart()?.getWidth?.() || this.chartDiv?.nativeElement?.clientWidth || 360;
+    const points = buildEventPowerWhiskers(series, this.getPowerProjection(series), range, Math.max(1, width - 64));
+    const color = this.showActivityNamesInTooltip ? series.color : buildEventEChartsVisualTokens(this.darkTheme, this.isMobile).textColor;
+    return buildEventPowerWhiskerOption(series.id, points, color);
   }
 
   private buildSharedYAxisPanel(
@@ -2318,6 +2329,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartHost.setOption({
       ...(scaleOptions ? { xAxis: scaleOptions } : {}),
       yAxis: yAxisUpdate,
+      ...(this.isSmoothedPower ? { series: this.panel.series.map(series => this.buildPowerWhiskers(series, visibleRange)) } : {}),
     }, {
       notMerge: false,
       lazyUpdate: true,

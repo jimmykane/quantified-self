@@ -346,7 +346,7 @@ describe('Firebase Hosting configuration', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
     // bounded background Training rebuilds during bulk imports/reparse,
-    // and display-only Raw/3s Power charts.
+    // and display-only Raw/3s Power charts with recorded peaks and dips.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

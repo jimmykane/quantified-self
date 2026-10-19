@@ -18,7 +18,7 @@ import {
 describe('help.content', () => {
   it('explains display-only Power averaging without changing statistics or benchmarks', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');
-    for (const phrase of ['**Power** charts start in **Raw**', 'including coasting zeros', 'even on a distance axis', 'recorded minimum/maximum',
+    for (const phrase of ['**Power** charts start in **Raw**', 'including coasting zeros', 'actual recorded peaks and dips visible at their original positions', 'even on a distance axis', 'recorded minimum/maximum',
       '**3s average** and **Recorded** separately', 'benchmarks continue to use the original data']) {
       expect(copy).toContain(phrase);
     }

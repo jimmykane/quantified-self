@@ -500,7 +500,12 @@ average needs three finite consecutive one-second samples according to their abs
 missing readings and timestamp interruptions do not. The same computation therefore applies on Duration, Time and Distance
 axes, including repeated distance positions. The input series is never mutated. Each comparison activity has its own buffer.
 
-The same line styling, device patterns and zone coloring apply to both views. Tooltips show canonical Sports Lib-formatted
+The 3s view keeps recorded peaks and dips as thin, silent ECharts whiskers alongside the average line. Both raw extrema
+are retained in each approximately seven-pixel visible interval, at their original x positions and separately within each
+uninterrupted recording run. Each whisker extends from the local 3s average to the actual raw value; a recorded-value cap
+remains visible when a complete average is unavailable. Zoom, container resize and fullscreen changes rebucket these
+extrema. The 3s line omits area fill so the whiskers stay visible; Raw keeps its original fill. Device patterns and zone coloring
+remain attached to the average line, including each independent comparison series. Tooltips show canonical Sports Lib-formatted
 3s and recorded values separately; the y-axis includes both raw and averaged values in the current view so zooming cannot
 clip an average whose window starts before the visible range. Original streams still own minimum/maximum, selection
 statistics, overlays, marker positions, power curves, benchmark calculations and recorded metrics. Existing shared tooltip,
