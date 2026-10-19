@@ -46,22 +46,33 @@ export function buildReparseMonitoring(project, channel) {
     'Unknown/unavailable or saturated observations without a proven positive lower bound. Never a healthy zero.');
   const filter = (key, extra = '') => `metric.type="${metricType(key)}" ${runtime} ${extra}`.trim();
   const sum = (period, fields = ['metric.label.tier']) => ({ alignmentPeriod: period, perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: fields });
+  // Native request completion is independent of an application ACK logged after
+  // Cloud Run has already returned a timeout. Do not group this metric by tier.
+  const scannerNativeErrors = `metric.type="run.googleapis.com/request_count" ${runtime} resource.labels.service_name=one_of(${SERVICES.slice(3).map(service => `"${service}"`).join(',')}) metric.labels.response_code_class="5xx"`;
   const policies = [];
   function policy(id, title, key, extra, count, period, severity, explanation) {
-    policies.push({ displayName: `QS Reparse: ${title}`, userLabels: { managed_by: OWNER, policy_id: id }, enabled: true, severity, combiner: 'OR',
+    const definition = { displayName: `QS Reparse: ${title}`, userLabels: { managed_by: OWNER, policy_id: id }, enabled: true, severity, combiner: 'OR',
       notificationChannels: channel ? [channel] : [], alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
       conditions: [{ displayName: title, conditionThreshold: { filter: filter(key, extra), aggregations: [sum(period)], comparison: 'COMPARISON_GT',
         thresholdValue: count - 1, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } }],
       documentation: { mimeType: 'text/markdown', subject: `[QS Reparse] ${title}`,
         links: [{ displayName: 'Queue Monitor', url: 'https://quantified-self.io/admin/queues' }],
-        content: `${explanation}\n\n[Runbook](${runbook})\n\nACK is not a successful rewrite. No-progress requires positive eligible work, not missing telemetry. Heavy depth alone is not critical. Never replay, reparse, purge, enable a campaign or change worker limits without separate approval. Keep private IDs, source paths and raw errors out of incidents. Initial thresholds require volume-based tuning. #543 owns the heavy admission cap.` } });
+        content: `${explanation}\n\n[Runbook](${runbook})\n\nACK is not a successful rewrite. No-progress requires positive eligible work, not missing telemetry. Heavy depth alone is not critical. Never replay, reparse, purge, enable a campaign or change worker limits without separate approval. Keep private IDs, source paths and raw errors out of incidents. Initial thresholds require volume-based tuning. #543 owns the heavy admission cap.` } };
+    policies.push(definition);
+    return definition;
   }
   policy('worker', 'Repeated normal or route failures', 'worker_attempts', 'metric.labels.outcome="failed" AND metric.labels.tier=one_of("normal","route")', 5, '1800s', 'ERROR', 'Five exceptional attempts in 30 minutes per tier. Terminal input/manual-review ACKs and runtime-behind waits are excluded.');
   policy('heavy_worker', 'Repeated serialized heavy failures', 'worker_attempts', 'metric.labels.outcome="failed" metric.labels.tier="heavy"', 3, '21600s', 'WARNING', 'Three exceptional heavy attempts in six hours; preserve single-concurrency and the existing manual-heavy workflow.');
   policy('stall', 'Normal or route batch not progressing', 'stalled_samples', 'metric.labels.tier=one_of("normal","route")', 2, '10800s', 'ERROR', 'Two positive hourly observations in three hours, with no completion for the same target/tier for at least one hour. Future scheduling and native backoff/deadlines are excluded.');
   policy('heavy_stall', 'Heavy batch not progressing', 'stalled_samples', 'metric.labels.tier="heavy"', 2, '10800s', 'WARNING', 'Two positive hourly observations in three hours, each with six hours of eligible job age and no recent same-target heavy completion. Intentional serialization/depth alone never pages.');
   policy('enqueue', 'Repeated task admission failures', 'enqueue_attempts', 'metric.labels.outcome="failed"', 3, '3600s', 'ERROR', 'Three actual enqueue exceptions per tier in one hour. Existing deterministic task names returning false do not count as exceptions.');
-  policy('scanner', 'Repeated discovery exceptions', 'scan_attempts', 'metric.labels.outcome="failed"', 3, '3600s', 'ERROR', 'Three scanner exceptions in an hour. Idle or disabled discovery is not a failure.');
+  const scannerPolicy = policy('scanner', 'Repeated discovery exceptions', 'scan_attempts', 'metric.labels.outcome="failed"', 3, '3600s', 'ERROR',
+    'Three structured scanner exceptions per tier OR three native Cloud Run 5xx responses per scanner in an hour. Native errors include HTTP 504 timeouts even if the application later logs an ACK. These are independent conditions, not counts to add as unique failures. Native requests that never reach a container (such as rejected authentication) are outside this metric; use Cloud Scheduler execution logs for those. Idle or disabled discovery and successful requests are not failures.');
+  scannerPolicy.conditions.push({ displayName: 'Native scanner HTTP errors (includes timeouts)', conditionThreshold: {
+    filter: scannerNativeErrors, aggregations: [sum('3600s', ['resource.label.service_name'])],
+    comparison: 'COMPARISON_GT', thresholdValue: 2, duration: '60s', trigger: { count: 1 },
+    evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE',
+  } });
   policy('telemetry', 'Queue observations unavailable', 'probe_failures', '', 2, '10800s', 'WARNING', 'Two unavailable or unknown hourly samples per tier in three hours. This is observation health, not failed parsing; inspect index readiness/caps before acting. No unconditional absence policy is enabled for inactive campaigns.');
   const chart = (title, query, aggregation = sum('900s'), unit = '1') => ({ title, xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: {
     timeSeriesFilter: { filter: query, aggregation }, unitOverride: unit } }], yAxis: { label: unit, scale: 'LINEAR' } } });
@@ -73,6 +84,7 @@ export function buildReparseMonitoring(project, channel) {
         chart(`${queue}: native dispatch delay p95`, native('task_attempt_delays'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: [] }, 'ms')];
     }),
     ...['worker_attempts', 'job_commits', 'enqueue_attempts', 'scan_attempts'].map(key => chart(key, filter(key), sum('900s', ['metric.label.tier', 'metric.label.outcome']))),
+    chart('Scanner native HTTP errors / timeouts (not application ACK)', scannerNativeErrors, sum('900s', ['resource.label.service_name', 'metric.label.response_code'])),
     chart('Whole invocation latency p95', filter('worker_latency'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: ['metric.label.tier'] }, 'ms'),
     ...['queue_samples', 'stalled_samples', 'probe_failures'].map(key => chart(key, filter(key), sum('3600s'))),
     ...[['sampled_pending', '1'], ['sampled_age', 'ms']].map(([key, unit]) => chart(`${key}: hourly mean of observations`, filter(key), {

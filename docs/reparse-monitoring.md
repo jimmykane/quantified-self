@@ -129,6 +129,8 @@ conservative suppression evidence, not owner-specific completion or device evide
 
 `tools/reparse-monitoring/definitions.mjs` owns dashboard **QS Sports Lib Reprocessing**,
 ten `qs_reparse_*_v1` log metrics and seven policies under `qs-reparse-monitoring-v1`.
+The local native-timeout correction keeps those counts and extends the existing
+scanner policy to two conditions (eight conditions overall); it is not yet applied.
 Native depth, HTTP-attempt and dispatch-delay charts are scoped to the three exact task
 queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 
@@ -139,7 +141,7 @@ queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 | Normal/route no progress | Two positive hourly stalled observations per tier in three hours | Error |
 | Heavy no progress | Two six-hour-stalled hourly observations in three hours | Warning |
 | Task admission failures | Three actual enqueue exceptions per tier in one hour | Error |
-| Discovery failures | Three scanner exceptions in one hour | Error |
+| Discovery failures | Three structured exceptions per tier OR three native 5xx responses per scanner in one hour; native condition pending application | Error |
 | Observation health | Two unavailable/unknown hourly observations per tier in three hours | Warning |
 
 Policies use a 60-second retest window, inactive missing-data evaluation and two-hour
@@ -153,6 +155,34 @@ Three-hour observation windows allow multiple hourly samples despite boundary/in
 drift. Event-driven worker/enqueue/discovery failure thresholds are unchanged.
 Multi-tier policy filters use exact `one_of` membership rather than mixed label AND/OR
 expressions, following [Monitoring filter syntax](https://docs.cloud.google.com/monitoring/api/v3/filters).
+
+The scanner policy's local correction adds the built-in
+`run.googleapis.com/request_count` metric with `response_code_class="5xx"`, scoped
+to the exact `schedulesportslibreparsescan` and `schedulesportslibroutereparsescan`
+services, this project and `europe-west2`. It includes HTTP 504 timeouts even when
+application code subsequently logs an ACK: Cloud Run can return 504 without terminating
+the container's work ([request timeout behavior](https://docs.cloud.google.com/run/docs/configuring/request-timeout)).
+The existing structured condition/name/identity remains intact. The new native condition
+sums across revisions and response codes **per scanner service**, not a nonexistent
+native `tier` label and not a combined activity/route total. Both conditions retain
+three observations in one hour, a 60-second retest, inactive missing-data handling and
+OR combination; their counts must not be added as distinct failures. One isolated
+native timeout does not meet the repeated-failure threshold.
+
+A matching native-error chart groups by service and response code. There are still
+ten log metrics and seven policies; the proposed dashboard/condition bundle has
+**28 queries**, versus the previously deployed 26. No metric, Function, observer,
+Firestore read/write, index, schedule, timeout, retry or worker resource is added.
+Native errors are independent of the optional hourly queue observation, so they are
+not restricted to the first ten minutes of each hour.
+
+Coverage is intentionally native **5xx request results**, not all scheduler delivery
+failures: Cloud Run's request metric excludes requests that never reach a container,
+including rejected authentication and some capacity failures
+([metric definition](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#run)).
+Use existing Cloud Scheduler execution logs to diagnose those or a missing invocation;
+do not claim idle or missing native series proves successful dispatch. No unconditional
+absence policy, broad severity matcher, new log metric or remediation is introduced.
 
 ## Verification and separately approved activation
 
@@ -215,6 +245,9 @@ Function, schedule or channel was created. Natural route-sample confirmation pas
 at 10:06 UTC and representative normal-tier processing evidence is now recorded below.
 #834 remains open for a native scanner-timeout alert-coverage gap discovered during
 the final closure check; structured attempt ACKs alone cannot establish scanner health.
+The narrow native-condition/chart correction is now implemented and tested locally.
+It still requires separately approved bundle application and production readback;
+this does not require another Functions, index or Rules deployment.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -347,10 +380,39 @@ final native-health check found a separate issue that prevents closure:
   observations. It therefore misses this proven native-timeout path. The missing
   normal/heavy 12:00 sample must not be presented as another healthy idle observation.
 
-**Remaining in #834:** cover native scanner request errors/timeouts alongside structured
-discovery failures, preserve exact scanner scope and sustained thresholds, add regressions,
-and obtain separately approved application/readback of the corrected alert condition.
+**Remaining in #834:** separately approved application/readback of the locally corrected
+native scanner condition and matching dashboard chart. Exact scanner scope, sustained
+thresholds and upgrade identity preservation are covered by the local regressions below.
 Do not change scanner deadlines, discovery settings, worker resources, queue concurrency,
 retry policy or the separate #543 admission-cap scope merely to silence this signal.
 No native fault was injected and no processing was manually started for these checks.
 #834 stays open / In progress until this gap is addressed and verified.
+
+## Local native-timeout correction and review — 19 October 2026
+
+The correction changes only `tools/reparse-monitoring/` definitions/tests and this
+operational documentation. It adds one native condition to the existing `scanner`
+policy and one chart without changing the existing structured condition or seven
+policy identities. Reapplication fixtures start from the deployed structured-only
+shape, append the native condition once, preserve all existing condition IDs and
+the dashboard identity, and preserve the nine other monitoring bundles and channel.
+
+Thirteen focused tests and all 101 tests across the ten monitoring bundles passed.
+Fixtures cover both scanner names, 500/502/503/504/599 results without application
+telemetry, successful/client-error exclusion, wrong projects/regions/metrics/resources,
+unrelated workers and lookalike service names. Threshold tests retain one/two-error
+non-alerting behavior, independent late ACKs, cross-revision sums and separation of
+the two scanner services. The filter evaluator now uses Logging's OR-before-AND
+precedence and supports exact Monitoring `one_of` membership rather than widening filters.
+
+Read-only Monitoring queries found the already-observed activity-scanner 504 in the
+existing native request metric. This is not a new metric waiting for ingestion and
+no fault was injected. Read-only validation at **12:20 UTC** accepted all **28 proposed
+chart/condition queries**, including the service-grouped native condition and the
+service/response-code chart. Both native queries returned a positive point for the
+recorded activity-scanner timeout in the fixed 11:40–12:15 UTC window; neither was
+truncated. This validates filters and aggregation against real metric data, not
+policy activation: the new condition and chart are **not yet applied**.
+No runtime code, Firestore query or queue behavior changed, so no Functions build or
+new emulator run was required for this configuration-only correction. Existing Help,
+MCP/Assistant, Training, parser and provider contracts remain unchanged. #543 is untouched.
