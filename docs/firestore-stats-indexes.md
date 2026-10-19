@@ -13,6 +13,12 @@ callers, frontend Firestore queries, backend/worker/scripts, MCP and Assistant r
 Read-only production metadata inspection found no event/activity field overrides and 22 READY composites (21 events,
 one activities), with no differences from the repository's event/activity composites. Those composites are unchanged.
 
+The PR review also inspected the deployed `mcpApi` and `queryActivityHealthRange` source artifacts using read-only
+access. Their `health/activity-query.ts` and `mcp/data.service.ts` readers are byte-identical to the audited PR sources.
+An AST scan of each artifact's application sources confirmed that server-side stats filters/orders are the Weight and
+VO2 Max query plans below; MCP stat field paths are projections. No deployment archives or private data are committed.
+The latest successful main Hosting build used `ca6232ecd`, the frontend revision included in this audit.
+
 | Reader | Server query shape / source | Stats indexing dependency |
 | --- | --- | --- |
 | Dashboard and resolver, summary tiles, Calendar, date-range activity section, Tracks | `startDate` range/order; `src/app/services/app.event.service.ts`, `src/app/components/dashboard/dashboard.component.ts`, `src/app/resolvers/dashboard.resolver.ts`, `src/app/components/summaries/summaries.component.ts`, `src/app/services/dashboard-chart-preview.service.ts`, `src/app/services/activity-calendar.service.ts`, `src/app/components/event-table/activity-range-table-section.component.ts`, `src/app/components/tracks/tracks.component.ts` | None. Stat selection, sport filtering and chart aggregation occur after retrieval. Dashboard text search also uses event `name`, outside `stats`. |
@@ -61,7 +67,8 @@ contracts, permissions, plugins and Training calculations do not change. No repa
 
 The helper **only prints JSON containing argv arrays**. It never invokes gcloud, a shell, Firebase, a network client or
 any cloud mutation. Pass the target project and database explicitly; there is no production default. Do not pipe its
-output to a shell. Keep local metadata snapshots outside Git and capture them immediately before each enforcement gate.
+output to a shell. Every phase, including preparation and rollback, requires field and composite snapshots captured
+immediately before planning. Keep local metadata snapshots outside Git.
 
 Before either phase, obtain separate approval for the exact project/database and fields. Inventory every collection
 named `events` or `activities`: a collection-group field policy applies across all owners/paths with that collection ID,
@@ -76,15 +83,21 @@ below instead of a broad `firebase deploy --only firestore` that can affect Rule
    dashboard, Power Curve eligibility, Weight/VO2 Health history, comparisons, Calendar, Tracks, tags, MCP metrics and
    rankings; compare selected fields, values, pagination and results before/after. Include supported older clients.
    The emulator does not enforce compound indexes, so emulator passes alone cannot satisfy this gate.
-2. For the separately approved production phase 1, generate the 11 child-only commands:
+2. For the separately approved production phase 1, capture metadata and generate the 11 child-only commands:
 
    ```sh
-   node tools/firestore-stats-indexes.mjs prepare PROJECT_ID '(default)' > /tmp/qs-stats-prepare.json
+   gcloud firestore indexes fields list --project=PROJECT_ID --database='(default)' --format=json > /tmp/qs-stats-fields.json
+   gcloud firestore indexes composite list --project=PROJECT_ID --database='(default)' --format=json > /tmp/qs-stats-composites.json
+   node tools/firestore-stats-indexes.mjs prepare PROJECT_ID '(default)' /tmp/qs-stats-fields.json /tmp/qs-stats-composites.json > /tmp/qs-stats-prepare.json
    ```
 
    Review each argv array and manually run only the approved commands, preserving quoted field paths literally.
    Each is `gcloud firestore indexes fields update` on one allowlisted child, with the full desired mode list. These
-   updates explicitly retain the modes already supplied by defaults. **Neither parent is disabled in phase 1.**
+   updates explicitly retain the audited modes already supplied by defaults. The preflight requires enabled parent
+   defaults and unchanged READY composites. It blocks existing additional child modes/scopes, unfinished indexes,
+   unknown stats overrides, duplicate metadata resources and collection wildcard overrides. This matters because
+   `gcloud --index` replaces the field's entire index list; extra settings must be reviewed, not silently deleted.
+   **Neither parent is disabled in phase 1.**
 3. Wait for every operation to complete and every child index to be READY. Verify each child has an explicit
    configuration (`usesAncestorConfig` false or omitted by protobuf), not just an inherited READY index. Re-run the
    production smoke/planner matrix. Preserve the result and timestamp in the deployment record outside repository docs.
@@ -100,7 +113,9 @@ below instead of a broad `firebase deploy --only firestore` that can affect Rule
    ```
 
    The helper must succeed. It requires explicit READY child modes, unchanged READY event/activity composites, matching
-   project/database, expected database defaults, no reverting configuration and no unknown explicit stats overrides.
+   project/database, expected database/parent modes, no collection wildcard, no reverting configuration and no unknown
+   explicit stats overrides. An already-disabled parent is accepted when resuming phase two; preparation does not run
+   against a disabled parent.
    Any drift is a stop condition: re-audit instead of forcing the plan. It does not certify snapshot freshness or
    historical client compatibility; those remain operator gates.
 2. After the separate phase-two approval and staging/smoke gates, review and manually run the single printed command:
@@ -121,11 +136,14 @@ cleanup duration. Manual/composite indexes remain until separately removed; this
 ## Rollback and maintenance
 
 ```sh
-node tools/firestore-stats-indexes.mjs rollback PROJECT_ID '(default)' > /tmp/qs-stats-rollback.json
+gcloud firestore indexes fields list --project=PROJECT_ID --database='(default)' --format=json > /tmp/qs-stats-fields.json
+gcloud firestore indexes composite list --project=PROJECT_ID --database='(default)' --format=json > /tmp/qs-stats-composites.json
+node tools/firestore-stats-indexes.mjs rollback PROJECT_ID '(default)' /tmp/qs-stats-fields.json /tmp/qs-stats-composites.json > /tmp/qs-stats-rollback.json
 ```
 
 After separate rollback approval, review/run the two parent-only `--clear-exemption` commands, or just the affected
-collection's command. Keep all explicit children and composites. Restoring inherited indexing may require background
+collection's command. The rollback gate also checks ancestor/default and composite drift, so clearing an exemption
+cannot silently restore a different inheritance policy. Keep all explicit children and composites. Restoring inherited indexing may require background
 rebuilds before affected queries recover; rollback is not guaranteed to be immediate. If phase one failed, stop before
 disabling any parent and fix the specific child configuration. Do not clear child exemptions while a parent is disabled.
 Reconcile the canonical configuration with any approved rollback before another index deployment.
@@ -133,7 +151,7 @@ Reconcile the canonical configuration with any approved rollback before another 
 Run `npm run test:stats-indexes`, `npm run test:workflows`, and
 `npm --prefix functions test -- src/firestore-indexes.spec.ts` after policy/configuration edits. Test the affected query
 services as well when a query shape changes. Tests cover inheritance policy, quoted field paths, all array modes,
-unknown/R-R stats, composite drift, incomplete/failed builds, inherited child configurations, cross-project snapshots,
+unknown/R-R stats, additive preparation, wildcard/parent drift, incomplete/failed builds, inherited child configurations, cross-project snapshots,
 separate parent phases, rollback and the print-only CLI. Real staging validation remains a required deployment gate.
 
 References: [map inheritance and composite independence](https://firebase.google.com/docs/firestore/query-data/index-overview#automatic_index_exemptions),

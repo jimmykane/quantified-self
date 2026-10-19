@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkReadiness, createRolloutPlan, statsIndexAllowlist, validateStatsIndexConfig } from './firestore-stats-indexes.mjs';
+import { checkPreparation, checkReadiness, createRolloutPlan, statsIndexAllowlist, validateStatsIndexConfig } from './firestore-stats-indexes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(readFileSync(resolve(root, 'firestore.indexes.json'), 'utf8'));
@@ -78,7 +78,7 @@ test('missing, duplicate and inherited child modes fail closed', () => {
 
 test('phase one emits only explicit child updates preserving all existing array modes', () => {
   const before = clone(config);
-  const plan = createRolloutPlan(config, 'prepare', project, database);
+  const plan = createRolloutPlan(config, 'prepare', project, database, snapshots());
   assert.equal(plan.commands.length, 11);
   for (const [i, command] of plan.commands.entries()) {
     assert.deepEqual(command.slice(0, 6), ['gcloud', 'firestore', 'indexes', 'fields', 'update', statsIndexAllowlist[i].fieldPath]);
@@ -104,7 +104,7 @@ test('phase two is gated and affects one parent at a time; rollback restores inh
     assert(plan.commands[0].includes(`--collection-group=${group}`));
     assert(plan.commands[0].includes('--disable-indexes'));
   }
-  const rollback = createRolloutPlan(config, 'rollback', project, database);
+  const rollback = createRolloutPlan(config, 'rollback', project, database, snapshots());
   assert.equal(rollback.commands.length, 2);
   assert(rollback.commands.every(command => command[5] === 'stats' && command.includes('--clear-exemption')));
 });
@@ -168,6 +168,46 @@ test('explicit project/database and a known review-only phase are mandatory', ()
   }
 });
 
+test('preparation requires snapshots and blocks replacement of existing extra modes/scopes', () => {
+  assert.throws(() => createRolloutPlan(config, 'prepare', project, database), /requires fresh/);
+  assert.throws(() => createRolloutPlan(config, 'rollback', project, database), /requires fresh/);
+  const baseline = snapshots();
+  baseline.fields.splice(1);
+  assert.equal(createRolloutPlan(config, 'prepare', project, database, baseline).commands.length, 11);
+  const partial = snapshots();
+  partial.fields[1].indexConfig.indexes.pop();
+  checkPreparation(config, partial.fields, partial.composites, project, database);
+  for (const mutate of [
+    state => { state.fields[1].indexConfig.indexes.push({ ...apiIndex(allModes[0], statsIndexAllowlist[0].fieldPath), queryScope: 'COLLECTION_GROUP' }); },
+    state => { state.fields[1].indexConfig.indexes[0].state = 'CREATING'; },
+    state => { state.fields[2].indexConfig.indexes.push(apiIndex(allModes[2], statsIndexAllowlist[1].fieldPath)); },
+    state => { state.fields.push({ name: `${prefix}events/fields/stats`, indexConfig: { indexes: [] } }); },
+  ]) {
+    const state = snapshots(); mutate(state);
+    assert.throws(() => createRolloutPlan(config, 'prepare', project, database, state));
+  }
+});
+
+test('collection wildcard and parent-mode drift block preparation, enforcement and rollback', () => {
+  const wildcard = clone(config);
+  wildcard.fieldOverrides.push({ collectionGroup: 'events', fieldPath: '*', indexes: [] });
+  assert.throws(() => validateStatsIndexConfig(wildcard), /wildcard/);
+  for (const mutate of [
+    state => { state.fields.push({ name: `${prefix}events/fields/*`, indexConfig: { indexes: [] } }); },
+    state => { state.fields.push({ name: `${prefix}activities/fields/stats`, indexConfig: { indexes: [apiIndex(ordered[0], 'stats')] } }); },
+    state => { state.fields.push(clone(state.fields[0])); },
+  ]) {
+    for (const phase of ['prepare', 'enforce-events', 'enforce-activities', 'rollback']) {
+      const state = snapshots(); mutate(state);
+      assert.throws(() => createRolloutPlan(config, phase, project, database, state));
+    }
+  }
+  const applied = snapshots();
+  applied.fields.push({ name: `${prefix}events/fields/stats`, indexConfig: { indexes: [] } });
+  createRolloutPlan(config, 'enforce-activities', project, database, applied);
+  createRolloutPlan(config, 'rollback', project, database, applied);
+});
+
 test('CLI reads readiness snapshots but only prints reviewable argv, even with no gcloud on PATH', t => {
   const directory = mkdtempSync(resolve(tmpdir(), 'qs-stats-index-test-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -182,6 +222,11 @@ test('CLI reads readiness snapshots but only prints reviewable argv, even with n
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).commands.length, 1);
   assert.equal(readFileSync(fields, 'utf8'), JSON.stringify(state.fields));
+  for (const phase of ['prepare', 'rollback']) {
+    const planned = run(phase, project, database, fields, composites);
+    assert.equal(planned.status, 0, planned.stderr);
+    assert(JSON.parse(planned.stdout).commands.length > 0);
+  }
   for (const args of [[], ['deploy', project, database], ['enforce-events', project, database],
     ['prepare', project, database, 'extra']]) {
     const failed = run(...args);

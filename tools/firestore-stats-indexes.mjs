@@ -41,6 +41,8 @@ function apiModes(indexes, fieldPath) {
 }
 
 export function validateStatsIndexConfig(config) {
+  requireCondition(!config.fieldOverrides.some(field => isTarget(field.collectionGroup) && field.fieldPath === '*'),
+    'Collection wildcard changes non-stats query indexes; re-audit before rollout');
   const expected = [
     ...['events', 'activities'].map(collectionGroup => ({ collectionGroup, fieldPath: 'stats', indexes: [] })),
     ...statsIndexAllowlist,
@@ -70,22 +72,40 @@ function compositeKey(index) {
   })) });
 }
 
-export function checkReadiness(config, fields, composites, project, database) {
+function checkBaseline(config, fields, composites, project, database) {
   validateStatsIndexConfig(config);
   requireCondition(Array.isArray(fields) && Array.isArray(composites), 'Expected fresh gcloud JSON arrays');
   const prefix = `projects/${project}/databases/${database}/collectionGroups/`;
   requireCondition(fields.every(field => field.name?.startsWith(prefix))
     && composites.every(index => index.name?.startsWith(prefix)), 'Snapshot project/database mismatch');
+  requireCondition(new Set(fields.map(field => field.name)).size === fields.length
+    && new Set(composites.map(index => index.name)).size === composites.length, 'Duplicate snapshot resources');
   const defaults = fields.find(field => field.name === `${prefix}__default__/fields/*`);
   requireCondition(defaults && same(apiModes(defaults.indexConfig?.indexes, '*'), modes(array))
     && defaults.indexConfig.indexes.every(index => index.state === 'READY'), 'Unexpected database defaults; re-audit inheritance');
   for (const field of fields) {
     const match = field.name.match(/\/collectionGroups\/(events|activities)\/fields\/(.+)$/);
+    requireCondition(!match || match[2] !== '*', 'Collection wildcard overrides database defaults; re-audit inheritance');
     if (!match || !isStats(match[2])) continue;
     requireCondition(field.indexConfig?.reverting !== true, 'Stats configuration is reverting; wait for completion');
     requireCondition(match[2] === 'stats' || statsIndexAllowlist.some(allowed => key(allowed) === `${match[1]}/${match[2]}`),
       `Unexpected explicit stats override: ${match[1]}/${match[2]}`);
+    if (match[2] === 'stats') {
+      const indexes = field.indexConfig?.indexes || [];
+      requireCondition(!indexes.length || (same(apiModes(indexes, 'stats'), modes(array))
+        && indexes.every(index => index.state === 'READY')), 'Unexpected stats parent modes or unfinished build; re-audit');
+    }
   }
+  // Compare every live event/activity composite, not only those that mention stats.
+  const target = config.indexes.filter(index => isTarget(index.collectionGroup)).map(compositeKey).sort();
+  const live = composites.filter(index => /\/collectionGroups\/(events|activities)\/indexes\//.test(index.name));
+  requireCondition(live.every(index => index.state === 'READY') && same(live.map(compositeKey).sort(), target),
+    'Event/activity composite index drift or unfinished build; stop and reconcile');
+  return prefix;
+}
+
+export function checkReadiness(config, fields, composites, project, database) {
+  const prefix = checkBaseline(config, fields, composites, project, database);
   for (const field of statsIndexAllowlist) {
     const matches = fields.filter(candidate => candidate.name === `${prefix}${field.collectionGroup}/fields/${field.fieldPath}`);
     const current = matches[0]?.indexConfig;
@@ -93,11 +113,25 @@ export function checkReadiness(config, fields, composites, project, database) {
       && same(apiModes(current.indexes, field.fieldPath), modes(field.indexes))
       && current.indexes.every(index => index.state === 'READY'), `Explicit child indexes not READY: ${key(field)}`);
   }
-  // Compare every live event/activity composite, not only those that mention stats.
-  const target = config.indexes.filter(index => isTarget(index.collectionGroup)).map(compositeKey).sort();
-  const live = composites.filter(index => /\/collectionGroups\/(events|activities)\/indexes\//.test(index.name));
-  requireCondition(live.every(index => index.state === 'READY') && same(live.map(compositeKey).sort(), target),
-    'Event/activity composite index drift or unfinished build; stop and reconcile');
+}
+
+export function checkPreparation(config, fields, composites, project, database) {
+  const prefix = checkBaseline(config, fields, composites, project, database);
+  for (const collectionGroup of ['events', 'activities']) {
+    const parent = fields.find(field => field.name === `${prefix}${collectionGroup}/fields/stats`);
+    requireCondition(!parent || same(apiModes(parent.indexConfig?.indexes || [], 'stats'), modes(array)),
+      'Preparation requires enabled parent defaults; use the approved repair/rollback procedure');
+  }
+  for (const field of statsIndexAllowlist) {
+    const current = fields.find(candidate => candidate.name === `${prefix}${field.collectionGroup}/fields/${field.fieldPath}`);
+    if (!current) continue;
+    const indexes = current.indexConfig?.indexes || [];
+    // --index replaces the entire list. Never silently remove an existing mode/scope.
+    requireCondition(current.indexConfig?.usesAncestorConfig !== true
+      && indexes.every(index => index.state === 'READY')
+      && apiModes(indexes, field.fieldPath).every(mode => modes(field.indexes).includes(mode)),
+    `Preparation would replace unaudited modes or unfinished indexes: ${key(field)}`);
+  }
 }
 
 export function createRolloutPlan(config, phase, project, database, snapshots) {
@@ -105,16 +139,20 @@ export function createRolloutPlan(config, phase, project, database, snapshots) {
   requireCondition(database === '(default)' || /^[a-z][a-z0-9-]{2,61}[a-z0-9]$/.test(database || ''), 'An explicit database ID is required');
   requireCondition(['prepare', 'enforce-events', 'enforce-activities', 'rollback'].includes(phase), 'Unknown rollout phase');
   validateStatsIndexConfig(config);
+  requireCondition(snapshots, 'Every phase requires fresh field and composite snapshots');
   if (phase.startsWith('enforce-')) {
-    requireCondition(snapshots, 'Enforcement requires fresh field and composite snapshots');
     checkReadiness(config, snapshots.fields, snapshots.composites, project, database);
+  } else if (phase === 'prepare') {
+    checkPreparation(config, snapshots.fields, snapshots.composites, project, database);
+  } else {
+    checkBaseline(config, snapshots.fields, snapshots.composites, project, database);
   }
   const fields = phase === 'prepare' ? statsIndexAllowlist
     : (phase === 'rollback' ? ['events', 'activities'] : [phase.slice('enforce-'.length)])
       .map(collectionGroup => ({ collectionGroup, fieldPath: 'stats', indexes: [] }));
   return {
     phase, project, database,
-    notice: 'Review-only argv. Nothing is executed. Cloud changes require separate approval. Snapshots must be captured immediately before enforcement.',
+    notice: 'Review-only argv. Nothing is executed. Cloud changes require separate approval. Snapshots must be captured immediately before each phase.',
     commands: fields.map(field => [
       'gcloud', 'firestore', 'indexes', 'fields', 'update', field.fieldPath,
       `--collection-group=${field.collectionGroup}`, `--project=${project}`, `--database=${database}`,
@@ -129,8 +167,8 @@ export function createRolloutPlan(config, phase, project, database, snapshots) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const [phase, project, database, fieldFile, compositeFile, ...extra] = process.argv.slice(2);
-    requireCondition(!extra.length && (phase?.startsWith('enforce-') ? fieldFile && compositeFile : !fieldFile && !compositeFile),
-      'Usage: node tools/firestore-stats-indexes.mjs PHASE PROJECT DATABASE [FIELDS.json COMPOSITES.json]');
+    requireCondition(!extra.length && fieldFile && compositeFile,
+      'Usage: node tools/firestore-stats-indexes.mjs PHASE PROJECT DATABASE FIELDS.json COMPOSITES.json');
     const config = JSON.parse(readFileSync(resolve(root, 'firestore.indexes.json'), 'utf8'));
     const snapshots = fieldFile && compositeFile ? {
       fields: JSON.parse(readFileSync(fieldFile, 'utf8')),
