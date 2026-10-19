@@ -46,6 +46,18 @@ const entry = (event, fields = {}, service = SERVICES[0]) => ({
 });
 const selected = (key, log) => matches(metric(key).filter, log);
 const type = filter => /metric\.type="([^"]+)"/.exec(filter)?.[1];
+const nativeMetricTypes = new Set(['depth', 'task_attempt_count', 'task_attempt_delays']
+  .map(key => `cloudtasks.googleapis.com/queue/${key}`));
+function assertDashboardMetric(filter, config) {
+  const metricType = type(filter);
+  if (nativeMetricTypes.has(metricType)) {
+    assert.match(filter, /resource\.labels\.location="europe-west2"/);
+    assert.match(filter, /resource\.labels\.queue_id="processSportsLib(?:Reparse(?:Heavy)?|RouteReparse)Task"/);
+    return true;
+  }
+  assert.ok(config.metrics.some(m => metricType === `logging.googleapis.com/user/${m.name}`));
+  return false;
+}
 
 test('exact ownership, ten metrics, seven policies, three fixed tiers and three scoped native queues', () => {
   const config = bundle(); assert.equal(config.metrics.length, 10); assert.equal(config.policies.length, 7);
@@ -58,12 +70,22 @@ test('exact ownership, ten metrics, seven policies, three fixed tiers and three 
   const native = [];
   for (const tile of config.dashboard.mosaicLayout.tiles.slice(1)) {
     const q = tile.widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter.filter;
-    if (q.includes('cloudtasks.googleapis.com')) {
-      native.push(q); assert.match(q, /resource\.labels\.location="europe-west2"/);
-      assert.match(q, /resource\.labels\.queue_id="processSportsLib(?:Reparse(?:Heavy)?|RouteReparse)Task"/);
-    } else assert.ok(config.metrics.some(m => type(q) === `logging.googleapis.com/user/${m.name}`));
+    if (assertDashboardMetric(q, config)) native.push(q);
   }
   assert.equal(native.length, 9);
+});
+test('dashboard validation rejects lookalike metric hosts and identifiers outside metric.type', () => {
+  const scope = 'resource.labels.location="europe-west2" resource.labels.queue_id="processSportsLibReparseTask"';
+  for (const metricType of [
+    'evil.cloudtasks.googleapis.com/queue/depth',
+    'cloudtasks.googleapis.com.evil.test/queue/depth',
+    'cloudtasksXgoogleapisYcom/queue/depth',
+    'cloudtasks.googleapis.com/queue/unknown',
+    'logging.googleapis.com/user/unregistered',
+  ]) assert.throws(() => assertDashboardMetric(`metric.type="${metricType}" ${scope}`, bundle()));
+  assert.throws(() => assertDashboardMetric(`note="cloudtasks.googleapis.com/queue/depth" ${scope}`, bundle()));
+  assert.throws(() => assertDashboardMetric('metric.type="cloudtasks.googleapis.com/queue/depth" resource.labels.location="us-central1" resource.labels.queue_id="processSportsLibReparseTask"', bundle()));
+  assert.throws(() => assertDashboardMetric('metric.type="cloudtasks.googleapis.com/queue/depth" resource.labels.location="europe-west2" resource.labels.queue_id="unrelatedTask"', bundle()));
 });
 test('ACK, successful commit, skips, rollout waits, deduplication and failures are distinct', () => {
   assert.equal(selected('job_commits', entry('worker_attempt', { outcome: 'acknowledged' })), false);
