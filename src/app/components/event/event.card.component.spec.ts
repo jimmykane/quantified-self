@@ -372,6 +372,18 @@ describe('EventCardComponent', () => {
         expect(component.event()).toBe(refreshedEvent);
     });
 
+    it('requests HR on full refresh even when HR charts are disabled', async () => {
+        mockUser.settings.chartSettings.showAllData = false;
+        mockUserService.getUserChartDataTypesToUse.mockReturnValue([]);
+        const refreshedEvent = createEvent('evt1', [createActivity('act1')], 'Refreshed Event');
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValue(of(refreshedEvent));
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(createEvent('evt1', [createActivity('act2')]));
+        await Promise.resolve();
+        await Promise.resolve();
+        const types = mockEventService.getEventActivitiesAndSomeStreams.mock.calls[0][2];
+        expect(types.filter((type: string) => type === DataHeartRate.type)).toHaveLength(1);
+    });
+
     it('should request stamina streams during full refresh when show all chart data is enabled', async () => {
         mockUser.settings.chartSettings.showAllData = true;
         const liveMismatchedEvent = createEvent('evt1', [createActivity('act2')], 'Live Mismatch Event');
