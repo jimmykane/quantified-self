@@ -5,6 +5,7 @@ export interface HealthSourceSelectionCandidate {
   metricId: HealthMetricId;
   nativeOnly?: boolean;
   semanticVariant?: string;
+  alternateResolutionKey?: string;
   points: readonly { value: number | string | boolean; timestampMs: number; calendarDate: string }[];
 }
 
@@ -16,6 +17,18 @@ const MEANINGFUL_ZERO_METRICS = new Set<HealthMetricId>([
   HEALTH_METRIC_IDS.BodyEnergy, HEALTH_METRIC_IDS.BodyEnergyChange,
   HEALTH_METRIC_IDS.RecoveryScore, HEALTH_METRIC_IDS.SleepScore,
 ]);
+const DAYTIME_HEART_RATE_VARIANTS = new Set(['daily_15_second', 'activity_interval_average', 'qs_daily_sample_mean', 'qs_daily_interval_mean']);
+
+/** Follow only an exact same-account daytime/daily-average pair; never replace a missing pin. */
+export function resolveHealthSourceKey(candidates: readonly HealthSourceSelectionCandidate[], preferred: string | null | undefined): string | null {
+  if (!preferred) return selectDefaultHealthSourceKey(candidates);
+  if (candidates.some(candidate => candidate.key === preferred)) return preferred;
+  const alternatives = candidates.filter(candidate => candidate.metricId === HEALTH_METRIC_IDS.HeartRate
+    && !candidate.nativeOnly && DAYTIME_HEART_RATE_VARIANTS.has(candidate.semanticVariant || '')
+    && candidate.alternateResolutionKey === preferred
+    && candidate.points.some(point => typeof point.value === 'number' && Number.isFinite(point.value) && Number.isFinite(point.timestampMs)));
+  return alternatives.length === 1 ? alternatives[0].key : preferred;
+}
 
 /** Choose from bounded evidence; never remove zeros or combine sources. */
 export function selectDefaultHealthSourceKey(candidates: readonly HealthSourceSelectionCandidate[]): string | null {
@@ -43,6 +56,6 @@ export function selectDefaultHealthSourceKey(candidates: readonly HealthSourceSe
 
 function heartRatePriority(candidate: HealthSourceSelectionCandidate): number {
   if (candidate.metricId !== HEALTH_METRIC_IDS.HeartRate) return 0;
-  return ['daily_15_second', 'activity_interval_average'].includes(candidate.semanticVariant || '') ? 0
+  return DAYTIME_HEART_RATE_VARIANTS.has(candidate.semanticVariant || '') ? 0
     : /^(qs_)?sleep_session_average_heart_rate$/.test(candidate.semanticVariant || '') ? 1 : 2;
 }

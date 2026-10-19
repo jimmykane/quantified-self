@@ -36,7 +36,7 @@
         @if (chart.compactHeartRate) {
           <div class="health-chart-reading-header">
             <div>
-              @if (comparingSources() || chart.calculatedByQS) { <span class="health-chart-reading-label">{{ chart.calculatedByQS ? 'Calculated by QS' : 'Latest reading' }}</span> }
+              @if (comparingSources() || chart.calculatedByQS) { <span class="health-chart-reading-label">{{ chart.readingCaption }}</span> }
               <strong class="health-chart-reading-value">{{ model.latestText }}</strong>
             </div>
             @if (model.recordedDateText) { <span class="health-chart-recorded-date">Recorded {{ model.recordedDateText }}</span> }

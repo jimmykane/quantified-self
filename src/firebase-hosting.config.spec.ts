@@ -375,7 +375,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
-    // Health Sources help also explains automatic retries and final failures.
+    // Health help also covers primary Heart rate choices, same-account daily averages, automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.

@@ -147,6 +147,8 @@ export interface HealthWorkspaceSeries {
   id: string;
   /** Stable provider/account identity for display selection, independent of metric semantics. */
   sourceSelectionKey?: string;
+  /** Exact same-account daytime/daily-average counterpart; presentation only, never saved. */
+  alternateResolutionKey?: string;
   metricId: HealthMetricId;
   provider: HealthProvider;
   providerLabel: string;
@@ -617,6 +619,7 @@ export function buildHealthMetricWorkspaceView(
     return {
       id: opaqueHealthSeriesId(seriesIdentity),
       sourceSelectionKey: opaqueHealthSeriesId(accountIdentity(first.provider, first.accountKey)),
+      alternateResolutionKey: heartRateAlternateResolutionKey(first),
       metricId: first.metricId,
       provider: first.provider,
       providerLabel: providerLabel(first.provider),
@@ -1845,6 +1848,27 @@ function buildMixedVo2SourceLabels(datums: readonly MetricDatum[]): Map<string, 
     }
   }
   return labels;
+}
+
+function heartRateAlternateResolutionKey(datum: MetricDatum): string | undefined {
+  if (datum.metricId !== HEALTH_METRIC_IDS.HeartRate || datum.nativeOnly
+    || datum.normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical
+    || datum.unit !== HEALTH_UNITS.BeatsPerMinute || datum.valueType !== HEALTH_VALUE_TYPES.Number) return undefined;
+  const pairs: Record<string, readonly [string, string]> = {
+    activity_interval_average: ['qs_daily_interval_mean', 'average'],
+    qs_daily_interval_mean: ['activity_interval_average', 'average'],
+    daily_15_second: ['qs_daily_sample_mean', 'average'],
+    qs_daily_sample_mean: ['daily_15_second', 'representative_sample'],
+  };
+  const pair = pairs[datum.semanticVariant];
+  if (!pair) return undefined;
+  const derived = datum.semanticVariant.startsWith('qs_');
+  if (datum.aggregation !== (datum.semanticVariant === 'daily_15_second' ? 'representative_sample' : 'average')
+    || datum.origin !== (derived ? HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived : HEALTH_VALUE_ORIGINS.Recorded)
+    || datum.recordingMethod !== (derived ? HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated : HEALTH_RECORDING_METHODS.Device)) return undefined;
+  return opaqueHealthSeriesId(metricDatumSeriesIdentity({ ...datum, semanticVariant: pair[0], aggregation: pair[1],
+    origin: derived ? HEALTH_VALUE_ORIGINS.Recorded : HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived,
+    recordingMethod: derived ? HEALTH_RECORDING_METHODS.Device : HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated }));
 }
 
 function metricDatumSeriesIdentity(datum: MetricDatum): string {

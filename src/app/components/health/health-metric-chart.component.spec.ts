@@ -216,6 +216,21 @@ describe('HealthMetricChartComponent', () => {
     expect(fixture.componentInstance.comparingSources()).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('keeps the same source across detailed and daily-average views without saving another selection', async () => {
+    const host = await render(null);
+    const changed = vi.fn(); fixture.componentInstance.sourceSelected.subscribe(changed);
+    const day = { ...series(null), id: 'day', metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'activity_interval_average', alternateResolutionKey: 'daily' };
+    const daily = { ...day, id: 'daily', semanticVariant: 'qs_daily_interval_mean', alternateResolutionKey: 'day',
+      origin: HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived, recordingMethod: HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated };
+    fixture.componentRef.setInput('selectedSourceKey', 'day'); fixture.componentRef.setInput('series', [daily]); fixture.detectChanges();
+    expect(fixture.componentInstance.chosenKey()).toBe('daily');
+    expect(host.querySelector('h3')?.textContent).toBe('Latest daily average');
+    expect(host.querySelector('.health-chart-reading-header')?.textContent).toContain('Calculated by QS');
+    expect(host.textContent).not.toContain('no readings in this period');
+    fixture.componentRef.setInput('selectedSourceKey', 'daily'); fixture.componentRef.setInput('series', [day]); fixture.detectChanges();
+    expect(fixture.componentInstance.chosenKey()).toBe('day');
+    expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
 
   it('uses flat shared rows while preserving source separation and status labels', async () => {
     const host = await render('Garmin Test');

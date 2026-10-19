@@ -1,18 +1,34 @@
 @if (measurements().length > 1 || measurements().length && !choice()) {
   <div class="chart-reading-picker">
     <span [class.cdk-visually-hidden]="compact()">Measurement</span>
-    <mat-select aria-label="Heart rate measurement" [value]="choice()?.readingKey" [disabled]="disabled()"
-      (selectionChange)="chooseMeasurement($event.value)">
-      @for (reading of measurements(); track reading.key) {
-        <mat-option [value]="reading.key">{{ reading.label }}</mat-option>
-      }
-    </mat-select>
+    <button mat-button type="button" class="chart-source-trigger chart-reading-trigger" [disabled]="disabled()"
+      #measurementTrigger="matMenuTrigger" [matMenuTriggerFor]="measurementMenu" (menuOpened)="opened()"
+      [attr.aria-label]="'Heart rate measurement: ' + (choice()?.readingLabel || 'Choose measurement')">
+      <span class="chart-source-trigger-content"><span>{{ choice()?.readingLabel || 'Choose measurement' }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
+    </button>
   </div>
 }
+<mat-menu #measurementMenu="matMenu" class="qs-menu-panel">
+  @for (reading of primaryMeasurements(); track reading.key) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="choice()?.readingKey === reading.key"
+      [disabled]="disabled()" [attr.aria-label]="reading.label" (click)="chooseMeasurement(reading.key)">
+      <mat-icon aria-hidden="true">{{ choice()?.readingKey === reading.key ? 'check' : 'radio_button_unchecked' }}</mat-icon>{{ reading.label }}</button>
+  }
+  @if (secondaryMeasurements().length) {
+    <button mat-menu-item type="button" [matMenuTriggerFor]="statisticsMenu" [disabled]="disabled()" (menuOpened)="opened()">More measurements</button>
+  }
+</mat-menu>
+<mat-menu #statisticsMenu="matMenu" class="qs-menu-panel">
+  @for (reading of secondaryMeasurements(); track reading.key) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="choice()?.readingKey === reading.key"
+      [disabled]="disabled()" [attr.aria-label]="reading.label" (click)="chooseMeasurement(reading.key)">
+      <mat-icon aria-hidden="true">{{ choice()?.readingKey === reading.key ? 'check' : 'radio_button_unchecked' }}</mat-icon>{{ reading.label }}</button>
+  }
+</mat-menu>
 <div class="chart-source-row">
 @if (canChoose()) {
   <button mat-button type="button" class="chart-source-trigger" [disabled]="disabled()"
-    [matMenuTriggerFor]="sourceMenu" (menuOpened)="opened()" [attr.aria-label]="ariaLabel()" [matTooltip]="description()">
+    #sourceTrigger="matMenuTrigger" [matMenuTriggerFor]="sourceMenu" (menuOpened)="opened()" [attr.aria-label]="ariaLabel()" [matTooltip]="description()">
     <span class="chart-source-trigger-content"><span>{{ label() }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
   </button>
 } @else {
@@ -33,4 +49,4 @@
     </button>
   }
 </mat-menu>
-@if (!compact() && choice()?.readingMethod; as method) { <span class="chart-reading-method">{{ method }}</span> }
+@if (!compact() && methodLabel(); as method) { <span class="chart-reading-method">{{ method }}</span> }

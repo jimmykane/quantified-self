@@ -14,11 +14,12 @@ export interface ChartSourceChoice {
   readingMethod?: string;
   readingDescription?: string;
   readingOrder?: number;
+  secondaryMeasurement?: boolean;
 }
 
 const HEART_RATE_READINGS: Readonly<Record<string, readonly [string, string]>> = {
-  daily_15_second: ['daytime', 'Heart rate throughout the day'],
-  activity_interval_average: ['daytime', 'Heart rate throughout the day'],
+  daily_15_second: ['daytime', 'Heart rate'],
+  activity_interval_average: ['daytime', 'Heart rate'],
   activity_interval_minimum: ['interval-minimum', 'Lowest HR per recording period'],
   activity_interval_maximum: ['interval-maximum', 'Highest HR per recording period'],
   sleep_session_average_heart_rate: ['sleep-average', 'Average sleep HR'],
@@ -28,8 +29,8 @@ const HEART_RATE_READINGS: Readonly<Record<string, readonly [string, string]>> =
   daily_minimum: ['daily-minimum', 'Daily minimum HR'],
   daily_maximum: ['daily-maximum', 'Daily maximum HR'],
   rolling_7_day_average: ['rolling-average', '7-day average HR'],
-  qs_daily_sample_mean: ['daily-average', 'Daily average HR'],
-  qs_daily_interval_mean: ['daily-average', 'Daily average HR'],
+  qs_daily_sample_mean: ['daytime', 'Heart rate'],
+  qs_daily_interval_mean: ['daytime', 'Heart rate'],
 };
 
 export function heartRateReading(series: Pick<HealthWorkspaceSeries, 'semanticVariant' | 'aggregation' | 'semanticLabel' | 'nativeOnly'> & Partial<Pick<HealthWorkspaceSeries, 'metricId'>>): { key: string; label: string } | null {
@@ -69,6 +70,10 @@ const SHORT_READINGS: Readonly<Record<string, string>> = {
   rolling_7_day_average: '7-day average',
   daily_15_second: 'Heart rate throughout the day',
   activity_interval_average: 'Heart rate throughout the day', activity_interval_minimum: 'Lowest HR per recording period', activity_interval_maximum: 'Highest HR per recording period',
+  qs_daily_sample_mean: 'Daily average HR', qs_daily_interval_mean: 'Daily average HR',
+  qs_daily_interval_low: 'Daily lowest average HR', qs_daily_interval_high: 'Daily highest average HR',
+  qs_daily_interval_minimum_low: 'Daily lowest HR', qs_daily_interval_maximum_high: 'Daily highest HR',
+  qs_daily_sample_low: 'Daily lowest HR', qs_daily_sample_high: 'Daily highest HR',
 };
 const PROVENANCE = new Set(['provider summary', 'provider calculated', 'provider reported', 'recorded', 'device', 'manual',
   'quantified self derived', 'quantified self calculated', 'calculated by qs']);
@@ -85,11 +90,14 @@ export function healthChartSourceChoice(series: Pick<HealthWorkspaceSeries, 'id'
     : ['daily_15_second', 'activity_interval_average'].includes(series.semanticVariant) ? 'Recorded by your watch' : 'Synced reading';
   return { key: series.id, sourceLabel: series.sourceLabel, detail,
     ...(measurement ? { readingKey: measurement.key, readingLabel: measurement.label, readingMethod: method,
+      secondaryMeasurement: !['daytime', 'sleep-average'].includes(measurement.key),
       readingDescription: series.semanticVariant === 'daily_15_second'
         ? 'Garmin sends heart-rate readings for individual times during the day. These are not resting HR or average sleep HR.'
         : series.semanticVariant === 'activity_interval_average'
           ? 'Suunto sends the average heart rate for each short recording period. This is not an average for the whole day, resting HR or average sleep HR.'
-          : detail,
+          : ['qs_daily_sample_mean', 'qs_daily_interval_mean'].includes(series.semanticVariant)
+            ? 'One average per recorded day, calculated by QS from available heart-rate readings. Missing readings are not filled in; this does not guarantee a complete day.'
+            : detail,
       readingOrder: ['daytime', 'sleep-average', 'sleep-minimum', 'daily-average', 'daily-minimum', 'daily-maximum', 'rolling-average', 'nap-average', 'nap-minimum'].indexOf(measurement.key) } : {}),
     label: `${series.sourceLabel} · ${detail}`,
     shortLabel: `${series.sourceLabel} · ${reading}${calculated ? ' · Calculated by QS' : ''}${series.nativeOnly ? ' · Source format' : ''}` };

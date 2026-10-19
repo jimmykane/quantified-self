@@ -8,6 +8,16 @@ describe('compact chart source attribution', () => {
     const choice = (semanticVariant: string) => healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant });
     expect(choice('daily_15_second').readingKey).toBe('daytime');
     expect(choice('activity_interval_average').readingKey).toBe('daytime');
+    for (const variant of ['daily_15_second', 'activity_interval_average', 'qs_daily_sample_mean', 'qs_daily_interval_mean']) {
+      expect(choice(variant)).toMatchObject({ readingKey: 'daytime', readingLabel: 'Heart rate', secondaryMeasurement: false });
+    }
+    expect(choice('sleep_session_average_heart_rate').secondaryMeasurement).toBe(false);
+    for (const variant of ['sleep_session_minimum_heart_rate', 'rolling_7_day_average', 'activity_interval_minimum', 'qs_daily_interval_low']) {
+      expect(choice(variant).secondaryMeasurement).toBe(true);
+    }
+    expect(choice('qs_daily_interval_mean').readingDescription).toContain('One average per recorded day');
+    expect(choice('qs_daily_interval_low').readingLabel).toBe('Daily lowest average HR');
+    expect(choice('qs_daily_interval_minimum_low').readingLabel).toBe('Daily lowest HR');
     expect(choice('daily_15_second').readingMethod).toBe('Recorded by your watch');
     expect(choice('activity_interval_average').readingMethod).toBe('Recorded by your watch');
     expect(choice('activity_interval_average').readingDescription).toContain('average heart rate for each short recording period');
