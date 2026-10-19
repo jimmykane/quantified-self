@@ -92,7 +92,8 @@ export class DashboardHealthChartComponent {
         return this.thumbnail() && this.preview() && shared?.uid === this.user().uid && this.data.isOwner(this.user().uid)
             && shared.context.window.metric === settings.metric && shared.context.window.range === settings.range
             && shared.context.window.endDate === this.window().endDate
-            && (!settings.sourceKey || shared.context.selectedKey === settings.sourceKey)
+            && (!settings.sourceKey || shared.context.selectedKey === settings.sourceKey
+                || shared.context.selected?.model.series.alternateResolutionKey === settings.sourceKey)
             ? shared.context : this.context();
     });
     readonly showingExample = computed(() => this.exampleOnly() || this.preview() && !this.previewEvidence()?.hasData);

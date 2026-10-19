@@ -8,6 +8,16 @@ describe('compact chart source attribution', () => {
     const choice = (semanticVariant: string) => healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant });
     expect(choice('daily_15_second').readingKey).toBe('daytime');
     expect(choice('activity_interval_average').readingKey).toBe('daytime');
+    for (const variant of ['daily_15_second', 'activity_interval_average', 'qs_daily_sample_mean', 'qs_daily_interval_mean']) {
+      expect(choice(variant)).toMatchObject({ readingKey: 'daytime', readingLabel: 'Heart rate', secondaryMeasurement: false });
+    }
+    expect(choice('sleep_session_average_heart_rate').secondaryMeasurement).toBe(false);
+    for (const variant of ['sleep_session_minimum_heart_rate', 'rolling_7_day_average', 'activity_interval_minimum', 'qs_daily_interval_low']) {
+      expect(choice(variant).secondaryMeasurement).toBe(true);
+    }
+    expect(choice('qs_daily_interval_mean').readingDescription).toContain('One average per recorded day');
+    expect(choice('qs_daily_interval_low').readingLabel).toBe('Daily lowest average HR');
+    expect(choice('qs_daily_interval_minimum_low').readingLabel).toBe('Daily lowest HR');
     expect(choice('daily_15_second').readingMethod).toBe('Recorded by your watch');
     expect(choice('activity_interval_average').readingMethod).toBe('Recorded by your watch');
     expect(choice('activity_interval_average').readingDescription).toContain('average heart rate for each short recording period');
@@ -33,6 +43,32 @@ describe('compact chart source attribution', () => {
     expect(choice.detail).toBe('Average sleep HRV');
     expect(choice.label).toBe(`${series.sourceLabel} · Average sleep HRV`);
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'sleep_overnight_hrv' }).shortLabel).toContain('Overnight HRV');
+  });
+  it.each(['average', 'minimum'] as const)('groups provider and calculated nap %s without losing provenance or series identity', kind => {
+    const provider = healthChartSourceChoice({ ...series, id: `provider-${kind}`, metricId: 'heart_rate',
+      aggregation: kind, semanticVariant: `nap_${kind}_heart_rate` });
+    const calculated = healthChartSourceChoice({ ...series, id: `calculated-${kind}`, metricId: 'heart_rate',
+      aggregation: kind, semanticVariant: `qs_nap_${kind}_heart_rate`, origin: 'quantified_self_derived' });
+    expect(calculated.readingKey).toBe(provider.readingKey);
+    expect(calculated.readingLabel).toBe(provider.readingLabel);
+    expect(calculated.secondaryMeasurement).toBe(true);
+    expect(calculated.key).not.toBe(provider.key);
+    expect(calculated.detail).toContain('Calculated by QS');
+    expect(provider.detail).not.toContain('Calculated by QS');
+    const native = healthChartSourceChoice({ ...series, metricId: 'heart_rate', nativeOnly: true,
+      aggregation: kind, semanticVariant: `qs_nap_${kind}_heart_rate` });
+    expect(native.readingKey).not.toBe(provider.readingKey);
+    expect(native.readingKey).not.toBe(healthChartSourceChoice({ ...series, metricId: 'heart_rate', nativeOnly: true,
+      aggregation: kind, semanticVariant: `nap_${kind}_heart_rate` }).readingKey);
+  });
+  it('does not group unknown sleep or nap variants just because they share a calculation prefix', () => {
+    for (const variant of ['sleep_future_reading', 'nap_future_reading']) {
+      const provider = healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant: variant });
+      const calculated = healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant: `qs_${variant}` });
+      expect(provider.readingKey).not.toBe(calculated.readingKey);
+      expect(provider.secondaryMeasurement).toBe(true);
+      expect(calculated.secondaryMeasurement).toBe(true);
+    }
   });
   it('keeps new Sleep vital labels compact without disguising minimums, maximums or naps', () => {
     for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Minimum sleep HR'], ['sleep_session_maximum_spo2', 'Maximum sleep SpO₂'],

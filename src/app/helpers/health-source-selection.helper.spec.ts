@@ -1,12 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { HEALTH_METRIC_CATALOG, type HealthMetricId } from '@shared/health';
-import { selectDefaultHealthSourceKey, type HealthSourceSelectionCandidate } from './health-source-selection.helper';
+import { resolveHealthSourceKey, selectDefaultHealthSourceKey, type HealthSourceSelectionCandidate } from './health-source-selection.helper';
 
 function candidate(key: string, metricId: HealthMetricId, value: number | string | boolean, date = '2026-09-14'): HealthSourceSelectionCandidate {
   return { key, metricId, points: [{ value, calendarDate: date, timestampMs: Date.parse(`${date}T12:00:00Z`) }] };
 }
 
 describe('automatic Health source selection', () => {
+  it('resolves only an exact resolution counterpart and keeps missing or ambiguous saved pins unavailable', () => {
+    const daily = { ...candidate('daily', 'heart_rate', 65), semanticVariant: 'qs_daily_interval_mean', alternateResolutionKey: 'daytime' };
+    expect(resolveHealthSourceKey([daily], 'daytime')).toBe('daily');
+    expect(resolveHealthSourceKey([daily], 'sleep')).toBe('sleep');
+    expect(resolveHealthSourceKey([daily, { ...daily, key: 'another' }], 'daytime')).toBe('daytime');
+    expect(resolveHealthSourceKey([{ ...daily, nativeOnly: true }], 'daytime')).toBe('daytime');
+    expect(resolveHealthSourceKey([{ ...daily, points: [] }], 'daytime')).toBe('daytime');
+    expect(resolveHealthSourceKey([{ ...daily, semanticVariant: 'sleep_session_minimum_heart_rate' }], 'daytime')).toBe('daytime');
+    expect(resolveHealthSourceKey([{ ...daily, points: [{ ...daily.points[0], value: NaN }] }], 'daytime')).toBe('daytime');
+    expect(resolveHealthSourceKey([daily, { ...daily, key: 'daytime' }], 'daytime')).toBe('daytime');
+    expect(resolveHealthSourceKey([daily], null)).toBe('daily');
+  });
+  it('prefers daily Heart rate averages to same-day sleep minimums or rolling statistics', () => {
+    const daily = { ...candidate('daily', 'heart_rate', 65), semanticVariant: 'qs_daily_interval_mean' };
+    expect(selectDefaultHealthSourceKey([
+      { ...candidate('minimum', 'heart_rate', 40), semanticVariant: 'sleep_session_minimum_heart_rate' },
+      { ...candidate('rolling', 'heart_rate', 90), semanticVariant: 'rolling_7_day_average' }, daily,
+    ])).toBe('daily');
+  });
   it('starts Heart rate with daytime readings ahead of a same-day rolling summary, without preferring stale data', () => {
     const rolling = { ...candidate('rolling', 'heart_rate', 90), semanticVariant: 'rolling_7_day_average' };
     const daytime = { ...candidate('daytime', 'heart_rate', 60), semanticVariant: 'activity_interval_average' };

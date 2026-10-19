@@ -63,6 +63,32 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('dense Health chart projections', () => {
+  it.each([
+    ['activity_interval_average', 'average', 'qs_daily_interval_mean', HEALTH_PROVIDERS.SuuntoApp],
+    ['daily_15_second', 'representative_sample', 'qs_daily_sample_mean', HEALTH_PROVIDERS.GarminAPI],
+  ] as const)('pairs %s with its same-account daily average', (variant, aggregation, dailyVariant, provider) => {
+    const records = ['one', 'two'].map(accountKey => sourceRecord({ id: accountKey, provider, accountKey, metrics: [valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: dailyVariant, origin: HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived,
+      recordingMethod: HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated,
+    })] }));
+    const chunks = records.map(record => ({ ...sampleChunk({ id: record.id, provider, accountKey: record.source.accountKey,
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: variant }), aggregation }));
+    const query = { startDate: '2026-08-01', endDate: '2026-08-14', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true };
+    const result = projectLoadedHealthRange(records, chunks, query, { sourceRecordsComplete: true, samplesComplete: true });
+    const all = buildHealthMetricWorkspaceView(result).series;
+    expect(all).toHaveLength(4);
+    for (const daytime of all.filter(series => series.semanticVariant === variant)) {
+      const daily = all.find(series => series.id === daytime.alternateResolutionKey)!;
+      expect(daily.semanticVariant).toBe(dailyVariant);
+      expect(daily.alternateResolutionKey).toBe(daytime.id);
+      expect(daily.sourceSelectionKey).toBe(daytime.sourceSelectionKey);
+      expect(all.filter(series => series.id === daytime.alternateResolutionKey)).toHaveLength(1);
+    }
+    const native = { ...chunks[0], normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly, canonicalValues: null, canonicalUnit: null };
+    const invalid = projectLoadedHealthRange([], [native, { ...chunks[1], semanticVariant: 'activity_interval_minimum' }], query,
+      { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(invalid).series.every(series => !series.alternateResolutionKey)).toBe(true);
+  });
   it('preserves every sample and separate account series while bounding table rows', () => {
     const result = projectLoadedHealthRange([], [], {
       startDate: '2026-08-01', endDate: '2026-08-30',

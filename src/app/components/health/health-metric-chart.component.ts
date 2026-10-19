@@ -18,7 +18,7 @@ import {
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { healthChartSourceChoice, heartRateReading } from '../../helpers/chart-source.helper';
-import { selectDefaultHealthSourceKey } from '../../helpers/health-source-selection.helper';
+import { resolveHealthSourceKey } from '../../helpers/health-source-selection.helper';
 import { ChartSourcePickerComponent } from '../shared/chart-source-picker/chart-source-picker.component';
 
 @Component({
@@ -65,8 +65,8 @@ export class HealthMetricChartComponent {
   ));
   readonly heartRateChoices = computed(() => this.models().filter(model => model.series.metricId === HEALTH_METRIC_IDS.HeartRate)
     .map(model => healthChartSourceChoice(model.series)));
-  readonly chosenKey = computed(() => this.selectedSourceKey() || selectDefaultHealthSourceKey(
-    this.models().map(model => ({ ...model.series, key: model.series.id }))));
+  readonly chosenKey = computed(() => resolveHealthSourceKey(
+    this.models().map(model => ({ ...model.series, key: model.series.id })), this.selectedSourceKey()));
   readonly soleMeasurementLabel = computed(() => new Set(this.heartRateChoices().map(choice => choice.readingKey)).size === 1
     ? this.heartRateChoices().find(choice => choice.key === this.chosenKey())?.readingLabel || null : null);
   readonly chosenReading = computed(() => this.heartRateChoices().find(choice => choice.key === this.chosenKey())?.readingKey);
@@ -88,11 +88,15 @@ export class HealthMetricChartComponent {
     const status = this.chartStatuses()[model.series.id] || null;
     const describeHeartRate = model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !model.series.nativeOnly;
     const choice = healthChartSourceChoice(model.series);
+    const dailyAverage = !model.series.nativeOnly && ['qs_daily_sample_mean', 'qs_daily_interval_mean'].includes(model.series.semanticVariant);
     return {
       model,
-      title: model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !this.comparingSources() ? 'Latest reading' : model.series.sourceLabel,
+      title: model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !this.comparingSources()
+        ? dailyAverage ? 'Latest daily average' : 'Latest reading' : model.series.sourceLabel,
       summary: describeHeartRate ? null : model.readingLabel,
       calculatedByQS: choice.readingMethod === 'Calculated by QS',
+      readingCaption: dailyAverage && this.comparingSources() ? 'Daily average · Calculated by QS'
+        : choice.readingMethod === 'Calculated by QS' ? 'Calculated by QS' : 'Latest reading',
       compactHeartRate: model.series.metricId === HEALTH_METRIC_IDS.HeartRate,
       recordingDescription: choice.readingDescription || choice.detail,
       statusOverlay: buildHealthHrvChartStatusOverlay(status),
