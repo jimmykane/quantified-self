@@ -174,6 +174,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Email delivery monitoring configuration | `npm run test:email-monitoring` | Offline Firestore-mail/extension/marketing dashboard and seven policies; no extra queue or monitoring collection; activation needs separate approval |
 | Derived-metrics monitoring configuration | `npm run test:derived-metrics-monitoring` | Offline ingress/calculation dashboard and six policies; bounded pending-generation observation; activation needs separate approval |
 | Sports Lib reprocessing monitoring | `npm run test:reparse-monitoring` | Offline normal/heavy/route dashboard and seven policies; existing scanners only; activation needs separate approval |
+| Account cleanup monitoring | `npm run test:cleanup-monitoring` | Offline cleanup/disconnect dashboard and six policies; no added Firestore reads, indexes or Function; activation needs separate approval |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -258,6 +259,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Derived-metrics queue monitoring and activation](docs/training-workspace.md#derived-metrics-cloud-monitoring-831)
 - [Sports Lib activity and route reprocessing monitoring](docs/reparse-monitoring.md)
+- [Account cleanup and disconnect recovery monitoring](docs/account-cleanup-monitoring.md)
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
 - [Activity sending workspace and recovery](docs/activity-sending-workspace.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)

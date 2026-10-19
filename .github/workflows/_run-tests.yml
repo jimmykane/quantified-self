@@ -80,6 +80,9 @@ jobs:
       - name: Test Sports Lib activity and route reprocessing monitoring configuration
         run: npm run test:reparse-monitoring
 
+      - name: Test account cleanup and disconnect recovery monitoring configuration
+        run: npm run test:cleanup-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture

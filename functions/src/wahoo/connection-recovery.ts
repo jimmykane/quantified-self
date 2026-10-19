@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { cleanupAge, cleanupObservation } from '../cleanup-monitoring';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   SERVICE_CONNECTION_STATES,
@@ -11,7 +12,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
-import { releaseQueueItemsDeferredForReconnectRequired } from '../queue/pending-disconnect-release';
+import { DeferredQueueReleaseIncompleteError, releaseQueueItemsDeferredForReconnectRequired } from '../queue/pending-disconnect-release';
 import {
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
@@ -165,6 +166,7 @@ async function clearWahooReconnectReleasePendingIfConnected(
 export async function releaseWahooReconnectQueueItemsWithRepair(
   userID: string,
   connectionStateGeneration: string,
+  previousAttemptAt?: unknown,
 ): Promise<boolean> {
   try {
     await restoreRoutesAndReleaseDeferredWork(
@@ -195,6 +197,9 @@ export async function releaseWahooReconnectQueueItemsWithRepair(
       `[ServiceConnectionMeta] Failed to release reconnect-required Wahoo queue items for user ${userID}.${retryRecorded ? ' A durable retry was scheduled.' : ''}`,
       error,
     );
+    if (retryRecorded && !(error instanceof DeferredQueueReleaseIncompleteError)) {
+      cleanupObservation('recovery', 'WahooAPI', 'retry', 'wahoo_release', cleanupAge(previousAttemptAt));
+    }
     return false;
   }
 
@@ -203,6 +208,7 @@ export async function releaseWahooReconnectQueueItemsWithRepair(
   } catch (error) {
     // The release is already complete; retaining the marker only causes an
     // idempotent repair pass, so do not make a successful OAuth callback fail.
+    cleanupObservation('recovery', 'WahooAPI', 'partial', 'wahoo_release');
     logger.error(
       `[ServiceConnectionMeta] Failed to clear reconnect-release repair marker for Wahoo user ${userID}.`,
       error,
@@ -225,6 +231,7 @@ export async function retryWahooReconnectQueueRelease(userID: string): Promise<b
   return releaseWahooReconnectQueueItemsWithRepair(
     userID,
     meta.wahooReconnectReleaseConnectionGeneration,
+    meta.wahooReconnectReleaseLastAttemptAt,
   );
 }
 

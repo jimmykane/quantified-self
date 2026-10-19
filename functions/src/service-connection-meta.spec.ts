@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
+import { DeferredQueueReleaseIncompleteError } from './queue/pending-disconnect-release';
 
 const hoisted = vi.hoisted(() => ({
   historyCreate: vi.fn(),
@@ -54,7 +56,8 @@ vi.mock('./activity-sync/route-cleanup', () => ({
   restoreActivitySyncRoutesForPendingDisconnectClear: hoisted.restoreActivitySyncRoutesForPendingDisconnectClear,
 }));
 
-vi.mock('./queue/pending-disconnect-release', () => ({
+vi.mock('./queue/pending-disconnect-release', async importOriginal => ({
+  ...await importOriginal<typeof import('./queue/pending-disconnect-release')>(),
   releaseQueueItemsDeferredForPendingDisconnect: hoisted.releaseQueueItemsDeferredForPendingDisconnect,
   releaseQueueItemsDeferredForReconnectRequired: hoisted.releaseQueueItemsDeferredForReconnectRequired,
 }));
@@ -1048,6 +1051,17 @@ describe('service-connection-meta', () => {
       wahooReconnectReleasePending: true,
       wahooReconnectReleaseAttemptCount: 1,
     }), { merge: true });
+    expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({
+      flow: 'recovery', provider: 'WahooAPI', lane: 'wahoo_release', outcome: 'retry',
+    }));
+  });
+
+  it('does not count bounded queue-release pagination as a recovery failure', async () => {
+    hoisted.releaseQueueItemsDeferredForReconnectRequired.mockRejectedValueOnce(
+      new DeferredQueueReleaseIncompleteError(ServiceNames.WahooAPI, 'reconnect_required'),
+    );
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(logger.info).not.toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({ outcome: 'retry' }));
   });
 
   it('commits the Wahoo repair claim with the exact connected generation before route or queue work', async () => {

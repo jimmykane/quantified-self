@@ -1,6 +1,7 @@
 import { CONNECTION_HISTORY_COLLECTION } from '../connection-history/model';
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
+import { cleanupObservation, cleanupProvider, observeAccountCleanup, observeRemoteCleanup } from '../cleanup-monitoring';
 import * as admin from 'firebase-admin';
 import { cleanupMarketingCampaignRecipients } from '../admin/marketing/cleanup';
 import { getServiceConfig } from '../OAuth2';
@@ -291,6 +292,7 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
     try {
         logger.info(`[Cleanup] Deauthorizing ${config.name} for user ${uid}`);
         cleanupOutcome = await config.deauthFn(uid);
+        if (cleanupOutcome) observeRemoteCleanup(config.serviceName, cleanupOutcome, 'account');
     } catch (e: unknown) {
         const error = e as Error;
         if (error.name === 'TokenNotFoundError') {
@@ -299,6 +301,7 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
             // Log error but continue to forced cleanup
             logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, error);
             deauthError = error;
+            cleanupObservation('account', cleanupProvider(config.serviceName), 'remote_unconfirmed');
         }
     }
 
@@ -307,6 +310,7 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
         // Archive any tokens that survived deauthorization (likely due to 500/502 errors)
         await archiveRemainingTokens(config.collectionName, uid, config.serviceName, deauthError);
     } catch (e: unknown) {
+        cleanupObservation('account', cleanupProvider(config.serviceName), 'partial');
         logger.error(`[Cleanup] Error archiving remaining ${config.name} tokens for ${uid}`, e as Error);
     }
 
@@ -315,12 +319,14 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
         // failed, archive that refreshed token last so it wins over stale local data.
         await archiveLifecycleTokens(uid, config.serviceName, cleanupOutcome);
     } catch (e: unknown) {
+        cleanupObservation('account', cleanupProvider(config.serviceName), 'partial');
         logger.error(`[Cleanup] Error archiving lifecycle ${config.name} tokens for ${uid}`, e as Error);
     }
 
     try {
         await deleteTokenDocumentWithSubcollections(config.collectionName, uid);
     } catch (e: unknown) {
+        cleanupObservation('account', cleanupProvider(config.serviceName), 'partial');
         logger.error(`[Cleanup] Error deleting ${config.name} tokens for ${uid}`, e as Error);
     }
 }
@@ -348,6 +354,7 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
             await db.recursiveDelete(target.ref);
             logger.info(`[Cleanup] Recursively deleted ${target.label} generated state for user ${uid}`);
         } catch (error) {
+            cleanupObservation('account', 'all', 'partial');
             logger.error(`[Cleanup] Failed to recursively delete ${target.label} generated state for user ${uid}`, error);
         }
     }
@@ -386,6 +393,7 @@ async function recursiveDeleteQueryResults(
                     continue;
                 }
                 if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
+                    cleanupObservation('account', 'all', 'partial');
                     logger.error(`[Cleanup] Preserving ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
                     continue;
                 }
@@ -397,6 +405,7 @@ async function recursiveDeleteQueryResults(
                 logger.info(`[Cleanup] Recursively deleted ${deletedDocCount} ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`);
             }
         } catch (error) {
+            cleanupObservation('account', 'all', 'partial');
             logger.error(`[Cleanup] Failed to recursively delete ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
         }
     }
@@ -710,6 +719,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
                     }
 
                     if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
+                        cleanupObservation('account', 'all', 'partial');
                         logger.error(`[Cleanup] Preserving legacy provider-keyed orphan doc ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
                         continue;
                     }
@@ -726,6 +736,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
                 }
             }
         } catch (error) {
+            cleanupObservation('account', 'all', 'partial');
             logger.error(`[Cleanup] Failed legacy provider-keyed orphan sweep for ${collectionName} while cleaning user ${uid}`, error);
         }
     }
@@ -964,7 +975,7 @@ export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
 export const cleanupUserAccounts = functions
     .region('europe-west2')
     .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
-    .auth.user().onDelete(async (user) => {
+    .auth.user().onDelete(async (user, context) => observeAccountCleanup(context?.timestamp, async () => {
     const uid = user.uid;
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
 
@@ -1139,4 +1150,4 @@ export const cleanupUserAccounts = functions
             ? routeOriginalCleanupError
             : new Error('Rejected route-original cleanup did not complete.');
     }
-});
+}));

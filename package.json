@@ -44,6 +44,7 @@
     "test:email-monitoring": "node --test tools/email-monitoring/monitoring.test.mjs",
     "test:derived-metrics-monitoring": "node --test tools/derived-metrics-monitoring/monitoring.test.mjs",
     "test:reparse-monitoring": "node --test tools/reparse-monitoring/monitoring.test.mjs",
+    "test:cleanup-monitoring": "node --test tools/cleanup-monitoring/monitoring.test.mjs",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
     "plugin:tools": "npm --prefix tools/quantified-self-plugin ci",
