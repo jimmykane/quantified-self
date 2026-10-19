@@ -46,6 +46,7 @@ import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUs
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
+import { isSuuntoImportDisconnected } from '../suunto/disconnected-import';
 import {
     deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
@@ -2396,6 +2397,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
 }
 async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
+    const suuntoQueueOwner = queueItem.provider === SLEEP_PROVIDERS.SuuntoApp ? queueItem.userID : undefined;
     const processingStartedAtMs = Date.now();
     // Lease fields read from Firestore belong to whichever invocation claimed
     // them. Never let a duplicate task reuse those values as proof of ownership
@@ -3333,6 +3335,14 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             );
         }
         if (error instanceof MissingSleepProviderTokenError) {
+            if (suuntoQueueOwner && await isSuuntoImportDisconnected(suuntoQueueOwner)) {
+                logger.info('[SleepSync][Suunto] Skipping work after completed disconnect.', {
+                    queueItemId: queueItem.id, reason: 'service_disconnected',
+                });
+                return markQueueItemSkipped(queueItem, undefined, 'service_disconnected', {
+                    skippedContext: 'SERVICE_DISCONNECTED',
+                });
+            }
             if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 && queueItem.type === 'coros_poll' && queueItem.userID) {
                 const meta = await getServiceConnectionMeta(queueItem.userID, ServiceNames.COROSAPI);

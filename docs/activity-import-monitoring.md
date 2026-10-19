@@ -115,6 +115,11 @@ committed skip. Unknown connection state still uses the existing missing-token w
 the existing skip, new-dead-letter and worker-attempt metrics already cover this classification; no metric, policy,
 threshold or dashboard change is required. See [Garmin lifecycle](garmin-integration.md#identity-and-lifecycle).
 
+Owned Suunto imports after a confirmed completed disconnect use that same committed `skipped` outcome and fixed INFO
+diagnostic, not a new dead letter. Coverage is **covered/unchanged** by the existing `suunto` provider filters, skip,
+worker-attempt and new-dead-letter signals. Unknown state or another retained account remains a failure; stale or
+deletion-denied completion emits no committed skip. See [Suunto lifecycle](suunto-integration.md#queued-work-after-disconnect).
+
 ## Initial alert policies
 
 All thresholds are initial operating values, not production volume guarantees. Tune

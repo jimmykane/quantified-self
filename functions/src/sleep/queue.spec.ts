@@ -81,6 +81,7 @@ vi.mock('firebase-admin', () => {
         where: hoisted.tokenRootWhere,
         limit: hoisted.tokenRootLimit,
         get: hoisted.tokenRootGet,
+        select: vi.fn(() => tokenRootQuery),
         doc: vi.fn((id: string) => ({ id, __mockType: 'nested-document' })),
     };
     hoisted.tokenRootWhere.mockReturnValue(tokenRootQuery);
@@ -3918,6 +3919,118 @@ describe('sleep queue', () => {
             context: 'NO_TOKEN_FOUND',
         }));
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+    });
+
+    describe('owned Suunto work after completed disconnect', () => {
+        const disconnectedMeta = {
+            connectionStateGeneration: 'cleared-generation',
+            connectionAccountsRevisionKey: 'empty-accounts-revision',
+            connectionAccounts: [],
+        };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+        const committedLogs = () => hoisted.loggerInfo.mock.calls.filter(([message, data]) =>
+            message === '[HealthSleep]' && data?.event === 'committed');
+
+        beforeEach(() => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            item = {
+                id: 'suunto-disconnected-work', dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500, queueRevision: 'original-revision',
+                processed: false, provider: 'SuuntoApp', userID: 'test-user-uid',
+                providerUserId: 'old-suunto-account', retryCount: 0, type: 'suunto_health_poll',
+                healthTrigger: 'poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => ({ ...item }) }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        it.each(['suunto_poll', 'suunto_webhook', 'suunto_health_poll'] as const)('commits an INFO skip for %s without domain writes or DLQ', async type => {
+            item.type = type;
+            if (type !== 'suunto_health_poll') item.healthTrigger = undefined;
+            if (type === 'suunto_webhook') {
+                item.payload = { samples: [{ SleepId: 123 }] };
+                item.suuntoWebhookAuthorityDigest = SUUNTO_WEBHOOK_AUTHORITY_DIGEST;
+            }
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                skippedContext: 'SERVICE_DISCONNECTED',
+            }));
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({ provider: 'SuuntoApp', outcome: 'skipped' })]]);
+            expect(hoisted.loggerWarn).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        });
+
+        it.each([null, {}, { ...disconnectedMeta, connectionState: 'connected' },
+            { ...disconnectedMeta, connectionState: 'reconnect_required' },
+            { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+        ])('retains missing-token DLQ handling without a confirmed disconnect: %j', async meta => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(meta);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+        });
+
+        it('leaves legacy unowned work unchanged', async () => {
+            item.userID = undefined;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.getServiceConnectionMeta).not.toHaveBeenCalled();
+        });
+
+        it('does not mistake a missing exact account for a completed service disconnect', async () => {
+            hoisted.tokenRootGet.mockResolvedValueOnce({ docs: [], empty: true })
+                .mockResolvedValueOnce({ docs: [{}], empty: false });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        });
+
+        it.each(['replaced', 'processed', 'removed', 'leased'])('does not write or count a %s row', async state => {
+            queueRef.get.mockResolvedValue({ exists: state !== 'removed', data: () => ({ ...item,
+                ...(state === 'replaced' ? { queueRevision: 'new-revision' }
+                    : state === 'leased' ? { processingOwner: 'another-worker', processingRevision: 'revision:original-revision', processingLeaseExpiresAt: Date.now() + 60_000 }
+                    : { processed: true }),
+            }) });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('does not write or count a skip after account deletion wins', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it.each(['metadata', 'credentials'])('propagates %s read failure instead of making a terminal decision', async stage => {
+            const error = new Error('temporary Firestore failure');
+            if (stage === 'metadata') hoisted.getServiceConnectionMeta.mockRejectedValueOnce(error);
+            else hoisted.tokenRootGet.mockResolvedValueOnce({ docs: [], empty: true }).mockRejectedValueOnce(error);
+            await expect(processSleepSyncQueueItem(item)).rejects.toBe(error);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('keeps a failed completion retryable', async () => {
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('temporary commit failure'));
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Failed);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
     });
 
     describe('COROS polls after completed disconnect', () => {

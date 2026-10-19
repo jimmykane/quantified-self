@@ -192,6 +192,17 @@ needed. Help's existing disconnect/history-retention explanation remains accurat
 contract change. Only `processSleepSyncTask` needs deployment after separate approval. Do not replay or remove old
 failed jobs for an intentionally disconnected account; reconnect creates new eligible work rather than reopening skips.
 
+## Queued Suunto work after disconnect
+
+Owned Suunto Sleep/Health work uses INFO/skipped only for a cleared generated lifecycle, revisioned empty account
+projection and no remaining credentials under that owner. An empty OAuth root is permitted; a missing exact account
+with another token present remains a missing-token failure. Legacy unowned work is unchanged. Verify the guarded
+`processed=true` / `resultStatus=skipped` / `skippedReason=service_disconnected` write, not an INFO intent or HTTP ACK.
+Stale, missing, completed, leased or deletion-denied rows emit no committed skip; datastore failures remain retryable.
+Monitoring is **covered/unchanged** by #830's existing `SuuntoApp` / `sleep_sync` outcomes, worker failures and new dead
+letters. No metrics, thresholds, dashboards, retry/cleanup policy or cloud configuration changes. See
+[Suunto rollout and scope](suunto-integration.md#queued-work-after-disconnect); do not replay old disconnected work.
+
 ## Routine Verification
 
 For Garmin Health failures, use the [safe worker diagnostics](garmin-integration.md#health-worker-diagnostics)
