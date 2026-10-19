@@ -1,7 +1,10 @@
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   HealthHrvPersonalRangeStatus,
@@ -21,7 +24,7 @@ import { ChartSourcePickerComponent } from '../shared/chart-source-picker/chart-
 @Component({
   selector: 'app-health-metric-chart',
   standalone: true,
-  imports: [CompactRowComponent, MatChipsModule, HealthMetricSeriesChartComponent, ChartSourcePickerComponent],
+  imports: [CompactRowComponent, MatChipsModule, MatButtonModule, MatIconModule, HealthMetricSeriesChartComponent, ChartSourcePickerComponent],
   templateUrl: './health-metric-chart.component.html',
   styleUrls: ['./health-metric-chart.component.scss'],
   host: { '[class.health-metric-chart-fill-height]': 'fillHeight()', '[class.health-metric-chart-has-picker]': 'heartRateChoices().length > 0' },
@@ -38,6 +41,20 @@ export class HealthMetricChartComponent {
   readonly chartStatuses = input<Readonly<Record<string, HealthHrvPersonalRangeStatus>>>({});
   readonly selectedSourceKey = input<string | null>(null);
   readonly sourceSelected = output<string>();
+  readonly expandedDetails = signal<ReadonlySet<string>>(new Set());
+  private readonly haptics = inject(AppHapticsService);
+  constructor() {
+    effect(() => { this.series(); this.expandedDetails.set(new Set()); });
+  }
+  toggleDetails(id: string): void {
+    if (!this.visibleModels().some(model => model.series.id === id)) return;
+    this.expandedDetails.update(current => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+    this.haptics.selection();
+  }
   readonly models = computed(() => buildHealthChartModels(
     this.series(),
     this.startTimeMs(),
@@ -48,6 +65,8 @@ export class HealthMetricChartComponent {
     .map(model => healthChartSourceChoice(model.series)));
   readonly chosenKey = computed(() => this.selectedSourceKey() || selectDefaultHealthSourceKey(
     this.models().map(model => ({ ...model.series, key: model.series.id }))));
+  readonly soleMeasurementLabel = computed(() => new Set(this.heartRateChoices().map(choice => choice.readingKey)).size === 1
+    ? this.heartRateChoices().find(choice => choice.key === this.chosenKey())?.readingLabel || null : null);
   readonly chosenReading = computed(() => this.heartRateChoices().find(choice => choice.key === this.chosenKey())?.readingKey);
   readonly visibleModels = computed(() => !this.heartRateChoices().length ? this.models()
     : this.models().filter(model => this.chosenReading() && heartRateReading(model.series)?.key === this.chosenReading())
@@ -57,13 +76,15 @@ export class HealthMetricChartComponent {
   }
   readonly renderedModels = computed(() => this.visibleModels().map(model => {
     const status = this.chartStatuses()[model.series.id] || null;
-    const [, ...details] = model.series.semanticLabel.split(' · ');
     const describeHeartRate = model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !model.series.nativeOnly;
     const choice = healthChartSourceChoice(model.series);
     return {
       model,
-      title: describeHeartRate ? heartRateReading(model.series)?.label || model.readingLabel : model.series.sourceLabel,
-      summary: describeHeartRate ? [model.series.sourceLabel, choice.readingMethod || details.join(' · ')].join(' · ') : model.readingLabel,
+      title: model.series.sourceLabel,
+      summary: describeHeartRate ? [`Latest ${model.latestText}`, model.recordedDateText,
+        choice.readingMethod === 'Calculated by QS' ? choice.readingMethod : null].filter(Boolean).join(' · ') : model.readingLabel,
+      compactHeartRate: model.series.metricId === HEALTH_METRIC_IDS.HeartRate,
+      recordingDescription: choice.readingDescription || choice.detail,
       statusOverlay: buildHealthHrvChartStatusOverlay(status),
       statusDescription: healthHrvChartStatusDescription(status),
     };

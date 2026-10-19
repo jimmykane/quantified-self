@@ -785,7 +785,7 @@ export class HealthWorkspaceComponent {
         messages.push('Lowest and highest interval averages are not the day’s true heart-rate extremes.');
       }
     } else if (series.some(item => ['activity_interval_average', 'daily_15_second'].includes(item.semanticVariant))) {
-      messages.push('Throughout the day charts show individual recorded intervals, not daily averages.');
+      messages.push('Readings recorded during the day. This is not a live heart-rate feed.');
     }
     return messages.join(' ') || null;
   });

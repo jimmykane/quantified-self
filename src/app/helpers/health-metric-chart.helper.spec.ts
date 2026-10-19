@@ -119,6 +119,7 @@ describe('Health metric chart helpers', () => {
       const dates = points.map(point => getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
         .format(Date.parse(`${point.calendarDate}T12:00:00Z`)));
       expect(model.twoReadingComparisonText).toBe(`Recorded change: −${formatHealthValue(HEALTH_METRIC_IDS.BodyWeight, 1, 'kilogram', false, unitSettings)} · ${dates[0]} → ${dates[1]}`);
+      expect(model.latestText).toBe(unitSettings ? '156.5 lb' : '71.0 kg');
       expect(model.plotKind).toBe('point'); expect(model.evidenceText).toContain('No trend inferred');
       expect(model.ariaLabel).toContain(model.twoReadingComparisonText!);
     }

@@ -12,6 +12,7 @@ export interface ChartSourceChoice {
   readingKey?: string;
   readingLabel?: string;
   readingMethod?: string;
+  readingDescription?: string;
   readingOrder?: number;
 }
 
@@ -74,11 +75,15 @@ export function healthChartSourceChoice(series: Pick<HealthWorkspaceSeries, 'id'
   const reading = healthChartReadingLabel(series);
   const detail = series.semanticLabel + (series.nativeOnly ? ' · Native provider scale' : '');
   const measurement = heartRateReading(series);
-  const method = series.semanticVariant === 'daily_15_second' ? 'Recorded 15-second samples'
-    : series.semanticVariant === 'activity_interval_average' ? 'Recorded interval averages'
+  const method = ['daily_15_second', 'activity_interval_average'].includes(series.semanticVariant) ? 'Recorded by your watch'
       : series.semanticVariant.startsWith('qs_') ? 'Calculated by QS' : 'Provider-reported';
   return { key: series.id, sourceLabel: series.sourceLabel, detail,
     ...(measurement ? { readingKey: measurement.key, readingLabel: measurement.label, readingMethod: method,
+      readingDescription: series.semanticVariant === 'daily_15_second'
+        ? 'Garmin sends heart-rate readings for individual times during the day. These are not resting HR or average sleep HR.'
+        : series.semanticVariant === 'activity_interval_average'
+          ? 'Suunto sends the average heart rate for each short recording period. This is not an average for the whole day, resting HR or average sleep HR.'
+          : detail,
       readingOrder: ['daytime', 'sleep-average', 'sleep-minimum', 'daily-average', 'daily-minimum', 'daily-maximum', 'rolling-average', 'nap-average', 'nap-minimum'].indexOf(measurement.key) } : {}),
     label: `${series.sourceLabel} · ${detail}`,
     shortLabel: `${series.sourceLabel} · ${reading}${series.nativeOnly ? ' · Provider scale' : ''}` };

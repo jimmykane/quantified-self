@@ -345,7 +345,7 @@ describe('Firebase Hosting configuration', () => {
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
-    // measurement-first Heart rate source choices and per-chart coverage,
+    // measurement-first Heart rate source choices, plain-language chart details and per-chart coverage,
     // and bounded background Training rebuilds during bulk imports/reparse.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');

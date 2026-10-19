@@ -71,6 +71,7 @@ export interface HealthChartSeriesModel {
   plotKind: HealthWorkspaceSeries['chartKind'];
   readingLabel: string;
   recordedDateText: string | null;
+  latestText: string;
   evidenceText: string;
   twoReadingComparisonText: string | null;
   data: HealthChartDatum[];
@@ -798,6 +799,7 @@ function buildSeriesModel(
     plotKind,
     readingLabel: healthChartReadingLabel(series),
     recordedDateText,
+    latestText,
     evidenceText,
     twoReadingComparisonText,
     data: buildChartData(displayedPoints, plotKind, gapThreshold),

@@ -51,3 +51,8 @@
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
+
+.health-chart-evidence, .health-chart-details { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); overflow-wrap:anywhere; }
+.health-chart-details p { margin-block:0.5rem; }
+
+.health-chart-details-trigger { align-self:flex-start; }

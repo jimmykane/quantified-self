@@ -951,6 +951,9 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain("Opening **View history** keeps the card's selected reading and source");
     expect(healthSection?.content).toContain('does not import a separate Suunto resting-HR value');
     expect(healthSection?.content).toContain('**Coverage belongs to each chart.**');
+    expect(healthSection?.content).toContain('**Heart-rate chart details.**');
+    expect(healthSection?.content).toContain('Suunto supplies the average HR for each short recording period');
+    expect(healthSection?.content).toContain('**Show details** explains how the source recorded it');
     expect(healthSection?.content).toContain('unweighted arithmetic average');
     expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
     expect(healthSection?.content).toContain('names the omitted source, returns an older saved 1-year selection to 90 days');

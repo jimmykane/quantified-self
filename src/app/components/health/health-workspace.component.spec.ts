@@ -2153,13 +2153,13 @@ describe('HealthWorkspaceComponent', () => {
         observations: loaded.result.observations.map(item => ({ ...item, entry: { ...item.entry, semanticVariant: 'rolling_7_day_average' } })),
       } });
     }, undefined, {}, HEALTH_METRIC_IDS.HeartRate);
-    expect(component.heartRateReadingNotice()).toContain('individual recorded intervals');
+    expect(component.heartRateReadingNotice()).toContain('Readings recorded during the day');
     expect(component.heartRateReadingNotice()).not.toContain('rolling value');
     const rolling = component.metricView().series.find(item => item.semanticVariant === 'rolling_7_day_average')!;
     expect(rolling).toBeDefined();
     component.selectDetailSource(rolling.id);
     expect(component.heartRateReadingNotice()).toContain('provider’s rolling value');
-    expect(component.heartRateReadingNotice()).not.toContain('individual recorded intervals');
+    expect(component.heartRateReadingNotice()).not.toContain('Readings recorded during the day');
     component.selectMetricSource({ uid: 'user-1', metric: HEALTH_METRIC_IDS.HeartRate, sourceKey: 'health-series-1111111111111111' });
     expect(component.heartRateReadingNotice()).toBeNull();
   });

@@ -8,6 +8,9 @@ describe('compact chart source attribution', () => {
     const choice = (semanticVariant: string) => healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant });
     expect(choice('daily_15_second').readingKey).toBe('daytime');
     expect(choice('activity_interval_average').readingKey).toBe('daytime');
+    expect(choice('daily_15_second').readingMethod).toBe('Recorded by your watch');
+    expect(choice('activity_interval_average').readingMethod).toBe('Recorded by your watch');
+    expect(choice('activity_interval_average').readingDescription).toContain('average heart rate for each short recording period');
     expect(choice('rolling_7_day_average').readingKey).not.toBe('daytime');
     expect(choice('sleep_session_average_heart_rate').readingKey).toBe('sleep-average');
     expect(choice('qs_sleep_session_average_heart_rate').readingKey).toBe('sleep-average');
