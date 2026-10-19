@@ -185,7 +185,8 @@ node tools/reparse-monitoring/cli.mjs --project=quantified-self-io \
 Read back all ten metrics, seven enabled policies, condition IDs, dashboard queries and
 the unchanged email channel; reapply serially to verify identity preservation. Await natural
 hourly scanner samples **after metric creation**, including positive normal/heavy/route
-sample series while discovery is inactive. Verify expected zero sampled work, not inferred
+sample series and genuine idle samples when no eligible work exists. Do not change existing
+discovery settings to seed telemetry. Verify expected zero sampled work, not inferred
 successful parsing. Never manually invoke a reparse just to seed telemetry. Actual production
 batch success/failure/latency and heavy thresholds require an independently approved reparse;
 record aggregate-only evidence in #834 and do not close on missing/unknown telemetry.
@@ -207,9 +208,11 @@ upgrades, provider enablement, retention and recorded-activity projections are u
 
 ## Delivery status
 
-#834 implementation is local on `develop`. No #834 index, Function, metric, dashboard,
-policy or channel has been deployed/activated by this change. Production readback, natural
-post-creation sample proof and separately approved real-batch evidence remain in #834.
+#834 monitoring was deployed and activated in `quantified-self-io` with explicit owner
+approval on 19 October 2026. All four indexes are READY, five existing Functions are ACTIVE,
+and the dashboard, ten metrics and seven enabled policies have live API readback. No new
+Function, schedule or channel was created. Natural route-sample confirmation and
+representative real-batch evidence remain in #834; activation alone does not close it.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -258,3 +261,39 @@ phase. The hourly gate now accepts the scheduled tick in minutes 0–9 rather th
 minute 0. Six focused suites / 151 tests and all nine monitoring bundles / 84 tests passed;
 the regressions cover all ten possible minute phases, fractional scheduled timestamps,
 and the actual :06 route cadence. No schedule or observation budget changed.
+
+## Approved production activation — 19 October 2026
+
+- Created only the four additive collection-scoped job indexes above and waited for READY.
+  Firestore estimated about 3,600 activity-job documents for index building, not recorded
+  activities or derived snapshots. No index or data deletion was requested.
+- Deployed the five existing Functions from `e7f787284`, then redeployed only the two
+  scanners with the offset-safe hourly gate from `85d094742`. Final revisions are ACTIVE;
+  independent before/after readback preserved runtime generation/version, memory, CPU,
+  timeout, concurrency, instance limits, service configuration, both schedules, all three
+  queue retry/rate settings and the persisted discovery configuration. Discovery was
+  already enabled and remains unchanged. No Rules, Hosting or provider deployment occurred.
+- Build, 151 focused unit tests, 84 offline monitoring tests and deployment safeguards
+  passed, including 180 endpoint / 99 isolated-target and 70 secret-binding checks.
+  The previous complete 499-test isolated emulator run covers the unchanged observation
+  queries; all ten minute phases and the production route phase have focused regressions.
+- Activated [QS Sports Lib Reprocessing](https://console.cloud.google.com/monitoring/dashboards/builder/1cac6dcc-5ec4-41ec-850d-7773d3373118?project=quantified-self-io),
+  ten owned log metrics and seven enabled policies through the existing independent Alerts
+  email channel. All 26 actual chart/condition queries validated through the Monitoring API.
+  Serial reapplication retained the dashboard and all policy/condition IDs without duplicates.
+- Aggregate inventory changed from 106 to 116 log metrics, 55 to 62 policies and nine to ten
+  dashboards. All 106 pre-existing metrics, 55 policies, nine dashboards and all four channels
+  were hash-verified unchanged. No test email, temporary incident or new channel was created;
+  reuse the existing same-channel #655 opened/closed email evidence.
+- The natural 12:00 Helsinki / 09:00 UTC activity-scanner run emitted normal/heavy idle
+  samples at 09:00:42 UTC after metric creation: zero eligible pending, zero unknown,
+  not capped and not stalled. Both queue-sample series have positive post-creation points;
+  normal and route scanner acknowledgment series also have positive points. No probe-failure
+  series or worker/committed-job outcomes were observed in the bounded activation window.
+  These idle/ACK observations do not establish successful reprocessing or real-batch latency.
+- The route's 12:06 run preceded the timing correction. Its next natural hourly observation
+  on the corrected revision is scheduled for **13:06 Helsinki / 10:06 UTC**, followed by
+  metric-ingestion delay. Keep this evidence pending until an actual route sample and positive
+  series arrive. No scanner/worker was manually invoked, no task was replayed, no new reparse
+  was enabled and no provider API was called. #834 remains open / In progress for the remaining
+  natural route and representative real-batch evidence; #543 is unchanged.

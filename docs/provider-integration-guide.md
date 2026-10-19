@@ -1940,8 +1940,9 @@ There is no new scheduler, provider call, queue state, reparse, admission cap, r
 retry or MCP contract change. Fixed-label telemetry separates accepted task
 admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
 review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
-five existing Function updates, dashboard/metrics/policies and live evidence need separate approval before
-deployment/activation; #543 remains responsible for the heavy backlog cap.
+five existing Function updates and dashboard/metrics/policies were deployed/activated with owner approval
+on 19 October 2026; exact live evidence and remaining route/batch checks are in the runbook.
+Future production changes still require separate approval; #543 owns the heavy backlog cap.
 
 ### Suunto EnergySense parser support
 
