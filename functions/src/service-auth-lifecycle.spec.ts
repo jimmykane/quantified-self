@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 
 const {
   mockMarkServiceReconnectRequired,
@@ -245,6 +246,74 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       data: () => undefined,
     });
   });
+
+  it.each(([
+    [ServiceNames.GarminAPI, 'GarminAPI'], [ServiceNames.SuuntoApp, 'SuuntoApp'],
+    [ServiceNames.COROSAPI, 'COROSAPI'], [ServiceNames.WahooAPI, 'WahooAPI'],
+  ] as const).flatMap(([service, provider]) => [
+    [service, SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect, 'disconnect', 'explicit', provider],
+    [service, SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement, 'disconnect', 'subscription', provider],
+    [service, SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion, 'account', 'scheduler', provider],
+    [service, SERVICE_AUTH_CLEANUP_REASONS.TerminalAuthFailure, 'disconnect', 'scheduler', provider],
+  ] as const))('records unconfirmed %s revocation during %s before removing the last token', async (service, reason, flow, lane, provider) => {
+    const tokenData = { serviceName: service, accessToken: 'PRIVATE_ACCESS', refreshToken: 'PRIVATE_REFRESH',
+      expiresAt: Date.now() + 120_000, userName: 'PRIVATE_PROVIDER_ID' };
+    tokenCollectionRef.get.mockResolvedValue({ empty: false, size: 1,
+      docs: [{ id: 'PRIVATE_TOKEN_ID', ref: tokenRef, data: () => tokenData }] });
+    tokenDocumentGet.mockResolvedValue({ exists: true, ref: tokenRef, data: () => tokenData });
+    mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(Error('PRIVATE_PARTNER_RESPONSE'), { statusCode: 400 }));
+    mockDeleteLocalServiceToken.mockImplementationOnce(async () => {
+      expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', {
+        telemetryVersion: 1, event: 'outcome', flow, provider,
+        lane, outcome: 'remote_unconfirmed',
+      });
+      return { tokenRootDeleted: true, remainingTokenCount: 0 };
+    });
+    const result = await cleanupServiceConnectionForUser('PRIVATE_UID', service, reason, {
+      tokenResolver: async () => tokenData as Auth2ServiceTokenInterface,
+    });
+    expect(result).toMatchObject({ partnerDeauthorizeFailed: 1, deletedTokenCount: 1, preservedTokenCount: 0 });
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledOnce();
+    const telemetry = vi.mocked(logger.info).mock.calls.filter(call => call[0] === '[CleanupHealth]');
+    expect(telemetry).toHaveLength(1);
+    expect(JSON.stringify(telemetry)).not.toContain('PRIVATE_');
+  });
+
+  it.each(['refresh_failed', 'retryable_partner_failure', 'local_cleanup_failed', 'pending', 'success'] as const)(
+    'keeps revocation telemetry independent of %s', async scenario => {
+      const tokenData = { serviceName: ServiceNames.SuuntoApp, accessToken: 'PRIVATE_ACCESS',
+        refreshToken: 'PRIVATE_REFRESH', expiresAt: Date.now() + 120_000, userName: 'PRIVATE_PROVIDER_ID' };
+      tokenCollectionRef.get.mockResolvedValue({ empty: false, size: 1,
+        docs: [{ id: 'PRIVATE_TOKEN_ID', ref: tokenRef, data: () => tokenData }] });
+      tokenDocumentGet.mockResolvedValue({ exists: true, ref: tokenRef, data: () => tokenData });
+      mockDeleteLocalServiceToken.mockResolvedValue({ tokenRootDeleted: true, remainingTokenCount: 0 });
+      if (scenario === 'retryable_partner_failure' || scenario === 'local_cleanup_failed') {
+        mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(Error('PRIVATE_PARTNER_RESPONSE'), {
+          statusCode: scenario === 'retryable_partner_failure' ? 503 : 400,
+        }));
+      }
+      if (scenario === 'local_cleanup_failed') mockDeleteLocalServiceToken.mockRejectedValueOnce(Error('PRIVATE_DB_FAILURE'));
+      const work = cleanupServiceConnectionForUser('PRIVATE_UID', ServiceNames.SuuntoApp,
+        scenario === 'retryable_partner_failure' ? SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+          : SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect, {
+          tokenResolver: async () => {
+            if (scenario === 'refresh_failed') throw Object.assign(Error('PRIVATE_REFRESH_RESPONSE'), { statusCode: 401 });
+            if (scenario === 'pending') throw Object.assign(Error('PRIVATE_PENDING'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+            return tokenData as Auth2ServiceTokenInterface;
+          },
+        });
+      if (scenario === 'local_cleanup_failed') await expect(work).rejects.toThrow('Failed to fully clean up');
+      else {
+        const result = await work;
+        expect(result.deletedTokenCount).toBe(scenario === 'pending' || scenario === 'retryable_partner_failure' ? 0 : 1);
+        if (scenario === 'retryable_partner_failure') expect(result.retryableDisconnectFailures).toHaveLength(1);
+      }
+      const telemetry = vi.mocked(logger.info).mock.calls.filter(call => call[0] === '[CleanupHealth]');
+      expect(telemetry).toHaveLength(scenario === 'pending' || scenario === 'success' ? 0 : 1);
+      if (telemetry.length) expect(telemetry[0][1]).toMatchObject({ outcome: 'remote_unconfirmed', provider: 'SuuntoApp' });
+      expect(JSON.stringify(telemetry)).not.toContain('PRIVATE_');
+    },
+  );
 
   it('returns a retry resolution when a newer token snapshot already replaced the failing one', async () => {
     const staleTokenSnapshot: any = {

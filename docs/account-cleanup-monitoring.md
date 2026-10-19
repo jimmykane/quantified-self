@@ -8,7 +8,7 @@ separately approved deployment, activation and natural readback are recorded.
 ## Ownership and meanings
 
 `tools/cleanup-monitoring/` reuses the shared `tools/monitoring/` provisioner. Owner
-`qs-cleanup-monitoring-v1` has nine log metrics, six policies and one dashboard,
+`qs-cleanup-monitoring-v1` has nine log metrics, seven policies and one dashboard,
 **QS Account Cleanup & Disconnect Recovery**. It reuses an explicitly selected,
 existing independent Alerts email channel, not the app's Trigger Email extension.
 Training plan/workout deletion is already covered by #655 and is not duplicated.
@@ -33,9 +33,22 @@ because pre-existing cleanup helpers deliberately continue after some failures.
 No exception handling or deletion behavior is changed to make monitoring greener.
 
 `remote_unconfirmed` means partner deauthorization failed or could not be established.
-Revoked/expired access may make remote operations impossible. It is a diagnostic
-limitation, not remote deletion success and not a failure-rate page requiring
-endless provider retries. Existing local cleanup/retry policy remains authoritative.
+Revoked/expired access may make remote operations impossible. A dedicated policy
+emails on the **first observation**, even when local cleanup succeeded or the last
+local token has gone. The provider connection **may** remain active; telemetry does
+not prove that it does. This is an operator-review signal, not remote deletion
+success or an instruction to retry indefinitely. Existing local cleanup/retry
+policy remains authoritative.
+
+The shared partner-revocation handler records failures before subsequent local
+deletion or metadata persistence. It covers all four providers' explicit disconnect,
+subscription enforcement, account deletion and any requested terminal-auth revocation.
+Token-resolution failures that prevent revocation are also unconfirmed; an expected
+pending-disconnect token-use skip is excluded. A source failure and its returned
+cleanup stage can both emit observations. These are not distinct accounts or separate
+email sends: Cloud Monitoring controls incident notifications through the existing
+Alerts email channel, not application mail writes. No extra scanner or token retention
+is introduced. Previously lost credentials/connections are not retroactively inventoried.
 
 ## Observation boundary and costs
 
@@ -61,8 +74,9 @@ transaction proves the intent is retained; stale/deleted replacement operations 
 superseded/deferred instead. Account deletion may legitimately leave operational
 cleanup pending until credentials disappear. It never recreates user descendants.
 Queue-release retries count only after the existing generation/deletion-guarded
-repair write succeeds. The expected bounded-page exception remains a deferral, not
-a failure. Logger failures cannot change original results, errors or retries.
+repair write succeeds. Expected bounded queue/route pages and route-restoration
+lifecycle supersession remain deferrals, not failures. Logger failures cannot change
+original results, errors or retries.
 
 Failure age is deliberately narrow:
 
@@ -97,7 +111,7 @@ health_projection, route_restore, queue_release, wahoo_release and scheduler.
 | --- | --- |
 | `outcomes` | Fixed outcome observations, with local completion and remote limitations separate |
 | `failures` | Actual failed/partial stages and guarded retries; no expected deferrals or supersession |
-| `remote_unconfirmed` | Diagnostic remote limitation, never a successful provider deletion |
+| `remote_unconfirmed` | Failed/unconfirmed partner revocation; first-observation email policy, never a successful provider deletion |
 | `manual_review` | Newly committed exhausted-disconnect transition, not repeatedly counted retained state |
 | `overdue` | Validated failure observations exceeding the age gates below |
 | `age` | Distribution of observed retry/failure age; absence of timing is unavailable |
@@ -105,7 +119,7 @@ health_projection, route_restore, queue_release, wahoo_release and scheduler.
 | `examined` | Distribution of existing page sizes; not remaining backlog |
 | `heartbeat` | Whole existing scheduler ACK/error; caught lane failures remain separate |
 
-Six policies use the existing email channel, OPENED/CLOSED notifications and
+Seven policies use the existing email channel, OPENED/CLOSED notifications and
 two-hour auto-close. Thresholds are starting values to tune against actual volume:
 
 1. Account failure: three failed/partial stage observations per provider/lane in one
@@ -113,7 +127,7 @@ two-hour auto-close. Thresholds are starting values to tune against actual volum
 2. Disconnect failure: three actual failures/retries per provider/lane/runtime in 24
    hours. The window respects the existing 30-minute, two-hour and six-hour backoff;
    five retries in six hours would miss one persistently failing episode. Normal
-   future backoff, revoked-access diagnostics and stale work do not page.
+   future backoff and stale work do not page; remote revocation has its own policy.
 3. Recovery failure: three local recovery/operational failures/retries, or two whole
    scheduler failures, in 90 minutes. Failed heartbeats never masquerade as healthy runs.
 4. Overdue failure: two observations in six hours. Operational cutoff/Auth failed
@@ -123,6 +137,9 @@ two-hour auto-close. Thresholds are starting values to tune against actual volum
    hour. It is a new terminal condition requiring review, not a retained-row counter.
 6. Missing scheduler heartbeat: two hours, only for the always-running existing
    scheduler, including idle. Requires an initial post-creation time series.
+7. Partner revocation unconfirmed: one observation in one hour, sustained for 60
+   seconds, per flow/provider/lane/runtime. This does not wait for three disconnect
+   attempts or exhausted retries. Includes failures before local credentials disappear.
 
 The dashboard keeps Gen 1 and Gen 2 series distinct. Neither HTTP success nor ACK
 proves full account deletion. A bounded page cannot establish that all pending
@@ -139,6 +156,13 @@ revocation while local cleanup still completes. Inspect caps/cursor coverage bef
 claiming a complete backlog or blindly re-driving an operation. Do not remove fences,
 change retry schedules or replay/delete anything to silence a page.
 
+For a partner-revocation email, check whether the provider still lists the connection
+and whether a current credential remains. If credentials are gone, use the provider's
+connected-app/revoke workflow (with the required account owner involvement) rather than
+recreating credentials. Never describe an unconfirmed connection as definitely active
+or send personal identifiers/tokens in alert mail. Normal incident auto-close only means
+the recent signal stopped; it does not establish successful provider revocation.
+
 When a new provider or recovery lane is added, update the fixed telemetry mapping,
 definitions, tests and this runbook. Review current native runtime resource types and
 preserve the independent Training alerts. Never add user/account labels.
@@ -151,13 +175,17 @@ Concurrent Help edits from other work are not part of this ticket.
 
 ## Verification and separately approved activation
 
-Local verification on 19 October 2026: 338 focused Functions tests (11 files), the
-complete 499-test/20-file `mcp-data` demo-emulator group with no skips, 92 offline
+Local implementation and review verification on 19 October 2026: 389 focused Functions
+tests (13 files), the complete 499-test/20-file `mcp-data` demo-emulator group with no skips, 94 offline
 monitoring tests across all ten bundles, 17 workflow guards and 14 emulator-coverage
 guards passed. Functions build, entrypoint contracts (180 endpoints/99 isolated targets),
 deployment-source/70-secret-binding checks, credential scanning and diff checks passed.
-Focused lint has no errors; the pre-existing OAuth2 line-803 explicit-any warning is
-unchanged. No production verification, cloud configuration or data mutation is claimed.
+Focused lint has no errors; existing explicit-any warnings in the lifecycle owners/specs
+are unchanged. Review fixtures cover all four providers and four revocation reasons,
+last-token removal, subscription retry retention, refresh failure, subsequent local failure,
+expected token-use deferral and queue/route pagination. Provisioning also upgrades the
+original six-policy bundle to seven without replacing existing condition identities.
+No production verification, cloud configuration or data mutation is claimed.
 
 Local checks:
 
@@ -193,7 +221,7 @@ node tools/cleanup-monitoring/cli.mjs --project=quantified-self-io --notificatio
 
 Use the already verified independent Alerts channel, not a new channel or app-mail
 record. Production scope/readback must record deployed source, exact Function names,
-unchanged runtimes/secrets/schedules, nine metrics, dashboard, six enabled policies,
+unchanged runtimes/secrets/schedules, nine metrics, dashboard, seven enabled policies,
 all actual chart/condition query validity, stable resource/condition IDs after serial
 reapply, and preservation of unrelated monitoring/channels. Wait for a **natural**
 30-minute heartbeat plus positive post-creation Monitoring series and page coverage.

@@ -9,10 +9,11 @@ export type CleanupLane = 'operational' | 'subscription' | 'explicit' | 'health_
 
 export function cleanupProvider(service: unknown): CleanupProvider {
   switch (service) {
-    case 'Garmin API': return 'GarminAPI';
-    case 'Suunto app': return 'SuuntoApp';
-    case 'COROS API': return 'COROSAPI';
-    case 'Wahoo API': return 'WahooAPI';
+    // Sports Lib names and the fixed legacy connection keys use different casing.
+    case 'garminAPI': case 'Garmin API': return 'GarminAPI';
+    case 'suuntoApp': case 'Suunto app': return 'SuuntoApp';
+    case 'corosAPI': case 'COROS API': return 'COROSAPI';
+    case 'wahooAPI': case 'Wahoo API': return 'WahooAPI';
     default: return 'all';
   }
 }
@@ -92,7 +93,7 @@ export function observeRemoteCleanup(service: unknown, outcome: {
   const provider = cleanupProvider(service);
   if (outcome.partnerDeauthorizeFailed > 0
     || (typeof outcome.tokenCount === 'number' && typeof outcome.partnerDeauthorizeAttempted === 'number'
-      && outcome.tokenCount > outcome.partnerDeauthorizeAttempted)) {
+      && outcome.tokenCount > outcome.partnerDeauthorizeAttempted && !outcome.preservedTokenCount)) {
     cleanupObservation(flow, provider, 'remote_unconfirmed', lane);
   }
   if (!['partial', 'completed', 'no_tokens_found'].includes(outcome.localCleanupStatus)) return;

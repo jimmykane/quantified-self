@@ -9,6 +9,8 @@ describe('cleanup monitoring is non-authorizing and private-data-free', () => {
   it('maps only the four fixed providers', () => {
     expect(['Garmin API', 'Suunto app', 'COROS API', 'Wahoo API', 'PRIVATE'].map(cleanupProvider))
       .toEqual(['GarminAPI', 'SuuntoApp', 'COROSAPI', 'WahooAPI', 'all']);
+    expect(['garminAPI', 'suuntoApp', 'corosAPI', 'wahooAPI'].map(cleanupProvider))
+      .toEqual(['GarminAPI', 'SuuntoApp', 'COROSAPI', 'WahooAPI']);
   });
   it('validates timestamp ages without treating missing, future or malformed state as zero', () => {
     for (const value of [null, undefined, {}, NaN, -1, 0, 200]) expect(cleanupAge(value, 100)).toBeUndefined();
@@ -41,9 +43,9 @@ describe('cleanup monitoring is non-authorizing and private-data-free', () => {
     observeRemoteCleanup('Wahoo API', { partnerDeauthorizeFailed: 0, localCleanupStatus: 'PRIVATE_UNKNOWN' }, 'disconnect');
     expect(logger.info).not.toHaveBeenCalled();
   });
-  it('does not call deliberately retained credentials completed cleanup', () => {
+  it('does not page normal pending token use or call retained credentials completed cleanup', () => {
     observeRemoteCleanup('Suunto app', { partnerDeauthorizeFailed: 0, localCleanupStatus: 'completed',
-      preservedTokenCount: 1 }, 'disconnect', 'subscription');
+      preservedTokenCount: 1, tokenCount: 1, partnerDeauthorizeAttempted: 0 }, 'disconnect', 'subscription');
     expect(vi.mocked(logger.info).mock.calls.map(call => call[1]?.outcome)).toEqual(['deferred']);
   });
   it('logger failure cannot change returns, original exception, or recovery', async () => {

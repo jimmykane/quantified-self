@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { cleanupAge, cleanupObservation, cleanupPage, cleanupProvider, observeCleanupSchedule, observeRemoteCleanup } from '../cleanup-monitoring';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
@@ -561,7 +562,8 @@ async function retryPendingServiceRouteRestorations(): Promise<number> {
         cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'completed', 'route_restore');
       }
     } catch (error) {
-      cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'failed', 'route_restore');
+      cleanupObservation('recovery', cleanupProvider(metaSnapshot.id),
+        error instanceof ServiceRecoveryDeferredError ? 'deferred' : 'failed', 'route_restore');
       logger.error('[RetryPendingServiceDisconnects] Failed to repair route restoration.', {
         userID,
         serviceName: metaSnapshot.id,

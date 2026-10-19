@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { cleanupAge, cleanupObservation, cleanupProvider } from './cleanup-monitoring';
+import { ServiceRecoveryDeferredError } from './shared/service-recovery-deferral';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   HEALTH_PROVIDERS,
@@ -347,7 +348,7 @@ export async function restoreRoutesAndReleaseDeferredWork(
         : null,
     )
   ) {
-    throw new Error(`Cannot restore ${serviceName} routes while disconnect is still active.`);
+    throw new ServiceRecoveryDeferredError(`Cannot restore ${serviceName} routes while disconnect is still active.`);
   }
   const restoreOptions = {
     requireServiceConnected,
@@ -380,7 +381,7 @@ export async function restoreRoutesAndReleaseDeferredWork(
     disconnectLifecycleGuard,
   );
   if (!parkingClosed) {
-    throw new Error(`Route restoration for ${serviceName} was superseded before its release barrier closed.`);
+    throw new ServiceRecoveryDeferredError(`Route restoration for ${serviceName} was superseded before its release barrier closed.`);
   }
   await releaseQueueItemsDeferredForRouteRestore(
     userID,
@@ -400,7 +401,7 @@ export async function restoreRoutesAndReleaseDeferredWork(
     disconnectLifecycleGuard,
   );
   if (!restorationCompleted) {
-    throw new Error(`Route restoration for ${serviceName} was superseded before its marker was cleared.`);
+    throw new ServiceRecoveryDeferredError(`Route restoration for ${serviceName} was superseded before its marker was cleared.`);
   }
 }
 

@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { cleanupAge, cleanupObservation } from '../cleanup-monitoring';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   SERVICE_CONNECTION_STATES,
@@ -12,7 +13,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
-import { DeferredQueueReleaseIncompleteError, releaseQueueItemsDeferredForReconnectRequired } from '../queue/pending-disconnect-release';
+import { releaseQueueItemsDeferredForReconnectRequired } from '../queue/pending-disconnect-release';
 import {
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
@@ -197,7 +198,7 @@ export async function releaseWahooReconnectQueueItemsWithRepair(
       `[ServiceConnectionMeta] Failed to release reconnect-required Wahoo queue items for user ${userID}.${retryRecorded ? ' A durable retry was scheduled.' : ''}`,
       error,
     );
-    if (retryRecorded && !(error instanceof DeferredQueueReleaseIncompleteError)) {
+    if (retryRecorded && !(error instanceof ServiceRecoveryDeferredError)) {
       cleanupObservation('recovery', 'WahooAPI', 'retry', 'wahoo_release', cleanupAge(previousAttemptAt));
     }
     return false;

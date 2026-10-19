@@ -29,7 +29,7 @@ export function buildCleanupMonitoring(project, channel) {
   metric('failures', 'jsonPayload.event="outcome" jsonPayload.outcome=("failed" OR "partial" OR "retry")',
     'Actual exceptional attempts, partial local cleanup and committed retry failures. Expected deferrals, stale work and remote limitations excluded.');
   metric('remote_unconfirmed', 'jsonPayload.event="outcome" jsonPayload.outcome="remote_unconfirmed"',
-    'Remote revocation unconfirmed: local cleanup must not be described as successful provider deletion. Diagnostic, not a retry/failure page.');
+    'Failed or unconfirmed partner revocation, including lost credentials. First observation alerts separately from repeated local failures; stage observations can overlap.');
   metric('manual_review', 'jsonPayload.event="outcome" jsonPayload.outcome="manual_review"', 'New committed exhausted-disconnect transitions; retained manual-review rows do not repeatedly page.');
   metric('overdue', 'jsonPayload.event="outcome" ((jsonPayload.flow="operational" jsonPayload.outcome="retry" jsonPayload.ageMs>=86400000) OR (jsonPayload.flow=("disconnect" OR "recovery") jsonPayload.outcome="retry" jsonPayload.ageMs>=21600000) OR (jsonPayload.flow="account" jsonPayload.outcome="failed" jsonPayload.ageMs>=86400000))',
     'Validated retained operational failure >=24h since cutoff, subscription retry >=6h overdue at processing, or failed Auth retry >=24h from event. Tombstones are never sampled.');
@@ -63,7 +63,9 @@ export function buildCleanupMonitoring(project, channel) {
   policy('account', 'Repeated account cleanup failures', [threshold('failures', 'cloud_function', 'metric.labels.flow="account"', 3, '3600s'), nativeAccountFailure],
     'Three failed attempts or partial stages in one hour; counts are observations, not unique accounts. Retained completed tombstones have no signal.', 'ERROR');
   policy('disconnect', 'Repeated disconnect failures', ['cloud_function', 'cloud_run_revision'].map(resource => threshold('failures', resource, 'metric.labels.flow="disconnect"', 3, '86400s')),
-    'Three actual failure/retry observations per provider/lane/runtime in 24 hours, allowing the existing 30-minute/2-hour/6-hour backoff to become observable. Normal future backoff, supersession and remote-unconfirmed diagnostics do not page.');
+    'Three actual failure/retry observations per provider/lane/runtime in 24 hours, allowing the existing 30-minute/2-hour/6-hour backoff to become observable. Normal future backoff and supersession do not page. Remote revocation has its own first-observation policy.');
+  policy('remote', 'Partner disconnect revocation unconfirmed', ['cloud_function', 'cloud_run_revision'].map(resource => threshold('remote_unconfirmed', resource, '', 1, '3600s')),
+    'One failed or unconfirmed partner revocation requires attention even when local cleanup succeeds or the last local token is already gone. The provider connection may remain active; this is not proof that it does. Covers Garmin, Suunto, COROS and Wahoo explicit disconnect, subscription enforcement, requested terminal-auth revocation and account deletion. Inspect private execution logs and provider connected-app status; if credentials are unavailable, use the provider-side revoke path rather than endlessly retrying or recreating credentials. A source failure and its returned cleanup stage may overlap; counts are observations, not distinct affected accounts.');
   const schedulerFailures = threshold('heartbeat', 'cloud_run_revision', 'metric.labels.outcome="failed"', 2, '5400s');
   schedulerFailures.conditionThreshold.aggregations = [sum('5400s', [])];
   policy('recovery', 'Repeated recovery failures', [threshold('failures', 'cloud_run_revision', 'metric.labels.flow=one_of("recovery","operational")', 3, '5400s'), schedulerFailures],

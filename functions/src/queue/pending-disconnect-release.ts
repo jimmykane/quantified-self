@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 import { SERVICE_CONNECTION_STATES } from '../../../shared/service-connection';
 import { SLEEP_PROVIDERS, type SleepProvider } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
@@ -50,7 +51,7 @@ const DEFERRED_QUEUE_RELEASE_CONCURRENCY = 10;
  * Callers must retain their repair marker and retry, not restore a completed
  * disconnect lifecycle.
  */
-export class DeferredQueueReleaseIncompleteError extends Error {
+export class DeferredQueueReleaseIncompleteError extends ServiceRecoveryDeferredError {
     constructor(serviceName: ServiceNames, deferredReason: QueueDeferredReason) {
         super(`Deferred ${serviceName} queue release for ${deferredReason} reached its bounded page limit; retrying the remaining items.`);
         this.name = 'DeferredQueueReleaseIncompleteError';

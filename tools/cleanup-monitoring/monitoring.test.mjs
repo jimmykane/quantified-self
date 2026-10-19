@@ -45,8 +45,8 @@ const entry = (fields = {}, resource = 'cloud_run_revision') => ({ resource: { t
 } }, jsonPayload: { message: '[CleanupHealth]', telemetryVersion: 1, event: 'outcome', flow: 'disconnect', provider: 'SuuntoApp', lane: 'explicit', ...fields } });
 const selected = (key, fields, resource) => matches(metric(key).filter, entry(fields, resource));
 
-test('fixed categories, nine owned metrics, six policies and mixed runtime boundaries', () => {
-  const b = bundle(); assert.equal(b.metrics.length, 9); assert.equal(b.policies.length, 6);
+test('fixed categories, nine owned metrics, seven policies and mixed runtime boundaries', () => {
+  const b = bundle(); assert.equal(b.metrics.length, 9); assert.equal(b.policies.length, 7);
   assert.equal(b.dashboard.displayName, 'QS Account Cleanup & Disconnect Recovery');
   for (const m of b.metrics) {
     assert.ok(m.description.startsWith(`[${OWNER}]`));
@@ -122,6 +122,29 @@ test('policy thresholds are sustained, native abrupt account errors covered, onl
   assert.ok(attempts.every(time => time < 86400));
   assert.ok(attempts.length > disconnect.thresholdValue);
 });
+test('a single partner revocation failure emails through the existing channel in either runtime', () => {
+  const remote = bundle().policies.find(p => p.userLabels.policy_id === 'remote');
+  assert.deepEqual(remote.notificationChannels, [channel]);
+  assert.equal(remote.enabled, true);
+  assert.equal(remote.conditions.length, 2);
+  assert.match(remote.documentation.content, /last local token is already gone/);
+  assert.match(remote.documentation.content, /provider connection may remain active/);
+  for (const [index, resource] of ['cloud_function', 'cloud_run_revision'].entries()) {
+    const c = remote.conditions[index].conditionThreshold;
+    assert.match(c.filter, new RegExp(`qs_cleanup_remote_unconfirmed_v1.*resource.type="${resource}"`));
+    assert.equal(c.thresholdValue, 0);
+    assert.equal(c.duration, '60s');
+    assert.equal(c.aggregations[0].alignmentPeriod, '3600s');
+    for (const provider of PROVIDERS.filter(p => p !== 'all')) {
+      for (const flow of ['disconnect', 'account']) {
+        assert.equal(selected('remote_unconfirmed', { provider, flow, outcome: 'remote_unconfirmed' }, resource), true);
+      }
+    }
+  }
+  for (const outcome of ['completed', 'acknowledged', 'deferred', 'superseded', 'started']) {
+    assert.equal(selected('remote_unconfirmed', { outcome }), false);
+  }
+});
 test('offline preview, explicit cloud approval, CI registration and no index/Rules deployment requirement', () => {
   for (const args of [[`--project=${project}`], [`--project=${project}`, '--apply'], [`--project=${project}`, '--delete']]) {
     const result = spawnSync(process.execPath, ['tools/cleanup-monitoring/cli.mjs', ...args], { encoding: 'utf8', env: { PATH: '/no-credentials' } });
@@ -169,10 +192,25 @@ test('serial reapplication preserves all nine other bundles and every condition 
   const policies = structuredClone(source.state.alertPolicies.slice(before.alertPolicies.length)); source.calls.length = 0;
   const second = await applyCleanupMonitoring(bundle(), source.request);
   assert.equal(second.dashboard, first.dashboard); assert.equal(source.calls.filter(c => c.method === 'POST').length, 0);
-  assert.equal(source.calls.filter(c => c.method === 'PATCH').length, 7);
+  assert.equal(source.calls.filter(c => c.method === 'PATCH').length, 8);
   assert.deepEqual(source.state.alertPolicies.slice(before.alertPolicies.length), policies);
   for (const key of Object.keys(before)) assert.deepEqual(source.state[key].slice(0, before[key].length), before[key]);
   assert.ok(source.calls.every(c => c.method !== 'DELETE' && !c.url.includes('other-') && (c.method === 'GET' || !c.url.includes('/notificationChannels'))));
+});
+test('adding the remote policy to the original six preserves existing policies, conditions and dashboard', async () => {
+  const source = transport(); const original = bundle();
+  original.policies = original.policies.filter(p => p.userLabels.policy_id !== 'remote');
+  const first = await applyCleanupMonitoring(original, source.request);
+  const before = structuredClone(source.state.alertPolicies.filter(p => p.userLabels.managed_by === OWNER));
+  source.calls.length = 0;
+  const second = await applyCleanupMonitoring(bundle(), source.request);
+  assert.equal(second.dashboard, first.dashboard);
+  const posts = source.calls.filter(c => c.method === 'POST');
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].body.userLabels.policy_id, 'remote');
+  for (const policy of before) {
+    assert.deepEqual(source.state.alertPolicies.find(p => p.name === policy.name), policy);
+  }
 });
 test('ownership collisions and malformed/disabled configuration fail before writes', async () => {
   for (const bad of ['dashboard', 'policy', 'metric', 'schema', 'inventory', 'channel']) {

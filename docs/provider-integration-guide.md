@@ -1584,13 +1584,16 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 ## 10. Admin and operational coverage
 
 Account cleanup and disconnect recovery monitoring (#836) is implemented locally in
-the independent `tools/cleanup-monitoring/` bundle: nine fixed-label metrics, six policies
+the independent `tools/cleanup-monitoring/` bundle: nine fixed-label metrics, seven policies
 and the **QS Account Cleanup & Disconnect Recovery** dashboard. It reuses existing
 30-minute recovery page reads and committed lifecycle outcomes, with no extra Firestore
 reads/writes, index, collection, observer Function or schedule. Local completion, Auth
 handler ACK, remote-unconfirmed revocation and independently unfinished extension cleanup
 are not interchangeable. Completed deletion tombstones are not backlog, and bounded-page
-deferrals/stale generations do not count as failures. Existing #655 Training cleanup alerts
+deferrals/stale generations do not count as failures. A dedicated first-observation email
+policy covers failed/unconfirmed partner revocation for all four providers, even if local
+credentials are subsequently removed; it does not claim the partner is definitely active
+or change retry/token-retention behavior. Existing #655 Training cleanup alerts
 remain unchanged. Help, provider behavior, deletion fences, recursion and MCP/Assistant
 contracts are unchanged. Deployment/apply/natural verification are separately approved
 remaining work in #836; see [the cleanup monitoring runbook](account-cleanup-monitoring.md).

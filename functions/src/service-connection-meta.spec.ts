@@ -3,6 +3,8 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import type * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { DeferredQueueReleaseIncompleteError } from './queue/pending-disconnect-release';
+import { RouteRestoreQueueReleaseIncompleteError } from './queue/sync-route-eligibility';
+import { ServiceRecoveryDeferredError } from './shared/service-recovery-deferral';
 
 const hoisted = vi.hoisted(() => ({
   historyCreate: vi.fn(),
@@ -62,7 +64,8 @@ vi.mock('./queue/pending-disconnect-release', async importOriginal => ({
   releaseQueueItemsDeferredForReconnectRequired: hoisted.releaseQueueItemsDeferredForReconnectRequired,
 }));
 
-vi.mock('./queue/sync-route-eligibility', () => ({
+vi.mock('./queue/sync-route-eligibility', async importOriginal => ({
+  ...await importOriginal<typeof import('./queue/sync-route-eligibility')>(),
   releaseQueueItemsDeferredForRouteRestore: hoisted.releaseQueueItemsDeferredForRouteRestore,
 }));
 
@@ -794,10 +797,12 @@ describe('service-connection-meta', () => {
       }),
     });
 
-    await expect(retryPendingServiceRouteRestore(
+    const work = retryPendingServiceRouteRestore(
       'user-1',
       ServiceNames.WahooAPI,
-    )).rejects.toThrow('disconnect is still active');
+    );
+    await expect(work).rejects.toThrow('disconnect is still active');
+    await expect(work).rejects.toBeInstanceOf(ServiceRecoveryDeferredError);
 
     expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).not.toHaveBeenCalled();
     expect(hoisted.releaseQueueItemsDeferredForRouteRestore).not.toHaveBeenCalled();
@@ -1061,6 +1066,17 @@ describe('service-connection-meta', () => {
       new DeferredQueueReleaseIncompleteError(ServiceNames.WahooAPI, 'reconnect_required'),
     );
     await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(logger.info).not.toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({ outcome: 'retry' }));
+  });
+
+  it('does not count bounded route restoration as a Wahoo recovery failure', async () => {
+    hoisted.releaseQueueItemsDeferredForRouteRestore.mockRejectedValueOnce(
+      new RouteRestoreQueueReleaseIncompleteError(ServiceNames.WahooAPI),
+    );
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      wahooReconnectReleasePending: true, wahooReconnectReleaseAttemptCount: 1,
+    }), { merge: true });
     expect(logger.info).not.toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({ outcome: 'retry' }));
   });
 
