@@ -609,6 +609,13 @@ updates remain undocumented capabilities, not guessed upload fields. See the sin
 [v15 allocation/recovery verification](training-workspace.md#swimming-field-allocation-and-headings-v15).
 This change still needs separately approved Functions/frontend deployment and physical watch verification.
 
+The later [swimming wording and reported validation](training-workspace.md#swimming-wording-and-reported-validation-19-october-2026)
+clarifies app choices as last/next Work block **planned** distance, distinct from measured results and repetition
+numbering. It changes no saved preference, allocation, watch payload or provider lifecycle. Reported numbering and
+consistent countdown sound/vibration are recorded for the tested case, not font-size control or a custom final tone.
+Previous-effort Rest statistics remain a focused future investigation in #905, separate from #828's native targets.
+Monitoring and MCP contracts are unchanged; this copy-only follow-up needs no Functions, Rules or index deployment.
+
 Recipes with timed Rest now select private **v16**, adding a native `default` alert with a `stepDuration` condition
 and `countdown: { type: "standard" }` at the exact Rest duration. This applies across supported sports, including
 swimming and Gym set rests, by default without a QS toggle. Manual/distance Rest and active Recovery are excluded.

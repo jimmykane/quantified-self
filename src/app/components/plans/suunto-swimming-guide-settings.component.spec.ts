@@ -56,6 +56,28 @@ describe('Suunto swimming screen preferences', () => {
     }
     expect(ids.size).toBe(4); expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('explains planned Work distances and repetition counts without changing saved choices or Guide behavior', async () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const original = structuredClone(component.draft());
+    component.toggle(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const selectedLabels = Array.from(element.querySelectorAll('mat-select')).map(select => select.textContent?.trim());
+    expect(selectedLabels).toContain('Last work block: planned distance');
+    expect(selectedLabels).toContain('Next work block: planned distance');
+    for (const phrase of ['Work blocks before/after this Rest', 'same value for both',
+      'not measured distance', 'Lap-only Work has no prescribed distance',
+      'regardless of titles/notes', 'Work 1/10 is the first of ten Work blocks',
+      'Rest 1/10 follows it', "Suunto controls the heading's font size"]) {
+      expect(element.textContent).toContain(phrase);
+    }
+    expect(element.textContent).not.toContain('Previous planned interval distance');
+    expect(element.textContent).not.toContain('Next planned interval distance');
+    expect(component.draft()).toEqual(original);
+    expect(component.draft().restFields).toEqual(['interval', 'previousPlannedDistance', 'nextPlannedDistance', 'heartRate']);
+    expect(component.canSave()).toBe(false); expect(save).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('changes/reorders choices with one feedback owner, ignoring duplicates and no-ops', () => {
     const component = render().componentInstance;
     component.choose('workFields', 0, 'strokes'); component.move('workFields', 0, 1);

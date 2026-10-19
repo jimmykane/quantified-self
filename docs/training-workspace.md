@@ -3219,6 +3219,45 @@ authored notes. Synthetic transport and demo-Firestore lifecycle tests cover ori
 same-ID update, pinning, consent, exact archives, protected copies and idempotent repeat reconciliation. Physical
 app/watch layout remains a release check; local tests cannot prove text visibility, sensor data or vibration.
 
+##### Swimming wording and reported validation (19 October 2026)
+
+The Rest field choices now say **Last work block: planned distance** and **Next work block: planned distance**.
+They refer to the Work prescriptions immediately before and after that Rest, not measured completed distance,
+remaining distance or the repetition number. Equal-distance repeats can show the same value for both. Lap-only
+Work has no prescribed distance, even if a title/instruction mentions one; an absent neighbor also supplies no value.
+Settings and Help explain that `Work 1/10` means the first of ten prescribed Work occurrences, while `Rest 1/10`
+belongs to that preceding occurrence. It is not the next repetition or completion/adherence evidence. These are
+app labels and explanations only: persisted enum values/preferences, defaults, field allocation, the compact
+watch text, mapping versions/digests and every Guide payload remain unchanged. Existing interactions/haptics,
+account fences and Save semantics remain unchanged; opening the explanation makes no write.
+
+Swimming feedback supplied on 19 October confirms correct Work/Rest numbering on the tested watch, but reports
+the heading too small to read comfortably. Record counter behavior as confirmed for that reported case, not
+readability resolved or universal device proof. The current Guide interface provides no font-size control.
+Do not request another identical counter/alert test without a concrete alternative to verify. A Rest screenshot
+without a countdown cannot establish a regression: inspect its authored ending before proposing a timing change.
+
+The focused future investigation [#905](https://github.com/jimmykane/quantified-self/issues/905) tracks previous-effort
+statistics during Rest: average pace over the whole completed Work interval, elapsed time, measured distance and
+stroke count where supported. It is separate from #828's native-target investigation and does not reopen completed
+#784. No verified previous-effort selector exists in the current integration; freshly reset Rest lap averages,
+planned distances and workout totals are not substitutes. No new field/control or provider experiment is added.
+
+MCP impact: **no wire impact**. This wording/evidence-only change adds no planning/read capability, recipe field,
+projection, schema, tool, mutation, consent, Assistant authority, provider action or bundled guidance. Existing
+strict plan/workout reads and proposal/confirmation contracts remain unchanged; no MCP coverage is deferred.
+Monitoring is **unchanged**: delivery workers, queues, outcomes, retries, labels, dashboards and policies are untouched.
+Only the frontend wording/help requires the normal separately approved release; no Functions, Rules/indexes,
+mapping migration, requeue or production action is needed. Tests cover the visible labels, explanations, unchanged
+saved choice values and silent initialization; existing serializer regressions cover unchanged watch artifacts.
+
+Verification: 283 focused frontend settings, delivery-dialog, Help and Hosting tests passed; 53 existing Suunto
+swimming presentation/countdown-alert serializer tests passed. Frontend policy checked 634 specs with zero fixture
+review warnings; changed-file lint and `git diff --check` passed. `npm run build-production` passed with unchanged
+budgets, including service-worker asset and all 33 prerendered-page checks. Synthetic Material dialog browser QA
+covered 320px light and desktop dark layouts: explanations wrap and selected values remain accessible; narrow
+selects retain their existing ellipsis. This is app-copy verification, not new physical-watch validation.
+
 ##### Native timed Rest countdown alerts (v16)
 
 Recipes containing a canonical `purpose: rest` step with a time ending now use private `suunto-guides-v16`, across
@@ -3251,6 +3290,11 @@ This proves the standard alert path on that watch, not exact five-second timing,
 quiet/tones-off behavior or audibility while swimming. The watch owns the pattern; do not add guessed sound/haptic
 flags or promise a long final tone. Quiet/tones-off behavior remains a physical verification follow-up. Previous-effort
 Rest statistics, native pace-format overrides and pool-length detection improvements are still outside this change.
+
+Post-release swimming feedback supplied on 19 October separately reports consistent sound and vibration on every
+tested countdown, with beeps starting around four seconds remaining and a short cue at zero. This corroborates the
+standard-alert behavior for that athlete's reported test; it does not prove an exact five-second sequence, a long
+final tone, quiet-mode behavior or all devices. Keep the native alert and exact Rest duration unchanged.
 
 V15 and all older attempts remain frozen: recovery first proves the journal's exact original payload, including
 unit/preferences snapshots, then ordinary reconciliation can update an eligible future copy once under the same

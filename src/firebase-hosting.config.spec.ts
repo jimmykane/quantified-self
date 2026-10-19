@@ -381,6 +381,7 @@ describe('Firebase Hosting configuration', () => {
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
     // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
     // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
+    // Help distinguishes last/next planned Work distances from measured results and the Work/Rest counter.
     // Event details also distinguishes session Max HR from selected-lap peaks, including rest.
     // Event details now documents the compact TSS / Workout CTL / Day CTL strip.
     // The same-day Help revision clarifies preview timeouts, source provenance and checked/ready/excluded draft counts.

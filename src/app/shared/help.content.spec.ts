@@ -536,6 +536,16 @@ describe('help.content', () => {
       'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
     expect(content).not.toContain('Repeat on another date');
   });
+  it('distinguishes planned Work distances from measured swimming and the repetition counter', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Last work block: planned distance**', '**Next work block: planned distance**',
+      'immediately before this Rest', 'immediately after it', 'Equal-distance repeats show the same value for both',
+      'Distances are prescribed, not measured',
+      'Lap-only Work has no prescribed distance', 'regardless of titles/notes',
+      '**Rest 1/10** follows it', 'not the next repetition or proof',
+      "Suunto controls the heading's font size"]) expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'Next work block').map(section => section.id)).toContain('training-plans');
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
