@@ -1597,9 +1597,11 @@ or change retry/token-retention behavior. Existing #655 Training cleanup alerts
 remain unchanged. Help, provider behavior, deletion fences, recursion and MCP/Assistant
 contracts are unchanged. The owner approved deployment and activation on 19 October
 2026; twelve existing Functions are ACTIVE and all 29 chart/condition queries passed
-live readback. Natural idle runtime coverage is verified, but the first positive
-Monitoring heartbeat/page series after the filter correction is still required
-before #836 closes; see [the cleanup monitoring runbook](account-cleanup-monitoring.md).
+live readback. The natural 11:07 UTC recovery run acknowledged with all thirteen
+uncapped idle pages, and positive post-correction Monitoring heartbeat/page series
+were verified at 11:08–11:09 UTC. No destructive QA or test mail was needed; this
+completes #836's approved operational verification, not actual deletion/revocation
+proof. See [the cleanup monitoring runbook](account-cleanup-monitoring.md).
 
 Email/marketing monitoring (#835) is implemented locally through the existing Firestore `mail` outbox and Trigger Email
 extension, separately from fitness-provider queues. New mail initializes supported PENDING metadata in its original

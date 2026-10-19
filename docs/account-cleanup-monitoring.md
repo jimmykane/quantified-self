@@ -3,8 +3,8 @@
 Status on 19 October 2026: the twelve affected existing Functions are deployed and
 the nine metrics, seven enabled policies and dashboard are active under the owner's
 explicit approval. API/query and identity-preservation readback passed. The first
-natural **post-filter-correction Monitoring time series** is still pending; #836
-remains open until that evidence is recorded. No account deletion, disconnect,
+natural **post-filter-correction heartbeat and Monitoring time series** are verified;
+the approved production verification for #836 is complete. No account deletion, disconnect,
 forced recovery, test mail, index or Rules deployment was performed for validation.
 
 ## Ownership and meanings
@@ -298,8 +298,27 @@ subscription retry for each provider. Each examined zero rows and was uncapped;
 no cleanup failure, remote-unconfirmed or manual-review observation was emitted.
 This proves idle runtime coverage, not actual deletion or provider revocation.
 That run preceded the filter correction and **does not** prove positive Monitoring
-ingestion under the corrected filter. The next natural run is due at **11:07 UTC
-(14:07 Europe/Helsinki)**. Confirm its acknowledged heartbeat, page observations and
-positive `qs_cleanup_heartbeat_v1` / `qs_cleanup_pages_v1` series after normal ingestion
-delay before marking the ticket completed. Do not manually invoke recovery or
-manufacture a failure/deletion merely to populate a chart.
+ingestion under the corrected filter.
+
+Final bounded read-only verification at **11:08–11:09 UTC (14:08–14:09 Helsinki)**
+confirmed the next natural run's acknowledged heartbeat at **11:07:06.788701 UTC**
+on the same revision. All thirteen expected page categories were present, examined
+zero rows and were uncapped. Post-correction Cloud Monitoring reads contained a
+positive acknowledged `qs_cleanup_heartbeat_v1` series and thirteen positive
+`qs_cleanup_pages_v1` series covering operational, all four lifecycle-repair lanes,
+and explicit/subscription pages for each of Garmin, Suunto, COROS and Wahoo. Neither
+Logging nor Monitoring queries were truncated. There were no failed/partial/retry,
+remote-unconfirmed or manual-review observations in this verification window;
+event-only outcome series were correctly absent during idle, not fabricated zeros
+or proof of a completed deletion.
+
+The final configuration readback reconfirmed all nine metrics, seven enabled
+policies/thirteen conditions, all 29 chart/condition queries, stable identities,
+the existing enabled Alerts channel and unchanged unrelated-resource fingerprints.
+One transient Monitoring HTTP 503 was retried read-only and succeeded; no cloud
+configuration was reapplied during the natural-heartbeat check. Existing #655
+same-channel OPENED/CLOSED delivery evidence was reused without sending mail.
+All twelve focused cleanup-monitoring tests and the documentation diff check passed.
+No manual recovery invocation, destructive QA, source-data change or provider call
+was used to obtain this evidence. This completes the approved operational scope,
+not proof of a real user deletion, extension completion or partner revocation.
