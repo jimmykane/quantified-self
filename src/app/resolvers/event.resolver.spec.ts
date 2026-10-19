@@ -4,6 +4,7 @@ import {
     DataAltitude,
     DataGrade,
     DataGradeSmooth,
+    DataHeartRate,
     DataPotentialStamina,
     DataStamina,
     User,
@@ -57,7 +58,7 @@ describe('eventResolver', () => {
         expect(executeResolver).toBeTruthy();
     });
 
-    it('should resolve with event when event is found', () => new Promise<void>(done => {
+    it('resolves an event with HR samples even when no charts are selected', () => new Promise<void>(done => {
         const mockEvent = { id: 'testEvent' } as any;
         eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(mockEvent));
         userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
@@ -76,6 +77,7 @@ describe('eventResolver', () => {
             expect(result.event).toEqual(mockEvent);
             expect(result.user).toEqual(mockUser);
             expect(eventServiceSpy.getEventActivitiesAndSomeStreams).toHaveBeenCalled();
+            expect(eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2]).toContain(DataHeartRate.type);
             done();
         });
     }));
