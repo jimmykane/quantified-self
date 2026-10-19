@@ -7,6 +7,8 @@ import {
   ElementRef,
   EventEmitter,
   Input,
+  inject,
+  signal,
   NgZone,
   OnChanges,
   OnDestroy,
@@ -15,7 +17,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChartCursorBehaviours, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, DataPower, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
@@ -80,6 +82,9 @@ import {
 } from '../../../../helpers/echarts-horizontal-touch-gesture.controller';
 import { resolveEventChartPinchRange } from '../../../../helpers/event-chart-pinch-zoom.helper';
 import { resolveEventChartPanRange } from '../../../../helpers/event-chart-pan-range.helper';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
+import { buildEventPowerDisplay,
+  type EventPowerDisplayMode, type EventPowerDisplayProjection } from '../../../../helpers/event-power-display.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -293,6 +298,25 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   public rangeStats: EventPanelRangeStat[] = [];
   public isFullscreen = false;
   public readonly zoomCursorBehaviour = ChartCursorBehaviours.ZoomX;
+  public readonly powerDisplayMode = signal<EventPowerDisplayMode>('raw');
+  private readonly haptics = inject(AppHapticsService);
+  private powerProjections = new WeakMap<EventChartPanelSeries, EventPowerDisplayProjection>();
+
+  public get supportsPowerSmoothing(): boolean {
+    return this.panel?.dataType === DataPower.type
+      && this.panel.series.some(series => this.getPowerProjection(series).hasAverage);
+  }
+
+  private get isSmoothedPower(): boolean {
+    return this.powerDisplayMode() === '3s' && this.supportsPowerSmoothing;
+  }
+
+  public onPowerDisplayChange(mode: EventPowerDisplayMode): void {
+    if (this.destroyed || !this.supportsPowerSmoothing || (mode !== 'raw' && mode !== '3s') || mode === this.powerDisplayMode()) return;
+    this.powerDisplayMode.set(mode);
+    this.haptics.selection();
+    this.queueChartRefresh('powerDisplay');
+  }
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
@@ -592,6 +616,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.panel) {
+      this.powerProjections = new WeakMap();
+      const previous = changes.panel.previousValue as EventChartPanelModel | null;
+      if (previous?.dataType !== this.panel?.dataType
+        || previous?.series.map(series => series.id).join('|') !== this.panel?.series.map(series => series.id).join('|')) {
+        this.powerDisplayMode.set('raw');
+      }
+    }
     if (!this.chartHost.getChart()) {
       return;
     }
@@ -831,8 +863,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const overlayPanel = this.getActiveOverlayPanel();
     const shareOverlayYAxis = canShareEventPanelYAxis(panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
-      ? this.buildSharedYAxisPanel(panel, overlayPanel)
-      : panel;
+      ? this.buildSharedYAxisPanel(this.buildPowerYAxisPanel(panel), overlayPanel)
+      : this.buildPowerYAxisPanel(panel);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: primaryYAxisPanel,
       visibleRange,
@@ -905,7 +937,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         silent: !this.interactionsEnabled,
         dimensions: ['x', 'y'],
-        data: this.getSeriesLineData(series),
+        data: this.isSmoothedPower
+          ? this.getPowerProjection(series).lineValues as unknown as ChartLineSeriesOption['data']
+          : this.getSeriesLineData(series),
       });
 
       if (useZoneColors) {
@@ -1062,6 +1096,24 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return this.overlayPanel.series?.length ? this.overlayPanel : null;
+  }
+
+  private getPowerProjection(series: EventChartPanelSeries): EventPowerDisplayProjection {
+    let projection = this.powerProjections.get(series);
+    if (!projection) {
+      projection = buildEventPowerDisplay(series);
+      this.powerProjections.set(series, projection);
+    }
+    return projection;
+  }
+
+  private buildPowerYAxisPanel(panel: EventChartPanelModel): EventChartPanelModel {
+    if (!this.isSmoothedPower) return panel;
+    return { ...panel, series: [...panel.series, ...panel.series.map(series => ({ ...series,
+      lineValues: this.getPowerProjection(series).lineValues,
+      timeValues: series.timeValues ?? Float64Array.from((series.points ?? []).map(point => point.time)),
+      pointCount: getEventChartSeriesPointCount(series),
+    }))] };
   }
 
   private buildSharedYAxisPanel(
@@ -1854,6 +1906,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const label = this.buildTooltipRowLabel(resolvedPoint, hasOverlay);
       const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y, resolvedPoint.index);
       const gradeLabel = this.buildTooltipGradeLabel(resolvedPoint.series, resolvedPoint.index);
+      if (this.isSmoothedPower && resolvedPoint.panel === this.panel) {
+        const average = this.getPowerProjection(resolvedPoint.series).lineValues[resolvedPoint.index * 2 + 1];
+        const formattedAverage = Number.isFinite(average) ? this.formatDataValue(resolvedPoint.series.streamType, average) : '—';
+        tooltipLines.push(`<div>${label ? `${label} · ` : ''}3s average: ${formattedAverage}</div>`);
+        tooltipLines.push(`<div>${label ? `${label} · ` : ''}Recorded: ${formatted}</div>`);
+        continue;
+      }
       tooltipLines.push(
         `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label ? `${label}: ` : ''}${formatted}${gradeLabel}</div>`
       );
@@ -2222,8 +2281,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const overlayPanel = this.getActiveOverlayPanel();
     const shareOverlayYAxis = canShareEventPanelYAxis(this.panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
-      ? this.buildSharedYAxisPanel(this.panel, overlayPanel)
-      : this.panel;
+      ? this.buildSharedYAxisPanel(this.buildPowerYAxisPanel(this.panel), overlayPanel)
+      : this.buildPowerYAxisPanel(this.panel);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: primaryYAxisPanel,
       visibleRange,
