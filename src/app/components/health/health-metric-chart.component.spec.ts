@@ -193,8 +193,8 @@ describe('HealthMetricChartComponent', () => {
     expect(host.querySelector('mat-card')).toBeNull();
     expect(host.querySelectorAll('app-compact-row .compact-row--stacked.compact-row--compact')).toHaveLength(2);
     expect(Array.from(host.querySelectorAll('h3')).map(heading => heading.textContent)).toEqual(['Garmin', 'Suunto']);
-    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Native only');
-    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Conflict');
+    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Original format');
+    expect(host.querySelector('.health-chart-panel-native')?.textContent).toContain('Readings differ');
     expect(fixture.debugElement.queryAll(By.directive(HealthMetricSeriesChartStubComponent))).toHaveLength(2);
   });
 

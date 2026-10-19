@@ -1,12 +1,12 @@
 <mat-expansion-panel class="health-source-table-panel mat-elevation-z0"
   (opened)="haptics.selection()" (closed)="haptics.selection()">
   <mat-expansion-panel-header>
-    <mat-panel-title class="health-source-table-title">Source observations</mat-panel-title>
+    <mat-panel-title class="health-source-table-title">Recorded readings</mat-panel-title>
   </mat-expansion-panel-header>
   @if (sleep()) {
     <div class="health-source-table-scroll">
       <table>
-        <caption>Normalized Sleep sessions by source. Providers are not blended.</caption>
+        <caption>Sleep records from each source. Sources are shown separately.</caption>
         <thead>
           <tr>
             <th scope="col">Date</th>
@@ -37,16 +37,16 @@
     }
     <div class="health-source-table-scroll">
       <table>
-        <caption>{{ detailTitle() }} observations and sample chunks by source. Providers are not blended, and account keys are replaced with local ordinals.</caption>
+        <caption>{{ detailTitle() }} readings from each source. Multiple accounts from the same service are numbered.</caption>
         <thead>
           <tr>
             <th scope="col">Date</th>
             <th scope="col">Source</th>
             <th scope="col">Device</th>
             <th scope="col">Reading</th>
-            <th scope="col">Semantics</th>
-            <th scope="col">Coverage</th>
-            <th scope="col">Freshness</th>
+            <th scope="col">Reading type</th>
+            <th scope="col">Recording completeness</th>
+            <th scope="col">Updates</th>
             <th scope="col">Status</th>
             <th scope="col"><span class="health-source-table-actions-label">Actions</span></th>
           </tr>
@@ -61,7 +61,7 @@
               <td>{{ row.semanticsText }}</td>
               <td>{{ row.coverageText }}</td>
               <td>{{ row.freshnessText }}</td>
-              <td>{{ row.conflict ? 'Conflict' : '—' }}</td>
+              <td>{{ row.conflict ? 'Readings differ' : '—' }}</td>
               <td>
                 @if (row.manualMeasurement) {
                   <div class="health-source-table-actions">

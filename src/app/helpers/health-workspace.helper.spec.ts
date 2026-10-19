@@ -526,7 +526,7 @@ describe('Health workspace helpers', () => {
       .toEqual(['Garmin account 1', 'Garmin account 2']);
     expect(view.series.find(series => series.nativeOnly)?.chartKind).toBe('step');
     expect(view.series.map(series => JSON.stringify(series)).join(' ')).not.toContain('secret-account');
-    expect(view.series[0].coverageText).toContain('/4 days');
+    expect(view.series[0].coverageText).toContain('of 4 days with readings');
   });
 
   it('keeps series IDs stable across range projections without exposing account keys', () => {
@@ -610,11 +610,11 @@ describe('Health workspace helpers', () => {
     const canonical = view.series.find(series => !series.nativeOnly);
     const native = view.series.find(series => series.nativeOnly);
 
-    expect(canonical?.coverageText).toBe('1/2 days');
-    expect(native?.coverageText).toBe('1/2 days');
-    expect(canonical?.freshnessText).toContain('Stale');
+    expect(canonical?.coverageText).toBe('1 of 2 days with readings');
+    expect(native?.coverageText).toBe('1 of 2 days with readings');
+    expect(canonical?.freshnessText).toContain('No recent updates');
     expect(canonical?.freshnessText).toContain('Aug 1');
-    expect(native?.freshnessText).toContain('Fresh');
+    expect(native?.freshnessText).toContain('Last recorded');
     expect(native?.freshnessText).toContain('Aug 2');
   });
 
@@ -635,7 +635,7 @@ describe('Health workspace helpers', () => {
       series.metricId === HEALTH_METRIC_IDS.RestingHeartRate && !series.nativeOnly);
     expect(canonicalNumericSeries?.points[0].timezoneOffsetSeconds).toBe(10_800);
     expect(view.series.filter(series => series.nativeOnly)).toHaveLength(1);
-    expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
+    expect(view.rows.every(row => row.valueText.includes('readings'))).toBe(true);
   });
 
   it('puts the newest sample-backed Health highlight before older provider summaries', () => {
@@ -670,6 +670,7 @@ describe('Health workspace helpers', () => {
     const rows = buildHealthPriorityRows(result);
 
     expect(rows.map(row => row.sourceLabel)).toEqual(['Suunto', 'Garmin']);
+    expect(rows.every(row => !/provider summary|native only|representative sample/i.test(row.contextText))).toBe(true);
     expect(rows[0]).toMatchObject({ valueText: '70 bpm', observedAtMs: Date.parse('2026-08-01T00:02:00.000Z') });
 
     const trendSeries = selectHealthPriorityTrendSeries(result);
@@ -1254,7 +1255,7 @@ describe('Health workspace helpers', () => {
     expect(view.series[0].points).toEqual([expect.objectContaining({ value: 62, calendarDate: '2026-08-02' })]);
     expect(view.rows[0]).toMatchObject({
       valueText: '62 ms',
-      semanticsText: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      semanticsText: 'Average sleep HRV',
       coverageText: 'Sleep session',
     });
     expect(JSON.stringify(view)).not.toContain('raw-provider-user');

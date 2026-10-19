@@ -1,6 +1,6 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
-import { healthChartReadingLabel } from './chart-source.helper';
+import { healthChartReadingLabel, healthChartSourceChoice } from './chart-source.helper';
 import { addComparisonDays, comparisonDateCarrier, type NoteComparisonWindow } from './timeline-note-comparison.helper';
 import type { EChartsType } from 'echarts/core';
 import {
@@ -817,7 +817,7 @@ function buildSeriesModel(
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
     displayUnit,
-    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}.${twoReadingComparisonText ? ` ${twoReadingComparisonText}.` : ''} Values are not combined with other sources.`,
+    ariaLabel: `${healthChartSourceChoice(series).label}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}.${twoReadingComparisonText ? ` ${twoReadingComparisonText}.` : ''} Values are not combined with other sources.`,
   };
 }
 

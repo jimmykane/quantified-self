@@ -6,7 +6,7 @@
     @if (!chosenReading()) { <p role="status">Your selected source and measurement have no readings in this period. Choose another measurement or period.</p> }
   </div>
 }
-<div class="health-chart-grid" aria-label="Source-separated metric charts">
+<div class="health-chart-grid" aria-label="Charts by source">
   @for (chart of renderedModels(); track chart.model.series.id) {
     @let model = chart.model;
     <app-compact-row
@@ -19,10 +19,10 @@
         @if (model.series.nativeOnly || model.series.hasConflict) {
           <mat-chip-set compactRowAction class="health-chart-status" aria-label="Series status">
             @if (model.series.nativeOnly) {
-              <mat-chip>Native only</mat-chip>
+              <mat-chip>Original format</mat-chip>
             }
             @if (model.series.hasConflict) {
-              <mat-chip>Conflict</mat-chip>
+              <mat-chip>Readings differ</mat-chip>
             }
           </mat-chip-set>
         }
@@ -49,7 +49,7 @@
         <div class="health-chart-details" [id]="'health-chart-details-' + model.series.id" [hidden]="!expandedDetails().has(model.series.id)">
           <p>{{ chart.recordingDescription }}</p>
           <p>{{ model.evidenceText }}</p>
-          <p>Coverage: {{ model.series.coverageText }}</p>
+          <p>{{ model.series.coverageText }}</p>
           <p>{{ model.series.freshnessText }}</p>
           @if (model.series.deviceLabel) { <p>Device: {{ model.series.deviceLabel }}</p> }
           @if (model.omittedPointCount > 0) {

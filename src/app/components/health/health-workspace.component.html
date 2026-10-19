@@ -249,7 +249,7 @@
           <div class="health-notice" role="note">
             <mat-icon aria-hidden="true">fitness_center</mat-icon>
             <span>
-              No measured weight is available in this view. Latest workout profile context:
+              No weigh-in is available in this view. Weight saved in your latest workout profile:
               {{ workoutWeightFallback()!.valueText }} from {{ workoutWeightFallback()!.sourceLabel }}
               on {{ workoutWeightFallback()!.observedText }}. It is not plotted as a weigh-in.
             </span>
@@ -264,13 +264,13 @@
         @if (!selectedIsSleep() && metricView().conflictCount > 0) {
           <div class="health-notice health-notice-conflict" role="alert">
             <mat-icon aria-hidden="true">difference</mat-icon>
-            <span>{{ metricView().conflictCount }} conflicting source {{ metricView().conflictCount === 1 ? 'window is' : 'windows are' }} highlighted. Values remain separate.</span>
+            <span>Some sources report different values for the same period. Each source is shown separately.</span>
           </div>
         }
         @if (!selectedIsSleep() && metricView().hasNativeOnlySeries) {
           <div class="health-notice" role="status">
             <mat-icon aria-hidden="true">category</mat-icon>
-            <span>Native-only or non-comparable readings are isolated from canonical series.</span>
+            <span>Some readings use the source’s own format and cannot be directly compared with other readings. They are shown separately.</span>
           </div>
         }
 
@@ -279,7 +279,7 @@
             <mat-spinner diameter="34" aria-hidden="true"></mat-spinner>
             <div>
               <strong>Loading {{ detailTitle() }}</strong>
-              <span>Collecting bounded source pages before calculating coverage and conflicts.</span>
+              <span>Loading readings from your connected sources…</span>
             </div>
           </div>
         } @else if (isDenied()) {
@@ -287,7 +287,7 @@
             <mat-icon aria-hidden="true">lock</mat-icon>
             <div>
               <strong>Health data access was denied</strong>
-              <span>Review this provider’s permissions and connection.</span>
+              <span>Check permissions for this service in Connectivity.</span>
               <a mat-stroked-button routerLink="/services">Open Connectivity</a>
             </div>
           </div>
@@ -304,7 +304,7 @@
           <div class="health-detail-state">
             <mat-icon aria-hidden="true">timeline</mat-icon>
             <div>
-              <strong>This metric is stored as detailed samples</strong>
+              <strong>Choose a shorter date range for these readings</strong>
               <span>No daily summary is available here. Choose 1d, 14d, 30d, or 90d to view the detailed readings.</span>
               <button mat-stroked-button type="button" (click)="selectRange('90d')">View 90 days</button>
             </div>
@@ -328,7 +328,7 @@
             </div>
           </div>
         } @else if (selectedIsSleep()) {
-          <section class="health-sleep-chart" aria-label="Normalized Sleep trend">
+          <section class="health-sleep-chart" aria-label="Sleep history">
             <app-sleep-trend-chart
               [timelineNotes]="timelineNotes.context()"
               [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
@@ -340,7 +340,7 @@
               [sleepWindowLabel]="selectedWindow().label"
               [canNavigateOlder]="true"
               [canNavigateNewer]="selectedWindow().canNavigateNewer"
-              infoTooltip="Sleep sessions stay in the normalized Sleep model. Health resolves references to that model and keeps providers separate.">
+              infoTooltip="These are your recorded sleep sessions. Each source is shown separately.">
             </app-sleep-trend-chart>
           </section>
         } @else {

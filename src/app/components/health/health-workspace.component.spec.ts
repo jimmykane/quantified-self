@@ -1392,10 +1392,10 @@ describe('HealthWorkspaceComponent', () => {
       }),
     ]);
     expect(component.workspaceSourceOptions().map(provider => provider.label)).toContain('Garmin');
-    expect(component.sleepHrvNotice()).toContain('never averaged with standalone HRV');
+    expect(component.sleepHrvNotice()).toContain('shown separately from other HRV measurements');
     expect(component.visiblePriorityCards().map(card => card.label)).toContain('HRV');
     const hostText = (fixture.nativeElement as HTMLElement).textContent;
-    expect(hostText).toContain('Sleep HRV is read from normalized Sleep sessions');
+    expect(hostText).toContain('HRV recorded during sleep is shown separately');
     expect(hostText).toContain('Sleep HRV · 14-day trend');
     expect(hostText).toContain('Building personal range');
     expect(hostText).toContain('3/14 nights');
@@ -1934,7 +1934,7 @@ describe('HealthWorkspaceComponent', () => {
     const latestTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
       .format(todayStartMs + 120_000);
     expect(chart.latestValueText).toBe('58 bpm');
-    expect(chart.contextText).toBe(`Last recorded ${latestTime} · Interval averages`);
+    expect(chart.contextText).toBe(`Last recorded ${latestTime}`);
     expect(component.priorityWindow.dayCount).toBe(30);
     expect(component.priorityHrvWindow.label).toBe('14-day trend');
     expect(component.selectedRange()).toBe('1y');
@@ -2158,7 +2158,7 @@ describe('HealthWorkspaceComponent', () => {
     const rolling = component.metricView().series.find(item => item.semanticVariant === 'rolling_7_day_average')!;
     expect(rolling).toBeDefined();
     component.selectDetailSource(rolling.id);
-    expect(component.heartRateReadingNotice()).toContain('provider’s rolling value');
+    expect(component.heartRateReadingNotice()).toContain('covers the seven days before each reading');
     expect(component.heartRateReadingNotice()).not.toContain('Readings recorded during the day');
     component.selectMetricSource({ uid: 'user-1', metric: HEALTH_METRIC_IDS.HeartRate, sourceKey: 'health-series-1111111111111111' });
     expect(component.heartRateReadingNotice()).toBeNull();
@@ -2378,7 +2378,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(nativeElement.textContent).toContain('COROS');
     expect(nativeElement.textContent).not.toContain('secret-account');
     expect(nativeElement.textContent).toContain('each source kept separate');
-    expect(nativeElement.querySelector('table caption')?.textContent).toContain('Providers are not blended');
+    expect(nativeElement.querySelector('table caption')?.textContent).toContain('Multiple accounts from the same service are numbered');
     expect(nativeElement.querySelector('mat-expansion-panel.health-source-table-panel')).toBeTruthy();
     expect(nativeElement.querySelector('details.health-source-table-panel')).toBeNull();
     expect(nativeElement.textContent).toContain('missing');
@@ -2408,7 +2408,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(router.parseUrl(router.url).queryParamMap.get('metric')).toBe('sleep');
     expect((fixture.nativeElement as HTMLElement).querySelector('.sleep-chart-stub')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('table caption')?.textContent)
-      .toContain('Normalized Sleep sessions by source');
+      .toContain('Sleep records from each source');
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('secret-provider-user');
   });
 
@@ -2489,7 +2489,7 @@ describe('HealthWorkspaceComponent', () => {
       endTimeMs: component.selectedWindow().endTimeMs,
     });
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.textContent).toContain('Latest workout profile context: 72.0 kg from Garmin');
+    expect(host.textContent).toContain('Weight saved in your latest workout profile: 72.0 kg from Garmin');
     expect(host.textContent).toContain('It is not plotted as a weigh-in');
     expect(host.textContent).not.toContain('opaque-workout-account');
     expect(host.querySelectorAll('.health-chart-panel')).toHaveLength(0);
@@ -2579,7 +2579,7 @@ describe('HealthWorkspaceComponent', () => {
 
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.Vo2Max);
     expect(component.selectedActivityHealthResult()?.observations[0].metricId).toBe(HEALTH_METRIC_IDS.Vo2Max);
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Workout VO₂ max is separate evidence');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('VO₂ max from workouts is shown separately');
   });
 
   it('surfaces incomplete and failed workout-source loads without hiding valid Health data', async () => {
@@ -2598,9 +2598,9 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('2,048 source records');
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('2,048 workout candidates');
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('safety limits');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Not all readings could be loaded');
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('workout candidates');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Choose a shorter or earlier date range');
 
     loadActivityHealthRange.mockRejectedValueOnce(new Error('irrelevant private provider failure'));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
@@ -2608,7 +2608,7 @@ describe('HealthWorkspaceComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).textContent)
-      .not.toContain('Workout-backed observations could not be loaded');
+      .not.toContain('Readings from workouts could not be loaded');
 
     TestBed.inject(HealthMetricQueryService).invalidate('user-1');
     loadActivityHealthRange.mockRejectedValueOnce(new Error('private provider failure'));
@@ -2617,7 +2617,7 @@ describe('HealthWorkspaceComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
-    expect(text).toContain('Workout-backed observations could not be loaded');
+    expect(text).toContain('Readings from workouts could not be loaded');
     expect(text).not.toContain('private provider failure');
   });
 

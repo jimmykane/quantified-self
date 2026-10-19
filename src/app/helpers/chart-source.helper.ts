@@ -19,8 +19,8 @@ export interface ChartSourceChoice {
 const HEART_RATE_READINGS: Readonly<Record<string, readonly [string, string]>> = {
   daily_15_second: ['daytime', 'Heart rate throughout the day'],
   activity_interval_average: ['daytime', 'Heart rate throughout the day'],
-  activity_interval_minimum: ['interval-minimum', 'Interval minimum HR'],
-  activity_interval_maximum: ['interval-maximum', 'Interval maximum HR'],
+  activity_interval_minimum: ['interval-minimum', 'Lowest HR per recording period'],
+  activity_interval_maximum: ['interval-maximum', 'Highest HR per recording period'],
   sleep_session_average_heart_rate: ['sleep-average', 'Average sleep HR'],
   sleep_session_minimum_heart_rate: ['sleep-minimum', 'Minimum sleep HR'],
   nap_average_heart_rate: ['nap-average', 'Average nap HR'],
@@ -42,7 +42,7 @@ export function heartRateReading(series: Pick<HealthWorkspaceSeries, 'semanticVa
 
 export function restingHeartRateSupportNote(metric: string): string | null {
   return metric === HEALTH_METRIC_IDS.RestingHeartRate
-    ? 'Resting HR is a separate provider summary. This integration does not import Suunto resting HR; its daytime and sleep readings are available under Heart rate.' : null;
+    ? 'Resting HR is a separate measurement. We do not currently import a resting-HR value from Suunto; its daytime and sleep readings are under Heart rate.' : null;
 }
 
 export function healthMetricReadingTitle(metric: string, series?: HealthWorkspaceSeries | null): string | null {
@@ -53,7 +53,10 @@ export function healthMetricReadingTitle(metric: string, series?: HealthWorkspac
 }
 
 const SHORT_READINGS: Readonly<Record<string, string>> = {
-  point: 'Recorded measurement',
+  point: 'Recorded measurement', device_sample: 'Recorded reading', provider_state: 'Reported state',
+  manual_measurement: 'Entered manually', provider_weight_measurement: 'Weight measurement',
+  user_metrics_vo2_max: 'Fitness estimate', workout_profile_context: 'Workout profile weight',
+  workout_imported_running: 'Running workout estimate', workout_imported_cycling: 'Cycling workout estimate',
   session_duration: 'Main sleep', session_score: 'Main sleep',
   nap_duration: 'Nap', nap_score: 'Nap',
   daily_resting: 'Daily resting HR',
@@ -64,19 +67,22 @@ const SHORT_READINGS: Readonly<Record<string, string>> = {
   nap_minimum_heart_rate: 'Nap minimum', nap_resting_heart_rate: 'Nap resting',
   nap_maximum_spo2: 'Nap maximum', nap_average_respiration: 'Nap average',
   rolling_7_day_average: '7-day average',
-  daily_15_second: '15-second samples',
-  activity_interval_average: 'Interval averages', activity_interval_minimum: 'Interval minimums', activity_interval_maximum: 'Interval maximums',
+  daily_15_second: 'Heart rate throughout the day',
+  activity_interval_average: 'Heart rate throughout the day', activity_interval_minimum: 'Lowest HR per recording period', activity_interval_maximum: 'Highest HR per recording period',
 };
 const PROVENANCE = new Set(['provider summary', 'provider calculated', 'provider reported', 'recorded', 'device', 'manual',
   'quantified self derived', 'quantified self calculated', 'calculated by qs']);
 
 /** Shorten presentation only; retain every source/reading identity and full meaning. */
-export function healthChartSourceChoice(series: Pick<HealthWorkspaceSeries, 'id' | 'sourceLabel' | 'semanticLabel' | 'semanticVariant' | 'aggregation' | 'nativeOnly'> & Partial<Pick<HealthWorkspaceSeries, 'metricId'>>): ChartSourceChoice {
+export function healthChartSourceChoice(series: Pick<HealthWorkspaceSeries, 'id' | 'sourceLabel' | 'semanticLabel' | 'semanticVariant' | 'aggregation' | 'nativeOnly'> & Partial<Pick<HealthWorkspaceSeries, 'metricId' | 'origin' | 'recordingMethod'>>): ChartSourceChoice {
   const reading = healthChartReadingLabel(series);
-  const detail = series.semanticLabel + (series.nativeOnly ? ' · Native provider scale' : '');
+  const calculated = series.origin === 'quantified_self_derived' || series.recordingMethod === 'quantified_self_calculated'
+    || series.semanticVariant.startsWith('qs_') || /calculated by qs/i.test(series.semanticLabel);
+  const detail = [reading, calculated ? 'Calculated by QS' : null,
+    series.nativeOnly ? 'Original source format' : null].filter(Boolean).join(' · ');
   const measurement = heartRateReading(series);
-  const method = ['daily_15_second', 'activity_interval_average'].includes(series.semanticVariant) ? 'Recorded by your watch'
-      : series.semanticVariant.startsWith('qs_') ? 'Calculated by QS' : 'Provider-reported';
+  const method = calculated ? 'Calculated by QS'
+    : ['daily_15_second', 'activity_interval_average'].includes(series.semanticVariant) ? 'Recorded by your watch' : 'Synced reading';
   return { key: series.id, sourceLabel: series.sourceLabel, detail,
     ...(measurement ? { readingKey: measurement.key, readingLabel: measurement.label, readingMethod: method,
       readingDescription: series.semanticVariant === 'daily_15_second'
@@ -86,13 +92,15 @@ export function healthChartSourceChoice(series: Pick<HealthWorkspaceSeries, 'id'
           : detail,
       readingOrder: ['daytime', 'sleep-average', 'sleep-minimum', 'daily-average', 'daily-minimum', 'daily-maximum', 'rolling-average', 'nap-average', 'nap-minimum'].indexOf(measurement.key) } : {}),
     label: `${series.sourceLabel} · ${detail}`,
-    shortLabel: `${series.sourceLabel} · ${reading}${series.nativeOnly ? ' · Provider scale' : ''}` };
+    shortLabel: `${series.sourceLabel} · ${reading}${calculated ? ' · Calculated by QS' : ''}${series.nativeOnly ? ' · Source format' : ''}` };
 }
 
 /** A visible measurement label, not a replacement for its full provenance. */
 export function healthChartReadingLabel(series: Pick<HealthWorkspaceSeries, 'semanticLabel' | 'semanticVariant' | 'aggregation'>): string {
-  const parts = series.semanticLabel.split(' · ').filter(part => !PROVENANCE.has(part.toLowerCase()));
+  const parts = series.semanticLabel.split(' · ').filter(part => !PROVENANCE.has(part.toLowerCase()) && !part.toLowerCase().startsWith('calculated by qs'));
   const aggregation = series.aggregation.replace(/_/g, ' ').toLowerCase();
   if (parts.length > 1 && parts[0].toLowerCase() === aggregation) parts.shift();
-  return SHORT_READINGS[series.semanticVariant] || parts.join(' · ') || series.semanticLabel;
+  return SHORT_READINGS[series.semanticVariant.replace(/^qs_(?=sleep_|nap_)/, '')]
+    || (series.semanticVariant === 'provider_daily_summary' ? `Daily ${aggregation}` : null)
+    || parts.join(' · ') || 'Recorded reading';
 }

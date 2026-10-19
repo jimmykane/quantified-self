@@ -102,7 +102,7 @@ describe('daily Heart rate summaries', () => {
     expect(withDailyHeartRateSummaries([record], [{ ...chunk, semanticVariant: 'health_snapshot_heart_rate' }])[0].metrics).toEqual([]);
     expect(withDailyHeartRateSummaries([record], [{ ...chunk, metricId: 'heart_rate_variability' }])[0].metrics).toEqual([]);
     expect(heartRateSemanticLabel('rolling_7_day_average')).toContain('7-day average');
-    expect(heartRateSemanticLabel('qs_daily_interval_low')).toContain('lowest interval average');
+    expect(heartRateSemanticLabel('qs_daily_interval_low')).toContain('lowest recorded average HR');
     expect(heartRateSemanticLabel('unknown')).toBeNull();
   });
 });

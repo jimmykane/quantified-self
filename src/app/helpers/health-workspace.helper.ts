@@ -1,3 +1,4 @@
+import { healthChartReadingLabel, healthChartSourceChoice } from './chart-source.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
 import {
@@ -667,18 +668,20 @@ export function buildHealthMetricWorkspaceView(
       sourceLabel,
       deviceLabel: datum.deviceLabel || 'Not reported',
       valueText: datum.rowKind === 'chunk'
-        ? `${getNumberFormatter().format(datum.sampleCount)} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings)}`
+        ? `${getNumberFormatter().format(datum.sampleCount)} readings · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings)}`
         : formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings),
-      semanticsText: `${datum.semanticLabel
-        || `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}`}${datum.nativeOnly ? ' · native only' : ''}`,
+      semanticsText: [healthChartReadingLabel({ ...datum, semanticLabel: datum.semanticLabel
+        || `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)}` }),
+        datum.origin === HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived ? 'Calculated by QS' : null,
+        datum.nativeOnly ? 'Original source format' : null].filter(Boolean).join(' · '),
       coverageText: datum.rowKind === 'activity'
         ? 'Not applicable'
         : datum.rowKind === 'sleep'
           ? 'Sleep session'
         : coverageStatusLabel(datum.coverageStatus),
       freshnessText: datum.rowKind === 'activity' || datum.rowKind === 'sleep'
-        ? `Last observed ${formatCalendarDate(datum.calendarDate)}`
-        : freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
+        ? `Last recorded ${formatCalendarDate(datum.calendarDate)}`
+        : freshnessStatusByRowId.get(datum.rowId) || 'Update frequency not reported',
       conflict: !!datum.observationId && conflictingObservationIds.has(datum.observationId),
       manualMeasurement: datum.manualMeasurement,
     };
@@ -774,7 +777,7 @@ export function buildHealthPriorityRows(
       providerLabel: series.providerLabel,
       sourceLabel: series.sourceLabel,
       valueText: formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings),
-      contextText: `${formatCalendarDate(latest.calendarDate)} · ${humanize(series.aggregation)} · ${humanize(series.semanticVariant)}${series.nativeOnly ? ' · native only' : ''}`,
+      contextText: `${formatCalendarDate(latest.calendarDate)} · ${healthChartSourceChoice(series).detail}`,
       observedAtMs: latest.timestampMs,
     }];
   }).sort((left, right) => right.observedAtMs - left.observedAtMs
@@ -1690,7 +1693,7 @@ function sleepSummaryDatums(
         unit: getHealthMetricDefinition(metricId).canonicalUnit,
         normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
         nativeOnly: false,
-        semanticLabel: `${label ? `${label} · ` : ''}${point.isNap ? 'Nap' : 'Sleep session'} · ${calculated ? 'Calculated by QS · Recorded 15-second samples' : 'Provider summary · Provider calculated'}`,
+        semanticLabel: `${label ? `${label} · ` : ''}${point.isNap ? 'Nap' : 'Sleep session'} · ${calculated ? 'Calculated by QS from recorded heart rate' : 'Provider summary · Provider calculated'}`,
         valueType: HEALTH_VALUE_TYPES.Number,
         timestampMs: point.endTimeMs,
         calendarDate,
@@ -1881,7 +1884,7 @@ function exactSeriesCoverageText(
 ): string {
   const dates = new Set(items.map(item => item.calendarDate));
   if (items.every(item => item.rowKind === 'activity')) {
-    return `${getNumberFormatter().format(dates.size)} workout ${dates.size === 1 ? 'date' : 'dates'} · coverage not applicable`;
+    return `${getNumberFormatter().format(dates.size)} workout ${dates.size === 1 ? 'date' : 'dates'} · recording completeness does not apply`;
   }
   const partialDates = new Set(items
     .filter(item => item.coverageStatus === 'partial')
@@ -1891,10 +1894,10 @@ function exactSeriesCoverageText(
     .map(item => item.calendarDate));
   const requestedDays = calendarDayCount(startDate, endDate);
   const qualifiers = [
-    partialDates.size ? `${partialDates.size} partial` : null,
-    unknownDates.size ? `${unknownDates.size} unknown` : null,
+    partialDates.size ? `${partialDates.size} ${partialDates.size === 1 ? 'day' : 'days'} with recording gaps` : null,
+    unknownDates.size ? 'Recording completeness not reported' : null,
   ].filter((item): item is string => !!item);
-  return `${dates.size}/${requestedDays} days${qualifiers.length ? ` · ${qualifiers.join(' · ')}` : ''}`;
+  return `${dates.size} of ${requestedDays} days with readings${qualifiers.length ? ` · ${qualifiers.join(' · ')}` : ''}`;
 }
 
 function exactSeriesFreshness(
@@ -1916,9 +1919,9 @@ function exactSeriesFreshness(
     : Math.max(0, nowMs - lastObservedAtMs) > staleAfterMs ? 'stale' : 'fresh';
   return {
     text: status === 'unknown'
-      ? `Last observed ${formatCalendarDate(lastCalendarDate)}`
-      : `${humanize(status)} · ${formatCalendarDate(lastCalendarDate)}`,
-    statusLabel: humanize(status),
+      ? `Last recorded ${formatCalendarDate(lastCalendarDate)}`
+      : `Last recorded ${formatCalendarDate(lastCalendarDate)}${status === 'stale' ? ' · No recent updates' : ''}`,
+    statusLabel: status === 'fresh' ? 'Recent reading' : status === 'stale' ? 'No recent updates' : 'Update frequency not reported',
   };
 }
 
@@ -1976,8 +1979,8 @@ function resolveDeviceLabel(device: HealthObservation['device'] | HealthSampleCh
 function coverageStatusLabel(status: HealthCoverageStatus): string {
   switch (status) {
     case 'complete': return 'Complete';
-    case 'partial': return 'Partial';
-    case 'unknown': return 'Unknown';
+    case 'partial': return 'Recording gaps';
+    case 'unknown': return 'Completeness not reported';
   }
 }
 

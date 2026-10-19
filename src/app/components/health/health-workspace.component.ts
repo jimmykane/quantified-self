@@ -24,7 +24,6 @@ import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
 import {
   ACTIVITY_HEALTH_METRIC_IDS,
-  ACTIVITY_HEALTH_INCOMPLETE_REASONS,
   isActivityHealthMetricId,
   type ActivityHealthObservation,
   type ActivityHealthRangeResult,
@@ -777,12 +776,12 @@ export class HealthWorkspaceComponent {
     const series = readingKey ? available.filter(item => heartRateReading(item)?.key === readingKey) : [];
     const messages: string[] = [];
     if (series.some(item => item.semanticVariant === 'rolling_7_day_average')) {
-      messages.push('7-day average is the provider’s rolling value, not the average of your selected date range.');
+      messages.push('7-day average covers the seven days before each reading, rather than your selected date range.');
     }
     if (series.some(item => item.semanticVariant.startsWith('qs_daily_'))) {
       messages.push('Calculated by QS uses only the readings recorded on each day; gaps remain gaps.');
       if (series.some(item => ['qs_daily_interval_low', 'qs_daily_interval_high'].includes(item.semanticVariant))) {
-        messages.push('Lowest and highest interval averages are not the day’s true heart-rate extremes.');
+        messages.push('Lowest and highest recorded averages describe short recording periods. Your actual lowest or highest HR may differ.');
       }
     } else if (series.some(item => ['activity_interval_average', 'daily_15_second'].includes(item.semanticVariant))) {
       messages.push('Readings recorded during the day. This is not a live heart-rate feed.');
@@ -791,27 +790,11 @@ export class HealthWorkspaceComponent {
   });
   readonly incompleteNotice = computed(() => {
     const loaded = this.selectedHealthLoad();
-    const reasons: string[] = [];
-    if (loaded?.limitReached) {
-      reasons.push({
-        source_records: '2,048 source records',
-        sample_chunks: '256 sample chunks',
-        sample_points: '100,000 sample points',
-        serialized_bytes: '16 MiB of serialized data',
-      }[loaded.limitReached]);
-    }
     const activityResult = this.selectedActivityHealthResult();
-    if (activityEvidenceCanAffectView(this.routeState().metric, this.filteredHealthResult())
-      && activityResult?.complete === false
-      && activityResult.incompleteReason) {
-      reasons.push(activityResult.incompleteReason === ACTIVITY_HEALTH_INCOMPLETE_REASONS.CandidateLimit
-        ? '2,048 workout candidates'
-        : '1 MiB projected workout result');
-    }
-    if (!reasons.length) {
-      return null;
-    }
-    return `Incomplete result: this load stopped at the ${reasons.join(' and ')} safety ${reasons.length === 1 ? 'limit' : 'limits'}. Choose a shorter or older window to inspect the remaining data.`;
+    const workoutIncomplete = activityEvidenceCanAffectView(this.routeState().metric, this.filteredHealthResult())
+      && activityResult?.complete === false && !!activityResult.incompleteReason;
+    if (!loaded?.limitReached && !workoutIncomplete) return null;
+    return 'Not all readings could be loaded for this date range. Choose a shorter or earlier date range to see more.';
   });
   readonly activitySourceNotice = computed(() => {
     const metric = this.routeState().metric;
@@ -822,7 +805,7 @@ export class HealthWorkspaceComponent {
       || this.selectedStatus() !== 'ready') {
       return null;
     }
-    return 'Workout-backed observations could not be loaded. Provider Health measurements are shown, but this view may be incomplete.';
+    return 'Readings from workouts could not be loaded. Your other Health measurements are shown, but some readings may be missing.';
   });
   readonly workoutMetricNotice = computed(() => {
     const metric = this.routeState().metric;
@@ -830,10 +813,10 @@ export class HealthWorkspaceComponent {
       return null;
     }
     if (metric === HEALTH_METRIC_IDS.BodyWeight) {
-      return 'Workout Weight is profile context embedded in an imported workout, not a weigh-in. It is shown only for sources without a Health Weight measurement in this filtered window.';
+      return 'This weight comes from a workout profile. It is not a weigh-in, and is only shown when that source has no weight measurement in this date range.';
     }
     if (metric === HEALTH_METRIC_IDS.Vo2Max) {
-      return 'Workout VO₂ max is separate evidence grouped by source and discipline. It is never combined with provider Health or manual VO₂ max.';
+      return 'VO₂ max from workouts is shown separately by source and sport, alongside synced and manually entered VO₂ max.';
     }
     return null;
   });
@@ -842,12 +825,12 @@ export class HealthWorkspaceComponent {
       || !this.metricView().series.some(series => isSleepHrvSemanticVariant(series.semanticVariant))) {
       return null;
     }
-    return 'Sleep HRV is read from normalized Sleep sessions and shown as its own labeled series. It is never averaged with standalone HRV.';
+    return 'HRV recorded during sleep is shown separately from other HRV measurements.';
   });
   readonly revisionNotice = computed(() => {
     const count = this.selectedHealthLoad()?.result.pageInfo.sampleRevisionMismatchCount || 0;
     return count > 0
-      ? `${getNumberFormatter().format(count)} superseded sample ${count === 1 ? 'chunk was' : 'chunks were'} excluded. The loaded sample aggregate is incomplete.`
+      ? 'Some readings changed during loading and were left out of this view. Refresh to load the latest readings.'
       : null;
   });
   readonly partialCoverageNotice = computed(() => {
@@ -866,7 +849,7 @@ export class HealthWorkspaceComponent {
   readonly tableTruncationText = computed(() => {
     const view = this.metricView();
     return view.totalRowCount > view.rows.length
-      ? `Showing the newest ${getNumberFormatter().format(view.rows.length)} of ${getNumberFormatter().format(view.totalRowCount)} source observations.`
+      ? `Showing the newest ${getNumberFormatter().format(view.rows.length)} of ${getNumberFormatter().format(view.totalRowCount)} recorded readings.`
       : null;
   });
   readonly priorityCards = computed<HealthPriorityCardView[]>(() => {
