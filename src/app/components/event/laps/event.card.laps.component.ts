@@ -815,6 +815,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       this.getSelectableRows(table.dataSource.data).flatMap(row => row.lap ? [row.lap] : []),
       metricTypes,
       this.unitSettings,
+      this.event?.getActivities?.() || this.selectedActivities,
     ) : new Set(table.columns));
 
     return Object.fromEntries(metricGroups
@@ -823,8 +824,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         const availableTableCount = availableMetricTypesByTable.filter(types => types.has(type)).length;
         const label = !selectedMetricTypes.has(type)
           ? family === 'swimming' && availableTableCount > 0
-            ? availableTableCount === tableCount ? 'Recorded in current laps'
-              : `Recorded in ${availableTableCount} of ${tableCount} lap tables`
+            ? availableTableCount === tableCount
+              ? type === DataHeartRateMax.type ? 'Available in current lap tables' : 'Recorded in current laps'
+              : `${type === DataHeartRateMax.type ? 'Available' : 'Recorded'} in ${availableTableCount} of ${tableCount} lap tables`
             : null
           : availableTableCount === 0
           ? 'No data in current laps — hidden from the table'

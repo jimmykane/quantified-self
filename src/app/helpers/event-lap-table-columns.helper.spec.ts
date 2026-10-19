@@ -113,6 +113,19 @@ describe('event lap table columns helper', () => {
     }
   });
 
+  it.each([undefined, unitSettings])('discovers summary-only Max HR before column selection with units %j', units => {
+    const lap = hrLap(undefined);
+    const otherTabLap = hrLap(165, 130, true);
+    const types = [DataHeartRateMax.type, DataPowerMax.type];
+    for (const activity of [hrActivity([lap], 160), hrActivity([lap], undefined, [170]), hrActivity([lap, otherTabLap])]) {
+      expect(getAvailableEventLapMetricTypes(activity, [lap], types, units))
+        .toEqual(new Set([DataHeartRateMax.type]));
+      expect(getAvailableEventLapMetricTypes(activity, [], types, units)).toEqual(new Set());
+    }
+    expect(getAvailableEventLapMetricTypes(hrActivity([lap], 0, [null, 0, -1, Number.NaN]), [lap], types, units))
+      .toEqual(new Set());
+  });
+
   it('excludes cross-leg context laps from the session peak across lap tabs', () => {
     const lap = { ...hrLap(140), startDate: new Date(0), endDate: new Date(30_000) } as LapInterface;
     const rest = { ...hrLap(165, 130, true), startDate: new Date(30_000), endDate: new Date(60_000) } as LapInterface;
@@ -121,6 +134,14 @@ describe('event lap table columns helper', () => {
     const sibling = { type: 'Cycling', startDate: new Date(60_000), endDate: new Date(120_000) } as ActivityInterface;
     expect(getAverageEventLapMetrics([lap], [DataHeartRateMax.type], undefined, 'Swimming', activity, [activity, sibling]))
       .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm' }]);
+  });
+
+  it('does not discover a summary-only peak in a context-only lap table', () => {
+    const lap = { ...hrLap(undefined), startDate: new Date(0), endDate: new Date(120_000) } as LapInterface;
+    const activity = { ...hrActivity([lap], 170), startDate: new Date(0), endDate: new Date(60_000) } as ActivityInterface;
+    const sibling = { type: 'Cycling', startDate: new Date(60_000), endDate: new Date(120_000) } as ActivityInterface;
+    expect(getAvailableEventLapMetricTypes(activity, [lap], [DataHeartRateMax.type], undefined, [activity, sibling]))
+      .toEqual(new Set());
   });
 
   it('keeps selected peaks inside selected original laps and counts valid rest readings', () => {

@@ -547,6 +547,33 @@ describe('EventCardLapsComponent', () => {
         expect(activity.getStreamData(DataHeartRate.type)).toEqual(samples);
     });
 
+    it.each(['session', 'samples', 'other lap tab'] as const)('keeps the swim picker consistent with a peak from %s', source => {
+        const activity = createRestActivity([30, 30]);
+        activity.getLaps().forEach(lap => lap.removeStat(DataHeartRateMax.type));
+        if (source === 'session') activity.addStat(new DataHeartRateMax(170));
+        if (source === 'samples') activity.addStream(new Stream(DataHeartRate.type, [120, 170]));
+        if (source === 'other lap tab') {
+            activity.getLaps()[1].type = LapTypes.AutoLap;
+            activity.getLaps()[1].addStat(new DataHeartRateMax(170));
+        }
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.metricAvailability[DataHeartRateMax.type].availableTableCount)
+            .toBe(group.metricAvailability[DataHeartRateMax.type].tableCount);
+        expect(group.metricAvailability[DataHeartRateMax.type].label).toBe('Available in current lap tables');
+
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type, DataHeartRateMax.type] } }));
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        expect(table.columns).toContain(DataHeartRateMax.type);
+        expect(table.dataSource.data[0][DataHeartRateMax.type]).toBe('170 bpm');
+        expect(group.metricAvailability[DataHeartRateMax.type].label).toBeNull();
+        expect(group.selectedUnavailableMetricCount).toBe(0);
+    });
+
     it('does not promote a cross-sport context peak through another lap tab', () => {
         const activity = createRestActivity([30, 30, 10]);
         activity.getLaps()[0].addStat(new DataActiveLap(true));

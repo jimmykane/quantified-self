@@ -549,18 +549,19 @@ export const getEventLapMetricStat = (
   }
 };
 
-/** Discover lap values independently of the user's selected columns. */
+/** Discover displayed lap values, including the Max HR summary, independently of selected columns. */
 export const getAvailableEventLapMetricTypes = (
   activity: ActivityInterface,
   laps: readonly LapInterface[],
   metricTypes: readonly string[],
   unitSettings: UserUnitSettingsInterface | null | undefined,
+  eventActivities: readonly ActivityInterface[] = [],
 ): Set<string> => {
   const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
   const analytics = swimming ? getSwimLapAnalytics(activity, unitSettings) : new Map();
   const strokeLabels = swimming && metricTypes.includes(EVENT_LAP_STROKE_COLUMN)
     ? getSwimLapStrokeLabels(activity) : null;
-  return new Set(metricTypes.filter(type => EVENT_LAP_METRIC_TYPES.has(type)
+  const availableTypes = new Set(metricTypes.filter(type => EVENT_LAP_METRIC_TYPES.has(type)
     && (swimming || !SWIM_ONLY_LAP_METRIC_TYPES.has(type))
     && laps.some(lap => {
       if (type === EVENT_LAP_STROKE_COLUMN) {
@@ -573,6 +574,15 @@ export const getAvailableEventLapMetricTypes = (
       }
       return formatEventLapMetric(stat, type, unitSettings, activity.type).trim().length > 0;
     })));
+  if (metricTypes.includes(DataHeartRateMax.type) && !availableTypes.has(DataHeartRateMax.type)) {
+    const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, eventActivities));
+    // The table can show this column from its session summary even when every
+    // individual lap cell is empty. Reuse the same scope and validity rules.
+    if (getAverageEventLapMetrics(localLaps, [DataHeartRateMax.type], unitSettings, activity.type, activity, eventActivities).length) {
+      availableTypes.add(DataHeartRateMax.type);
+    }
+  }
+  return availableTypes;
 };
 
 interface LapSummaryContext {
