@@ -211,8 +211,9 @@ upgrades, provider enablement, retention and recorded-activity projections are u
 #834 monitoring was deployed and activated in `quantified-self-io` with explicit owner
 approval on 19 October 2026. All four indexes are READY, five existing Functions are ACTIVE,
 and the dashboard, ten metrics and seven enabled policies have live API readback. No new
-Function, schedule or channel was created. Natural route-sample confirmation and
-representative real-batch evidence remain in #834; activation alone does not close it.
+Function, schedule or channel was created. Natural route-sample confirmation passed
+at 10:06 UTC; representative real-batch evidence remains in #834. Idle monitoring
+health alone does not close it.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -291,9 +292,21 @@ and the actual :06 route cadence. No schedule or observation budget changed.
   normal and route scanner acknowledgment series also have positive points. No probe-failure
   series or worker/committed-job outcomes were observed in the bounded activation window.
   These idle/ACK observations do not establish successful reprocessing or real-batch latency.
-- The route's 12:06 run preceded the timing correction. Its next natural hourly observation
-  on the corrected revision is scheduled for **13:06 Helsinki / 10:06 UTC**, followed by
-  metric-ingestion delay. Keep this evidence pending until an actual route sample and positive
-  series arrive. No scanner/worker was manually invoked, no task was replayed, no new reparse
-  was enabled and no provider API was called. #834 remains open / In progress for the remaining
-  natural route and representative real-batch evidence; #543 is unchanged.
+- The route's 12:06 run preceded the timing correction and is not hourly-sample proof.
+  Its corrected revision emitted the first natural route sample at **13:06:02.863 Helsinki /
+  10:06:02.863 UTC**. Readback after ingestion confirmed a positive post-creation
+  `qs_reparse_queue_samples_v1` route point at 10:08:26.931 UTC. The sample had zero eligible
+  pending, zero unknown, no truncation and no stall. Normal/heavy natural samples at
+  10:00:39 UTC had the same healthy idle values and positive post-creation points.
+- Read-only follow-up through 10:10 UTC reconfirmed all five Functions ACTIVE, the two
+  corrected scanner revisions, four READY job indexes, ten matching metrics, the same
+  dashboard, seven enabled policies and all 26 valid chart/condition queries. Both existing
+  ten-minute schedules and the existing Alerts email channel remain enabled. The bounded
+  post-creation log/series window contained no probe failures, worker attempts or job commits;
+  absence of worker traffic during idle is not evidence of successful parsing or batch latency.
+- **#834 remains open / In progress only for representative real-batch progress, committed
+  outcomes and latency evidence.** Reuse natural real work when it occurs; running or
+  broadening a reparse requires separate approval. No scanner/worker was manually invoked,
+  no task was replayed, no reparse was enabled, no email was sent and no provider API was called.
+  No cloud configuration changed during this verification. #543 is unchanged. The heartbeat
+  follow-up is paused once this evidence is recorded; another idle poll cannot supply batch proof.
