@@ -230,11 +230,12 @@
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }
 
-.lap-selected-summary-label {
+.lap-selected-summary-row .lap-selected-summary-label {
   flex: 0 0 136px;
   justify-content: flex-start;
   max-width: 136px;
-  white-space: nowrap;
+  padding-inline: 8px;
+  white-space: normal;
   width: 136px;
 }
 
