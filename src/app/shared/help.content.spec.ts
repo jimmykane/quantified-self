@@ -936,6 +936,10 @@ describe('help.content', () => {
     expect(healthSection?.content).not.toContain('**View options**');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('**Read Heart rate charts by their time period.**');
+    expect(healthSection?.content).toContain('**Choose the measurement, then the source.**');
+    expect(healthSection?.content).toContain("Opening **View history** keeps the card's selected reading and source");
+    expect(healthSection?.content).toContain('does not import a separate Suunto resting-HR value');
+    expect(healthSection?.content).toContain('**Coverage belongs to each chart.**');
     expect(healthSection?.content).toContain('unweighted arithmetic average');
     expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
     expect(healthSection?.content).toContain('names the omitted source, returns an older saved 1-year selection to 90 days');

@@ -7,6 +7,12 @@ function candidate(key: string, metricId: HealthMetricId, value: number | string
 }
 
 describe('automatic Health source selection', () => {
+  it('starts Heart rate with daytime readings ahead of a same-day rolling summary, without preferring stale data', () => {
+    const rolling = { ...candidate('rolling', 'heart_rate', 90), semanticVariant: 'rolling_7_day_average' };
+    const daytime = { ...candidate('daytime', 'heart_rate', 60), semanticVariant: 'activity_interval_average' };
+    expect(selectDefaultHealthSourceKey([rolling, daytime])).toBe('daytime');
+    expect(selectDefaultHealthSourceKey([rolling, { ...daytime, points: candidate('older', 'heart_rate', 60, '2026-09-13').points }])).toBe('rolling');
+  });
   it.each(Object.values(HEALTH_METRIC_CATALOG))('uses recorded freshness for $id instead of provider order', metric => {
     const value = metric.valueType === 'category' ? 'rest' : 54;
     expect(selectDefaultHealthSourceKey([

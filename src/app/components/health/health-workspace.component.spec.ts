@@ -110,6 +110,7 @@ class HealthCategoryOverviewStubComponent {
   @Input() preferredSources: AppHealthMetricSources = {};
   @Input() savingPreferences = false;
   @Output() sourceSelected = new EventEmitter<{ uid: string; metric: HealthWorkspaceMetricSelection; sourceKey: string }>();
+  @Output() readingOpened = new EventEmitter<{ uid: string; metric: HealthWorkspaceMetricSelection; sourceKey: string }>();
   @Output() metricSelected = new EventEmitter<HealthWorkspaceMetricSelection>();
   @Output() providersObserved = new EventEmitter<{ uid: string; providers: HealthProvider[] }>();
 }
@@ -159,6 +160,8 @@ class ServiceSourceIconStubComponent {
   `,
 })
 class HealthMetricChartStubComponent {
+  @Input() selectedSourceKey: string | null = null;
+  @Output() sourceSelected = new EventEmitter<string>();
   @Input() fillHeight = false;
   @Input() timelineNotes = null;
   @Input() series: readonly HealthWorkspaceSeries[] = [];
@@ -2143,6 +2146,45 @@ describe('HealthWorkspaceComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it('explains only the selected heart-rate measurement rather than unrelated provider summaries', async () => {
+    await createComponent(metric => {
+      const loaded = rangeLoad(metric);
+      return Promise.resolve(metric !== HEALTH_METRIC_IDS.HeartRate ? loaded : { ...loaded, result: { ...loaded.result,
+        observations: loaded.result.observations.map(item => ({ ...item, entry: { ...item.entry, semanticVariant: 'rolling_7_day_average' } })),
+      } });
+    }, undefined, {}, HEALTH_METRIC_IDS.HeartRate);
+    expect(component.heartRateReadingNotice()).toContain('individual recorded intervals');
+    expect(component.heartRateReadingNotice()).not.toContain('rolling value');
+    const rolling = component.metricView().series.find(item => item.semanticVariant === 'rolling_7_day_average')!;
+    expect(rolling).toBeDefined();
+    component.selectDetailSource(rolling.id);
+    expect(component.heartRateReadingNotice()).toContain('provider’s rolling value');
+    expect(component.heartRateReadingNotice()).not.toContain('individual recorded intervals');
+    component.selectMetricSource({ uid: 'user-1', metric: HEALTH_METRIC_IDS.HeartRate, sourceKey: 'health-series-1111111111111111' });
+    expect(component.heartRateReadingNotice()).toBeNull();
+  });
+
+  it('keeps the overview reading in history and accepts detail source changes with one feedback owner', async () => {
+    await createComponent();
+    const [first, second] = component.metricView().series;
+    expect(first).toBeDefined(); expect(second).toBeDefined();
+    const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
+    overview.readingOpened.emit({ uid: 'user-1', metric: component.selectedMetric(), sourceKey: first.id });
+    overview.metricSelected.emit(component.selectedMetric());
+    fixture.detectChanges(); await fixture.whenStable();
+    const chart = fixture.debugElement.query(By.directive(HealthMetricChartStubComponent)).componentInstance as HealthMetricChartStubComponent;
+    expect(chart.selectedSourceKey).toBe(first.id);
+    haptics.selection.mockClear();
+    chart.sourceSelected.emit(second.id);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(chart.selectedSourceKey).toBe(second.id);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    const writes = updateHealthWorkspacePreferences.mock.calls.length;
+    chart.sourceSelected.emit(second.id); chart.sourceSelected.emit('unavailable');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(writes);
+  });
+
   it('queues metric-source and range changes together and discards pending pins when the owner changes', async () => {
     await createComponent();
     let finish!: () => void;
@@ -2340,7 +2382,8 @@ describe('HealthWorkspaceComponent', () => {
     expect(nativeElement.querySelector('mat-expansion-panel.health-source-table-panel')).toBeTruthy();
     expect(nativeElement.querySelector('details.health-source-table-panel')).toBeNull();
     expect(nativeElement.textContent).toContain('missing');
-    expect(nativeElement.textContent).toContain('source-days');
+    expect(nativeElement.textContent).toContain('Coverage is shown separately for each chart');
+    expect(nativeElement.textContent).not.toContain('source-days');
 
     expect(component.allProvidersSelected()).toBe(true);
     component.openSources();

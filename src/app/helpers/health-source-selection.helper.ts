@@ -35,7 +35,14 @@ export function selectDefaultHealthSourceKey(candidates: readonly HealthSourceSe
     || Number(!!left.candidate.semanticVariant?.startsWith('nap_')) - Number(!!right.candidate.semanticVariant?.startsWith('nap_'))
     || Number(!!left.candidate.nativeOnly) - Number(!!right.candidate.nativeOnly)
     || right.latest.calendarDate.localeCompare(left.latest.calendarDate)
+    || heartRatePriority(left.candidate) - heartRatePriority(right.candidate)
     || right.latest.timestampMs - left.latest.timestampMs
     || right.days - left.days);
   return ranked[0]?.candidate.key || null;
+}
+
+function heartRatePriority(candidate: HealthSourceSelectionCandidate): number {
+  if (candidate.metricId !== HEALTH_METRIC_IDS.HeartRate) return 0;
+  return ['daily_15_second', 'activity_interval_average'].includes(candidate.semanticVariant || '') ? 0
+    : /^(qs_)?sleep_session_average_heart_rate$/.test(candidate.semanticVariant || '') ? 1 : 2;
 }

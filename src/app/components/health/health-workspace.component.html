@@ -63,6 +63,7 @@
       [vitalsHighlightedMetrics]="highlightedVitalsMetrics()"
       [changeSignals]="overviewChangeSignals()"
       [preferredSources]="preferredMetricSources()" (sourceSelected)="selectMetricSource($event)"
+      (readingOpened)="selectMetricSource($event)"
       [savingPreferences]="isSavingPreferences()"
       [referenceDate]="overviewEndDate()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()"
       (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)">
@@ -344,6 +345,8 @@
           </section>
         } @else {
           <app-health-metric-chart
+            [selectedSourceKey]="preferredMetricSources()[routeState().metric] || null"
+            (sourceSelected)="selectDetailSource($event)"
             [fillHeight]="true"
             [timelineNotes]="timelineNotes.context()"
             [series]="metricView().series"

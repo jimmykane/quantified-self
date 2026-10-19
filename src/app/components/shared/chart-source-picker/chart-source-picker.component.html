@@ -1,3 +1,14 @@
+@if (measurements().length > 1 || measurements().length && !choice()) {
+  <div class="chart-reading-picker">
+    <span>Measurement</span>
+    <mat-select aria-label="Heart rate measurement" [value]="choice()?.readingKey" [disabled]="disabled()"
+      (selectionChange)="chooseMeasurement($event.value)">
+      @for (reading of measurements(); track reading.key) {
+        <mat-option [value]="reading.key">{{ reading.label }}</mat-option>
+      }
+    </mat-select>
+  </div>
+}
 @if (canChoose()) {
   <button mat-button type="button" class="chart-source-trigger" [disabled]="disabled()"
     [matMenuTriggerFor]="sourceMenu" (menuOpened)="opened()" [attr.aria-label]="ariaLabel()" [matTooltip]="description()">
@@ -7,15 +18,16 @@
   <span class="chart-source-caption" [matTooltip]="description()">{{ label() }}</span>
 }
 <mat-menu #sourceMenu="matMenu" class="qs-menu-panel" xPosition="before">
-  <div class="chart-source-menu-heading">Source and reading</div>
+  <div class="chart-source-menu-heading">{{ measurements().length ? 'Source' : 'Source and reading' }}</div>
   @if (selectedKey() && !choice()) {
     <p class="chart-source-menu-notice">Your selected reading has no data in this period.</p>
   }
-  @for (option of choices(); track option.key) {
+  @for (option of sourceChoices(); track option.key) {
     <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="option.key === selectedKey()"
       [disabled]="disabled()" [attr.aria-label]="option.label" (click)="choose(option.key)">
       <mat-icon aria-hidden="true">{{ option.key === selectedKey() ? 'check' : 'radio_button_unchecked' }}</mat-icon>
-      <span class="chart-source-option"><span class="chart-source-option-label">{{ option.sourceLabel }}</span><span class="chart-source-option-detail">{{ option.detail }}</span></span>
+      <span class="chart-source-option"><span class="chart-source-option-label">{{ option.sourceLabel }}</span><span class="chart-source-option-detail">{{ option.readingMethod || option.detail }}</span></span>
     </button>
   }
 </mat-menu>
+@if (choice()?.readingMethod; as method) { <span class="chart-reading-method">{{ method }}</span> }

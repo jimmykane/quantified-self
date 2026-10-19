@@ -43,6 +43,8 @@ import { ProviderPresentation, buildProviderPresentation } from '@shared/provide
 import { SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { healthMetricUsesSleep } from '../../helpers/health-workspace.helper';
+import { heartRateReading, restingHeartRateSupportNote } from '../../helpers/chart-source.helper';
+import { selectDefaultHealthSourceKey } from '../../helpers/health-source-selection.helper';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
 import { from, Subscription } from 'rxjs';
 import { distinctUntilChanged, map, take } from 'rxjs/operators';
@@ -763,9 +765,16 @@ export class HealthWorkspaceComponent {
       : null;
   });
   readonly heartRateReadingNotice = computed(() => {
+    const supportNote = restingHeartRateSupportNote(this.routeState().metric);
+    if (supportNote) return supportNote;
     if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRate
       || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
-    const series = this.metricView().series;
+    const available = this.metricView().series;
+    const selectedKey = this.preferredMetricSources()[HEALTH_METRIC_IDS.HeartRate]
+      || selectDefaultHealthSourceKey(available.map(item => ({ ...item, key: item.id })));
+    const selected = available.find(item => item.id === selectedKey);
+    const readingKey = selected && heartRateReading(selected)?.key;
+    const series = readingKey ? available.filter(item => heartRateReading(item)?.key === readingKey) : [];
     const messages: string[] = [];
     if (series.some(item => item.semanticVariant === 'rolling_7_day_average')) {
       messages.push('7-day average is the provider’s rolling value, not the average of your selected date range.');
@@ -849,8 +858,9 @@ export class HealthWorkspaceComponent {
     if (missingDays === 0 && partialDays === 0 && unknownDays === 0) {
       return null;
     }
-    const formatter = getNumberFormatter();
-    return `Coverage is incomplete for this view: ${formatter.format(missingDays)} missing, ${formatter.format(partialDays)} partial, and ${formatter.format(unknownDays)} unknown source-days.`;
+    return missingDays || partialDays
+      ? 'Some days have missing or partial readings. Coverage is shown separately for each chart; missing readings are not zero.'
+      : 'Some sources do not report how complete each day’s recording is. Dates with readings are listed with each chart.';
   });
   readonly metricRows = computed<HealthObservationTableRow[]>(() => this.metricView().rows);
   readonly tableTruncationText = computed(() => {
@@ -1482,6 +1492,13 @@ export class HealthWorkspaceComponent {
     this.metricSourcesTouched.add(metric);
     this.preferredMetricSources.update(current => ({ ...current, [metric]: sourceKey }));
     this.queueWorkspacePreferenceWrite();
+  }
+
+  selectDetailSource(sourceKey: string): void {
+    if (this.preferredMetricSources()[this.selectedMetric()] === sourceKey
+      || !this.metricView().series.some(series => series.id === sourceKey)) return;
+    this.haptics.selection();
+    this.selectMetricSource({ uid: this.signedInUserID(), metric: this.selectedMetric(), sourceKey });
   }
 
   showAllProviders(): void {

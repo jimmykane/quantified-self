@@ -4,6 +4,17 @@ import { healthChartSourceChoice } from './chart-source.helper';
 describe('compact chart source attribution', () => {
   const series = { id: 'stable-key', sourceLabel: 'Suunto · Account 2', aggregation: 'average', nativeOnly: false,
     semanticVariant: 'sleep_session_average_hrv', semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated' };
+  it('groups comparable daytime readings while separating rolling, sleep and nap measurements', () => {
+    const choice = (semanticVariant: string) => healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant });
+    expect(choice('daily_15_second').readingKey).toBe('daytime');
+    expect(choice('activity_interval_average').readingKey).toBe('daytime');
+    expect(choice('rolling_7_day_average').readingKey).not.toBe('daytime');
+    expect(choice('sleep_session_average_heart_rate').readingKey).toBe('sleep-average');
+    expect(choice('qs_sleep_session_average_heart_rate').readingKey).toBe('sleep-average');
+    expect(choice('sleep_session_minimum_heart_rate').readingKey).toBe('sleep-minimum');
+    expect(choice('nap_average_heart_rate').readingKey).toBe('nap-average');
+    expect(choice('unknown_provider_variant').readingKey).toContain('unknown_provider_variant');
+  });
   it('keeps account and reading meaning while moving provenance to expanded details', () => {
     const choice = healthChartSourceChoice(series);
     expect(choice.key).toBe(series.id);

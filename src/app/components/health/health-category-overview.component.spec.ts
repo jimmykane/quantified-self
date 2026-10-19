@@ -10,6 +10,8 @@ import type { AppDashboardHealthMetricSettings } from '../../models/app-user.int
 import { buildDashboardHealthContext, type DashboardHealthContext, type DashboardHealthEvidence } from '../../helpers/dashboard-health-context.helper';
 import { DashboardHealthService } from '../../services/dashboard-health.service';
 import { Subject } from 'rxjs';
+import { buildDashboardHealthExample } from '../../helpers/dashboard-health-preview.helper';
+import { opaqueHealthSeriesId } from '../../helpers/health-workspace.helper';
 
 @Component({ selector: 'app-dashboard-health-chart', standalone: true, template: '' })
 class HealthChartStubComponent {
@@ -52,6 +54,23 @@ describe('Health category overview', () => {
       health: null, history: null, activities: null, sessions: [], errors: [],
     }, settings);
   }
+  it('names the actual HR measurement and hands the default reading to history without requiring a source change', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    component.selectCategory('vitals'); fixture.detectChanges();
+    const context = buildDashboardHealthExample({ metric: 'heart_rate', range: '30d' },
+      resolveHealthWorkspaceWindow({ metric: 'heart_rate', range: '30d', endDate: '2026-10-11' }), null);
+    context.selectedKey = opaqueHealthSeriesId('selected-daytime');
+    context.selected!.model.series.semanticVariant = 'activity_interval_average';
+    component.observeSources(context); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#health-overview-heart_rate')?.textContent).toContain('Heart rate throughout the day');
+    const opened = vi.fn(), selected = vi.fn();
+    component.readingOpened.subscribe(opened); component.metricSelected.subscribe(selected);
+    fixture.nativeElement.querySelector('[aria-label="View Heart rate throughout the day history"]').click();
+    expect(opened).toHaveBeenCalledExactlyOnceWith({ uid: 'owner', metric: 'heart_rate', sourceKey: context.selectedKey });
+    expect(selected).toHaveBeenCalledExactlyOnceWith('heart_rate');
+    fixture.componentRef.setInput('user', { uid: 'other-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    component.openHistory('heart_rate'); expect(opened).toHaveBeenCalledTimes(1);
+  });
   it('puts the change summary above existing metrics only on All and leaves cards intact', () => {
     const fixture = create();
     fixture.componentRef.setInput('changeSignals', [{ id: 'hrv', label: 'HRV', sourceLabel: 'Suunto',

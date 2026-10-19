@@ -134,8 +134,26 @@ describe('HealthMetricChartComponent', () => {
     fixture.componentRef.setInput('series', [{ ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate,
       semanticLabel: '7-day average · Provider reported', semanticVariant: 'rolling_7_day_average' }]);
     fixture.detectChanges();
-    expect(host.querySelector('h3')?.textContent).toBe('7-day average');
-    expect(host.textContent).toContain('Garmin · Provider reported');
+    expect(host.querySelector('h3')?.textContent).toBe('7-day average HR');
+    expect(host.textContent).toContain('Garmin · Provider-reported');
+  });
+  it('keeps the selected daytime source first and separates sleep and rolling measurements', async () => {
+    const host = await render(null);
+    const heart = { ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate };
+    const garmin = { ...heart, id: 'garmin-day', semanticVariant: 'daily_15_second' };
+    const suunto = { ...heart, id: 'suunto-day', provider: HEALTH_PROVIDERS.SuuntoApp, sourceLabel: 'Suunto', semanticVariant: 'activity_interval_average' };
+    fixture.componentRef.setInput('series', [
+      { ...heart, id: 'rolling', semanticVariant: 'rolling_7_day_average' },
+      { ...heart, id: 'sleep', semanticVariant: 'sleep_session_average_heart_rate' }, garmin, suunto,
+    ]);
+    fixture.componentRef.setInput('selectedSourceKey', 'suunto-day'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['suunto-day', 'garmin-day']);
+    expect(host.querySelectorAll('app-health-metric-series-chart')).toHaveLength(2);
+    fixture.componentRef.setInput('selectedSourceKey', 'sleep'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['sleep']);
+    fixture.componentRef.setInput('selectedSourceKey', 'not-in-period'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels()).toEqual([]);
+    expect(host.textContent).toContain('no readings in this period');
   });
 
   it('uses flat shared rows while preserving source separation and status labels', async () => {

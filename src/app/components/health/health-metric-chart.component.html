@@ -1,3 +1,10 @@
+@if (heartRateChoices().length) {
+  <div class="health-reading-controls">
+    <app-chart-source-picker [choices]="heartRateChoices()" [selectedKey]="chosenKey()"
+      chartTitle="Heart rate" (selected)="chooseSource($event)" />
+    @if (!chosenReading()) { <p role="status">Your selected source and measurement have no readings in this period. Choose another measurement or period.</p> }
+  </div>
+}
 <div class="health-chart-grid" aria-label="Source-separated metric charts">
   @for (chart of renderedModels(); track chart.model.series.id) {
     @let model = chart.model;
