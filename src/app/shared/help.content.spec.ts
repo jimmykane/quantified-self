@@ -2476,11 +2476,13 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('without affecting your other MCP clients');
   });
 
-  it('directs account deletion to the Account settings section', () => {
+  it('directs account deletion to Data management and its confirmation dialog', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
-    expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> Danger Zone**');
-    expect(dataAndPrivacySection?.content).not.toContain('**Settings -> Profile -> Danger Zone**');
+    expect(dataAndPrivacySection?.content).toContain('[Settings → Data management](/settings?section=data-management)');
+    expect(dataAndPrivacySection?.content).toContain('choose **Delete account…**');
+    expect(dataAndPrivacySection?.content).toContain('Review the consequences and confirm in the dialog');
+    expect(dataAndPrivacySection?.content).not.toContain('Danger Zone');
   });
 
   it('should explain public event and comparison sharing exposure', () => {

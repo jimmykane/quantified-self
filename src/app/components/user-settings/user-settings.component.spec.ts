@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { UserSettingsComponent } from './user-settings.component';
+import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-account-dialog.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
@@ -153,7 +154,7 @@ describe('UserSettingsComponent', () => {
                 { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: Clipboard, useValue: clipboardMock },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
-                { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn(), isAdmin: vi.fn().mockResolvedValue(false) } },
+                { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn(), deleteAllUserData: vi.fn(), isAdmin: vi.fn().mockResolvedValue(false) } },
                 { provide: Router, useValue: mockRouter },
                 { provide: MatSnackBar, useValue: snackBarMock },
                 { provide: AppWindowService, useValue: {} },
@@ -515,6 +516,7 @@ describe('UserSettingsComponent', () => {
             'map',
             'privacy',
             'account',
+            'data-management',
         ]);
     });
 
@@ -526,7 +528,7 @@ describe('UserSettingsComponent', () => {
         expect(groups[1].querySelector('.settings-group-title').textContent).toBe('Privacy & account');
         const triggers = Array.from(fixture.nativeElement.querySelectorAll('.settings-section-trigger')) as HTMLButtonElement[];
         expect(triggers.map(button => button.getAttribute('aria-label'))).toEqual([
-            'Units & formatting', 'Dashboard', 'Training load', 'Charts', 'Maps', 'Privacy & emails', 'Account',
+            'Units & formatting', 'Dashboard', 'Training load', 'Charts', 'Maps', 'Privacy & emails', 'Account', 'Data management',
         ]);
         expect(triggers.every(button => button.classList.contains('mat-mdc-button'))).toBe(true);
         expect(triggers.every(button => button.type === 'button')).toBe(true);
@@ -607,7 +609,7 @@ describe('UserSettingsComponent', () => {
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('form button')) as HTMLButtonElement[];
         expect(buttons.filter(button => button.type === 'submit'))
             .toEqual([fixture.nativeElement.querySelector('.settings-save-bar button')]);
-        const deleteButton = buttons.find(button => button.textContent?.includes('Delete My Account'))!;
+        const deleteButton = buttons.find(button => button.textContent?.includes('Delete account…'))!;
         expect(deleteButton.type).toBe('button');
     });
 
@@ -616,7 +618,7 @@ describe('UserSettingsComponent', () => {
         const name = component.userSettingsFormGroup.get('displayName');
         name.setValue('Pending name');
         name.markAsDirty();
-        component.activeSection = 'account';
+        component.activeSection = 'data-management';
         let finishSave!: () => void;
         const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(
             (resolve, reject) => { finishSave = () => fail ? reject(new Error('offline')) : resolve([]); }
@@ -625,7 +627,7 @@ describe('UserSettingsComponent', () => {
         const save = component.onSubmit(new Event('submit'));
         fixture.detectChanges();
         const overview = fixture.nativeElement.querySelector('.settings-overview') as HTMLElement;
-        const deleteButton = fixture.nativeElement.querySelector('.danger-card button') as HTMLButtonElement;
+        const deleteButton = fixture.nativeElement.querySelector('#settings-data-management-content button') as HTMLButtonElement;
         expect(overview.hasAttribute('inert')).toBe(true);
         expect(deleteButton.disabled).toBe(true);
         expect(fixture.nativeElement.querySelector('.settings-save-bar mat-spinner')).toBeTruthy();
@@ -691,12 +693,12 @@ describe('UserSettingsComponent', () => {
         }
     });
 
-    it('shows Privacy immediately before the final Account section', async () => {
+    it('places Data management last, after Privacy and Account', async () => {
         await createSettings();
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 
-        expect(sectionIds[sectionIds.length - 2]).toBe('privacy');
-        expect(sectionIds[sectionIds.length - 1]).toBe('account');
+        expect(sectionIds.slice(-3)).toEqual(['privacy', 'account', 'data-management']);
+        expect(component.settingsGroups.flatMap(group => group.sections.map(section => section.id))).toEqual(sectionIds);
     });
 
     it('should update section query param when a settings section is selected', async () => {
@@ -724,7 +726,7 @@ describe('UserSettingsComponent', () => {
         const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
 
-        expect(panels).toHaveLength(7);
+        expect(panels).toHaveLength(8);
         expect(profilePanel.hidden).toBe(false);
         expect(mapPanel.hidden).toBe(true);
 
@@ -746,13 +748,27 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('account');
     });
 
-    it('maps the legacy delete-account section query to account', async () => {
+    it.each(['data-management', 'delete-account'])('opens Data management from the %s section query', async section => {
         await createSettings();
         component.activeSection = 'account';
 
-        queryParamMapSubject.next(convertToParamMap({ section: 'delete-account' }));
+        queryParamMapSubject.next(convertToParamMap({ section }));
 
-        expect(component.activeSection).toBe('account');
+        expect(component.activeSection).toBe('data-management');
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(TestBed.inject(MatDialog).open).not.toHaveBeenCalled();
+    });
+
+    it.each(['data-management', 'delete-account'])('initializes the %s link without opening the deletion dialog', async section => {
+        mockActivatedRoute.snapshot.queryParamMap = convertToParamMap({ section });
+        queryParamMapSubject.next(convertToParamMap({ section }));
+        await renderSettings();
+
+        expect(component.activeSection).toBe('data-management');
+        expect(fixture.nativeElement.querySelector('#settings-data-management-content').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('#settings-account-content').hidden).toBe(true);
+        expect(TestBed.inject(MatDialog).open).not.toHaveBeenCalled();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
     it('collapses the overview when the section query param is missing', async () => {
@@ -764,24 +780,61 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBeNull();
     });
 
-    it('shows delete account as an action only while the account section is active', async () => {
+    it('keeps deletion collapsed on arrival and separate from Account and profile links', async () => {
         await renderSettings();
-        component.activeSection = 'units';
-        fixture.detectChanges();
-
         const accountPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
-        expect(accountPanel.querySelector('.danger-card')).toBeTruthy();
+        const dataPanel = fixture.nativeElement.querySelector('#settings-data-management-content');
+        expect(component.activeSection).toBeNull();
+        expect(dataPanel.hidden).toBe(true);
+        expect(dataPanel.textContent).toContain('Delete account…');
+        expect(accountPanel.textContent).not.toContain('Delete account');
+        expect(fixture.nativeElement.textContent).not.toContain('Danger Zone');
         expect(accountPanel.querySelector('app-mcp-connections')).toBeNull();
         expect(accountPanel.textContent).not.toContain('MCP connections');
         expect(accountPanel.querySelector('[formControlName="displayName"]')).toBeTruthy();
-        expect(accountPanel.textContent).toContain('Delete My Account');
-        expect(accountPanel.hidden).toBe(true);
 
-        component.activeSection = 'account';
-        fixture.detectChanges();
+        for (const section of ['account', 'profile']) {
+            queryParamMapSubject.next(convertToParamMap({ section }));
+            fixture.detectChanges();
+            expect(accountPanel.hidden).toBe(false);
+            expect(dataPanel.hidden).toBe(true);
+        }
 
-        expect(accountPanel.hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
+        expect(TestBed.inject(MatDialog).open).not.toHaveBeenCalled();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    });
+
+    it('opens Data management by disclosure and requires the existing deletion confirmation', async () => {
+        await renderSettings();
+        const trigger = fixture.nativeElement.querySelector('#settings-data-management-title') as HTMLButtonElement;
+        const panel = fixture.nativeElement.querySelector('#settings-data-management-content') as HTMLElement;
+        trigger.click();
+        await fixture.whenStable(); fixture.detectChanges();
+
+        expect(component.activeSection).toBe('data-management');
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+        expect(panel.hidden).toBe(false);
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: { section: 'data-management' },
+            queryParamsHandling: 'merge',
+        });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+
+        panel.querySelector('button').click();
+        expect(TestBed.inject(MatDialog).open).toHaveBeenCalledExactlyOnceWith(DeleteAccountDialogComponent, {
+            data: { displayName: component.user.displayName, hasActiveSubscription: false },
+        });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+        expect(TestBed.inject(AppUserService).deleteAllUserData).not.toHaveBeenCalled();
+
+        trigger.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(panel.hidden).toBe(true);
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
     });
 
     it('should initialize acceptedTrackingPolicy from user data', async () => {
@@ -1701,6 +1754,7 @@ describe('UserSettingsComponent', () => {
         component.deleteUser(new Event('click'));
 
         expect(dialog.open).not.toHaveBeenCalled();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
     it('shows validation helper when required profile controls are invalid', async () => {

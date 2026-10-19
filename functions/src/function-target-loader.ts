@@ -167,6 +167,8 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./tasks/derived-metrics-worker') as FunctionModule,
   processDerivedMetricsIngressTask:
     () => module.require('./tasks/derived-metrics-ingress-worker') as FunctionModule,
+  observeDerivedMetricsHealth:
+    () => module.require('./derived-metrics/monitoring-schedule') as FunctionModule,
 });
 
 export const OPTIMIZED_FUNCTION_TARGETS = Object.freeze(Object.keys(TARGET_LOADERS));

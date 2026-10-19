@@ -1660,7 +1660,7 @@ You can copy the endpoint and manage connected clients in [**Connections -> MCP*
 
 ## Account deletion
 
-You can delete your account from **Settings -> Account -> Danger Zone**.
+Open [Settings → Data management](/settings?section=data-management), then choose **Delete account…**. Review the consequences and confirm in the dialog. Opening Account or your profile does not show the deletion controls.
 
 If your account has an email address, self-deletion sends a confirmation email after the request completes.
 

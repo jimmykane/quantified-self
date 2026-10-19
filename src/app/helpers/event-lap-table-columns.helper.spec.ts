@@ -86,6 +86,7 @@ describe('event lap table columns helper', () => {
 
   it.each([undefined, unitSettings])('uses the whole-session HR peak including rest with units %j', units => {
     const laps = [hrLap(110, 90), hrLap(137, 130), hrLap(165, 180, true)];
+    laps[1].getDuration = () => new DataDuration(90);
     const activity = hrActivity(laps, 155, [null, 0, 150, 170, Number.NaN, Number.POSITIVE_INFINITY]);
     expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type, DataHeartRateAvg.type], units, 'Swimming', activity))
       .toEqual([{ type: DataHeartRateMax.type, display: '170 bpm' }, { type: DataHeartRateAvg.type, display: '110 bpm' }]);
