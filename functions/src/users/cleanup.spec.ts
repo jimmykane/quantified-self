@@ -30,6 +30,7 @@ const {
     cleanupMcpOAuthStateForUserMock,
     cleanupRejectedRouteOriginalFilesForUserMock,
     cleanupServiceDisconnectTasksForUserMock,
+    cleanupSendUploadReservationsMock,
 } = vi.hoisted(() => {
     const dataCleanupMocks = {
         beginAccountDataCleanup: vi.fn().mockResolvedValue({ attemptId: 'synthetic-attempt', suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] }),
@@ -199,6 +200,7 @@ const {
         cleanupMcpOAuthStateForUserMock: vi.fn().mockResolvedValue(undefined),
         cleanupRejectedRouteOriginalFilesForUserMock: vi.fn().mockResolvedValue(undefined),
         cleanupServiceDisconnectTasksForUserMock: vi.fn().mockResolvedValue(undefined),
+        cleanupSendUploadReservationsMock: vi.fn().mockResolvedValue(undefined),
     };
 });
 
@@ -247,6 +249,11 @@ vi.mock('../routes/rejected-original-cleanup', () => ({
 }));
 
 vi.mock('./data-cleanup', () => ({ ...dataCleanupMocks, ACCOUNT_DELETION_ROOT_COLLECTIONS: ['users', 'customers'], ACCOUNT_DELETION_TARGETS_COLLECTION: 'operationalTargets' }));
+
+vi.mock('../activity-send/upload-cleanup', () => ({
+    SEND_UPLOAD_CLEANUP_COLLECTION: 'activitySendUploadCleanup',
+    cleanupSendUploadReservations: cleanupSendUploadReservationsMock,
+}));
 
 vi.mock('../service-disconnect-cleanup', () => ({
     SERVICE_DISCONNECT_CLEANUP_COLLECTION: 'serviceDisconnectCleanup',
@@ -379,6 +386,7 @@ describe('cleanupUserAccountsV2', () => {
         cleanupMcpOAuthStateForUserMock.mockReset().mockResolvedValue(undefined);
         cleanupRejectedRouteOriginalFilesForUserMock.mockReset().mockResolvedValue(undefined);
         cleanupServiceDisconnectTasksForUserMock.mockReset().mockResolvedValue(undefined);
+        cleanupSendUploadReservationsMock.mockReset().mockResolvedValue(undefined);
         transactionDeleteMock.mockReset();
         runTransactionMock.mockReset().mockImplementation(async (handler: (transaction: {
             get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
@@ -434,6 +442,17 @@ describe('cleanupUserAccountsV2', () => {
         });
         expect(ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS.secrets.map(secret => secret.name))
             .toEqual(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.secrets.map(secret => secret.name));
+    });
+
+    it('redrives only the deleted account upload reservations and rejects failed reconciliation', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        cleanupSendUploadReservationsMock.mockRejectedValueOnce(new Error('upload reservation unavailable'));
+        await expect(cleanupUserAccounts(user, {} as functions.EventContext)).rejects.toThrow('upload reservation unavailable');
+        expect(cleanupSendUploadReservationsMock).toHaveBeenCalledWith(expect.any(Number), user.uid);
+        expect(dataCleanupMocks.deleteAccountFirestoreRoot).toHaveBeenCalledTimes(2);
+        expect(dataCleanupMocks.completeAccountDataCleanup).not.toHaveBeenCalled();
+        await cleanupUserAccounts(user, {} as functions.EventContext);
+        expect(dataCleanupMocks.completeAccountDataCleanup).toHaveBeenCalledTimes(1);
     });
 
     it('fails closed when the account fence cannot be established', async () => {

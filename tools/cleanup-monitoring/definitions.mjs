@@ -62,7 +62,13 @@ export function buildCleanupMonitoring(project, channel) {
     filter: `${accountNative} metric.labels.status!="ok"`, aggregations: [sum('3600s', [])],
     comparison: 'COMPARISON_GT', thresholdValue: 2, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE',
   } };
-  policy('account', 'Repeated account cleanup failures', [threshold('failures', 'cloud_function', 'metric.labels.flow="account"', 3, '3600s'), nativeAccountFailure],
+  const accountV2Native = `metric.type="run.googleapis.com/request_count" resource.type="cloud_run_revision" resource.labels.project_id="${project}" resource.labels.location="europe-west2" resource.labels.service_name="cleanupuseraccountsv2"`;
+  const nativeAccountV2Failure = { displayName: 'Gen 2 account handler native errors (includes timeouts)', conditionThreshold: {
+    filter: `${accountV2Native} metric.labels.response_code_class="5xx"`, aggregations: [sum('3600s', [])],
+    comparison: 'COMPARISON_GT', thresholdValue: 2, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE',
+  } };
+  policy('account', 'Repeated account cleanup failures', [threshold('failures', 'cloud_function', 'metric.labels.flow="account"', 3, '3600s'), nativeAccountFailure,
+    threshold('failures', 'cloud_run_revision', 'metric.labels.flow="account"', 3, '3600s'), nativeAccountV2Failure],
     'Three failed attempts or partial stages in one hour; counts are observations, not unique accounts. Retained completed tombstones have no signal.', 'ERROR');
   policy('disconnect', 'Repeated disconnect failures', ['cloud_function', 'cloud_run_revision'].map(resource => threshold('failures', resource, 'metric.labels.flow="disconnect"', 3, '86400s')),
     'Three actual failure/retry observations per provider/lane/runtime in 24 hours, allowing the existing 30-minute/2-hour/6-hour backoff to become observable. Normal future backoff and supersession do not page. Remote revocation has its own first-observation policy.');
@@ -94,7 +100,8 @@ export function buildCleanupMonitoring(project, channel) {
   chart('Existing recovery page coverage / caps', filter('pages', 'cloud_run_revision'), sum('3600s', ['metric.label.lane', 'metric.label.provider', 'metric.label.capped'])),
   chart('Existing page sizes / hourly mean (not remaining backlog)', filter('examined', 'cloud_run_revision'), { alignmentPeriod: '3600s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_MEAN', groupByFields: ['metric.label.lane', 'metric.label.provider'] }),
   chart('Existing recovery scheduler outcomes', filter('heartbeat', 'cloud_run_revision'), sum('1800s', ['metric.label.outcome'])),
-  chart('Account Auth handler native executions (not extension completion)', accountNative, sum('3600s', ['metric.label.status'])),
+  chart('Gen 1 account Auth handler native executions (not extension completion)', accountNative, sum('3600s', ['metric.label.status'])),
+  chart('Gen 2 account Auth handler native requests (not extension completion)', accountV2Native, sum('3600s', ['metric.label.response_code_class'])),
   ];
   return { project, metrics, policies, dashboard: { displayName: 'QS Account Cleanup & Disconnect Recovery', labels: { [OWNER]: '' }, mosaicLayout: { columns: 12,
     tiles: widgets.map((widget, i) => i === 0 ? { xPos: 0, yPos: 0, width: 12, height: 3, widget }

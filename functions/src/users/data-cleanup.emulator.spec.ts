@@ -2,6 +2,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { CONNECTION_HISTORY_COLLECTION } from '../connection-history/model';
+import { sendUploadCleanupRef } from '../activity-send/upload-cleanup';
 import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../wahoo/constants';
 import {
@@ -581,6 +584,69 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             expect((await db.doc(`users/${other}`).get()).exists).toBe(true);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.cleanupStatus).toBe('complete');
         } finally { await db.recursiveDelete(owned); await db.recursiveDelete(foreign); }
+    }, 30_000);
+
+    it('recovers provider attribution from connection history and retries its missing parent recursively', async () => {
+        const uid = owner();
+        const other = owner();
+        const provider = `history-provider-${uid}`;
+        const history = db.collection(CONNECTION_HISTORY_COLLECTION).doc(uid);
+        const foreign = db.collection(CONNECTION_HISTORY_COLLECTION).doc(other);
+        const legacy = db.collection('suuntoAppWorkoutQueue').doc(`${uid}-history-only`);
+        await history.set({ userID: uid, serviceName: ServiceNames.SuuntoApp, providerUserId: provider });
+        await history.collection('receipts').doc('child').set({ synthetic: true });
+        await foreign.set({ userID: other, serviceName: ServiceNames.SuuntoApp, providerUserId: `other-${provider}` });
+        await legacy.set({ userName: provider });
+        const remove = db.recursiveDelete.bind(db);
+        let fail = true;
+        const interruption = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+            if (ref.path === history.path && fail) {
+                await history.delete();
+                throw new Error('synthetic history interruption');
+            }
+            return remove(ref, writer);
+        });
+        try {
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('history interruption');
+            expect((await legacy.get()).exists).toBe(false);
+            const receipt = db.doc(`userDeletionTombstones/${uid}`);
+            expect((await receipt.get()).data()?.providerIdentifiers.suuntoUserNames).toContain(provider);
+            expect((await receipt.get()).data()?.cleanupStatus).toBe('pending');
+            fail = false;
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
+            expect((await history.collection('receipts').get()).empty).toBe(true);
+            expect((await receipt.collection('operationalTargets').get()).empty).toBe(true);
+            expect((await receipt.get()).data()?.cleanupStatus).toBe('complete');
+            expect((await foreign.get()).exists).toBe(true);
+        } finally { interruption.mockRestore(); await remove(history); await remove(foreign); await remove(legacy); }
+    }, 30_000);
+
+    it('keeps completion pending for a leased upload reservation after the user tree disappears', async () => {
+        const uid = owner();
+        const other = owner();
+        const path = `users/${uid}/activitySendSources/batch/row.fit`;
+        const reservation = sendUploadCleanupRef(path);
+        const foreign = sendUploadCleanupRef(`users/${other}/activitySendSources/batch/row.fit`);
+        const now = Date.now();
+        const data = { version: 1, userID: uid, batchID: 'batch', rowID: 'row', path,
+            digest: 'a'.repeat(64), cleanupAfter: Timestamp.fromMillis(now - 1),
+            leaseID: 'active-cleaner', leaseUntil: Timestamp.fromMillis(now + 30 * 60_000) };
+        await reservation.set(data);
+        await foreign.set({ ...data, userID: other, path: `users/${other}/activitySendSources/batch/row.fit` });
+        await db.doc(`users/${uid}/activitySendOperations/batch/rows/row`).set({ synthetic: true });
+        try {
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('cleanup remains');
+            const receipt = db.doc(`userDeletionTombstones/${uid}`);
+            expect((await receipt.get()).data()?.cleanupStatus).toBe('pending');
+            expect((await receipt.get()).data()).not.toHaveProperty('expireAt');
+            expect((await reservation.get()).data()).toEqual(data);
+            await assertAccountFirestoreRootAbsent(db, uid, 'users');
+            // Simulate the existing lease owner finishing; account cleanup cannot erase its claim early.
+            await reservation.delete();
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
+            expect((await receipt.get()).data()?.cleanupStatus).toBe('complete');
+            expect((await foreign.get()).exists).toBe(true);
+        } finally { await db.recursiveDelete(reservation); await db.recursiveDelete(foreign); }
     }, 30_000);
 
     it('keeps the verified Gen 2 receipt when an overlapping Gen 1 attempt resumes', async () => {

@@ -7,6 +7,21 @@ natural **post-filter-correction heartbeat and Monitoring time series** are veri
 the approved production verification for #836 is complete. No account deletion, disconnect,
 forced recovery, test mail, index or Rules deployment was performed for validation.
 
+## Prepared Gen 2 account owner (#850)
+
+The activation evidence above covers the existing production owners. The account-cleanup PR prepares
+`cleanupUserAccountsV2` with the same fixed-label observations and extends the existing account policy
+with a `cloud_run_revision` structured-failure condition plus native `run.googleapis.com/request_count`
+5xx responses for `cleanupuseraccountsv2` in `europe-west2`. The native series can expose hard timeouts
+without relying on a final application log; it is independent of the Gen 1 native condition, not a count
+to add as unique failures. Requests rejected before reaching a container require Eventarc/transport
+inspection. See the [official Cloud Run metric reference](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#run).
+The dashboard includes native requests by response class. This adds no metric, policy, observer,
+scheduler, Firestore read or notification channel. Reapplication preserves existing condition IDs and
+unrelated resources. The new condition/dashboard activation and live delivery verification remain part
+of the separately approved [staged cutover](delete-user-data-migration.md); they are not included in
+#836's earlier production evidence. Historical evidence below retains its original runtime scope.
+
 ## Ownership and meanings
 
 `tools/cleanup-monitoring/` reuses the shared `tools/monitoring/` provisioner. Owner
@@ -145,7 +160,8 @@ Seven policies use the existing email channel, OPENED/CLOSED notifications and
 two-hour auto-close. Thresholds are starting values to tune against actual volume:
 
 1. Account failure: three failed/partial stage observations per provider/lane in one
-   hour, or three non-OK native `cleanupUserAccounts` executions in one hour.
+   hour, or three non-OK native `cleanupUserAccounts` executions in one hour. The prepared Gen 2
+   extension adds the same structured threshold and three native 5xx requests in one hour.
 2. Disconnect failure: three actual failures/retries per provider/lane/runtime in 24
    hours. The window respects the existing 30-minute, two-hour and six-hour backoff;
    five retries in six hours would miss one persistently failing episode. Normal

@@ -1,4 +1,5 @@
 import { CONNECTION_HISTORY_COLLECTION } from '../connection-history/model';
+import { cleanupSendUploadReservations, SEND_UPLOAD_CLEANUP_COLLECTION } from '../activity-send/upload-cleanup';
 import * as functions from 'firebase-functions/v1';
 import { IS_NOT_TENANT, onUserDeleted } from 'firebase-functions/v2/identity';
 import * as logger from 'firebase-functions/logger';
@@ -636,6 +637,8 @@ function providerQueueLookupFromCollectionData(
     data: Record<string, unknown>,
 ): ProviderQueueLookup | null {
     switch (collectionName) {
+        case CONNECTION_HISTORY_COLLECTION:
+            return providerLookupForService(data.serviceName as ServiceNames, data.providerUserId);
         case SLEEP_SYNC_QUEUE_COLLECTION_NAME: {
             const serviceName = serviceNameFromSleepProvider(data.provider);
             return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
@@ -692,6 +695,7 @@ function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<
     }
 
     if (
+        collectionName === CONNECTION_HISTORY_COLLECTION ||
         collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
         collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
         collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME ||
@@ -706,6 +710,7 @@ function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<
 
     const originalCollection = asFirebaseUidString(data.originalCollection);
     if (
+        originalCollection === CONNECTION_HISTORY_COLLECTION ||
         originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
         originalCollection === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
         originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME
@@ -794,6 +799,9 @@ function looksLikeLegacyGarminWorkoutQueueData(data: Record<string, unknown>): b
 function addProviderIdentifiersFromFailedJobData(identifiers: UserProviderIdentifiers, data: Record<string, unknown>): void {
     const originalCollection = asNonEmptyString(data.originalCollection);
     switch (originalCollection) {
+        case CONNECTION_HISTORY_COLLECTION:
+            addProviderIdentifier(identifiers, data.serviceName, data.providerUserId);
+            return;
         case SLEEP_SYNC_QUEUE_COLLECTION_NAME:
             addProviderIdentifiersFromSleepQueueData(identifiers, data);
             return;
@@ -865,6 +873,10 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
 ): Promise<void> {
     const firebaseUIDValues = [uid];
 
+    await collectProviderIdentifiersFromQueueQuery(
+        db, uid, CONNECTION_HISTORY_COLLECTION, 'userID', firebaseUIDValues,
+        data => addProviderIdentifier(identifiers, data.serviceName, data.providerUserId), failures,
+    );
     await collectProviderIdentifiersFromQueueQuery(
         db,
         uid,
@@ -1115,6 +1127,9 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
 
     await cleanupUserScopedGeneratedState(uid, failures);
     await runCleanupStage(failures, 'route_originals', () => cleanupRejectedRouteOriginalFilesForUser(uid));
+    // These reservations outlive the user root to catch uploads already in flight.
+    // Preserve producer/cleanup leases and retry until their owner verifies absence.
+    await runCleanupStage(failures, 'activity_send_uploads', () => cleanupSendUploadReservations(Date.now(), uid));
     await runCleanupStage(failures, 'mcp_oauth', () => cleanupMcpOAuthStateForUser(uid, async ref => {
         if (ref.path.startsWith(`users/${uid}/`)) {
             // The fixed UID root remains discoverable even if a connection parent is removed.
@@ -1201,7 +1216,7 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
         await runCleanupStage(failures, 'firestore_verification', () => assertAccountFirestoreRootAbsent(db, uid, collection));
     }
     await runCleanupStage(failures, 'storage_verification', () => assertAccountStorageAbsent(uid));
-    for (const collection of [SERVICE_DISCONNECT_CLEANUP_COLLECTION, REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME]) {
+    for (const collection of [SERVICE_DISCONNECT_CLEANUP_COLLECTION, REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME, SEND_UPLOAD_CLEANUP_COLLECTION]) {
         await runCleanupStage(failures, 'deferred_cleanup_verification', () => assertAccountCleanupQueryEmpty(
             db.collection(collection).where('userID', '==', uid),
         ));

@@ -672,8 +672,9 @@ production memory and cold-start monitoring remain necessary before changing run
 
 `cleanupUserAccountsV2` loads directly from `users/cleanup`, exposes one Firebase
 handler and preserves its Auth deletion trigger and all runtime options during
-both isolated loading and complete discovery. Discovery now exposes 169 endpoints
-and the loader has 83 isolated targets. The Gen 1 `cleanupUserAccounts` fallback
+both isolated loading and complete discovery. On 19 October, the compiled check
+verified all 181 endpoints and 100 isolated targets after rebasing onto current develop.
+The Gen 1 `cleanupUserAccounts` fallback
 remains during the [staged cutover](delete-user-data-migration.md).
 
 The owner needs MCP OAuth erasure and marketing recipient cleanup. Its import
@@ -682,11 +683,11 @@ check allows only `mcp/oauth.service`, `admin/marketing/cleanup` and
 admin handlers, Genkit, BigQuery and the full entrypoint. No unrelated endpoint is
 exposed by the loader.
 
-A Node 22.23.3 cold-import smoke ran once for each of the 84 scenarios (complete
-entrypoint plus all isolated targets). The new cleanup target imported in 1.52 s,
-with 134.1 MiB RSS, 38.6 MiB used heap and 1,473 loaded modules. Complete discovery
-used 230.2 MiB RSS and 128.0 MiB heap. These local smoke measurements were collected
-while emulator tests were running; they are not a performance comparison,
+A 19 October Node 22.23.3 cold-import smoke ran once for each of the 101 scenarios
+(complete entrypoint plus all isolated targets). The cleanup target imported in
+0.40 s, with 138.0 MiB RSS, 40.0 MiB used heap and 1,520 loaded modules. Complete
+discovery used 247.8 MiB RSS and 131.4 MiB heap. These local single-sample smoke
+measurements are not a performance comparison,
 production memory guarantee or billing estimate. The configured limit is now
 1 GiB to provide additional cleanup headroom; production cutover must verify
 memory/errors as well as event delivery.

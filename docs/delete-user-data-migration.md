@@ -160,6 +160,22 @@ participate in those checkpoints. Never reuse an Auth UID for a different accoun
 while old deletion events/retries or retained checkpoints can still exist: neither
 implementation distinguishes account incarnations at the same path.
 
+## Integration with develop (19 October 2026)
+
+The rebase preserves the current email delivery metadata (`queuedAt` and `delivery`) alongside UID
+ownership/expiry, connection-history cleanup, monitoring instrumentation, current Rules and the
+separate ordinary/emulator test runners. Connection-history `userID` is Firebase ownership;
+`serviceName`/`providerUserId` are checkpointed provider attribution, never replacement UID authority.
+Its roots and descendants use the same guarded recursive deletion/recovery path as other queues.
+
+Activity sending now reserves `activitySendUploadCleanup` outside the user tree before Storage writes.
+Account cleanup invokes that existing UID-scoped reconciler and refuses completion while any matching
+reservation remains, including future reservations or active cleanup leases. It never erases those
+claims as ordinary queue documents. The existing hourly owner can finish a delayed upload; an Auth
+retry then rechecks Storage and records completion. New nested activity-send and Training state remains
+covered by full `users/{uid}` recursive deletion. Existing failed-file debug captures keep their separate
+14-day retention policy; this PR does not broaden the configured account Storage bucket scope.
+
 ## Completion and retry contract
 
 1. `deleteSelf` writes a non-expiring, server-only deletion fence before the
@@ -171,7 +187,7 @@ implementation distinguishes account incarnations at the same path.
    request cannot reopen verified completion.
 2. The Auth cleanup handler also creates/upgrades the fence, covering deletion
    initiated through Auth administration. It reads provider identifiers from
-   credentials, archived follow-up tokens and UID-owned queues. Before removing
+   credentials, archived follow-up tokens, UID-owned queues and connection-history imports. Before removing
    those sources, it unions identifiers into the deletion checkpoint. A failed
    read/checkpoint preserves credentials and operational identity sources while
    independent Firestore, Storage, MCP and mail cleanup still proceeds.
@@ -207,7 +223,7 @@ implementation distinguishes account incarnations at the same path.
 5. Readback checks both roots and their descendants, exact Storage prefix,
    selected operational queries and token children. Missing-parent references
    are inspected through `listDocuments`, not just normal collection queries.
-   Existing route-original and service-disconnect reconcilers keep their leases
+   Existing route-original, activity-send upload-reservation and service-disconnect reconcilers keep their leases
    and cursors; remaining records prevent completion even if their invocation
    returned successfully. No new scheduler or generic queue is introduced.
 6. Only a fully successful, verified pass sets `cleanupStatus: complete`,
@@ -244,11 +260,19 @@ recording success or releasing writers.
 
 ## Monitoring and recovery
 
-Coverage is **deferred** in existing [#836](https://github.com/jimmykane/quantified-self/issues/836),
-verified in Quantified Self IO Project 2. Existing generic error/heap views and
-domain dashboards do not supply account-cleanup completion or overdue-pending
-alerts. Reuse `tools/monitoring/` and native Function errors/duration for that
-work; authoritative pending age must exclude completed retained markers.
+The existing [#836](https://github.com/jimmykane/quantified-self/issues/836) coverage is implemented,
+activated and verified, as recorded in [account cleanup monitoring](account-cleanup-monitoring.md).
+Both prepared Auth generations preserve its fixed-label `CleanupHealth` started/acknowledged/failed
+and partner-revocation observations. This PR extends the existing account policy to Gen 2 structured
+failures and exact `cleanupuseraccountsv2` Cloud Run 5xx requests, including hard timeouts that cannot
+emit a failure log. Its dashboard adds the same native request series; policy/resource ownership,
+existing condition IDs and notification channels are preserved. Apply and verify this extension to
+the monitoring bundle as part of the separately approved Gen 2 cutover. This work has not activated it.
+
+Monitoring reports observed failure/retry age, not a global pending-account inventory. In particular,
+it cannot establish that every non-expiring fence is current after event retries stop. Completed
+retained markers must never be counted as pending. Inspect the authoritative receipt and exact
+remaining scope during recovery; lack of a recent error is not proof of completion.
 
 New `[AccountDeletion]` summaries use fixed stages and `outcome=complete` or
 `incomplete`, without UIDs, emails, provider IDs, credentials or raw errors in
@@ -322,8 +346,8 @@ cannot overwrite a newer completion receipt. Concurrency one limits work per
 instance, not across instances or generations.
 
 Resolve both installed-extension Storage-prefix and UID-substitution gates above before any
-approved overlapping account deletion. Before production cutover, activate and verify the account-cleanup coverage in
-#836; local tests do not replace overdue-pending alerts. Before deployment approval, verify the runtime identity can recursively delete/read
+approved overlapping account deletion. Before Gen 2 cutover, apply and verify the Gen 2 extension to the existing
+#836 monitoring bundle; local tests do not establish live event delivery or pending-account coverage. Before deployment approval, verify the runtime identity can recursively delete/read
 both Firestore roots and list/read/delete objects in the exact bucket; do not
 copy the extension's broad RTDB/PubSub roles. Keep the installed extension and
 its manifest/env declarations until an exact configuration/retirement scope is
@@ -331,7 +355,7 @@ separately approved; do not interpret their presence as overlap safety approval.
 owners' generation, trigger type/location, default-project tenant behavior, retry,
 timeout, memory, CPU/concurrency, region, runtime identity, secrets and bucket
 permissions. Check native errors and Cloud Run metrics for `cleanupUserAccountsV2`
-as well as the legacy function; the #836 activation must include both during overlap. Any
+as well as the legacy function; monitoring must include both during overlap. Any
 live test-account deletion needs its own exact target/scope approval. Record
 complete Firestore/Storage/operational absence and actual native execution
 success before proposing retirement. Fixed-root Firestore deletes are idempotent across owners; the extension Storage
