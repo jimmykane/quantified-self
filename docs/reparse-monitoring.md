@@ -129,8 +129,9 @@ conservative suppression evidence, not owner-specific completion or device evide
 
 `tools/reparse-monitoring/definitions.mjs` owns dashboard **QS Sports Lib Reprocessing**,
 ten `qs_reparse_*_v1` log metrics and seven policies under `qs-reparse-monitoring-v1`.
-The local native-timeout correction keeps those counts and extends the existing
-scanner policy to two conditions (eight conditions overall); it is not yet applied.
+The approved native-timeout correction keeps those counts and extends the existing
+scanner policy to two conditions (eight conditions overall); it was applied and
+verified on 19 October 2026.
 Native depth, HTTP-attempt and dispatch-delay charts are scoped to the three exact task
 queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 
@@ -141,7 +142,7 @@ queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 | Normal/route no progress | Two positive hourly stalled observations per tier in three hours | Error |
 | Heavy no progress | Two six-hour-stalled hourly observations in three hours | Warning |
 | Task admission failures | Three actual enqueue exceptions per tier in one hour | Error |
-| Discovery failures | Three structured exceptions per tier OR three native 5xx responses per scanner in one hour; native condition pending application | Error |
+| Discovery failures | Three structured exceptions per tier OR three native 5xx responses per scanner in one hour | Error |
 | Observation health | Two unavailable/unknown hourly observations per tier in three hours | Warning |
 
 Policies use a 60-second retest window, inactive missing-data evaluation and two-hour
@@ -156,7 +157,7 @@ drift. Event-driven worker/enqueue/discovery failure thresholds are unchanged.
 Multi-tier policy filters use exact `one_of` membership rather than mixed label AND/OR
 expressions, following [Monitoring filter syntax](https://docs.cloud.google.com/monitoring/api/v3/filters).
 
-The scanner policy's local correction adds the built-in
+The scanner policy's native-timeout correction uses the built-in
 `run.googleapis.com/request_count` metric with `response_code_class="5xx"`, scoped
 to the exact `schedulesportslibreparsescan` and `schedulesportslibroutereparsescan`
 services, this project and `europe-west2`. It includes HTTP 504 timeouts even when
@@ -170,7 +171,7 @@ OR combination; their counts must not be added as distinct failures. One isolate
 native timeout does not meet the repeated-failure threshold.
 
 A matching native-error chart groups by service and response code. There are still
-ten log metrics and seven policies; the proposed dashboard/condition bundle has
+ten log metrics and seven policies; the active dashboard/condition bundle has
 **28 queries**, versus the previously deployed 26. No metric, Function, observer,
 Firestore read/write, index, schedule, timeout, retry or worker resource is added.
 Native errors are independent of the optional hourly queue observation, so they are
@@ -243,11 +244,12 @@ approval on 19 October 2026. All four indexes are READY, five existing Functions
 and the dashboard, ten metrics and seven enabled policies have live API readback. No new
 Function, schedule or channel was created. Natural route-sample confirmation passed
 at 10:06 UTC and representative normal-tier processing evidence is now recorded below.
-#834 remains open for a native scanner-timeout alert-coverage gap discovered during
-the final closure check; structured attempt ACKs alone cannot establish scanner health.
-The narrow native-condition/chart correction is now implemented and tested locally.
-It still requires separately approved bundle application and production readback;
-this does not require another Functions, index or Rules deployment.
+The native scanner-timeout coverage gap discovered during the final closure check
+was subsequently corrected, applied with separate owner approval and verified by
+live readback at 12:28–12:32 UTC on 19 October 2026. #834's monitoring acceptance
+criteria are complete. Structured attempt ACKs alone still do not establish scanner
+health; see the native timeout and unavailable-sample evidence below. This correction
+required no additional Functions, index or Rules deployment.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -368,25 +370,27 @@ Bounded read-only verification of the fixed **10:45–11:52 UTC** window confirm
   configuration, source data, scheduler, worker, campaign or queue was changed, and
   no email or provider call was initiated for this verification.
 
-The real-batch progress/outcome/duration evidence is therefore satisfied, but the
-final native-health check found a separate issue that prevents closure:
+The real-batch progress/outcome/duration evidence was therefore satisfied, but the
+12:11 UTC native-health check found a separate coverage issue that prevented closure
+at that time:
 
 - The activity scanner's 11:50 UTC scheduled request returned **HTTP 504 after
   299.982 seconds**. Cloud Scheduler recorded **DEADLINE_EXCEEDED at 11:55:04.549 UTC**.
 - The same scanner later emitted structured `scan_attempt:acknowledged` at
   **12:00:29.814 UTC**, with `durationMs: 628888`. Work continued after the request's
   native deadline. A later application ACK does not erase the failed scheduled request.
-- The existing discovery-failure policy only selects structured `scan_attempt:failed`
+- The then-existing discovery-failure policy selected only structured `scan_attempt:failed`
   observations. It therefore misses this proven native-timeout path. The missing
   normal/heavy 12:00 sample must not be presented as another healthy idle observation.
 
-**Remaining in #834:** separately approved application/readback of the locally corrected
-native scanner condition and matching dashboard chart. Exact scanner scope, sustained
-thresholds and upgrade identity preservation are covered by the local regressions below.
+**Outstanding at that check (subsequently completed below):** separately approved
+application/readback of the corrected native scanner condition and matching dashboard
+chart. Exact scanner scope, sustained thresholds and upgrade identity preservation
+are covered by the regressions below.
 Do not change scanner deadlines, discovery settings, worker resources, queue concurrency,
 retry policy or the separate #543 admission-cap scope merely to silence this signal.
 No native fault was injected and no processing was manually started for these checks.
-#834 stays open / In progress until this gap is addressed and verified.
+#834 remained open / In progress until this gap was addressed and verified.
 
 ## Local native-timeout correction and review — 19 October 2026
 
@@ -412,7 +416,53 @@ chart/condition queries**, including the service-grouped native condition and th
 service/response-code chart. Both native queries returned a positive point for the
 recorded activity-scanner timeout in the fixed 11:40–12:15 UTC window; neither was
 truncated. This validates filters and aggregation against real metric data, not
-policy activation: the new condition and chart are **not yet applied**.
+policy activation: the new condition and chart were **not yet applied at that check**.
 No runtime code, Firestore query or queue behavior changed, so no Functions build or
 new emulator run was required for this configuration-only correction. Existing Help,
 MCP/Assistant, Training, parser and provider contracts remain unchanged. #543 is untouched.
+
+## Approved native-timeout activation and completion — 19 October 2026
+
+With the owner's separate approval, pushed `develop` through `5ca0d21ca`, applied
+the corrected monitoring bundle and serially reapplied it. Final independent readback
+at **12:28–12:32 UTC / 15:28–15:32 Helsinki** verified:
+
+- Ten matching owned log metrics, seven enabled policies and **eight conditions**,
+  including the new native 5xx/504 condition on the existing scanner policy. All
+  28 actual chart/condition queries were accepted by Monitoring. All 20 chart queries,
+  dashboard layout and 56 policy configuration fields match the source definitions,
+  allowing API omission of empty repeated fields/default presentation fields.
+- The original dashboard, all seven policy IDs and all seven original condition IDs
+  were retained. Serial reapplication also retained the new condition ID. No metric,
+  policy, dashboard or channel was added or deleted: totals stayed at **125 metrics,
+  69 policies, 11 dashboards and four channels**. Hashes of all 115 unrelated metrics,
+  62 unrelated policies, ten unrelated dashboards and all four channels are unchanged.
+- The existing independent Alerts email channel remains enabled on every policy;
+  reuse #655's same-channel OPENED/CLOSED email proof. No test email, fault injection
+  or synthetic incident was created.
+- The native condition's real time series includes the previously observed activity
+  scanner HTTP 504. Its maximum aligned count in the bounded three-hour readback was
+  **one**, below the repeated-failure threshold of three per scanner per hour. The
+  structured scanner-failure condition had no series in that window. These results
+  validate capture and thresholds; they do not erase the failed request or claim
+  a real threshold-crossing incident/email was forced.
+- Natural activity and route requests most recently returned HTTP 200, with application
+  ACKs at **12:22:40 UTC** and **12:26:01 UTC**, respectively. The earlier normal/heavy
+  hourly observation at **12:09:52 UTC** explicitly reported unavailable after an
+  approximately 290-second scanner attempt. Both tiers have a positive observation-
+  failure series, with maximum count one each in three hours (warning requires two).
+  These are **not healthy idle samples**. Earlier verified healthy normal/heavy/route
+  samples and representative 290 normal-tier committed outcomes/durations remain the
+  live progress evidence; no live heavy/route rewrites are claimed.
+- All five existing Functions remain ACTIVE. Before/after readback matched their
+  revisions and resource controls, both enabled ten-minute schedules, all three task
+  queue controls and persisted discovery configuration. This task deployed no Function,
+  index or Rule and changed no runtime, retry, campaign, queue or provider behavior.
+
+All 101 offline monitoring tests passed before application; focused reparse tests and
+diff checks passed for these completion notes. Monitoring coverage is **covered** and
+the approved #834 acceptance criteria are satisfied. This closes the observability
+delivery, not the historical runtime timeout or unavailable observation as successful
+runs. Further runtime investigation/tuning is separate from monitoring activation;
+#543's heavy admission-cap scope/status remains unchanged. No scanner/worker was
+manually invoked, no source data was written/deleted and no provider call was made.

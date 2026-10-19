@@ -1964,12 +1964,16 @@ five existing Function updates and dashboard/metrics/policies were deployed/acti
 on 19 October 2026. Natural heartbeat and representative normal-tier completion/duration
 evidence are verified. A native scanner-timeout coverage gap was found when an
 HTTP 504/DEADLINE_EXCEEDED request later logged an application ACK, escaping the existing
-structured-only discovery-failure policy. A narrow local correction adds native Cloud Run
+structured-only discovery-failure policy. A narrow correction adds native Cloud Run
 5xx request counts for the two exact scanner services to that same policy and dashboard,
 retaining three errors per scanner in an hour and preserving the structured condition.
-It adds no log metric, Function, Firestore work or runtime/retry tuning. #834 remains open
-for separately approved bundle application and live readback; no Functions deployment is
-needed. Exact scope, native-metric limitations and verification are in the runbook.
+It adds no log metric, Function, Firestore work or runtime/retry tuning. The owner-approved
+correction was applied and verified at 12:28–12:32 UTC on 19 October 2026: ten owned
+metrics, seven enabled policies/eight conditions, all 28 chart/condition queries, stable
+resource IDs and unchanged unrelated monitoring/channel configuration. #834's monitoring
+acceptance criteria are complete; no further Functions deployment was needed. The earlier
+504 and explicitly unavailable samples remain recorded as such, not successful/healthy
+runs. Exact scope, native-metric limitations and verification are in the runbook.
 Future production changes still require separate approval; #543 owns the heavy backlog cap.
 
 ### Suunto EnergySense parser support
