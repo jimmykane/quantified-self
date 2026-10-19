@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin, resolveFirebaseUserIDForGarminUserID } from '../queue';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
@@ -38,6 +39,10 @@ import { fitActivityReferencesFromEvent } from '../suunto/guide-completion';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { authenticateGarminWebhook } from './webhook-auth';
 import { normalizeGarminActivityCallbackURL } from './activity-callback-url';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
+import { getServiceConnectionMeta } from '../service-connection-meta';
+import { QueueItemUserGuardedUpdateResult, updateQueueItemIfUserActive } from '../queue/dispatch-marker';
+import { recordImportCompletion } from '../queue/import-monitoring';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -152,6 +157,63 @@ function deferGarminQueueItemForPendingDisconnect(
   });
 }
 
+async function skipDisconnectedGarminQueueItem(
+  queueItem: GarminAPIActivityQueueItemInterface,
+  firebaseUserID: string,
+): Promise<QueueResult.Processed | null> {
+  const expected = { ...queueItem };
+  const meta = await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI);
+  // Missing credentials alone are not proof of a completed disconnect. Require
+  // the cleared lifecycle AND a confirmed empty server-owned account projection.
+  if (meta?.connectionState !== undefined
+    || typeof meta?.connectionStateGeneration !== 'string' || !meta.connectionStateGeneration.trim()
+    || typeof meta.connectionAccountsRevisionKey !== 'string' || !meta.connectionAccountsRevisionKey.trim()
+    || !Array.isArray(meta.connectionAccounts) || meta.connectionAccounts.length !== 0) return null;
+
+  if (!expected.ref) throw new Error('Missing Garmin queue document reference.');
+  const completion = {
+    processed: true,
+    processedAt: Date.now(),
+    resultStatus: 'skipped',
+    skippedReason: 'service_disconnected',
+    callbackURL: FieldValue.delete(),
+  };
+  const result = await updateQueueItemIfUserActive({
+    queueItemDocument: expected.ref,
+    queueItemId: expected.id,
+    userID: firebaseUserID,
+    phase: 'garmin_disconnected_import',
+    logPrefix: 'GarminWorkoutQueue',
+    actionDescription: 'disconnected import skip',
+    updateData: completion,
+    cleanupOnDeletedUser: false,
+    // Duplicate Garmin webhooks refresh these fields without advancing the
+    // creation time or revision; an older disconnect observation must not close them.
+    isCurrent: current => {
+      if (current.processed === true
+        || current.firebaseUserID !== firebaseUserID
+        || current.userID !== expected.userID
+        || current.dateCreated !== expected.dateCreated
+        || current.queueRevision !== expected.queueRevision) return false;
+      if (current.callbackURL !== expected.callbackURL
+        || current.token !== expected.token
+        || current.userAccessToken !== expected.userAccessToken
+        || current.activityFileType !== expected.activityFileType
+        || current.startTimeInSeconds !== expected.startTimeInSeconds) {
+        // Keep the existing Cloud Task alive: this row still has its dispatch
+        // marker, so acknowledging it would strand the refreshed payload.
+        throw new Error('Garmin queue payload changed during disconnect check.');
+      }
+      return true;
+    },
+  });
+  if (result === QueueItemUserGuardedUpdateResult.Updated) {
+    recordImportCompletion(expected.ref.parent.id, completion);
+    logger.info('[GarminWorkoutQueue] Import skipped after disconnect.', { queueItemId: expected.id, reason: 'service_disconnected' });
+  }
+  return QueueResult.Processed;
+}
+
 
 export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
@@ -243,18 +305,22 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
   // Use UserID for cache key as it's stable, unlike access tokens
-  const userKey = `GarminAPI:${queueItem.userID}`;
+  const recordedOwner = typeof queueItem.firebaseUserID === 'string' ? queueItem.firebaseUserID.trim() : '';
+  const userKey = `GarminAPI:${queueItem.userID}${recordedOwner ? `:${recordedOwner}` : ''}`;
+  // An owned job must never borrow another Firebase user's connection after an
+  // account transfer. Legacy unowned rows retain their existing lookup policy.
+  const tokenQuery = () => (recordedOwner
+    ? admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(recordedOwner).collection('tokens')
+    : admin.firestore().collectionGroup('tokens'))
+    .where('userID', '==', queueItem.userID)
+    .where('serviceName', '==', ServiceNames.GarminAPI)
+    .limit(1)
+    .get();
 
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
     if (!tokenPromise) {
-      // Lookup by userID (Garmin User ID) which is stored in the 'userID' field of the token document
-      // Since we don't know the Firebase User ID (the parent doc ID), we must use a Collection Group Query.
-      tokenPromise = admin.firestore().collectionGroup('tokens')
-        .where('userID', '==', queueItem.userID)
-        .where('serviceName', '==', ServiceNames.GarminAPI)
-        .limit(1)
-        .get();
+      tokenPromise = tokenQuery();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -264,14 +330,14 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
-    tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens')
-      .where('userID', '==', queueItem.userID)
-      .where('serviceName', '==', ServiceNames.GarminAPI)
-      .limit(1)
-      .get();
+    tokenQuerySnapshots = await tokenQuery();
   }
 
   if (!tokenQuerySnapshots.size) {
+    if (recordedOwner) {
+      const skipped = await skipDisconnectedGarminQueueItem(queueItem, recordedOwner);
+      if (skipped) return skipped;
+    }
     logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
   }

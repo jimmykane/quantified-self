@@ -1459,6 +1459,14 @@ Explicit user disconnects disable every activity-sync and saved-route direction 
 
 Credential removal and a server-only `serviceDisconnectCleanup/{opaqueUserOperationAccountHash}` intent commit atomically. The intent contains only the Firebase owner, provider lookup identity, lifecycle fence, server-timestamp cutoff and pagination/lease state—not credentials, callback URLs, raw payloads, state or PKCE. It is denied to browser clients by the existing Rules. Imported activities, saved routes, Health and Sleep history are not cleanup targets.
 
+Garmin recorded-activity workers also distinguish a confirmed completed disconnect from an unexplained missing
+credential when cleanup races queued work. Owner-pinned token lookup plus a cleared, generated lifecycle and an
+explicit revisioned empty account projection allow a deletion/queue-identity-guarded terminal skip at INFO, counted
+only after commit by existing import-skip telemetry. Missing tokens alone must not hide a connection fault; unknown
+state retains the existing warning/DLQ path. Never borrow another owner's token or reopen a completed skip on
+reconnect. See [Garmin identity and lifecycle](garmin-integration.md#identity-and-lifecycle) for the precise boundary
+and affected rollout targets. Existing product Help remains accurate: disconnect stops future imports and retains history.
+
 The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten cleanup tasks concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle for an active user, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup for an active user. Transient failures retain the intent without a finite event-retry or TTL deadline.
 
 Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the same bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.

@@ -124,6 +124,22 @@ Legacy active connections without a pinned provider ID or generation fields rema
 
 Disconnecting Garmin stops future imports and retains imported Sleep and Health history. Recursive account deletion removes the user-scoped Health records, sample chunks, sync state, Sleep sessions, and queue work. Queue and lifecycle writes recheck the deletion guard so delayed work cannot recreate user data.
 
+Recorded-activity jobs with a saved Firebase owner look up credentials only beneath that owner; they never adopt
+another owner's connection to the same Garmin account. If no matching credential exists, a cleared connection
+lifecycle with a nonempty generation and an explicit, revisioned empty `connectionAccounts` projection confirms
+disconnect completion. The worker then commits `processed=true`, `resultStatus=skipped` and
+`skippedReason=service_disconnected`, removes the callback URL, and logs INFO with the opaque queue ID. Completion
+rechecks user deletion and the original queue identity transactionally; removed, completed or replaced rows are not
+written. The guard also compares the captured download credentials, callback URL, file type and start timestamp:
+duplicate Garmin webhooks can refresh those fields without changing the creation time or queue revision.
+If only that payload changed, the current attempt fails retryably so Cloud Tasks rereads it; acknowledging the
+still-dispatched row would otherwise leave it unprocessed outside the dispatcher's undispatched-only query.
+Unknown/legacy metadata and connected, reconnect-required or disconnect-pending states retain the existing
+`NO_TOKEN_FOUND` warning/DLQ behavior. Firestore failures remain retryable. Closed skips do not reopen on reconnect;
+this classification does not replay or delete historical failed jobs. It uses existing import-skip monitoring and
+requires no new index, metric, frontend or MCP change. An approved rollout needs only `processWorkoutTask`;
+the scheduled `parseGarminAPIActivityQueue` dispatcher and all Function runtime options remain unchanged.
+
 ## Revision and replacement rules
 
 The callback `uploadEndTimeInSeconds` is the ordered revision watermark. Source identities use the stable provider interval, calendar date, or measurement timestamp rather than `summaryId`, because Garmin can update a record with a new summary ID. Recognized normalized content alone is hashed into the revision token, so replacing only the summary ID remains unchanged. Fractional provider timestamps are rounded to the Health model's millisecond precision. A higher identical delivery advances the maximum-observed watermark; a later distinct but older delivery is stale and cannot overwrite it.
