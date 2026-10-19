@@ -7609,7 +7609,8 @@ Cloud Tasks API.
 Source definitions live in `tools/derived-metrics-monitoring/`. They prepare **14 versioned log metrics**, the
 **QS Derived Metrics** dashboard (20 charts plus interpretation guidance), and **six policies with eight conditions**.
 They do not calculate a new athlete metric, change Training formulas or optimize recomputation (#760).
-Implementation and offline/emulator verification are separate from the deployment, activation and live evidence
+Implementation and offline/emulator verification are separate from production activation. The approved deployment
+and alert activation were completed on 19 October 2026; remaining post-activation natural telemetry evidence is
 still tracked by [#831](https://github.com/jimmykane/quantified-self/issues/831).
 
 The existing workers retain their resource/retry settings: ingress is Gen 2, 512 MiB/120 seconds; calculation is
@@ -7766,6 +7767,40 @@ Help's Training update/Retry and MCP preparing-state guidance was reviewed; user
 edit is required. **MCP impact: no wire impact**—no tool, exposed metric, schema, scope, consent, projection,
 proposal, mutation, Assistant permission, provider action or plugin change. Operational kind extraction preserves
 the complete existing public re-export API and values; no snapshot migration or derived schema bump is needed.
+
+#### Production activation evidence — 19 October 2026
+
+The owner separately approved the deployment and alert activation from local `develop` at `b1da64780`:
+
+- The coordinator-only index `CICAgLiK4oIK` reached READY at 06:47 UTC. No earlier broad derived-metrics composite
+  existed and no index was deleted. Production Query Explain used the four-field index: the idle query scanned zero
+  documents/index entries and incurred one minimum query read. This is one idle observation, not a general cost or
+  latency guarantee.
+- All seven Functions were independently ACTIVE on Node.js 22/Gen 2 in `europe-west2` by 06:54:09 UTC:
+  `observeDerivedMetricsHealth`, `processDerivedMetricsIngressTask`, `processDerivedMetricsTask`, `ensureDerivedMetrics`,
+  `setTrainingBuildBenchmark`, `mcpApi` and `assistantChat`. Existing resource settings were preserved; the observer
+  was verified at 512 MiB, 60 seconds, max one instance, with no secrets and an enabled `*/15 * * * *` UTC job.
+  Firestore Rules were released at 06:57:24 UTC with source identical to `develop`; all 220 Rules tests passed.
+- The bundle created 14 log metrics, the **QS Derived Metrics** dashboard
+  (`projects/242713487388/dashboards/35fb5741-8f8c-4f71-8f6b-1c883c6da5fe`), and six enabled policies with eight
+  conditions. The policies route to the existing enabled Alerts email channel
+  `projects/quantified-self-io/notificationChannels/7874469028377828627`, with opened/closed notification prompts.
+  Reuse #655's same-channel email-delivery proof; no new test email was sent.
+- Readback at 07:04:55 UTC matched the source definitions and accepted all 28 chart/condition queries. Six queries had
+  series; 22 were valid but empty, which is not proof of healthy processing. Serial reapplication preserved the dashboard,
+  all six policy IDs and all eight condition IDs, without duplicates. Fingerprints of the eight unrelated dashboards,
+  49 unrelated policies, 92 unrelated log metrics and all four notification channels were unchanged.
+- **Natural heartbeat initialization remains pending.** The queue-sample log metric was created at 07:00:14 UTC, after
+  the first natural run: Scheduler attempted at 07:00:00 UTC and the observer emitted all three valid idle samples at
+  07:00:01 UTC, with zero pending/unknown samples and no truncation. Those earlier logs do not initialize a newly created
+  log metric. Bounded readback at 07:03:46 UTC found no post-creation observation or heartbeat series. The next natural
+  run is 07:15 UTC (10:15 Helsinki), followed by metric-ingestion delay. Keep #831 open until positive
+  post-creation series exist for queued, processing and failed, and record natural admission/publication/settlement
+  where traffic exists. Do not interpret absence as an initialized missing-heartbeat policy or fabricate samples.
+
+Monitoring coverage is **activated; natural telemetry verification pending**. No processing was invoked manually,
+no provider upload/replay or fault injection was performed, and no notification channel, unrelated configuration,
+schedule, retry policy, product gate or data record was changed by activation.
 
 ### Training delivery queue monitoring
 
