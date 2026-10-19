@@ -1930,6 +1930,19 @@ Saved recording review distinguishes known ineligibility from temporary read fai
 
 Stopping closes retry authority for provider-confirmed processing failures and releases their private temporary files/quota while preserving the failed result and operation identifiers. Finished retryable batches retain the Stop control, including after Pro lapse. Active/uncertain operations retain their sources; saved archive files are never deleted. Cleanup failures remain resumable through the existing Stop cursor and operation trigger. A later confirmed failure after Stop completes releases its source through the existing retry-enabled delivery projection; open failures keep their retry source. Monitoring is **unchanged**: native admission/projection-trigger error/latency diagnostics and the existing hourly cleanup failure/heartbeat fallback cover these release paths, with no new scheduler, queue outcome, worker retry policy or telemetry label. MCP and Training contracts are unaffected.
 
+### Original-file reprocessing monitoring (#834)
+
+Original-file reprocessing monitoring is independently tracked in [#834](https://github.com/jimmykane/quantified-self/issues/834)
+and the [reprocessing monitoring runbook](reparse-monitoring.md). It uses existing normal/heavy/route workers
+and ten-minute scanners with bounded read-only job observations only on the hourly scheduled tick;
+empty queues need one query per collection and progress is read only for eligible outstanding tiers.
+There is no new scheduler, provider call, queue state, reparse, admission cap, retention,
+retry or MCP contract change. Fixed-label telemetry separates accepted task
+admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
+review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
+five existing Function updates, dashboard/metrics/policies and live evidence need separate approval before
+deployment/activation; #543 remains responsible for the heavy backlog cap.
+
 ### Suunto EnergySense parser support
 
 Sports Lib 23.0.0 retains the mapping introduced in 22.0.0 from Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance

@@ -1,6 +1,12 @@
 import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
+import { observeReparseQueue } from '../reparse/monitoring-probe';
+// Processing tests keep discovery assertions separate from the independently
+// emulator-tested, hourly read-only observation.
+vi.mock('../reparse/monitoring-probe', async importOriginal => ({
+    ...await importOriginal<typeof import('../reparse/monitoring-probe')>(), observeReparseQueue: vi.fn().mockResolvedValue(undefined),
+}));
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
 const TARGET_SPORTS_LIB_VERSION_CODE = 16_000_000;
@@ -473,6 +479,19 @@ describe('scheduleSportsLibReparseScan', () => {
         await (scheduleSportsLibReparseScan as any)({});
         expect(hoisted.checkpointGet).toHaveBeenCalledTimes(1);
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+    });
+
+    it('passes scheduled time through and observes hourly even with discovery disabled', async () => {
+        hoisted.runtimeDefaults.enabled = false;
+        const handler = scheduleSportsLibReparseScan as unknown as (event: { scheduleTime: string }) => Promise<void>;
+        for (let minute = 0; minute < 60; minute += 10) {
+            await handler({ scheduleTime: `2026-10-19T09:${String(minute).padStart(2, '0')}:00Z` });
+        }
+        expect(hoisted.checkpointGet).toHaveBeenCalledTimes(6);
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(observeReparseQueue).toHaveBeenCalledExactlyOnceWith(expect.anything(), expect.objectContaining({
+            collection: 'sportsLibReparseJobs', target: TARGET_SPORTS_LIB_VERSION,
+        }));
     });
 
     it('does not scan when the runtime checkpoint cannot be read', async () => {

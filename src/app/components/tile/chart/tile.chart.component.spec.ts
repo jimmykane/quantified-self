@@ -621,6 +621,9 @@ describe('TileChartComponent', () => {
     expect(getEventFiltersComponent()).toBeUndefined();
     const rangeSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve range');
     expect(rangeSelector?.value).toBe('1y');
+    expect(rangeSelector?.options.map(option => option.value)).toEqual([
+      'thisWeek', 'thisMonth', '14d', '30d', '90d', '1y', '2y', '3y', '4y', 'all',
+    ]);
     const compareSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve comparison');
     expect(compareSelector).toBeTruthy();
     expect(compareSelector?.value).toBe('best30d');

@@ -1,4 +1,5 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
+import { emitReparseMonitoring, monitorReparseAttempt } from '../reparse/monitoring';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -261,6 +262,7 @@ async function processSportsLibRouteReparseTaskRequest(
             }, { merge: true });
         }
 
+        emitReparseMonitoring({ tier: 'route', event: 'job_commit', outcome: reparseResult.status === 'skipped' ? 'skipped' : 'completed' });
         logger.info('[sports-lib-route-reparse-worker] Job completed.', {
             jobId,
             uid: job.uid,
@@ -347,4 +349,4 @@ export const processSportsLibRouteReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
     ...ROUTE_PROCESSING_TASK_RUNTIME_OPTIONS,
     region: FUNCTIONS_MANIFEST.processSportsLibRouteReparseTask.region,
-}, async (request) => processSportsLibRouteReparseTaskRequest(request));
+}, async (request) => monitorReparseAttempt('route', 'worker_attempt', () => processSportsLibRouteReparseTaskRequest(request)));

@@ -146,6 +146,8 @@ export type AppDashboardActionPrompts = Partial<Record<AppDashboardActionPromptI
 export type AppDashboardTileEventFilterRange =
     'thisWeek'
     | 'thisMonth'
+    | 'lastMonth'
+    | '7d'
     | '14d'
     | '30d'
     | '90d'

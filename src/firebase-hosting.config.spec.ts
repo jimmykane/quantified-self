@@ -385,6 +385,7 @@ describe('Firebase Hosting configuration', () => {
     // The same-day Help revision clarifies preview timeouts, source provenance and checked/ready/excluded draft counts.
     // Account deletion now lives in the separate Data management settings section.
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
+    // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
