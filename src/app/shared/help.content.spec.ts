@@ -89,7 +89,7 @@ describe('help.content', () => {
     expect(copy).toContain('pace-based load needs a threshold belonging to that sport');
     expect(copy).toContain('An unassigned whole-workout speed threshold is not copied across different sports');
     expect(copy).toContain('COROS GPX files can supply recorded heart-rate readings');
-    expect(copy).toContain('Readings alone do not supply the resting, threshold and maximum HR settings');
+    expect(copy).toContain('Readings alone do not supply the explicit threshold or other calibration');
     expect(copy).toContain('Daily monitoring FIT files are not workouts');
     expect(copy).toContain('Completed workout summaries, including Wahoo files without sensor readings, remain supported');
     expect(copy).toContain('when the file contains a recorded workout session');
@@ -155,6 +155,17 @@ describe('help.content', () => {
     expect(copy).toContain('another eligible method is used or load stays unavailable');
     expect(copy).toContain('File-imported scores remain unchanged');
     expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
+  });
+  it('explains sport-wide threshold HR estimates without changing calculation exclusions or calibration safeguards', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    for (const phrase of ['**HR · Banister**', '**HR · Threshold (estimate)**',
+      'When resting or maximum HR is missing but a valid threshold is recorded',
+      'This includes walking, hiking, swimming and strength training',
+      'Sports excluded from calculated TSS remain excluded',
+      'Conflicting or invalid calibration is not replaced with guessed settings',
+      'Older evaluations can show only **HR**', 'Reimport retains your overrides, exclusions and saved preferences']) {
+      expect(copy).toContain(phrase);
+    }
   });
   it('explains swimming threshold requirements, file-only fallbacks and imported-score preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
