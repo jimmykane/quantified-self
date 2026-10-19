@@ -40,6 +40,8 @@ export class HealthMetricChartComponent {
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly chartStatuses = input<Readonly<Record<string, HealthHrvPersonalRangeStatus>>>({});
   readonly selectedSourceKey = input<string | null>(null);
+  readonly readingNotice = input<string | null>(null);
+  readonly comparingSources = signal(false);
   readonly sourceSelected = output<string>();
   readonly expandedDetails = signal<ReadonlySet<string>>(new Set());
   private readonly haptics = inject(AppHapticsService);
@@ -68,9 +70,17 @@ export class HealthMetricChartComponent {
   readonly soleMeasurementLabel = computed(() => new Set(this.heartRateChoices().map(choice => choice.readingKey)).size === 1
     ? this.heartRateChoices().find(choice => choice.key === this.chosenKey())?.readingLabel || null : null);
   readonly chosenReading = computed(() => this.heartRateChoices().find(choice => choice.key === this.chosenKey())?.readingKey);
-  readonly visibleModels = computed(() => !this.heartRateChoices().length ? this.models()
+  readonly comparableModels = computed(() => !this.heartRateChoices().length ? this.models()
     : this.models().filter(model => this.chosenReading() && heartRateReading(model.series)?.key === this.chosenReading())
       .sort((a, b) => Number(b.series.id === this.chosenKey()) - Number(a.series.id === this.chosenKey())));
+  readonly canCompareSources = computed(() => this.heartRateChoices().length > 0 && this.comparableModels().length > 1);
+  readonly visibleModels = computed(() => this.heartRateChoices().length && !this.comparingSources()
+    ? this.comparableModels().filter(model => model.series.id === this.chosenKey()) : this.comparableModels());
+  toggleComparison(): void {
+    if (!this.canCompareSources()) return;
+    this.comparingSources.update(value => !value);
+    this.haptics.selection();
+  }
   chooseSource(key: string): void {
     if (key !== this.chosenKey() && this.heartRateChoices().some(choice => choice.key === key)) this.sourceSelected.emit(key);
   }
@@ -80,9 +90,9 @@ export class HealthMetricChartComponent {
     const choice = healthChartSourceChoice(model.series);
     return {
       model,
-      title: model.series.sourceLabel,
-      summary: describeHeartRate ? [`Latest ${model.latestText}`, model.recordedDateText,
-        choice.readingMethod === 'Calculated by QS' ? choice.readingMethod : null].filter(Boolean).join(' · ') : model.readingLabel,
+      title: model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !this.comparingSources() ? 'Latest reading' : model.series.sourceLabel,
+      summary: describeHeartRate ? null : model.readingLabel,
+      calculatedByQS: choice.readingMethod === 'Calculated by QS',
       compactHeartRate: model.series.metricId === HEALTH_METRIC_IDS.HeartRate,
       recordingDescription: choice.readingDescription || choice.detail,
       statusOverlay: buildHealthHrvChartStatusOverlay(status),

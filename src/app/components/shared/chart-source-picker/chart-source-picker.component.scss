@@ -14,3 +14,7 @@
 .chart-source-option { display:flex; flex-direction:column; gap:3px; padding-block:8px; white-space:normal; overflow-wrap:anywhere; }
 .chart-source-option-label { font:var(--mat-sys-label-large); }
 .chart-source-option-detail { font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }
+
+.chart-source-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.25rem 0.75rem; min-width:0; }
+:host(.chart-source-picker-compact) .chart-reading-picker { margin-block:0 4px; }
+:host(.chart-source-picker-compact) .chart-reading-picker mat-select { min-height:44px; display:flex; align-items:center; }

@@ -2,11 +2,18 @@
   <div class="health-reading-controls">
     @if (soleMeasurementLabel(); as label) { <p>{{ label }}</p> }
     <app-chart-source-picker [choices]="heartRateChoices()" [selectedKey]="chosenKey()"
-      chartTitle="Heart rate" (selected)="chooseSource($event)" />
+      chartTitle="Heart rate" [compact]="true" (selected)="chooseSource($event)">
+      @if (canCompareSources()) {
+        <button chartSourceAction mat-button type="button" [attr.aria-expanded]="comparingSources()"
+          aria-controls="health-source-charts" (click)="toggleComparison()">
+          {{ comparingSources() ? 'Hide comparison' : 'Compare sources' }}
+        </button>
+      }
+    </app-chart-source-picker>
     @if (!chosenReading()) { <p role="status">Your selected source and measurement have no readings in this period. Choose another measurement or period.</p> }
   </div>
 }
-<div class="health-chart-grid" aria-label="Charts by source">
+<div id="health-source-charts" class="health-chart-grid" aria-label="Charts by source">
   @for (chart of renderedModels(); track chart.model.series.id) {
     @let model = chart.model;
     <app-compact-row
@@ -26,6 +33,16 @@
             }
           </mat-chip-set>
         }
+        @if (chart.compactHeartRate) {
+          <div class="health-chart-reading-header">
+            <div>
+              @if (comparingSources() || chart.calculatedByQS) { <span class="health-chart-reading-label">{{ chart.calculatedByQS ? 'Calculated by QS' : 'Latest reading' }}</span> }
+              <strong class="health-chart-reading-value">{{ model.latestText }}</strong>
+            </div>
+            @if (model.recordedDateText) { <span class="health-chart-recorded-date">Recorded {{ model.recordedDateText }}</span> }
+          </div>
+          <p class="health-chart-coverage">{{ model.series.coverageText }}</p>
+        }
         <app-health-metric-series-chart
           [timelineNotes]="timelineNotes()"
           [model]="model"
@@ -43,13 +60,13 @@
           [attr.aria-label]="(expandedDetails().has(model.series.id) ? 'Hide ' : 'Show ') + model.series.sourceLabel + ' recording details'"
           [attr.aria-expanded]="expandedDetails().has(model.series.id)"
           [attr.aria-controls]="'health-chart-details-' + model.series.id" (click)="toggleDetails(model.series.id)">
-          {{ expandedDetails().has(model.series.id) ? 'Hide details' : 'Show details' }}
+          {{ expandedDetails().has(model.series.id) ? 'Hide recording details' : 'Recording details' }}
           <mat-icon iconPositionEnd aria-hidden="true">{{ expandedDetails().has(model.series.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
         </button>
         <div class="health-chart-details" [id]="'health-chart-details-' + model.series.id" [hidden]="!expandedDetails().has(model.series.id)">
           <p>{{ chart.recordingDescription }}</p>
+          @if (readingNotice()) { <p>{{ readingNotice() }}</p> }
           <p>{{ model.evidenceText }}</p>
-          <p>{{ model.series.coverageText }}</p>
           <p>{{ model.series.freshnessText }}</p>
           @if (model.series.deviceLabel) { <p>Device: {{ model.series.deviceLabel }}</p> }
           @if (model.omittedPointCount > 0) {
