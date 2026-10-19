@@ -75,6 +75,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('reparse monitoring / real
     expect(sample()).toMatchObject({ pendingSample: 0, unknownSample: 0, stalled: false });
     expect(sample('heavy')).toMatchObject({ pendingSample: 0, unknownSample: 0, stalled: false });
   });
+  it.each(['normal', 'heavy', 'route'])('keeps unresolved %s failures visible after a new task inherits prior job attempts', async tier => {
+    const route = tier === 'route';
+    const p = route ? { ...profile, collection: 'sportsLibRouteReparseJobs' as const } : profile;
+    const ref = await seed('retried-job', { ...(route ? {} : { processingTier: tier }), status: 'failed', attemptCount: 15 }, route);
+    const before = await ref.get();
+    await observeReparseQueue(db, p, now);
+    expect(sample(tier)).toMatchObject({ pendingSample: 1, stalled: true });
+    expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    await ref.update({ updatedAt: ts(now - hour) }); vi.clearAllMocks();
+    await observeReparseQueue(db, p, now);
+    expect(sample(tier)).toMatchObject({ pendingSample: 0, stalled: false });
+    await ref.update({ updatedAt: ts(now - 8 * hour), terminalFailure: true }); vi.clearAllMocks();
+    await observeReparseQueue(db, p, now);
+    expect(sample(tier)).toMatchObject({ pendingSample: 0, stalled: false });
+  });
   it('fences missing/deleting owners, malformed cross-user paths and concurrent job replacement', async () => {
     const ref = await seed('candidate');
     await db.doc(`userDeletionTombstones/${owner}`).set({ expireAt: ts(now + hour) });

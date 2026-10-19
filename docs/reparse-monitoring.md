@@ -88,8 +88,13 @@ There is no monitoring document, global progress cursor, campaign record or migr
 Current-target non-terminal jobs are considered only after a five-minute pending enqueue
 grace, or the **maximum four-hour native backoff** after failure. Interrupted processing
 also gets the longest 30-minute task deadline. Future timestamps, version supersession,
-manual-heavy/too-heavy review, terminal source rejection and exhausted failed attempts are
+manual-heavy/too-heavy review and terminal source rejection are
 not eligible no-progress work. Existing source classifiers/extractors are reused, not copied.
+
+The stored job `attemptCount` is a lifetime processing count retained by manual retries and
+re-enqueues, not the current Cloud Task's retry budget. It must not be used to infer native
+task exhaustion. Non-terminal failed work remains unresolved after the retry grace, even
+when native retries may have stopped; an incident never promises or automatically starts a retry.
 
 An eligible sampled job must also be at least one hour old for normal/route, or six hours
 for heavy, with no completion for that target/tier during the same window. Successful
@@ -193,11 +198,13 @@ This is why the two oldest-first indexes are included despite passing emulator t
 
 Local verification on 19 October 2026:
 
-- Fifteen focused Functions suites: 393 tests passed, including unchanged original-file
+- Fifteen focused Functions suites: 394 tests passed, including unchanged original-file
   parsing, non-activity skips, normal/heavy routing, native retries and deletion fences.
-- Complete isolated `mcp-data` emulator group: twenty files / 496 tests, none skipped;
-  nine new reparse cases cover tiers, idle, retry/terminal/source exclusions, caps,
-  concurrent replacement, account deletion, malformed progress and recovery.
+- Complete isolated `mcp-data` emulator group: twenty files / 499 tests, none skipped;
+  twelve reparse cases cover tiers, idle, retry/terminal/source exclusions, caps,
+  concurrent replacement, account deletion, malformed progress, recovery and lifetime
+  attempt counters retained by replacement tasks. Explicit terminal/manual-heavy states
+  remain excluded; high cumulative counts alone do not hide unresolved failures.
 - All nine offline monitoring bundles: 83 tests, including safe reapplication that preserves
   the eight other bundles, every condition ID and the independent email channel.
 - Functions build, compiled entrypoint checks (180 endpoints / 99 isolated targets),

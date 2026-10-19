@@ -29,8 +29,9 @@ export function reparseCandidate(data: Data, profile: ReparseProbeProfile, now: 
   if (!['pending', 'processing', 'failed'].includes(data.status)) return 'excluded';
   const updated = millis(data.updatedAt);
   if (updated === null || !Number.isSafeInteger(data.attemptCount) || data.attemptCount < 0) return 'unknown';
-  // No automatic retry is promised after exhaustion. Manual review is not a stalled worker.
-  if (data.status === 'failed' && data.attemptCount >= CLOUD_TASK_RETRY_CONFIG.maxAttempts) return 'excluded';
+  // attemptCount belongs to the job, not one native task. It survives manual
+  // retries/re-enqueues, so it cannot establish exhaustion of the current task.
+  // Only explicit terminal/manual-review state excludes an unresolved failure.
   const enqueued = millis(data.enqueuedAt);
   if (data.status === 'pending' && enqueued === null) return 'unknown';
   // No saved nextAttemptAt exists: conservatively wait out the maximum native backoff,

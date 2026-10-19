@@ -42,17 +42,24 @@ describe('reparse observability boundary', () => {
     await afterReparseScan(async () => undefined, observe, ['route'], clock);
     expect(observe).not.toHaveBeenCalled();
   });
-  it('excludes rollout, terminal, manual-heavy, exhausted and future work', () => {
+  it('excludes rollout, terminal, manual-heavy and future work', () => {
     expect(reparseCandidate(job(), profile, now)).toBe('eligible');
     for (const patch of [{ targetSportsLibVersion: '9.0.0' }, { targetSportsLibVersion: '11.0.0' }, { terminalFailure: true },
       { failureReason: 'TOO_HEAVY_FOR_AUTO_REPARSE' }, { lastError: 'terminal' }, { status: 'superseded' },
-      { status: 'failed', attemptCount: 10 }, { enqueuedAt: ts(now + 1) }, { updatedAt: ts(now) }]) {
+      { enqueuedAt: ts(now + 1) }, { updatedAt: ts(now) }]) {
       expect(reparseCandidate(job(patch), profile, now)).toBe('excluded');
     }
     expect(reparseCandidate(job({ updatedAt: {} }), profile, now)).toBe('unknown');
     expect(reparseCandidate(job({ attemptCount: NaN }), profile, now)).toBe('unknown');
     expect(reparseCandidate(job({ targetSportsLibVersion: undefined }), profile, now)).toBe('unknown');
     expect(reparseCandidate(job({ enqueuedAt: undefined }), profile, now)).toBe('unknown');
+  });
+  it('does not infer native task exhaustion from a lifetime job attempt count', () => {
+    const priorAttempts = { status: 'failed', attemptCount: 15, updatedAt: ts(now - 8 * 3_600_000), enqueuedAt: ts(1) };
+    expect(reparseCandidate(job(priorAttempts), profile, now)).toBe('eligible');
+    expect(reparseCandidate(job({ ...priorAttempts, updatedAt: ts(now - 3_600_000) }), profile, now)).toBe('excluded');
+    expect(reparseCandidate(job({ ...priorAttempts, terminalFailure: true }), profile, now)).toBe('excluded');
+    expect(reparseCandidate(job({ ...priorAttempts, failureReason: 'TOO_HEAVY_FOR_AUTO_REPARSE' }), profile, now)).toBe('excluded');
   });
   it('waits out the maximum native retry and active processing budgets, not just the minimum backoff', () => {
     expect(reparseCandidate(job({ status: 'failed' }), profile, now)).toBe('excluded');
