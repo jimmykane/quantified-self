@@ -6476,7 +6476,12 @@ Downloads, reparse and historical sends resolve the stored path; manual sends re
 format, provenance, size and generation checks. Storage sharing remains the existing event-folder policy, including
 retained revisions of a public event. MCP schemas, user-facing controls and Help are unchanged.
 Browser and backend use the same canonical source projection for SHA-256
-fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
+fingerprints, rejecting stale candidate/source combinations. Canonicalization omits undefined object properties and
+array entries, matching backend Firestore serialization with `ignoreUndefinedProperties`; explicit nulls, zero values,
+array order and duplicates remain significant. This prevents unnamed source devices from blocking import/reparse
+finalization without weakening source-change or reservation checks. No Sports Lib, schema, MCP contract/authority,
+Help or queue-monitoring change is needed; existing persistence-phase errors and retries cover this boundary.
+Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
 leg edits until stale activity details are reopened. The
 Sports Lib JSON reader preserves zero W/kg power-curve values so reopening a saved leg does not falsely change its

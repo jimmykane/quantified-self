@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultAppliedTrainingLoadPolicy, resolveEffectiveTrainingLoad, unresolvedTrainingLoadLegs,
   type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { reconcileTrainingLoadLegs, trainingLoadSourceFingerprint } from './training-load-metadata';
+import { browserTrainingLoadSourceFingerprint, canonicalTrainingLoadValue } from '../../../shared/training-load-source';
 
 const leg = (activityId: string, startMs = 1000): TrainingLoadLeg => ({ activityId,
   identity: { startMs, endMs: startMs + 3600000, type: 'Walking', duration: 3600, distance: 4000 },
@@ -116,5 +117,30 @@ describe('training load reconciliation', () => {
     expect(trainingLoadSourceFingerprint(data)).toBe(trainingLoadSourceFingerprint({
       ...data, startDate: { toMillis: () => 1000 }, name: 'new', stats: { a: 1, b: 2 } }));
     expect(trainingLoadSourceFingerprint(data)).not.toBe(trainingLoadSourceFingerprint({ ...data, stats: { a: 3 } }));
+  });
+  it('matches Firestore omission of undefined array entries without changing explicit values', async () => {
+    const values = [undefined, 'Example device', null, 0, false, 'Example device'];
+    const data = { startDate: 1000, endDate: 2000, stats: { 'Device Names': values,
+      nested: [{ names: [undefined, 'Second device'], absent: undefined }] } };
+    const persisted = { ...data, stats: { 'Device Names': ['Example device', null, 0, false, 'Example device'],
+      nested: [{ names: ['Second device'] }] } };
+    expect(trainingLoadSourceFingerprint(data)).toBe(trainingLoadSourceFingerprint(persisted));
+    expect(await browserTrainingLoadSourceFingerprint(data)).toBe(trainingLoadSourceFingerprint(persisted));
+    expect(values).toEqual([undefined, 'Example device', null, 0, false, 'Example device']);
+    const sparse = new Array<string | undefined>(2); sparse[1] = 'Example device';
+    expect(canonicalTrainingLoadValue(sparse)).toEqual(['Example device']);
+  });
+  it('still distinguishes real source changes, explicit nulls and array order', () => {
+    const data = { startDate: 1000, endDate: 2000, type: 'Walking', stats: {
+      Distance: 1000, 'Device Names': [undefined, 'First', 'Second'] } };
+    const fingerprint = trainingLoadSourceFingerprint(data);
+    for (const changed of [
+      { ...data, startDate: 1001 },
+      { ...data, endDate: 2001 },
+      { ...data, type: 'Running' },
+      { ...data, stats: { ...data.stats, Distance: 1001 } },
+      { ...data, stats: { ...data.stats, 'Device Names': [null, 'First', 'Second'] } },
+      { ...data, stats: { ...data.stats, 'Device Names': ['Second', 'First'] } },
+    ]) expect(trainingLoadSourceFingerprint(changed)).not.toBe(fingerprint);
   });
 });

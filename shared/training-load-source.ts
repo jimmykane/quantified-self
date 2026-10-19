@@ -6,7 +6,8 @@ export function trainingLoadTimeMs(value: unknown): number {
 }
 
 export function canonicalTrainingLoadValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalTrainingLoadValue);
+  // Firestore with ignoreUndefinedProperties omits undefined array entries as well as object fields.
+  if (Array.isArray(value)) return value.filter(item => item !== undefined).map(canonicalTrainingLoadValue);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
     .filter(([, item]) => item !== undefined).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([key, item]) => [key, canonicalTrainingLoadValue(item)]));

@@ -81,6 +81,31 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     }
   });
 
+  it('finalizes a real writer reparse when Firestore omits an unnamed source device', async () => {
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup(); await source(uid, workout('old'));
+    const ref = db.doc(`users/${uid}/events/workout`);
+    const oldLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const unnamed = workout('unnamed');
+    delete (unnamed.getFirstActivity().creator as { name?: string }).name;
+    const parsed = mergeRecordedEvents([unnamed, workout('named', Date.UTC(2026, 0, 2, 1))], 'workout');
+    expect(parsed.toJSON().stats?.['Device Names']).toEqual([undefined, 'Test']);
+
+    // Exercise EventWriter and Firestore directly: a JSON roundtrip would turn undefined into null.
+    const result = await persistReparsedEvent(uid, 'workout', parsed, (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
+    expect(result.staleActivitiesDeleted).toBe(1);
+    expect((await ref.get()).data()).toMatchObject({ stats: { 'Device Names': ['Test'] }, benchmarkSourceWritePending: false });
+    expect((await ref.collection('metaData').doc('processing').get()).data()?.sportsLibVersion).toBe(SPORTS_LIB_VERSION);
+    const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(metadata.sourceWritePending).toBe(false);
+    expect(Object.values(metadata.legs!).map(leg => leg.activityId).sort())
+      .toEqual(parsed.getActivities().map(activity => activity.getID()).sort());
+    expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).docs.map(doc => doc.id).sort())
+      .toEqual(parsed.getActivities().map(activity => activity.getID()).sort());
+    await completeTrainingLoadCacheWarmup(uid);
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.status).toBe('available');
+  });
+
   it('preserves benchmark reports and remaps participants through repeated real writer reparses', async () => {
     const { DataDuration } = await import('@sports-alliance/sports-lib');
     const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
