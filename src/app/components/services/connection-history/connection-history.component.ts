@@ -41,7 +41,7 @@ export class ConnectionHistoryOptionComponent {
   readonly checkedChange = output<boolean>();
   readonly rangeChange = output<ConnectionHistoryRangePreset>();
   private readonly haptics = inject(AppHapticsService);
-  readonly description = computed(() => `Includes ${resourceLabel([...new Set(historyCapabilities(this.service()).flatMap(capability => capability.resources))])} where supported. Importing happens in the background.${this.service() === ServiceNames.SuuntoApp ? ' Saved routes include your entire Suunto route library, regardless of the history range.' : ''}`);
+  readonly description = computed(() => `Includes ${resourceLabel([...new Set(historyCapabilities(this.service()).flatMap(capability => capability.resources))])} where supported. Importing happens in the background.${this.service() === ServiceNames.GarminAPI ? ' History availability varies by data type and Garmin account.' : ''}${this.service() === ServiceNames.SuuntoApp ? ' Saved routes include your entire Suunto route library, regardless of the history range.' : ''}`);
   readonly rangeOptions = computed(() => historyRangeOptions(this.service()));
   change(checked: boolean): void {
     if (this.disabled() || this.checked() === checked) return;

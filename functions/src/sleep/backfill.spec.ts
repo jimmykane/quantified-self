@@ -1383,9 +1383,13 @@ describe('backfillGarminAPIHealth', () => {
         expect(result.sleepQueued).toBe(1);
         expect(result.healthQueued).toBe(countGarminHealthBackfillRequests(startMs, nowMs));
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledOnce();
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            rangeStartMs: startMs, rangeEndMs: nowMs,
+        }));
         expect(hoisted.requestGet).toHaveBeenCalledTimes(remembered ? 2 : 3);
         expect(Date.parse(result.startDate)).toBeGreaterThan(acceptedMinStartMs);
         expect(Date.parse(result.startDate) - acceptedMinStartMs).toBeLessThanOrEqual(30_000);
+        expect(logger.warn).not.toHaveBeenCalled();
         expect(logger.error).not.toHaveBeenCalled();
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
             providerMinBackfillStartMs: Date.parse(result.startDate),
@@ -1410,7 +1414,14 @@ describe('backfillGarminAPIHealth', () => {
         await expect(backfillGarminAPIHealth(createRequest())).rejects.toMatchObject({ code: 'internal' });
 
         expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
-        expect(vi.mocked(logger.warn).mock.calls.filter(([message]) => `${message}`.includes('Retrying Garmin'))).toHaveLength(2);
+        expect(vi.mocked(logger.info).mock.calls.filter(([message, fields]) =>
+            message === '[SleepBackfill][Garmin] Provider minimum adjusted.'
+            && (fields as { outcome?: string }).outcome === 'retry_inline')).toHaveLength(2);
+        expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+            '[SleepBackfill][Garmin] Minimum-start recovery limit reached.',
+            expect.objectContaining({ summaryType: 'sleeps', statusCode: 400, recoveryAttempt: 3 }),
+        );
+        expect(logger.error).toHaveBeenCalled();
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
             status: 'failed',
@@ -1455,7 +1466,12 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.sleepQueued).toBe(0);
         expect(hoisted.requestGet).toHaveBeenCalledOnce();
-        expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Retrying Garmin'));
+        expect(logger.info).toHaveBeenCalledWith('[SleepBackfill][Garmin] Provider minimum adjusted.', {
+            summaryType: 'sleeps', statusCode: 400, recoveryAttempt: 1,
+            requestedStartMs: nowMs - 10_000, requestedEndMs: nowMs + fractionalMs,
+            providerMinimumStartMs: nowMs, nextStartMs: null, outcome: 'window_skipped',
+        });
+        expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('retries a Garmin window clipped to the provider min start time when Garmin returns one', async () => {
@@ -1468,14 +1484,26 @@ describe('backfillGarminAPIHealth', () => {
                 error: {
                     error: {
                         errorMessage: `start date before min start time ${Math.floor(clippedStartMs / 1000)}`,
+                        privateBody: 'private-provider-body',
                     },
                 },
+                request: { headers: { Authorization: 'Bearer private-access-token' },
+                    url: 'https://apis.garmin.com/private?token=private-pull-token' },
+                providerUserId: 'private-provider-account',
             })
             .mockResolvedValue(undefined);
 
         const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
+        expect(logger.info).toHaveBeenCalledWith('[SleepBackfill][Garmin] Provider minimum adjusted.', {
+            summaryType: 'sleeps', statusCode: 400, recoveryAttempt: 1,
+            requestedStartMs: expectedWindows[0].startMs, requestedEndMs: expectedWindows[0].endMs,
+            providerMinimumStartMs: clippedStartMs, nextStartMs: clippedStartMs + 30_000, outcome: 'retry_inline',
+        });
+        expect(logger.warn).not.toHaveBeenCalled();
+        expect(JSON.stringify([vi.mocked(logger.info).mock.calls, vi.mocked(logger.warn).mock.calls,
+            vi.mocked(logger.error).mock.calls])).not.toMatch(/private-provider-body|private-access-token|private-pull-token|private-provider-account|Authorization/);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
             timeout: 30_000,
             maxResponseBytes: 1024 * 1024,
@@ -1811,7 +1839,7 @@ describe('backfillGarminAPIHealth', () => {
                 statusCode: 400,
                 error: {
                     error: {
-                        errorMessage: 'start date before min start time',
+                        errorMessage: 'start date before min start time: private-provider-body',
                     },
                 },
             })
@@ -1820,6 +1848,12 @@ describe('backfillGarminAPIHealth', () => {
         const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(chunkSleepBackfillRange(startMs, nowMs, windowDays).length - 1);
+        expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+            '[SleepBackfill][Garmin] Provider minimum unavailable; skipping Sleep window.',
+            { summaryType: 'sleeps', statusCode: 400, recoveryAttempt: 1, requestedStartMs: startMs,
+                requestedEndMs: chunkSleepBackfillRange(startMs, nowMs, windowDays)[0].endMs, providerMinimumStartMs: null },
+        );
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private-provider-body');
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
             status: 'ready',
             lastBackfillQueueItems: result.queued,
