@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "derivedMetrics", "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "entryType", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAtMs", "order": "ASCENDING" }]
+      "fields": [{ "fieldPath": "entryType", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAtMs", "order": "ASCENDING" }, { "fieldPath": "generation", "order": "ASCENDING" }]
     },
     {
       "collectionGroup": "sleepSessions",

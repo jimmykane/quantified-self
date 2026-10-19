@@ -54,6 +54,10 @@ export async function observeDerivedMetricsQueue(db: FirebaseFirestore.Firestore
         const candidates = await db.collectionGroup(DERIVED_METRICS_COLLECTION_ID)
             .where('entryType', '==', DERIVED_METRICS_ENTRY_TYPES.Coordinator)
             .where('status', 'in', [...DERIVED_MONITORING_STATES]).orderBy('updatedAtMs')
+            // Existing coordinators have generation; snapshots must not. This
+            // ordered suffix keeps their composite index entries coordinator-only.
+            // It breaks timestamp ties, never replaces oldest-update ordering.
+            .orderBy('generation')
             .select(...DERIVED_METRICS_PROBE_FIELDS).limit(DERIVED_METRICS_PROBE_LIMIT + 1).get();
         if (stopped) return;
         const groups: DerivedMetricsSample[] = DERIVED_MONITORING_STATES.map(state => ({ state, pendingSample: 0,

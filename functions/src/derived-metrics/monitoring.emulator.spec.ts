@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore, Query, Transaction } from 'firebase-admin/firestore';
+import { FieldValue, Firestore, Query, Transaction } from 'firebase-admin/firestore';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as logger from 'firebase-functions/logger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metric-kinds';
+import firestoreIndexes from '../../../firestore.indexes.json';
 const mocks = vi.hoisted(() => ({ firestore: vi.fn(), enqueue: vi.fn(async () => true) }));
 vi.mock('firebase-admin', () => ({ firestore: mocks.firestore }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('../shared/cloud-tasks', () => ({ enqueueDerivedMetricsTask: mocks.enqueue }));
 import { observeDerivedMetricsQueue, DERIVED_METRICS_PROBE_FIELDS, DERIVED_METRICS_PROBE_LIMIT } from './monitoring-probe';
 import { markDerivedMetricsDirtyAndMaybeQueue, startDerivedMetricsProcessing, completeDerivedMetricsProcessing,
-    failDerivedMetricsProcessing, markDerivedMetricSnapshotsFailed, writeDerivedMetricSnapshotsReady } from './derived-metrics.service';
+    failDerivedMetricsProcessing, markDerivedMetricSnapshotsBuilding, markDerivedMetricSnapshotsFailed,
+    writeDerivedMetricSnapshotsReady } from './derived-metrics.service';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived metrics monitoring / real read-only Firestore observation', { timeout: 30_000 }, () => {
     const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -79,6 +81,67 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived metrics monitorin
         await seed(); await tombstone().set({ expireAt: new Date(now - 1) });
         await observeDerivedMetricsQueue(db, now); expect(sample()).toMatchObject({ pendingSample: 1 });
     });
+    it('preserves oldest-update priority and uses generation only to break equal-timestamp ties', async () => {
+        await seed({ updatedAtMs: 1, generation: 50 });
+        for (const [owner, generation] of [['PRIVATE_Z_LOW', 1], ['PRIVATE_A_HIGH', 5]] as const) {
+            await db.doc(`users/${owner}`).set({ private: 'PRIVATE_PROFILE' });
+            await seed({ updatedAtMs: 2, generation }, owner);
+        }
+        const reads = vi.spyOn(Transaction.prototype, 'getAll');
+        await observeDerivedMetricsQueue(db, now);
+        expect(reads.mock.calls.map(call => (call[0] as FirebaseFirestore.DocumentReference).path)).toEqual([
+            coordinator().path, 'users/PRIVATE_Z_LOW/derivedMetrics/coordinator', 'users/PRIVATE_A_HIGH/derivedMetrics/coordinator',
+        ]);
+        expect(sample()).toMatchObject({ pendingSample: 3, unknownSample: 0, truncated: false });
+        expect(JSON.stringify(observations())).not.toContain('PRIVATE');
+    });
+    it('omits generation-less records but keeps present malformed generations unknown', async () => {
+        await seed({ generation: 'PRIVATE_INVALID_GENERATION' });
+        for (const owner of ['PRIVATE_MISSING_GENERATION', 'PRIVATE_VALID']) {
+            await db.doc(`users/${owner}`).set({ private: 'PRIVATE_PROFILE' });
+            await seed({}, owner);
+        }
+        await db.doc('users/PRIVATE_MISSING_GENERATION/derivedMetrics/coordinator').update({ generation: FieldValue.delete() });
+        const reads = vi.spyOn(Transaction.prototype, 'getAll');
+        await observeDerivedMetricsQueue(db, now);
+        expect(reads).toHaveBeenCalledTimes(2);
+        expect(reads.mock.calls.map(call => (call[0] as FirebaseFirestore.DocumentReference).path))
+            .not.toContain('users/PRIVATE_MISSING_GENERATION/derivedMetrics/coordinator');
+        expect(sample()).toMatchObject({ pendingSample: 1, unknownSample: 1 });
+        expect(JSON.stringify(observations())).not.toContain('PRIVATE');
+    });
+    it('keeps the declared index sparse across real coordinator and building, failed and ready snapshot writes', async () => {
+        // The emulator checks query semantics, not composite-index enforcement.
+        // Verify the declared index's field-presence invariant against real writer output.
+        const indexes = firestoreIndexes.indexes.filter(index => index.collectionGroup === 'derivedMetrics'
+            && index.queryScope === 'COLLECTION_GROUP');
+        expect(indexes).toHaveLength(1);
+        const fields = indexes[0].fields.map(field => field.fieldPath);
+        expect(fields).toEqual(['entryType', 'status', 'updatedAtMs', 'generation']);
+        const hasIndexEntry = (data: FirebaseFirestore.DocumentData) => fields.every(field => Object.hasOwn(data, field));
+        const current = await claim();
+        const snapshot = db.doc(`users/${uid}/derivedMetrics/${kinds[0]}`);
+        const expectSnapshotExcluded = async (status: string) => {
+            const coordinatorData = (await coordinator().get()).data()!;
+            const snapshotData = (await snapshot.get()).data()!;
+            expect(coordinatorData.generation).toBe(current.generation);
+            expect(hasIndexEntry(coordinatorData)).toBe(true);
+            expect(snapshotData).toMatchObject({ entryType: 'snapshot', status });
+            expect(snapshotData).not.toHaveProperty('generation');
+            expect(hasIndexEntry(snapshotData)).toBe(false);
+        };
+        expect(await markDerivedMetricSnapshotsBuilding(uid, kinds, current)).toBe(true);
+        await expectSnapshotExcluded('building');
+        await markDerivedMetricSnapshotsFailed(uid, kinds, new Error('PRIVATE_ERROR'), current);
+        await failDerivedMetricsProcessing(uid, current.generation, new Error('PRIVATE_ERROR'), kinds, current);
+        await expectSnapshotExcluded('failed');
+        const started = (await startDerivedMetricsProcessing(uid, current.generation))!;
+        const retry = { generation: current.generation, startedAtMs: started.startedAtMs };
+        expect(await writeDerivedMetricSnapshotsReady(uid, kinds, {}, { claim: retry })).toBe(true);
+        await completeDerivedMetricsProcessing(uid, retry.generation, retry);
+        await expectSnapshotExcluded('ready');
+        expect((await coordinator().get()).get('status')).toBe('idle');
+    });
     it.each(['queued', 'failed'])('reads the saved %s build deadline and excludes scheduled work until it is eligible', async status => {
         const due = now + 120_000;
         await seed({ status, buildNotBeforeMs: due });
@@ -124,7 +187,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived metrics monitorin
         expect(sample()).toMatchObject({ pendingSample: 0, excludedSample: 1 });
     });
     it('rejects a coordinator-shaped document outside the owner-scoped exact path', async () => {
-        await db.doc('other/PRIVATE_OWNER/derivedMetrics/coordinator').set({ entryType: 'coordinator', status: 'queued', updatedAtMs: 1 });
+        await db.doc('other/PRIVATE_OWNER/derivedMetrics/coordinator').set({ entryType: 'coordinator', status: 'queued', updatedAtMs: 1, generation: 1 });
         await observeDerivedMetricsQueue(db, now);
         expect(observations('queue_sample').every(fields => fields.unknownSample === 1 && !('pendingSample' in fields))).toBe(true);
     });

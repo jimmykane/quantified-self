@@ -7641,8 +7641,13 @@ There is no periodic derived-metrics dispatcher from which to observe a stranded
 recover, write or delete anything. Its observation deadline is five seconds; this bounds waiting, not cancellation
 of an already-started Firestore RPC. No further work or late healthy samples follow a deadline.
 
-One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`,
-and fetches at most 21 projected records (20 candidates plus lookahead). Each candidate has one read-only transaction
+One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`
+then `generation`, and fetches at most 21 projected records (20 candidates plus lookahead). `generation` is an existing
+coordinator-only field: using it as an ordered index suffix excludes snapshots from this composite index without adding
+fields, documents, writes or a migration. It only breaks equal-update-time ties; oldest-update priority is unchanged.
+This is a one-way schema dependency, not an execution dependency: normal calculations never call or wait for the observer.
+Keep `generation` on coordinators and off snapshots; real-writer regressions protect that invariant.
+Each candidate has one read-only transaction
 over its current coordinator, owner existence and deletion tombstone, with a field mask limited to entry/status,
 generation, dirty/processing kind lists, pending timestamps, optional build deadline and tombstone expiry. User profile fields, payloads, raw errors,
 recorded activities and athlete settings are not fetched. Exact owner paths, rollout eligibility, active deletion,
@@ -7663,15 +7668,23 @@ Three fixed state groups emit every run, including idle/unavailable runs. Positi
 ages are **lower bounds**, not a global backlog or exact oldest generation. A saturated or unknown prefix without
 a proven positive result withholds zero/age fields. A positive result remains visible even with partial coverage.
 The dashboard exposes saturation independently. The bounded oldest-update prefix can hide later accounts, and
-coalesced updates can reorder candidates. Legacy documents missing indexed predicates/order fields are not included;
-native queue charts, failure logs and privately authorized diagnosis remain necessary. Do not interpret a zero as
-a full historical audit or remove the cap by scanning all users.
+coalesced updates can reorder candidates. Legacy or malformed documents missing indexed predicates/order fields,
+including `generation`, are not included and cannot contribute unknown counts. A present but invalid generation is
+still sampled as unknown. Native queue charts, failure logs and privately authorized diagnosis remain necessary.
+Do not interpret a zero as a full historical audit or remove the cap by scanning all users.
 
-The new collection-group composite index is `derivedMetrics: entryType ASC, status ASC, updatedAtMs ASC`.
+The collection-group composite index is `derivedMetrics: entryType ASC, status ASC, updatedAtMs ASC, generation ASC`.
+Firestore excludes documents missing any indexed field; the coordinator `entryType` filter alone is not a partial index.
+Snapshot building/ready/failure writes must not add `generation`, even as null, or those snapshots acquire index entries.
 Deploy it and wait for READY before enabling the observer; a missing index reports unavailable rather than zero.
+This replaces the original three-field declaration locally, not any live index. If an older broad index already exists
+in an environment, removing it needs separate exact-scope deletion approval; leaving it deployed retains its overhead.
 No Rules, TTL, personal monitoring document or new task queue is required. At the cap, a run requests at most 21
 query documents plus 60 transaction documents, before SDK retries and index-query billing. There are 96 scheduled
-runs/day; idle queries still have minimum read charges. Logs include three state samples/run plus task/per-kind commit
+runs/day; idle queries still have minimum read charges. The additional ordered field can affect index-entry read billing;
+verify the final query with production Query Explain after separately approved index deployment rather than claiming
+that fewer stored entries guarantee lower total read charges or measured write latency.
+Logs include three state samples/run plus task/per-kind commit
 observations. Scheduler, Functions, reads, log ingestion, metric series and alerting can incur charges; volume and
 pricing determine cost, so the bounded design is not a free-service or fixed-price promise.
 
@@ -7743,7 +7756,11 @@ Verification uses `npm run test:derived-metrics-monitoring`, focused Functions d
 `npm run test:functions-emulators -- mcp-data`, workflow/emulator guards, Functions build/entrypoint/secret checks,
 the cold-import benchmark, frontend TypeScript and existing derived/MCP output-contract regressions. Real demo
 Firestore cases cover idle, cap, malformed metadata, retry grace, changing generations, owner/deletion fences,
-ready versus requeued/settled, stale claims and transaction retries. Offline provisioning fixtures preserve all
+ready versus requeued/settled, stale claims and transaction retries. Sparse-index regressions verify exact query/index
+ordering, generation-less exclusion, malformed-present generations and the field-presence invariant across real
+coordinator and building/failed/ready snapshot writes. Emulators verify query and writer semantics, not composite-index
+enforcement or production performance; index READY and the live query plan remain part of #831's release verification.
+Offline provisioning fixtures preserve all
 seven other bundles and reject ownership/schema/channel/inventory conflicts before writes.
 Help's Training update/Retry and MCP preparing-state guidance was reviewed; user behavior is unchanged, so no Help
 edit is required. **MCP impact: no wire impact**—no tool, exposed metric, schema, scope, consent, projection,

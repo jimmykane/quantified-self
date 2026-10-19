@@ -137,8 +137,10 @@ test('preview and unconfirmed apply are offline; required CI and the bounded pro
   assert.equal(pkg.scripts['test:derived-metrics-monitoring'], 'node --test tools/derived-metrics-monitoring/monitoring.test.mjs');
   assert.match(readFileSync('.github/workflows/_run-tests.yml', 'utf8'), /run: npm run test:derived-metrics-monitoring/);
   const indexes = JSON.parse(readFileSync('firestore.indexes.json', 'utf8')).indexes;
-  assert.ok(indexes.some(index => index.collectionGroup === 'derivedMetrics' && index.queryScope === 'COLLECTION_GROUP'
-    && JSON.stringify(index.fields) === JSON.stringify(['entryType', 'status', 'updatedAtMs'].map(fieldPath => ({ fieldPath, order: 'ASCENDING' })))));
+  assert.deepEqual(indexes.filter(index => index.collectionGroup === 'derivedMetrics' && index.queryScope === 'COLLECTION_GROUP'), [{
+    collectionGroup: 'derivedMetrics', queryScope: 'COLLECTION_GROUP',
+    fields: ['entryType', 'status', 'updatedAtMs', 'generation'].map(fieldPath => ({ fieldPath, order: 'ASCENDING' })),
+  }]);
 });
 
 function transport() {
