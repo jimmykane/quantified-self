@@ -1961,7 +1961,11 @@ retry or MCP contract change. Fixed-label telemetry separates accepted task
 admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
 review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
 five existing Function updates and dashboard/metrics/policies were deployed/activated with owner approval
-on 19 October 2026; exact live evidence and remaining route/batch checks are in the runbook.
+on 19 October 2026. Natural heartbeat and representative normal-tier completion/duration
+evidence are verified. #834 remains open for native scanner-timeout alert coverage: an
+HTTP 504/DEADLINE_EXCEEDED request later logged an application ACK, escaping the existing
+structured-only discovery-failure policy. Exact evidence and the remaining narrow
+alert correction are in the runbook; no runtime or retry tuning is implied.
 Future production changes still require separate approval; #543 owns the heavy backlog cap.
 
 ### Suunto EnergySense parser support

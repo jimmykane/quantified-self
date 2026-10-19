@@ -212,8 +212,9 @@ upgrades, provider enablement, retention and recorded-activity projections are u
 approval on 19 October 2026. All four indexes are READY, five existing Functions are ACTIVE,
 and the dashboard, ten metrics and seven enabled policies have live API readback. No new
 Function, schedule or channel was created. Natural route-sample confirmation passed
-at 10:06 UTC; representative real-batch evidence remains in #834. Idle monitoring
-health alone does not close it.
+at 10:06 UTC and representative normal-tier processing evidence is now recorded below.
+#834 remains open for a native scanner-timeout alert-coverage gap discovered during
+the final closure check; structured attempt ACKs alone cannot establish scanner health.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -304,9 +305,52 @@ and the actual :06 route cadence. No schedule or observation budget changed.
   ten-minute schedules and the existing Alerts email channel remain enabled. The bounded
   post-creation log/series window contained no probe failures, worker attempts or job commits;
   absence of worker traffic during idle is not evidence of successful parsing or batch latency.
-- **#834 remains open / In progress only for representative real-batch progress, committed
+- **At the 10:10 UTC readback, #834 remained open / In progress for representative real-batch progress, committed
   outcomes and latency evidence.** Reuse natural real work when it occurs; running or
   broadening a reparse requires separate approval. No scanner/worker was manually invoked,
   no task was replayed, no reparse was enabled, no email was sent and no provider API was called.
   No cloud configuration changed during this verification. #543 is unchanged. The heartbeat
   follow-up is paused once this evidence is recorded; another idle poll cannot supply batch proof.
+
+## Representative processing proof and final closure check — 19 October 2026
+
+Bounded read-only verification of the fixed **10:45–11:52 UTC** window confirmed:
+
+- 290 normal-tier `job_commit:completed` observations after job persistence, spanning
+  11:50:07.936–11:51:59.992 UTC, and 290 normal-tier worker ACK observations.
+- All 290 worker observations carried durations, from 1,576 to 6,241 milliseconds.
+  The positive `qs_reparse_worker_latency_v1` distribution contained 290 observations;
+  positive worker-attempt and committed-outcome series were present as well. These
+  are observations, not a deduplicated count of distinct jobs or accounts.
+- Natural normal/heavy samples at 11:00:40.836 UTC and route sample at 11:06:02.177 UTC
+  had zero eligible sampled pending work, zero unknowns, no cap and no stall, with
+  positive Monitoring sample series for all three tiers. The next route sample at
+  12:06:02.883 UTC was healthy too. Normal/heavy and route workloads remain distinct;
+  this real-work evidence is normal-tier processing, not a claim of live heavy/route rewrites.
+- The targeted structured-failure query returned no exceptional observations in that
+  fixed window. All targeted queries were uncapped. The earlier broad 500-entry log
+  query was capped and was not used as a complete count or proof of absence.
+- Final configuration readback reconfirmed ten owned metrics, seven enabled policies,
+  the existing dashboard/channel and all 26 actual chart/condition queries. No cloud
+  configuration, source data, scheduler, worker, campaign or queue was changed, and
+  no email or provider call was initiated for this verification.
+
+The real-batch progress/outcome/duration evidence is therefore satisfied, but the
+final native-health check found a separate issue that prevents closure:
+
+- The activity scanner's 11:50 UTC scheduled request returned **HTTP 504 after
+  299.982 seconds**. Cloud Scheduler recorded **DEADLINE_EXCEEDED at 11:55:04.549 UTC**.
+- The same scanner later emitted structured `scan_attempt:acknowledged` at
+  **12:00:29.814 UTC**, with `durationMs: 628888`. Work continued after the request's
+  native deadline. A later application ACK does not erase the failed scheduled request.
+- The existing discovery-failure policy only selects structured `scan_attempt:failed`
+  observations. It therefore misses this proven native-timeout path. The missing
+  normal/heavy 12:00 sample must not be presented as another healthy idle observation.
+
+**Remaining in #834:** cover native scanner request errors/timeouts alongside structured
+discovery failures, preserve exact scanner scope and sustained thresholds, add regressions,
+and obtain separately approved application/readback of the corrected alert condition.
+Do not change scanner deadlines, discovery settings, worker resources, queue concurrency,
+retry policy or the separate #543 admission-cap scope merely to silence this signal.
+No native fault was injected and no processing was manually started for these checks.
+#834 stays open / In progress until this gap is addressed and verified.
