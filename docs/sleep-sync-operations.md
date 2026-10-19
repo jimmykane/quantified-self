@@ -176,6 +176,22 @@ uses a revision-bound recovery task name. A reserved task name is considered dis
 while the corresponding Cloud Task still exists, so a deleted or expired task cannot leave the
 queue row permanently stuck.
 
+## Queued COROS polls after disconnect
+
+An owned COROS poll may outlive a completed disconnect. With both a confirmed cleared/empty service projection and
+an absent owner token root, the worker logs an INFO skip intent instead of marking Sleep/Health failed or creating
+a new dead letter. Verify the actual queue row has `processed=true`, `resultStatus=skipped` and
+`skippedReason=service_disconnected`; neither HTTP acknowledgement nor the INFO diagnostic proves a committed skip.
+The existing completion transaction rejects replaced, already-processed, missing or actively leased rows and rechecks
+account deletion. Stale/deletion-denied transitions emit no committed outcome. Unknown state or a present token root
+retains the missing-token warning/DLQ path, and Firestore failures remain retryable.
+
+Monitoring coverage is **covered/unchanged**: #830 already includes `COROSAPI` / `sleep_sync`, post-commit `skipped`
+outcomes, genuine failures and new dead letters. No metric, threshold, dashboard or cloud configuration changes are
+needed. Help's existing disconnect/history-retention explanation remains accurate, and there is no MCP/Training data
+contract change. Only `processSleepSyncTask` needs deployment after separate approval. Do not replay or remove old
+failed jobs for an intentionally disconnected account; reconnect creates new eligible work rather than reopening skips.
+
 ## Routine Verification
 
 For Garmin Health failures, use the [safe worker diagnostics](garmin-integration.md#health-worker-diagnostics)

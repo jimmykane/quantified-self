@@ -3920,6 +3920,136 @@ describe('sleep queue', () => {
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
     });
 
+    describe('COROS polls after completed disconnect', () => {
+        const disconnectedMeta = {
+            connectionStateGeneration: 'cleared-generation',
+            connectionAccountsRevisionKey: 'confirmed-empty-accounts',
+            connectionAccounts: [],
+        };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+        const committedLogs = () => hoisted.loggerInfo.mock.calls.filter(([message, data]) =>
+            message === '[HealthSleep]' && data?.event === 'committed');
+
+        beforeEach(() => {
+            hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
+            hoisted.getServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            item = {
+                id: 'coros-disconnected-poll', dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500, queueRevision: 'original-revision',
+                processed: false, provider: 'COROSAPI', userID: 'test-user-uid',
+                providerUserId: 'old-coros-account', retryCount: 0, type: 'coros_poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => item }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        it.each([undefined, 'original-revision'])('commits an INFO-only skip through existing completion guards (revision: %s)', async revision => {
+            item.queueRevision = revision;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                skippedContext: 'SERVICE_DISCONNECTED',
+            }));
+            expect(hoisted.loggerInfo).toHaveBeenCalledWith('[SleepSync][COROS] Skipping poll after completed disconnect.', {
+                queueItemId: item.id, reason: 'service_disconnected',
+            });
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({
+                provider: 'COROSAPI', workload: 'sleep_sync', outcome: 'skipped',
+            })]]);
+            expect(hoisted.loggerWarn).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(hoisted.batchDelete).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith(item.userID, item.providerUserId);
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            null, {},
+            { ...disconnectedMeta, connectionState: 'connected' },
+            { ...disconnectedMeta, connectionState: 'reconnect_required' },
+            { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+            { ...disconnectedMeta, connectionStateGeneration: undefined },
+            { ...disconnectedMeta, connectionStateGeneration: 42 },
+            { ...disconnectedMeta, connectionStateGeneration: ' ' },
+            { ...disconnectedMeta, connectionAccountsRevisionKey: undefined },
+            { ...disconnectedMeta, connectionAccountsRevisionKey: 42 },
+            { ...disconnectedMeta, connectionAccounts: undefined },
+            { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'another-account' }] },
+        ])('preserves missing-token failures without confirmed disconnect evidence: %j', async meta => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(meta);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({ outcome: 'dead_lettered' })]]);
+        });
+
+        it('preserves mismatch failures when a token root still exists despite an empty account projection', async () => {
+            hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({}) });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+        });
+
+        it('does not infer disconnect for a legacy poll without a recorded owner', async () => {
+            item.userID = undefined;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.getServiceConnectionMeta).not.toHaveBeenCalled();
+            expect(queueRef.update).not.toHaveBeenCalled();
+        });
+
+        it.each(['replaced', 'processed', 'removed', 'leased'])('does not count or overwrite a %s queue row', async state => {
+            queueRef.get.mockResolvedValue({
+                exists: state !== 'removed',
+                data: () => ({ ...item, ...(state === 'replaced'
+                    ? { queueRevision: 'new-revision' }
+                    : state === 'leased' ? {
+                        processingOwner: 'another-worker', processingRevision: 'revision:original-revision',
+                        processingLeaseExpiresAt: Date.now() + 60_000,
+                    } : { processed: true }) }),
+            });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('rechecks account deletion before committing a skip', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it.each(['metadata', 'root'])('keeps %s read failures retryable without inventing a skip or DLQ', async stage => {
+            const error = new Error('temporary Firestore failure');
+            if (stage === 'metadata') hoisted.getServiceConnectionMeta.mockRejectedValueOnce(error);
+            else hoisted.docGet.mockRejectedValueOnce(error);
+            await expect(processSleepSyncQueueItem(item)).rejects.toBe(error);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('keeps failed completion retryable and does not count an uncommitted skip', async () => {
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('temporary commit failure'));
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Failed);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+    });
+
     it('does not process a COROS sleep queue item for an inactive legacy account', async () => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         hoisted.getActiveCOROSTokenSnapshot.mockRejectedValue(Object.assign(

@@ -3333,6 +3333,26 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             );
         }
         if (error instanceof MissingSleepProviderTokenError) {
+            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                && queueItem.type === 'coros_poll' && queueItem.userID) {
+                const meta = await getServiceConnectionMeta(queueItem.userID, ServiceNames.COROSAPI);
+                // An account/credential mismatch also looks like a missing token.
+                // Only a cleared lifecycle, confirmed empty projection AND absent
+                // token root prove the queued poll outlived a completed disconnect.
+                if (meta?.connectionState === undefined
+                    && typeof meta?.connectionStateGeneration === 'string' && meta.connectionStateGeneration.trim()
+                    && typeof meta.connectionAccountsRevisionKey === 'string' && meta.connectionAccountsRevisionKey.trim()
+                    && Array.isArray(meta.connectionAccounts) && meta.connectionAccounts.length === 0
+                    && !(await getServiceTokenRootDocumentRef(queueItem.userID, ServiceNames.COROSAPI).get()).exists) {
+                    logger.info('[SleepSync][COROS] Skipping poll after completed disconnect.', {
+                        queueItemId: queueItem.id,
+                        reason: 'service_disconnected',
+                    });
+                    return markQueueItemSkipped(queueItem, undefined, 'service_disconnected', {
+                        skippedContext: 'SERVICE_DISCONNECTED',
+                    });
+                }
+            }
             if (!isHealthQueueItem(queueItem)
                 && queueItem.userID
                 && (queueItem.provider !== SLEEP_PROVIDERS.COROSAPI || corosLifecycleGuards)) {
