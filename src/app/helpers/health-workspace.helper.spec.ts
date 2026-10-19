@@ -612,7 +612,9 @@ describe('Health workspace helpers', () => {
 
     expect(canonical?.coverageText).toBe('1 of 2 days with readings');
     expect(native?.coverageText).toBe('1 of 2 days with readings');
-    expect(canonical?.freshnessText).toContain('No recent updates');
+    expect(canonical?.freshnessText).toContain('Older reading');
+    expect(canonical?.freshnessText).not.toContain('updates');
+    expect(view.rows.map(row => row.freshnessText)).toContain('Older reading');
     expect(canonical?.freshnessText).toContain('Aug 1');
     expect(native?.freshnessText).toContain('Last recorded');
     expect(native?.freshnessText).toContain('Aug 2');

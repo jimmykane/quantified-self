@@ -1920,8 +1920,8 @@ function exactSeriesFreshness(
   return {
     text: status === 'unknown'
       ? `Last recorded ${formatCalendarDate(lastCalendarDate)}`
-      : `Last recorded ${formatCalendarDate(lastCalendarDate)}${status === 'stale' ? ' · No recent updates' : ''}`,
-    statusLabel: status === 'fresh' ? 'Recent reading' : status === 'stale' ? 'No recent updates' : 'Update frequency not reported',
+      : `Last recorded ${formatCalendarDate(lastCalendarDate)}${status === 'stale' ? ' · Older reading' : ''}`,
+    statusLabel: status === 'fresh' ? 'Recent reading' : status === 'stale' ? 'Older reading' : 'Update frequency not reported',
   };
 }
 

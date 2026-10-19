@@ -776,7 +776,7 @@ export class HealthWorkspaceComponent {
     const series = readingKey ? available.filter(item => heartRateReading(item)?.key === readingKey) : [];
     const messages: string[] = [];
     if (series.some(item => item.semanticVariant === 'rolling_7_day_average')) {
-      messages.push('7-day average covers the seven days before each reading, rather than your selected date range.');
+      messages.push('The source reports a moving 7-day average. Changing the chart’s date range does not recalculate it.');
     }
     if (series.some(item => item.semanticVariant.startsWith('qs_daily_'))) {
       messages.push('Calculated by QS uses only the readings recorded on each day; gaps remain gaps.');

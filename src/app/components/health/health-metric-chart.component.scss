@@ -28,6 +28,14 @@
       min-height: 190px;
     }
   }
+
+  // Recording details can have different lengths. Size these plots together
+  // from the viewport so opening one disclosure cannot shrink only its chart.
+  :host(.health-metric-chart-fill-height.health-metric-chart-has-picker) app-health-metric-series-chart {
+    --health-metric-series-chart-height: clamp(210px, 32vh, 360px);
+
+    flex: 0 0 auto;
+  }
 }
 
 .health-chart-panel-native {

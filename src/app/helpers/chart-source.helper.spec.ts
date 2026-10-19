@@ -36,7 +36,9 @@ describe('compact chart source attribution', () => {
   });
   it('keeps new Sleep vital labels compact without disguising minimums, maximums or naps', () => {
     for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Minimum sleep HR'], ['sleep_session_maximum_spo2', 'Maximum sleep SpO₂'],
-      ['sleep_session_resting_heart_rate', 'Sleep resting HR'], ['nap_average_respiration', 'Nap average']]) {
+      ['sleep_session_resting_heart_rate', 'Sleep resting HR'], ['nap_average_respiration', 'Average nap breathing rate'],
+      ['sleep_session_average_respiration', 'Average sleep breathing rate'], ['nap_maximum_spo2', 'Maximum nap SpO₂'],
+      ['nap_average_heart_rate', 'Average nap HR'], ['nap_minimum_heart_rate', 'Minimum nap HR'], ['nap_resting_heart_rate', 'Nap resting HR']]) {
       const choice = healthChartSourceChoice({ ...series, semanticVariant: variant });
       expect(choice.shortLabel).toBe(`Suunto · Account 2 · ${label}`);
       expect(choice.detail).toBe(label);

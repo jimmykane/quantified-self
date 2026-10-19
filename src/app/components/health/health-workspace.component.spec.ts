@@ -2158,7 +2158,8 @@ describe('HealthWorkspaceComponent', () => {
     const rolling = component.metricView().series.find(item => item.semanticVariant === 'rolling_7_day_average')!;
     expect(rolling).toBeDefined();
     component.selectDetailSource(rolling.id);
-    expect(component.heartRateReadingNotice()).toContain('covers the seven days before each reading');
+    expect(component.heartRateReadingNotice()).toContain('The source reports a moving 7-day average');
+    expect(component.heartRateReadingNotice()).toContain('Changing the chart’s date range does not recalculate it');
     expect(component.heartRateReadingNotice()).not.toContain('Readings recorded during the day');
     component.selectMetricSource({ uid: 'user-1', metric: HEALTH_METRIC_IDS.HeartRate, sourceKey: 'health-series-1111111111111111' });
     expect(component.heartRateReadingNotice()).toBeNull();
