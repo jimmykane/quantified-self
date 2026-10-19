@@ -1,9 +1,11 @@
 # Account cleanup and disconnect recovery monitoring (#836)
 
-Status: local implementation only. Nothing in this change deploys Functions, creates
-cloud configuration, sends mail, disconnects a provider or deletes production data.
-[#836](https://github.com/jimmykane/quantified-self/issues/836) remains open until its
-separately approved deployment, activation and natural readback are recorded.
+Status on 19 October 2026: the twelve affected existing Functions are deployed and
+the nine metrics, seven enabled policies and dashboard are active under the owner's
+explicit approval. API/query and identity-preservation readback passed. The first
+natural **post-filter-correction Monitoring time series** is still pending; #836
+remains open until that evidence is recorded. No account deletion, disconnect,
+forced recovery, test mail, index or Rules deployment was performed for validation.
 
 ## Ownership and meanings
 
@@ -20,6 +22,12 @@ Gen 2 `onSubscriptionUpdated` service in `europe-west3`. The latter can complete
 disconnect/queue-release recovery when entitlement returns; its location must not
 silently exclude those observations. Unrelated west3 Functions remain outside the
 log metrics. No Function is relocated or added.
+
+Cloud Logging evaluates `OR` before `AND`, including implicit whitespace conjunctions.
+Keep the complete Gen 1 and Gen 2 filter branches parenthesized, and retain the
+fixture evaluator's Logging-specific precedence. Without those branch parentheses,
+Gen 1 constraints also apply to Gen 2 logs: the heartbeat disappears and Monitoring
+rejects Gen 2 policy conditions. Validate actual API queries as well as fixtures.
 
 The flows are intentionally different:
 
@@ -191,7 +199,8 @@ are unchanged. Review fixtures cover all four providers and four revocation reas
 last-token removal, subscription retry retention, refresh failure, subsequent local failure,
 expected token-use deferral and queue/route pagination. Provisioning also upgrades the
 original six-policy bundle to seven without replacing existing condition identities.
-No production verification, cloud configuration or data mutation is claimed.
+Those implementation-only results do not establish production activation; the
+separately approved production evidence is recorded below.
 
 Local checks:
 
@@ -235,3 +244,62 @@ Record naturally occurring outcomes where available; idle data is not failure or
 proof of a real deletion. Reuse #655's same-channel OPENED/CLOSED email evidence.
 No account deletion, disconnect, forced cleanup, provider call, fabricated telemetry,
 test email, data/resource deletion or migration is authorized by this runbook.
+
+### Approved deployment and activation — 19 October 2026
+
+The owner explicitly approved deploying the affected Functions, enabling the alerts,
+and closing #836 only after healthy natural evidence. All twelve existing endpoints
+were independently read back **ACTIVE** after deployment at approximately 10:34 UTC:
+
+- `cleanupUserAccounts`
+- `retryPendingServiceDisconnects`
+- `deauthorizeGarminAPI`, `deauthorizeSuuntoApp`, `deauthorizeCOROSAPI`, `deauthorizeWahooAPI`
+- `requestAndSetGarminAPIAccessToken`, `requestAndSetSuuntoAPIAccessToken`,
+  `requestAndSetCOROSAPIAccessToken`, `requestAndSetWahooAPIAccessToken`
+- `enforceSubscriptionLimits`
+- `onSubscriptionUpdated`
+
+All remain in `europe-west2` except the existing `onSubscriptionUpdated` trigger in
+`europe-west3`. Before/after comparisons preserved generation, memory, CPU, timeout,
+concurrency, instance limits, service accounts, environment/secret bindings, ingress
+and both scheduler configurations. In particular, the existing 1024 MiB subscription
+enforcer was not reduced or otherwise tuned. No Function was added, relocated or deleted.
+The recovery scheduler retains its every-30-minute schedule, with this deployment's
+natural phase at UTC `:07`/`:37`; the subscription enforcer retains every 24 hours.
+
+The original mixed-runtime filter exposed an `OR`-precedence defect during live
+policy validation. Its complete branches and the fixture evaluator were corrected;
+no additional Functions deployment was needed for that configuration-only fix.
+All twelve cleanup-monitoring tests and all 97 tests across the ten monitoring
+bundles then passed. Predeployment verification also passed 392 focused Functions
+tests, Functions build, the 180-endpoint/99-isolated entrypoint contract, deployment
+package and 70-secret-binding checks. Backend source was unchanged from the earlier
+499-test `mcp-data` emulator proof; no emulator used production data.
+
+The corrected bundle was applied and serially reapplied. Readback at 10:46 UTC verified:
+
+- Nine owned log metrics, seven enabled policies with thirteen conditions, and the
+  [QS Account Cleanup & Disconnect Recovery dashboard](https://console.cloud.google.com/monitoring/dashboards/builder/d9691446-d27f-49aa-8125-113de0ed7d6f?project=quantified-self-io).
+- All 29 actual chart/condition queries accepted by Cloud Monitoring, including
+  both Gen 1 and Gen 2 resources. Policy and condition IDs and dashboard identity
+  remained stable on serial application, without duplicate creation.
+- Existing independent Alerts email channel
+  `projects/quantified-self-io/notificationChannels/7874469028377828627` enabled and
+  retained for OPENED/CLOSED notifications. Reuse #655's recorded email-delivery
+  evidence; no new channel, test mail or app-mail record was created.
+- Unrelated-resource fingerprints unchanged: all 116 pre-existing log metrics,
+  62 policies, ten dashboards and all four channels. Project totals after this
+  bundle are 125 metrics, 69 policies, eleven dashboards and four channels.
+
+The natural 10:37:04 UTC run on `retrypendingservicedisconnects-00101-zab` emitted
+one acknowledged heartbeat and all thirteen existing bounded-page observations:
+operational, four lifecycle-repair lanes, explicit disconnect for each provider and
+subscription retry for each provider. Each examined zero rows and was uncapped;
+no cleanup failure, remote-unconfirmed or manual-review observation was emitted.
+This proves idle runtime coverage, not actual deletion or provider revocation.
+That run preceded the filter correction and **does not** prove positive Monitoring
+ingestion under the corrected filter. The next natural run is due at **11:07 UTC
+(14:07 Europe/Helsinki)**. Confirm its acknowledged heartbeat, page observations and
+positive `qs_cleanup_heartbeat_v1` / `qs_cleanup_pages_v1` series after normal ingestion
+delay before marking the ticket completed. Do not manually invoke recovery or
+manufacture a failure/deletion merely to populate a chart.

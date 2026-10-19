@@ -33,17 +33,34 @@ function matches(filter, entry) {
     } else values.push(value(tokens[at++]));
     return actual !== undefined && values.some(expected => op === '=' ? actual === expected : typeof actual === 'number' && (op === '>' ? actual > expected : actual >= expected));
   }
-  function conjunction() {
+  // Cloud Logging's precedence is OR before AND, unlike JavaScript/SQL.
+  // Explicit AND and the implicit whitespace form have the same precedence.
+  function disjunction() {
     let result = primary();
-    while (at < tokens.length && !['OR', ')'].includes(tokens[at])) { const right = primary(); result = result && right; } return result;
+    while (tokens[at] === 'OR') { at++; const right = primary(); result = result || right; } return result;
   }
-  function expression() { let result = conjunction(); while (tokens[at] === 'OR') { at++; const right = conjunction(); result = result || right; } return result; }
+  function expression() {
+    let result = disjunction();
+    while (at < tokens.length && tokens[at] !== ')') {
+      if (tokens[at] === 'AND') at++;
+      const right = disjunction(); result = result && right;
+    }
+    return result;
+  }
   const result = expression(); assert.equal(at, tokens.length); return result;
 }
 const entry = (fields = {}, resource = 'cloud_run_revision') => ({ resource: { type: resource, labels: {
-  project_id: project, location: 'europe-west2', region: 'europe-west2',
+  project_id: project, ...(resource === 'cloud_function' ? { region: 'europe-west2' } : { location: 'europe-west2' }),
 } }, jsonPayload: { message: '[CleanupHealth]', telemetryVersion: 1, event: 'outcome', flow: 'disconnect', provider: 'SuuntoApp', lane: 'explicit', ...fields } });
 const selected = (key, fields, resource) => matches(metric(key).filter, entry(fields, resource));
+
+test('filter fixtures follow Logging OR-before-AND precedence and require grouped runtime branches', () => {
+  const log = entry();
+  assert.equal(matches('resource.type="cloud_function" OR resource.type="cloud_run_revision" jsonPayload.flow="account"', log), false);
+  assert.equal(matches('resource.type="cloud_function" AND resource.labels.region="europe-west2" OR resource.type="cloud_run_revision" AND resource.labels.location="europe-west2"', log), false);
+  assert.equal(matches('(resource.type="cloud_function" resource.labels.region="europe-west2") OR (resource.type="cloud_run_revision" resource.labels.location="europe-west2")', log), true);
+  assert.equal(matches('resource.type="cloud_run_revision" AND (jsonPayload.flow="account" OR jsonPayload.flow="disconnect")', log), true);
+});
 
 test('fixed categories, nine owned metrics, seven policies and mixed runtime boundaries', () => {
   const b = bundle(); assert.equal(b.metrics.length, 9); assert.equal(b.policies.length, 7);

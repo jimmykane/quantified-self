@@ -1583,7 +1583,7 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 ## 10. Admin and operational coverage
 
-Account cleanup and disconnect recovery monitoring (#836) is implemented locally in
+Account cleanup and disconnect recovery monitoring (#836) is deployed and enabled in
 the independent `tools/cleanup-monitoring/` bundle: nine fixed-label metrics, seven policies
 and the **QS Account Cleanup & Disconnect Recovery** dashboard. It reuses existing
 30-minute recovery page reads and committed lifecycle outcomes, with no extra Firestore
@@ -1595,8 +1595,11 @@ policy covers failed/unconfirmed partner revocation for all four providers, even
 credentials are subsequently removed; it does not claim the partner is definitely active
 or change retry/token-retention behavior. Existing #655 Training cleanup alerts
 remain unchanged. Help, provider behavior, deletion fences, recursion and MCP/Assistant
-contracts are unchanged. Deployment/apply/natural verification are separately approved
-remaining work in #836; see [the cleanup monitoring runbook](account-cleanup-monitoring.md).
+contracts are unchanged. The owner approved deployment and activation on 19 October
+2026; twelve existing Functions are ACTIVE and all 29 chart/condition queries passed
+live readback. Natural idle runtime coverage is verified, but the first positive
+Monitoring heartbeat/page series after the filter correction is still required
+before #836 closes; see [the cleanup monitoring runbook](account-cleanup-monitoring.md).
 
 Email/marketing monitoring (#835) is implemented locally through the existing Firestore `mail` outbox and Trigger Email
 extension, separately from fitness-provider queues. New mail initializes supported PENDING metadata in its original
