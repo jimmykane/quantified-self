@@ -51,9 +51,11 @@ enqueue exception. Metrics count observations/attempts, not distinct jobs or ath
 
 ## Bounded observations, progress and cost
 
-Each existing scanner observes its queue **hourly**, only on its top-of-hour scheduled
-tick. The Scheduler event's `scheduleTime`, not the Function's wall-clock start time, owns
-that decision so late delivery does not shift the observation slot. The other five
+Each existing scanner observes its queue **hourly**, only on its scheduled tick in the
+first ten minutes of each hour. Interval jobs can have a non-zero minute phase: the live
+activity job runs at :00/:10/etc., while the route job runs at :06/:16/etc. The Scheduler
+event's `scheduleTime`, not the Function's wall-clock start time, owns that decision so
+late delivery does not shift the observation slot. The other five
 ten-minute ticks still run discovery and emit its existing outcome telemetry, but perform
 no monitoring queries. There is no new schedule, timer, persisted throttle or monitoring
 record. Missing/invalid scheduled time reports unavailable observation without querying.
@@ -250,3 +252,9 @@ Hourly sampling cost review on 19 October 2026:
   focused non-mutating ESLint and `git diff --check` passed. Index
   definitions, discovery schedules/settings, workers, retry limits, Rules, MCP and Help
   are unchanged by the cost reduction. No production action or push was performed.
+
+The approved deployment's live Scheduler readback exposed the route job's :06 interval
+phase. The hourly gate now accepts the scheduled tick in minutes 0–9 rather than requiring
+minute 0. Six focused suites / 151 tests and all nine monitoring bundles / 84 tests passed;
+the regressions cover all ten possible minute phases, fractional scheduled timestamps,
+and the actual :06 route cadence. No schedule or observation budget changed.

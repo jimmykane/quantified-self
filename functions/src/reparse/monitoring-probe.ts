@@ -121,7 +121,8 @@ export async function observeReparseQueue(db: FirebaseFirestore.Firestore, profi
   } finally { if (timer) clearTimeout(timer); }
 }
 
-/** Observe only the top-of-hour scheduled tick, not wall-clock start time (delivery can be late).
+/** Observe the scheduled tick in the first ten minutes of each hour, not wall-clock start time.
+ * Interval schedulers can have a non-zero minute phase; delivery can also be late.
  * No timer/cursor or schedule change; preserve scanner success/error and its existing deadline.
  */
 export async function afterReparseScan(operation: () => Promise<void>, observe: () => Promise<void>,
@@ -131,7 +132,7 @@ export async function afterReparseScan(operation: () => Promise<void>, observe: 
   finally {
     const scheduledAt = typeof scheduleTime === 'string' ? Date.parse(scheduleTime) : NaN;
     if (!Number.isFinite(scheduledAt)) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
-    else if (new Date(scheduledAt).getUTCMinutes() === 0) {
+    else if (new Date(scheduledAt).getUTCMinutes() < 10) {
       if (clock() - start >= 290_000) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
       else {
         try { await observe(); } catch { tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier })); }

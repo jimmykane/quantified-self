@@ -42,10 +42,10 @@ describe('reparse observability boundary', () => {
     await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T09:00:00Z', clock);
     expect(observe).not.toHaveBeenCalled();
   });
-  it('observes once per scheduled hour without changing any of the six discovery ticks', async () => {
+  it.each(Array.from({ length: 10 }, (_, minute) => minute))('observes once per scheduled hour at minute phase %i without changing discovery', async phase => {
     const operation = vi.fn().mockResolvedValue(undefined); const observe = vi.fn().mockResolvedValue(undefined);
-    for (let minute = 0; minute < 60; minute += 10) {
-      await afterReparseScan(operation, observe, ['normal', 'heavy'], `2026-10-19T09:${String(minute).padStart(2, '0')}:00Z`);
+    for (let minute = phase; minute < 60; minute += 10) {
+      await afterReparseScan(operation, observe, ['normal', 'heavy'], `2026-10-19T09:${String(minute).padStart(2, '0')}:01.761483Z`);
     }
     expect(operation).toHaveBeenCalledTimes(6);
     expect(observe).toHaveBeenCalledOnce();

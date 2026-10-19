@@ -120,7 +120,7 @@ test('hourly probe policies tolerate boundary/ingestion drift while event-driven
     assert.ok(recent.length > condition.thresholdValue);
     assert.equal(1 > condition.thresholdValue, false); // One isolated bad observation cannot open an incident.
   }
-  assert.match(bundle().dashboard.mosaicLayout.tiles[0].widget.text.content, /top-of-hour scheduled tick/);
+  assert.match(bundle().dashboard.mosaicLayout.tiles[0].widget.text.content, /scheduled tick in the first ten minutes/);
   assert.match(metric('queue_samples').description, /hourly/);
 });
 test('preview is offline, unconfirmed apply is rejected, CI and narrowly scoped progress indexes are registered', () => {

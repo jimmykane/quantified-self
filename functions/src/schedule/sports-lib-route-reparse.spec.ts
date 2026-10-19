@@ -290,7 +290,8 @@ describe('scheduleSportsLibRouteReparseScan', () => {
 
     it('passes scheduled time through and observes hourly even with discovery disabled', async () => {
         const handler = scheduleSportsLibRouteReparseScan as unknown as (event: { scheduleTime: string }) => Promise<void>;
-        for (let minute = 0; minute < 60; minute += 10) {
+        // Production's interval job is offset to :06, not aligned with the activity job's :00.
+        for (let minute = 6; minute < 60; minute += 10) {
             await handler({ scheduleTime: `2026-10-19T09:${String(minute).padStart(2, '0')}:00Z` });
         }
         expect(hoisted.mockProcessingQueryGet).not.toHaveBeenCalled();
