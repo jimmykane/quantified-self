@@ -421,7 +421,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `22.0.0`; the provider-sport expansion is verified against its candidate build before package adoption
+- Installed `@sports-alliance/sports-lib`: `23.1.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -4824,7 +4824,10 @@ correction and route aliases are separate approvals documented in the
 
 ### Metric registry
 
-All metric kinds and their payload contracts live in `shared/derived-metrics.ts`. The backend build registry in
+Canonical kinds, collection identities and strict kind normalization live in lightweight
+`shared/derived-metric-kinds.ts`. `shared/derived-metrics.ts` re-exports that unchanged public API and owns the payload
+contracts; the isolated operational observer imports only the lightweight module, not sport registries or builders.
+The backend build registry in
 `derived-metrics.service.ts` declares source dependencies per kind. The worker uses those declarations to avoid fetching
 settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
@@ -5852,9 +5855,10 @@ state.
 
 Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
 available. Each result records its score (including valid zero), actual method, imported/calculated provenance,
-estimate flag and missing-input/fallback reasons. Walking, Nordic Walking, Hiking and Trekking use imported TSS →
-calibrated HR → calorie MET → unavailable; calculated power and running pace are ineligible. Other sports retain
-their existing Automatic order with corrected HR eligibility. A preferred HR/MET calculation falls back through the
+estimate flag and missing-input/fallback reasons. In the adopted 23.1.0 release, Walking, Indoor Walking, Nordic
+Walking, Speed Walking, Hiking and Trekking use imported TSS → eligible power with independent FTP → calibrated
+HR → calorie MET → unavailable. Running pace remains ineligible. Other sports retain their existing Automatic order
+with corrected HR eligibility. A preferred HR/MET calculation falls back through the
 eligible Automatic order. Valid nonnegative file-imported TSS wins regardless of preference; previous calculated
 TSS is never treated as imported on recalculation.
 
@@ -5879,18 +5883,21 @@ threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take pri
 setting. Observed peak HR and guessed threshold ratios are ineligible calibration. QS supplies no athlete
 settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
 
-The pending sports-lib threshold-HR update adds a fallback for Running, Trail Running, Cycling and Mountain Biking
-groups when resting or maximum HR is missing but an explicit, unambiguous threshold remains valid. Full valid
-calibration still selects Banister. Imported scores and eligible power retain Automatic priority; walking/hiking,
-swimming and other groups retain their current HR eligibility. Complete rejected calibration cannot use the fallback.
+Sports Lib 23.1.0 adds the threshold-HR fallback for every sport already eligible for calculated TSS (262 of the
+284 canonical types), including walking/hiking, pool/open-water swimming and strength training. The existing 22
+calculated-load exclusions remain unchanged. A valid explicit, unambiguous threshold is required when resting or
+maximum HR is missing. Full valid calibration still selects Banister. Imported scores and eligible power retain
+Automatic priority. Complete rejected calibration cannot use the fallback.
 Only this threshold candidate treats numeric zero FIT rest/max settings as unused; threshold zero, conflicting
 selected settings, ambiguous session references and malformed values remain rejected. No athlete settings, zone-derived
 thresholds or observed-peak maximums are supplied by QS. Unmapped source thresholds remain unavailable.
 
 The fallback uses the sports-lib threshold bands over the same observed timer-active intervals, with no extrapolation
 outside observations or through invalid readings. It is explicitly estimated and is not interchangeable with normalized
-Banister. Exact threshold is in the 80 TSS/hour band; just above threshold is 100 TSS/hour. Its low-intensity floor is
-not enabled for walking/recovery families. The library calculation guide owns the complete rate table.
+Banister. Exact threshold enters the 100 TSS/hour band; immediately below threshold remains in the 80 TSS/hour band. For a
+threshold of 165 bpm, one observed active hour at 100/164/165/166 bpm produces 40/80/100/100 TSS respectively.
+Other band boundaries retain their existing inclusivity. The low-intensity floor also applies to walking/recovery
+activities and can produce higher load than Banister or MET. The library calculation guide owns the complete rate table.
 
 Version-1 private evaluations can add `hrAlgorithm: 'BANISTER' | 'THRESHOLD'`; the threshold result also carries
 `threshold-hr-fallback` and `estimated: true`. The editor labels these **HR · Banister** and **HR · Threshold (estimate)**.
@@ -5900,9 +5907,9 @@ multi-result total. Compact private load summaries preserve it through their exi
 query paths, queues, triggers or scheduled rebuilds. Refreshed evaluations and changed summaries use the existing
 metadata/cache writes and invalidation flow; reparsing history still incurs that normal refresh work.
 
-Rollout is gated on a published sports-lib release: this compatible reader change is prepared against the current
-23.0.0 pins and verified locally with the candidate package. Before enabling the calculation in QS, adopt the same
-published version in root and Functions and update both lockfiles. Historical candidates require the normal approved
+Root and Functions now pin the same published sports-lib 23.1.0 package in both manifests and lockfiles.
+The runtime reparse target resolves from that installed version; version mismatch checks remain strict.
+Historical candidates require the normal approved
 original-file reparse lifecycle and derived refresh; a Training rebuild alone cannot recover file calibration.
 Strict leg matching, latest controls, immutable applied policies, source reservations, retries and deletion guards
 remain in force. Activity JSON, recorded-TSS metric names, public MCP schemas and evaluation version stay compatible.
@@ -6491,7 +6498,7 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.0.0 with FIT Parser 6.2.2 and matching package integrity.
+Root and Functions now pin published Sports Lib 23.1.0 with FIT Parser 6.2.2 and matching package integrity.
 Both consumers recognize the expanded 284-type catalog. The earlier 22.0.0 integration and its historical verification
 remain recorded here; package adoption does not deploy either consumer or start a production reparse.
 
@@ -7399,7 +7406,8 @@ different fatigue models rather than this steady aerobic protocol.
 
 ### Adding a derived metric
 
-1. Add the kind and payload to `shared/derived-metrics.ts`.
+1. Add the kind to `shared/derived-metric-kinds.ts` and its payload to `shared/derived-metrics.ts`. Update the fixed
+   operational kind allowlist in `tools/derived-metrics-monitoring/definitions.mjs`; its drift test must pass.
 2. Decide whether it is default, projection-sensitive, calendar-sensitive, Dashboard-visible, or Training-only.
 3. Add a backend build-registry entry with the narrowest source dependencies.
 4. Add a pure builder and focused Functions tests.
@@ -7631,6 +7639,152 @@ failure from blocking a loopback Training refresh; it does not weaken deployed e
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
+
+### Derived-metrics Cloud Monitoring (#831)
+
+Source definitions live in `tools/derived-metrics-monitoring/`. They prepare **14 versioned log metrics**, the
+**QS Derived Metrics** dashboard (20 charts plus interpretation guidance), and **six policies with eight conditions**.
+They do not calculate a new athlete metric, change Training formulas or optimize recomputation (#760).
+Implementation and offline/emulator verification are separate from the deployment, activation and live evidence
+still tracked by [#831](https://github.com/jimmykane/quantified-self/issues/831).
+
+The existing workers retain their resource/retry settings: ingress is Gen 2, 512 MiB/120 seconds; calculation is
+Gen 2, 2 GiB/540 seconds with concurrency one. Both remain in `europe-west2`. Structured observations distinguish:
+
+- Ingress `queued`, `coalesced`, `not_admitted` and invalid admission, not completed calculations. Not admitted
+  includes both lifecycle skips and rejected enqueue attempts; only the separate guarded enqueue-failure commit
+  establishes a persisted enqueue failure. Do not label all rejected admissions as expected exclusions.
+  Enqueue failures with a generation reject so Cloud Tasks retries; those attempts also record
+  ingress exceptions. Deletion/rollout skips without a generation and accepted coalescing still acknowledge normally.
+- Whole-task duration and acknowledged/exception outcomes. Acknowledgement includes stale, unchanged, superseded
+  and deletion-fenced no-ops; HTTP success is not snapshot publication.
+- Ready/failed snapshot writes, emitted only after the existing claim/deletion-guarded transaction commits.
+- Coordinator `settled`, intentional `requeued`, guarded calculation failure and guarded enqueue failure commits.
+  A ready snapshot can precede a follow-up generation. Settled means no pending kinds **at that commit**, not a
+  promise that later work cannot arrive or every retained snapshot is current.
+
+Logging is best effort, after transactions rather than inside retriable callbacks. These are observations, not an
+exactly-once audit ledger or unique-task/account counts. A multi-kind failure produces one observation per canonical
+kind; failure policies group by kind instead of summing a single failed generation into a global surge. Exceptions
+before a guarded failure write remain visible in attempts/native HTTP charts, but cannot establish committed failure.
+Existing claims, revisions, publication fences, retry policy, source reads and calculation results remain authoritative.
+
+#### Bounded pending-generation observation
+
+There is no periodic derived-metrics dispatcher from which to observe a stranded coordinator. The new isolated
+**`observeDerivedMetricsHealth`** runs every 15 minutes (`*/15 * * * *`, UTC), Gen 2 in `europe-west2`, **512 MiB**,
+60-second runtime limit, maximum one instance, no secrets or minimum warm instances. It does not enqueue, rebuild,
+recover, write or delete anything. Its observation deadline is five seconds; this bounds waiting, not cancellation
+of an already-started Firestore RPC. No further work or late healthy samples follow a deadline.
+
+One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`,
+and fetches at most 21 projected records (20 candidates plus lookahead). Each candidate has one read-only transaction
+over its current coordinator, owner existence and deletion tombstone, with a field mask limited to entry/status,
+generation, dirty/processing kind lists, pending timestamps, optional build deadline and tombstone expiry. User profile fields, payloads, raw errors,
+recorded activities and athlete settings are not fetched. Exact owner paths, rollout eligibility, active deletion,
+unchanged document version and valid metadata are checked before contributing a sample.
+
+Pending age uses the later of `requestedAtMs` and a saved `buildNotBeforeMs` for queued/failed work, and `startedAtMs`
+for processing. Intentionally future builds are excluded; their batching interval does not count as eligible waiting.
+Legacy missing/null deadlines retain the requested-at anchor, invalid deadlines remain unknown, and stale queued
+deadlines never hide an active processing claim. It never uses the date of the last activity or ready snapshot;
+an inactive athlete with no pending generation produces a real idle zero. Coalescing does not redefine the pending-age
+anchor. Failed work is excluded for the existing maximum **four-hour**
+Cloud Tasks retry backoff after its last failed coordinator update, not treated as stalled during that wait.
+Superseded samples and lifecycle exclusions do not count as failures. Unknown/invalid metadata is not a healthy zero.
+Kind entries must be literal canonical strings, never coerced persisted objects. A malformed row contributes unknown
+coverage only to its state group; it cannot abort observations of valid coordinators belonging to other owners.
+
+Three fixed state groups emit every run, including idle/unavailable runs. Positive pending counts/maximum observed
+ages are **lower bounds**, not a global backlog or exact oldest generation. A saturated or unknown prefix without
+a proven positive result withholds zero/age fields. A positive result remains visible even with partial coverage.
+The dashboard exposes saturation independently. The bounded oldest-update prefix can hide later accounts, and
+coalesced updates can reorder candidates. Legacy documents missing indexed predicates/order fields are not included;
+native queue charts, failure logs and privately authorized diagnosis remain necessary. Do not interpret a zero as
+a full historical audit or remove the cap by scanning all users.
+
+The new collection-group composite index is `derivedMetrics: entryType ASC, status ASC, updatedAtMs ASC`.
+Deploy it and wait for READY before enabling the observer; a missing index reports unavailable rather than zero.
+No Rules, TTL, personal monitoring document or new task queue is required. At the cap, a run requests at most 21
+query documents plus 60 transaction documents, before SDK retries and index-query billing. There are 96 scheduled
+runs/day; idle queries still have minimum read charges. Logs include three state samples/run plus task/per-kind commit
+observations. Scheduler, Functions, reads, log ingestion, metric series and alerting can incur charges; volume and
+pricing determine cost, so the bounded design is not a free-service or fixed-price promise.
+
+#### Dashboard, policies and response
+
+Six native charts cover the exact `processDerivedMetricsIngressTask` and `processDerivedMetricsTask` queues in
+`europe-west2`: depth, HTTP attempts and dispatch delay. Remaining charts show admission, attempts, whole-task p95,
+guarded commits, failures, state heartbeats, overdue/unknown/saturated observations and hourly mean sampled lower bounds.
+DELTA distributions retain genuine idle zeroes; sampled means are not instantaneous counts. Cross-resource p95 is a
+maximum of series percentiles, not a pooled global percentile. Empty native queues alone never prove fresh snapshots.
+
+| Initial policy | Observation window / threshold | Severity |
+| --- | --- | --- |
+| Sustained pending generation | Three eligible samples aged at least 30 minutes in one hour, grouped by state | Error |
+| Repeated committed calculation failures | Five guarded failures for one canonical kind in 30 minutes | Error |
+| Repeated enqueue failures | Three guarded enqueue failures for one kind in 15 minutes | Error |
+| Repeated ingress failures | Three actual ingress exceptions in 15 minutes | Error |
+| Coordinator observations unavailable | Two unknown/unavailable or capped-without-positive samples per state in one hour | Warning |
+| Required coordinator heartbeat missing | One hour without observations, with an independent condition for each state | Warning |
+
+Threshold conditions require 60 seconds of violation; missing threshold data evaluates inactive, not healthy.
+Absence needs an initialized time series: verify all three positive heartbeat series after activation. Tune initial
+thresholds against real traffic rather than treating one delayed sample or ordinary retries as incidents.
+The allowlisted dimensions are canonical metric kind (plus fixed `unknown`), stage, outcome and state. New log metrics
+and incident text contain no UIDs, job/generation IDs, names, titles, source fingerprints, values, credentials or raw
+errors. Existing private diagnostic logs are not imported into these metric labels.
+
+An incident links to Queue Monitor, Logs Explorer and this runbook. First check telemetry/index/scheduler availability,
+then both native queues and guarded commit signals. A privately authorized coordinator inspection can distinguish
+retry wait, a changing generation, an abandoned claim and invalid metadata; inspect source/build errors only with that
+authority. Never blindly rebuild all metrics, replay queues, clear claims, purge documents or alter retries to clear an
+alert. The observer cannot repair work and a cleared alert is not a freshness guarantee.
+
+#### Preview, release boundary and verification
+
+Preview is offline by default, without credentials, network or cloud writes:
+
+```sh
+node tools/derived-metrics-monitoring/cli.mjs --project=quantified-self-io
+```
+
+After **separate approval**, deploy the new index and the observer plus the two instrumented workers. The shared
+enqueue-failure telemetry is also used by `ensureDerivedMetrics`, `setTrainingBuildBenchmark`, `mcpApi` and
+`assistantChat`; include those existing entrypoints in the approved release for complete admission-path observations.
+No other runtime configuration, resources, provider support, scheduler or task retry settings change.
+The observer has a direct owner-module loader; entrypoint checks reject builders, Sports Lib, Cloud Tasks and the full
+application graph in its runtime, and preserve existing handler descriptors.
+
+Reuse the existing enabled **Alerts** email channel and shared ownership-safe provisioner. Once explicitly approved,
+substitute that channel's actual resource name (never a fabricated value):
+
+```sh
+node tools/derived-metrics-monitoring/cli.mjs --project=quantified-self-io \
+  --notification-channel=projects/quantified-self-io/notificationChannels/SELECTED_ID \
+  --apply --confirm-project=quantified-self-io
+```
+
+The CLI verifies channel, schemas and ownership before writes and serially upserts only its versioned resources.
+Reapplication preserves dashboard etags, policy/condition identities and every unrelated bundle/channel; it never
+creates/deletes a notification channel or deletes cloud resources. Existing #655 same-channel opened/closed email
+proof can be reused, without sending new test emails. Ordinary CI never deploys or applies this bundle.
+After approved activation, record index READY, active runtime configurations, 14 metrics, one dashboard, six enabled
+policies/eight conditions, all 28 chart/condition query readbacks and the three first real heartbeat/sample series.
+Confirm genuine idle observations and natural admission/publication/settlement where traffic exists; missing/unknown
+data is not success. Preserve ownership/condition IDs on a serial reapply and keep #831 open until its live criteria
+are satisfied. No synthetic failures, customer rebuilds, provider calls or test emails are required by this code change.
+
+Verification uses `npm run test:derived-metrics-monitoring`, focused Functions derived-metric/worker tests,
+`npm run test:functions-emulators -- mcp-data`, workflow/emulator guards, Functions build/entrypoint/secret checks,
+the cold-import benchmark, frontend TypeScript and existing derived/MCP output-contract regressions. Real demo
+Firestore cases cover idle, cap, malformed metadata, retry grace, changing generations, owner/deletion fences,
+ready versus requeued/settled, stale claims and transaction retries. Offline provisioning fixtures preserve all
+seven other bundles and reject ownership/schema/channel/inventory conflicts before writes.
+Help's Training update/Retry and MCP preparing-state guidance was reviewed; user behavior is unchanged, so no Help
+edit is required. **MCP impact: no wire impact**—no tool, exposed metric, schema, scope, consent, projection,
+proposal, mutation, Assistant permission, provider action or plugin change. Operational kind extraction preserves
+the complete existing public re-export API and values; no snapshot migration or derived schema bump is needed.
 
 ### Training delivery queue monitoring
 

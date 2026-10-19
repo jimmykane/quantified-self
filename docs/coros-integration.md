@@ -83,6 +83,18 @@ Each provider date becomes `coros_daily` / `daily_summary` with raw `happenDay` 
 
 Connecting COROS marks Health ready, a current terminal authentication loss marks reconnect required with an opaque error code, and deleting the COROS token root marks Health disconnected unless the service state read in the guarded transaction is reconnect-required. Browser clients can read their existing connection for compatibility but cannot create, update, or delete the root; server-owned OAuth and disconnect callables create it and remove token children before deleting it. This prevents an empty client-created root from reviving a legacy orphaned child, while every active-account lookup and downstream daily write also fails closed if the root is absent or owns a different credential generation. Pre-generation COROS connections remain compatible only while the existing root and selected token child both omit generation metadata; a generation on only one side or unequal generations fails closed. They do not require a credential migration or reconnect solely because both fields are absent. Connect and terminal-auth mirrors require the exact current service-connection generation and pending projection claim, while the delete trigger transactionally supersedes any pending claim only while the token root remains absent before selecting its Health state from current service metadata. Each connect or terminal-auth transition also commits a generation-keyed projection marker with the authoritative service state; the bounded lifecycle scheduler retries a failed Health mirror and clears only the exact marker after success. Clearing the claim invalidates an in-flight stale projection, and a concurrent reconnect preserves its newer claim. Delayed lifecycle work therefore cannot overwrite a newer reconnect or a completed disconnect. Disconnect never deletes imported Sleep or Health history. Recursive account deletion removes both domains and all Health sample chunks below `users/{uid}`.
 
+An owned `coros_poll` that finds no active token after a completed disconnect becomes a terminal
+`processed=true`, `resultStatus=skipped`, `skippedReason=service_disconnected` through the existing guarded Sleep
+completion helper. This requires a cleared connection state with a nonempty generation, an explicit revisioned empty
+account projection, and an absent token root for that same owner. A present root, unknown/legacy metadata, connected,
+reconnect-required or disconnect-pending state retains the existing `NO_TOKEN_FOUND` warning/DLQ behavior; account and
+credential mismatches are not inferred to be disconnects. No token from another owner is tried, and no Sleep/Health
+failure state is written for a confirmed disconnect. The INFO diagnostic contains only the opaque queue ID and fixed
+reason; skipped telemetry is emitted only after the existing deletion/revision/lease-guarded completion commits.
+Firestore reads or failed completion remain retryable. Reconnect does not reopen completed skips, and this change
+neither replays nor cleans up historical failed jobs. Only `processSleepSyncTask` needs an approved deployment;
+provider requests, retry policy, runtime options, schedulers, Rules, indexes and other providers are unchanged.
+
 The supported operator replay command is `npm --prefix functions run backfill-coros-daily-health`. Its dedupe generation ensures an older sleep-only operator run does not suppress the Health replay. The completed one-off legacy Sleep-to-Health migration tooling has been retired after a full production dry run found no remaining candidates.
 
 ### Imported event metadata

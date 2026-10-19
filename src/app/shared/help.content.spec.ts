@@ -156,11 +156,13 @@ describe('help.content', () => {
     expect(copy).toContain('File-imported scores remain unchanged');
     expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
   });
-  it('distinguishes HR algorithms without extending threshold-only estimates to other families', () => {
+  it('explains sport-wide threshold HR estimates without changing calculation exclusions or calibration safeguards', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     for (const phrase of ['**HR · Banister**', '**HR · Threshold (estimate)**',
       'When resting or maximum HR is missing but a valid threshold is recorded',
-      'Walking, hiking, swimming and other families retain their existing HR requirements',
+      'This includes walking, hiking, swimming and strength training',
+      'Sports excluded from calculated TSS remain excluded',
+      'Conflicting or invalid calibration is not replaced with guessed settings',
       'Older evaluations can show only **HR**', 'Reimport retains your overrides, exclusions and saved preferences']) {
       expect(copy).toContain(phrase);
     }
@@ -1637,12 +1639,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Total strokes**');
     expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
     expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
-    expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('Swimming performance averages exclude rest');
     expect(gettingStartedSection?.content).toContain('touching, non-overlapping recorded times');
     expect(gettingStartedSection?.content).toContain('positive recorded active-length count');
     expect(gettingStartedSection?.content).toContain('sums its original lap durations once');
     expect(gettingStartedSection?.content).toContain('estimate weighted by recorded lap duration');
-    expect(gettingStartedSection?.content).toContain('**Selected avg** still averages the original selected laps');
+    expect(gettingStartedSection?.content).toContain('**Selected summary** uses the original selected laps, including rest for **Max HR**');
     expect(gettingStartedSection?.content).toContain('not divided into invented splits');
     expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
     expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
@@ -1698,10 +1700,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('search or restore older choices');
     expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
-    expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Avg** row directly below its headers');
+    expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Summary** row directly below its headers');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');
     expect(gettingStartedSection?.content).toContain('checkboxes beside lap rows');
-    expect(gettingStartedSection?.content).toContain('**Selected avg · N** footer');
+    expect(gettingStartedSection?.content).toContain('**Selected summary · N** footer');
+    expect(gettingStartedSection?.content).toContain('**Max HR** is the whole-session peak, including rest');
+    expect(gettingStartedSection?.content).toContain('unweighted mean of available active-lap average heart rates');
+    expect(gettingStartedSection?.content).toContain('unselected laps and the session peak do not contribute');
+    expect(gettingStartedSection?.content).toContain('never borrows a cross-sport context lap');
     expect(gettingStartedSection?.content).toContain('distance-weighted pace and duration-weighted speed');
     expect(gettingStartedSection?.content).toContain('A saved lap column stays selected even when the current laps do not contain that metric');
     expect(gettingStartedSection?.content).toContain('available in only some of the current lap tables');
@@ -2481,11 +2487,13 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('without affecting your other MCP clients');
   });
 
-  it('directs account deletion to the Account settings section', () => {
+  it('directs account deletion to Data management and its confirmation dialog', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
-    expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> Danger Zone**');
-    expect(dataAndPrivacySection?.content).not.toContain('**Settings -> Profile -> Danger Zone**');
+    expect(dataAndPrivacySection?.content).toContain('[Settings → Data management](/settings?section=data-management)');
+    expect(dataAndPrivacySection?.content).toContain('choose **Delete account…**');
+    expect(dataAndPrivacySection?.content).toContain('Review the consequences and confirm in the dialog');
+    expect(dataAndPrivacySection?.content).not.toContain('Danger Zone');
   });
 
   it('should explain public event and comparison sharing exposure', () => {

@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
+import { getHealthFailureTelemetry } from '../health/error-diagnostics';
 import { parseTrustedGarminCallbackURL } from '../sleep/garmin-callback-url';
 import {
   GarminHealthResult,
@@ -56,9 +57,46 @@ export class GarminHealthRequestError extends Error {
   public readonly name = 'GarminHealthRequestError';
   public readonly code = 'garmin_health_request_failed';
 
-  constructor(public readonly statusCode: number | null = null) {
+  constructor(
+    public readonly statusCode: number | null = null,
+    public readonly transportCode?: string,
+    public readonly responseByteLimitExceeded = false,
+  ) {
     super('Garmin Health callback request failed.');
   }
+}
+
+export type GarminHealthRequestStage = 'token_refresh' | 'identity_request' | 'callback_request'
+  | 'callback_mapping' | 'result_assembly';
+
+export function getGarminHealthFailureTelemetry(
+  error: unknown, stage: string, elapsedMs: number,
+): Record<string, string | number> {
+  const base: Record<string, string | number> = {
+    ...getHealthFailureTelemetry(error, stage, elapsedMs), errorCode: 'garmin_health_processing_failed',
+  };
+  try {
+    if (!(error instanceof GarminHealthRequestError)) return base;
+    const status = error.statusCode;
+    const hasStatus = typeof status === 'number' && Number.isSafeInteger(status) && status >= 100 && status <= 599;
+    return {
+      ...base, errorName: 'GarminHealthRequestError', errorCode: 'garmin_health_request_failed',
+      failureCategory: error.responseByteLimitExceeded === true ? 'response_byte_limit'
+        : hasStatus ? 'provider_http_error' : base.transportCode ? 'transport_error' : 'provider_request_unknown',
+      ...(hasStatus ? { providerStatusCode: status } : {}),
+    };
+  } catch {
+    return base;
+  }
+}
+
+function requestFailure(error: unknown): GarminHealthRequestError {
+  const telemetry = getHealthFailureTelemetry(error, 'unknown', 0);
+  return new GarminHealthRequestError(
+    statusCodeFromError(error),
+    typeof telemetry.transportCode === 'string' ? telemetry.transportCode : undefined,
+    error instanceof requestPromise.ResponseBodyTooLargeError,
+  );
 }
 
 export function assertGarminHealthPermission(tokenData: Record<string, unknown>, userID: string): void {
@@ -93,7 +131,7 @@ export async function verifyLegacyGarminProviderIdentity(
       url: 'https://apis.garmin.com/wellness-api/rest/user/id',
     });
   } catch (error) {
-    throw new GarminHealthRequestError(statusCodeFromError(error));
+    throw requestFailure(error);
   }
   const providerUserId = response && typeof response === 'object'
     ? `${(response as Record<string, unknown>).userId || ''}`.trim()
@@ -148,6 +186,7 @@ export async function processGarminHealthQueueItem(
   firebaseUserID: string,
   initialGuards: GarminHealthWriteLifecycleGuards,
   onLifecycleGuardsCaptured?: (guards: GarminHealthWriteLifecycleGuards) => void,
+  onStage?: (stage: GarminHealthRequestStage) => void,
 ): Promise<{
   healthResults: GarminHealthResult[];
   lifecycleGuards: GarminHealthWriteLifecycleGuards;
@@ -160,6 +199,9 @@ export async function processGarminHealthQueueItem(
     recordsStale: number;
   };
 }> {
+  const stage = (value: GarminHealthRequestStage): void => {
+    try { onStage?.(value); } catch { /* Diagnostics must not change provider processing. */ }
+  };
   if (!isGarminHealthSummaryType(queueItem.garminSummaryType)) {
     throw new GarminHealthValidationError('Garmin Health queue item has an unsupported summary family.');
   }
@@ -171,6 +213,7 @@ export async function processGarminHealthQueueItem(
     throw new GarminHealthValidationError('Garmin Health queue item has an invalid callback URL.');
   }
 
+  stage('token_refresh');
   const refreshed = await refreshAndCaptureGarminHealthGuards(
     queueItem,
     tokenSnapshot,
@@ -180,6 +223,7 @@ export async function processGarminHealthQueueItem(
   onLifecycleGuardsCaptured?.(refreshed.lifecycleGuards);
   assertGarminHealthPermission(refreshed.tokenData, firebaseUserID);
   if (!refreshed.lifecycleGuards.providerIdentityPinned) {
+    stage('identity_request');
     await verifyLegacyGarminProviderIdentity(
       refreshed.tokenData.accessToken,
       queueItem.providerUserId,
@@ -188,6 +232,7 @@ export async function processGarminHealthQueueItem(
 
   let payload: unknown;
   try {
+    stage('callback_request');
     payload = await requestPromise.get({
       headers: {
         Authorization: `Bearer ${refreshed.tokenData.accessToken}`,
@@ -202,7 +247,7 @@ export async function processGarminHealthQueueItem(
     if (statusCode === 412) {
       throw new GarminHealthPermissionError(firebaseUserID);
     }
-    throw new GarminHealthRequestError(statusCode);
+    throw requestFailure(error);
   }
 
   const storedReceivedAtMs = queueItem.garminHealthReceivedAtMs;
@@ -211,6 +256,7 @@ export async function processGarminHealthQueueItem(
     && storedReceivedAtMs >= 0
     ? storedReceivedAtMs
     : Date.now();
+  stage('callback_mapping');
   const healthResults = mapGarminHealthSummaries(
     queueItem.garminSummaryType,
     payload,
@@ -218,6 +264,7 @@ export async function processGarminHealthQueueItem(
     callback.uploadEndTimeMs,
     receivedAtMs,
   );
+  stage('result_assembly');
   const payloadDigest = getGarminHealthPayloadDigest(
     queueItem.garminSummaryType,
     healthResults,

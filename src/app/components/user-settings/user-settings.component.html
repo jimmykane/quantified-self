@@ -38,7 +38,7 @@
         @let sectionTemplates = {
           dashboard: dashboardSettings, training: trainingLoadSettings,
           map: mapSettings, charts: chartSettings, units: unitSettings,
-          privacy: privacySettings, account: accountSettings
+          privacy: privacySettings, account: profileSettings, 'data-management': dataManagementSettings
         };
         <div class="settings-overview" [attr.inert]="isSaving || isDeleting ? '' : null">
           <section class="settings-theme-control" aria-labelledby="settings-theme-title" id="settings-theme">
@@ -513,30 +513,20 @@
           </div>
         </ng-template>
 
-        <ng-template #accountSettings>
-          <div class="settings-account-body">
-            <ng-container *ngTemplateOutlet="profileSettings"></ng-container>
-            <mat-divider></mat-divider>
-            <mat-card appearance="outlined" class="danger-card">
-              <mat-card-content class="card-content">
-                <div class="danger-title">
-                  <mat-icon>warning</mat-icon>
-                  <span>Danger Zone</span>
-                </div>
-                <p>
-                  Deleting your account will permanently remove all your activities, settings, connected services,
-                  and any other associated data. If you have an active subscription, it will also be cancelled.
-                  This action cannot be undone.
-                </p>
-
-                <div>
-                  <button mat-stroked-button type="button" class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isSaving || isDeleting">
-                    <mat-icon>delete_forever</mat-icon>
-                    Delete My Account
-                  </button>
-                </div>
-              </mat-card-content>
-            </mat-card>
+        <ng-template #dataManagementSettings>
+          <div class="settings-panel-body">
+            <h4 class="settings-subsection-title">Delete account</h4>
+            <p class="settings-section-note">
+              Deleting your account will permanently remove all your activities, settings, connected services,
+              and any other associated data. If you have an active subscription, it will also be cancelled.
+              This action cannot be undone.
+            </p>
+            <div>
+              <button mat-button type="button" class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isSaving || isDeleting">
+                <mat-icon>delete_forever</mat-icon>
+                Delete account…
+              </button>
+            </div>
           </div>
         </ng-template>
       </form>

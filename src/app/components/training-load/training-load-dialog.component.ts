@@ -111,7 +111,7 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
     if (this.legModel.method === 'MET') return 'Estimate from file calories, body mass and duration.';
     if (this.legModel.hrAlgorithm === 'BANISTER') return 'Calculated from recorded heart rate and explicit resting, threshold and maximum HR calibration.';
-    if (this.legModel.hrAlgorithm === 'THRESHOLD') return 'Estimated from recorded heart rate relative to the file threshold. This fallback is available for running and cycling when resting or maximum HR is missing.';
+    if (this.legModel.hrAlgorithm === 'THRESHOLD') return 'Estimated from recorded heart rate relative to the file threshold. This estimate is used when resting or maximum HR is missing and the sport supports calculated TSS.';
     if (this.legModel.score === null) return 'No eligible load calculation is available from this file. Use a numeric override or exclude the leg.';
     return this.legModel.reasons.length ? 'An eligible calculation was unavailable. The next eligible Automatic method was used.' : 'Calculated from the available file inputs.';
   }

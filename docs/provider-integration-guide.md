@@ -102,6 +102,13 @@ Suunto Health history adapts to item-count limits by halving oversized target wi
 
 Suunto Health failure logs retain allowlisted operation stages and error classifications before raw errors are sanitized for retry storage. Distinguish worker HTTP 500s from validated upstream status codes; RPC, transport, validation and unknown failures have separate safe diagnostics. See [backfill diagnostic fields](health-backfill-operations.md#verification). Do not add raw provider responses, exception messages, stacks, credential URLs or account identifiers to those fields.
 
+Garmin Health failures likewise classify the original exception with safe stages, elapsed time and HTTP/transport/RPC
+codes before retry-storage sanitization; unknown internal errors are not labelled as confirmed provider HTTP failures.
+The shared Health failure-state write error separately retains its queue ID, provider and allowlisted diagnostics.
+Both remain ERROR logs, without raw error text, payloads or credentials. Monitoring is **unchanged**: #830 uses existing
+worker/committed-transition events, not these diagnostic messages or queue IDs. Requests, retries and lifecycle guards
+are unchanged; release requires separate approval for only `processSleepSyncTask`. Existing Help and MCP are unaffected.
+
 Suunto workout downloads, activity-history reads, and Health pulls allow one same-account forced token refresh and
 read retry after HTTP 401 or 403. Health shares that recovery budget across all feeds/subrequests in one invocation;
 its existing durable queue retry policy remains unchanged. Never select another connected account to recover old work.
@@ -1451,6 +1458,28 @@ Every new provider needs a lifecycle plan before it is enabled.
 Explicit user disconnects disable every activity-sync and saved-route direction involving the provider in the **initial transaction**, alongside the existing OAuth/disconnect-operation fence. That transaction also removes earlier automatic route-restoration intent and marks connection metadata disconnect-pending; no provider request starts until it commits. Token-root deletion triggers remain an idempotent fallback. Reconnecting does not restore the routes that the user explicitly disconnected.
 
 Credential removal and a server-only `serviceDisconnectCleanup/{opaqueUserOperationAccountHash}` intent commit atomically. The intent contains only the Firebase owner, provider lookup identity, lifecycle fence, server-timestamp cutoff and pagination/lease state—not credentials, callback URLs, raw payloads, state or PKCE. It is denied to browser clients by the existing Rules. Imported activities, saved routes, Health and Sleep history are not cleanup targets.
+
+Garmin recorded-activity workers also distinguish a confirmed completed disconnect from an unexplained missing
+credential when cleanup races queued work. Owner-pinned token lookup plus a cleared, generated lifecycle and an
+explicit revisioned empty account projection allow a deletion/queue-identity-guarded terminal skip at INFO, counted
+only after commit by existing import-skip telemetry. Missing tokens alone must not hide a connection fault; unknown
+state retains the existing warning/DLQ path. Never borrow another owner's token or reopen a completed skip on
+reconnect. See [Garmin identity and lifecycle](garmin-integration.md#identity-and-lifecycle) for the precise boundary
+and affected rollout targets. Existing product Help remains accurate: disconnect stops future imports and retains history.
+
+COROS Health/Sleep polls use the same confirmed-disconnect classification, with the additional requirement that the
+original owner's token root is absent. COROS active-account lookup also rejects account and credential-generation
+mismatches, so a missing-token error alone must never silence those failures. The existing Sleep completion helper
+owns deletion/revision/lease checks and post-commit skip telemetry; no new lifecycle or recovery mechanism is added.
+See [COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) and the
+[Sleep operations runbook](sleep-sync-operations.md#queued-coros-polls-after-disconnect).
+
+Owned Suunto workout and Sleep/Health jobs use the same confirmed-disconnect skip, requiring a cleared generated
+lifecycle, revisioned empty account projection and no remaining token children for that Firebase owner. An empty
+OAuth root may remain; a missing exact-account token while another credential exists is not a completed disconnect.
+Legacy unowned jobs and unknown/reconnect-required/pending state retain existing failure handling. Completion uses
+the existing deletion/queue-identity guards and post-commit skip telemetry. Routes already skip unavailable sources
+and are unchanged. See [Suunto queued disconnects](suunto-integration.md#queued-work-after-disconnect).
 
 The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten cleanup tasks concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle for an active user, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup for an active user. Transient failures retain the intent without a finite event-retry or TTL deadline.
 

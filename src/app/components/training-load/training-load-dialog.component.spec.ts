@@ -28,7 +28,7 @@ describe('Training load editor', () => {
         automatic: candidate, hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' } },
     } } })));
     expect(component.actualMethodLabel).toBe(label);
-    if (hrAlgorithm === 'THRESHOLD') expect(component.explanation).toContain('running and cycling');
+    if (hrAlgorithm === 'THRESHOLD') expect(component.explanation).toContain('the sport supports calculated TSS');
     if (hrAlgorithm === 'BANISTER') expect(component.explanation).toContain('resting, threshold and maximum');
   });
   beforeEach(async () => {

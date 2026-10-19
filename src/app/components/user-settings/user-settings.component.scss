@@ -395,13 +395,6 @@
     }
 }
 
-.card-content {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 16px;
-}
-
 .brand-text-upgrade {
     display: flex;
     align-items: center;
@@ -412,30 +405,6 @@
     mat-icon {
         color: var(--mat-sys-primary);
     }
-}
-
-.danger-card {
-    max-width: 760px;
-    margin-top: 0;
-    border-color: color-mix(in srgb, var(--mat-sys-error) 30%, var(--mat-sys-outline-variant));
-    background-color: color-mix(in srgb, var(--mat-sys-error) 3%, var(--mat-sys-surface));
-}
-
-.settings-account-body {
-    display: grid;
-    gap: 20px;
-
-    .settings-panel-body {
-        padding-bottom: 0;
-    }
-}
-
-.danger-title {
-    color: var(--mat-sys-error);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
 }
 
 .settings-validation-debug {

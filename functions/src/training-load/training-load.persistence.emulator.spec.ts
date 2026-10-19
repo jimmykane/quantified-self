@@ -1,11 +1,12 @@
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { randomUUID } from 'node:crypto';
+import { FitBaseType, FitEncoder } from 'fit-file-parser/encoder';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { ActivityParsingOptions, ActivityTypes, ActivityUtilities, DataDistance, DataEnergy, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ActivityUtilities, DataDistance, DataEnergy, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -676,17 +677,43 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await db.doc(`userDeletionTombstones/${uid}`).set({ deleting: true });
     await expect(finish()).rejects.toThrow('account deletion');
   });
-  it('persists additive HR algorithm metadata on retry while retaining a concurrent zero override', async () => {
-    const uid = setup(); const event = workout(); event.getFirstActivity().type = ActivityTypes.Running;
-    await importWorkout(uid, event);
-    const ref = db.doc(metadataPath(uid));
-    const before = (await ref.get()).data() as TrainingLoadMetadata;
-    const hr = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 70, estimated: true,
-      provenance: 'calculated' as const, reasons: [], hrAlgorithm: 'THRESHOLD' as const };
-    const evaluate = vi.spyOn(ActivityUtilities, 'getTrainingStressScoreEvaluations').mockReturnValue({ version: 1,
-      automatic: hr, hr: { ...hr, preference: 'HR' }, met: { ...hr, preference: 'MET', method: 'MET', score: 9 } });
-    try {
-      const changed = workout('new-leg'); changed.getFirstActivity().type = ActivityTypes.Running;
+  it.each([
+    [ActivityTypes.Cycling, 2, 0, 164, 80],
+    [ActivityTypes.Cycling, 2, 0, 165, 100],
+    [ActivityTypes.Cycling, 2, 0, 166, 100],
+    [ActivityTypes.Walking, 11, 0, 100, 40],
+    [ActivityTypes.Hiking, 17, 0, 100, 40],
+    [ActivityTypes.Swimming, 5, 17, 100, 40],
+    [ActivityTypes.OpenWaterSwimming, 5, 18, 100, 40],
+    [ActivityTypes.StrengthTraining, 10, 20, 100, 40],
+  ] as const)('persists published FIT threshold HR for %s at %s/%s/%s with %s TSS across retry and concurrent override',
+    async (type, sport, subSport, hr, score) => {
+      const uid = setup(); const event = workout(); event.getFirstActivity().type = type;
+      await importWorkout(uid, event);
+      const ref = db.doc(metadataPath(uid));
+      const before = (await ref.get()).data() as TrainingLoadMetadata;
+      // Use the public encoder and importer, not fabricated evaluation metadata or athlete overrides.
+      const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+        size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+      const encoder = new FitEncoder();
+      const start = FitEncoder.toFitTimestamp(new Date(Date.UTC(2026, 0, 2)));
+      encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16),
+        field(4, start, FitBaseType.Uint32)]);
+      encoder.writeMessage(3, [field(4, 700, FitBaseType.Uint16)], 4);
+      for (let second = 0; second <= 3600; second += 60)
+        encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, hr)], 1);
+      encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 3600, FitBaseType.Uint32),
+        field(2, start, FitBaseType.Uint32), field(5, sport, FitBaseType.Enum), field(6, subSport, FitBaseType.Enum),
+        field(7, 3600000, FitBaseType.Uint32), field(8, 3600000, FitBaseType.Uint32),
+        field(11, 210, FitBaseType.Uint16)], 2);
+      encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, 0, FitBaseType.Uint16),
+        field(11, 0), field(12, 0), field(13, 165)], 3);
+      const bytes = encoder.close();
+      const changed = await EventImporterFIT.getFromArrayBuffer(
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+      changed.setID('workout'); changed.getFirstActivity().setID('new-leg');
+      expect(changed.getFirstActivity().type).toBe(type);
+      expect(JSON.stringify(changed.toJSON())).not.toMatch(/hrAlgorithm|threshold-hr-fallback/);
       await prepareTrainingLoadMetadata(uid, changed);
       await source(uid, changed); // Simulate an interrupted finalization.
       const finish = await prepareTrainingLoadMetadata(uid, changed);
@@ -694,13 +721,14 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       await finish(); await finish();
       const saved = (await ref.get()).data() as TrainingLoadMetadata;
       expect(saved.legs!.leg).toMatchObject({ activityId: 'new-leg', policy: before.legs!.leg.policy,
-        evaluations: { automatic: { method: 'HR', score: 70, hrAlgorithm: 'THRESHOLD' } } });
+        evaluations: { automatic: { method: 'HR', score, estimated: true, hrAlgorithm: 'THRESHOLD',
+          reasons: expect.arrayContaining(['threshold-hr-fallback']) }, met: { method: 'MET', score: 9 } } });
       expect(saved.controls).toEqual({ leg: { override: 0 } });
       expect(resolveEffectiveTrainingLoad({}, saved, [], 'new-leg')).toMatchObject({ score: 0, method: 'OVERRIDE' });
-      expect(resolveEffectiveTrainingLoad({}, { ...saved, controls: {} }, [], 'new-leg'))
-        .toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD', estimated: true });
-    } finally { evaluate.mockRestore(); }
-  });
+      const restored = JSON.parse(JSON.stringify({ ...saved, controls: {} }));
+      expect(resolveEffectiveTrainingLoad({}, restored, [], 'new-leg'))
+        .toMatchObject({ score, hrAlgorithm: 'THRESHOLD', estimated: true });
+    });
   it('serializes concurrent owner edits and source reparses without losing the override', async () => {
     const uid = setup(); const original = workout(); await importWorkout(uid, original);
     const ref = db.doc(metadataPath(uid));

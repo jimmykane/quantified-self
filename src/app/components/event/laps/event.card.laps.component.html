@@ -241,7 +241,8 @@
             [class.lap-length-toggle-cell]="column === 'lengths'"
             [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-selected-summary-label]="column === 'selection'"
-            [class.lap-selected-summary-index-spacer]="column === '#'">
+            [class.lap-selected-summary-index-spacer]="column === '#'"
+            [matTooltip]="column === maximumHeartRateType ? 'Peak of the selected original lap maxima, including selected rest laps. Coverage counts contributing laps.' : ''">
             @if (column === 'selection') {
             {{ lapTable.selectedSummaryLabel }}
             } @else if (column !== '#' && column !== 'lengths') {

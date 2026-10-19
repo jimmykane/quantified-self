@@ -81,6 +81,7 @@ vi.mock('firebase-admin', () => {
         where: hoisted.tokenRootWhere,
         limit: hoisted.tokenRootLimit,
         get: hoisted.tokenRootGet,
+        select: vi.fn(() => tokenRootQuery),
         doc: vi.fn((id: string) => ({ id, __mockType: 'nested-document' })),
     };
     hoisted.tokenRootWhere.mockReturnValue(tokenRootQuery);
@@ -333,7 +334,8 @@ vi.mock('../garmin/health-lifecycle', () => ({
     },
 }));
 
-vi.mock('../garmin/health-sync', () => ({
+vi.mock('../garmin/health-sync', async importOriginal => ({
+    ...(await importOriginal<typeof import('../garmin/health-sync')>()),
     processGarminHealthQueueItem: hoisted.processGarminHealthQueueItem,
     sanitizeGarminHealthErrorForTelemetry: vi.fn(() => new Error('Garmin Health callback request failed.')),
     GarminHealthPermissionError: class GarminHealthPermissionError extends Error {
@@ -354,7 +356,7 @@ import {
     processSleepSyncQueueItem,
     resolveGarminPingFirebaseUserIDs,
 } from './queue';
-import { GarminHealthPermissionError } from '../garmin/health-sync';
+import { GarminHealthPermissionError, GarminHealthRequestError } from '../garmin/health-sync';
 import { GarminHealthValidationError } from '../garmin/health';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
@@ -2214,6 +2216,62 @@ describe('sleep queue', () => {
         }));
     });
 
+    it.each(['callback_request', 'health_write', 'sync_state_write'] as const)(
+        'logs the original Garmin %s failure separately from a failure-state write error and still retries', async stage => {
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [{ id: 'garmin-token-1',
+                data: () => ({ serviceName: ServiceNames.GarminAPI, userID: 'garmin-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            }], empty: false });
+            const primaryError = stage === 'callback_request' ? new GarminHealthRequestError(503)
+                : Object.assign(new Error('private-primary-token/path'), { code: 10 });
+            if (stage === 'callback_request') {
+                hoisted.processGarminHealthQueueItem.mockImplementationOnce(async (...args: unknown[]) => {
+                    (args[5] as (stage: string) => void)(stage);
+                    throw primaryError;
+                });
+            } else if (stage === 'health_write') {
+                hoisted.processGarminHealthQueueItem.mockResolvedValueOnce({
+                    healthResults: [{ input: { sourceRecordKind: 'daily_summary', metrics: [] }, observedAtMs: 1_777_424_400_000 }],
+                    lifecycleGuards: await hoisted.captureActiveGarminHealthWriteLifecycleGuards(),
+                    continuation: null,
+                });
+                hoisted.replaceHealthSourceRecord.mockRejectedValueOnce(primaryError);
+            } else {
+                hoisted.updateHealthSyncState.mockRejectedValueOnce(primaryError);
+            }
+            hoisted.updateHealthSyncState.mockRejectedValueOnce(Object.assign(
+                new Error('private-secondary-health/path'), { code: 14, details: 'private-details', cause: primaryError },
+            ));
+            const update = vi.fn().mockResolvedValue(undefined);
+            const id = 'garmin-diagnostics-' + stage;
+            const result = await processSleepSyncQueueItem({
+                id, dateCreated: 1_700_000_000_000, dispatchedToCloudTask: 1_700_000_000_500,
+                processed: false, provider: 'GarminAPI', userID: 'test-user-uid', providerUserId: 'garmin-user-1',
+                retryCount: 0, type: 'garmin_ping', garminSummaryType: 'dailies',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=private-callback-token',
+                ref: { update } as unknown as admin.firestore.DocumentReference,
+            });
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(hoisted.loggerError).toHaveBeenCalledWith(
+                '[HealthSync] Failed to record provider Health sync failure.', expect.objectContaining({
+                    queueItemId: id, provider: 'GarminAPI', failure: 'garmin_health_state_write_failed',
+                    failureStage: 'failure_state_write', failureCategory: 'rpc_error', rpcStatusCode: 14,
+                }),
+            );
+            const primaryLog = hoisted.loggerError.mock.calls.find(([message]) => message === `[SleepSync] Queue item ${id} failed`);
+            expect(primaryLog?.[1]).toMatchObject({ queueItemId: id, provider: 'GarminAPI', failureStage: stage,
+                ...(stage === 'callback_request' ? { failureCategory: 'provider_http_error', providerStatusCode: 503 }
+                    : { failureCategory: 'rpc_error', rpcStatusCode: 10 }), processingElapsedMs: expect.any(Number) });
+            if (stage !== 'callback_request') expect(primaryLog?.[1]).not.toHaveProperty('providerStatusCode');
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1,
+                dispatchedToCloudTask: null, errors: [expect.objectContaining({ error: 'Garmin Health callback request failed.' })] }));
+            expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ processed: true }));
+            expect(hoisted.processGarminHealthQueueItem).toHaveBeenCalledOnce();
+            expect(hoisted.releaseSleepQueueRevision).toHaveBeenCalledOnce();
+            expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('private');
+        },
+    );
+
     it('uses refreshed Garmin lifecycle guards when recording callback permission failure', async () => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
         hoisted.tokenRootGet.mockResolvedValue({
@@ -3861,6 +3919,248 @@ describe('sleep queue', () => {
             context: 'NO_TOKEN_FOUND',
         }));
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+    });
+
+    describe('owned Suunto work after completed disconnect', () => {
+        const disconnectedMeta = {
+            connectionStateGeneration: 'cleared-generation',
+            connectionAccountsRevisionKey: 'empty-accounts-revision',
+            connectionAccounts: [],
+        };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+        const committedLogs = () => hoisted.loggerInfo.mock.calls.filter(([message, data]) =>
+            message === '[HealthSleep]' && data?.event === 'committed');
+
+        beforeEach(() => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            item = {
+                id: 'suunto-disconnected-work', dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500, queueRevision: 'original-revision',
+                processed: false, provider: 'SuuntoApp', userID: 'test-user-uid',
+                providerUserId: 'old-suunto-account', retryCount: 0, type: 'suunto_health_poll',
+                healthTrigger: 'poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => ({ ...item }) }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        it.each(['suunto_poll', 'suunto_webhook', 'suunto_health_poll'] as const)('commits an INFO skip for %s without domain writes or DLQ', async type => {
+            item.type = type;
+            if (type !== 'suunto_health_poll') item.healthTrigger = undefined;
+            if (type === 'suunto_webhook') {
+                item.payload = { samples: [{ SleepId: 123 }] };
+                item.suuntoWebhookAuthorityDigest = SUUNTO_WEBHOOK_AUTHORITY_DIGEST;
+            }
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                skippedContext: 'SERVICE_DISCONNECTED',
+            }));
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({ provider: 'SuuntoApp', outcome: 'skipped' })]]);
+            expect(hoisted.loggerWarn).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        });
+
+        it.each([null, {}, { ...disconnectedMeta, connectionState: 'connected' },
+            { ...disconnectedMeta, connectionState: 'reconnect_required' },
+            { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+        ])('retains missing-token DLQ handling without a confirmed disconnect: %j', async meta => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(meta);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+        });
+
+        it('leaves legacy unowned work unchanged', async () => {
+            item.userID = undefined;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.getServiceConnectionMeta).not.toHaveBeenCalled();
+        });
+
+        it('does not mistake a missing exact account for a completed service disconnect', async () => {
+            hoisted.tokenRootGet.mockResolvedValueOnce({ docs: [], empty: true })
+                .mockResolvedValueOnce({ docs: [{}], empty: false });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        });
+
+        it.each(['replaced', 'processed', 'removed', 'leased'])('does not write or count a %s row', async state => {
+            queueRef.get.mockResolvedValue({ exists: state !== 'removed', data: () => ({ ...item,
+                ...(state === 'replaced' ? { queueRevision: 'new-revision' }
+                    : state === 'leased' ? { processingOwner: 'another-worker', processingRevision: 'revision:original-revision', processingLeaseExpiresAt: Date.now() + 60_000 }
+                    : { processed: true }),
+            }) });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('does not write or count a skip after account deletion wins', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it.each(['metadata', 'credentials'])('propagates %s read failure instead of making a terminal decision', async stage => {
+            const error = new Error('temporary Firestore failure');
+            if (stage === 'metadata') hoisted.getServiceConnectionMeta.mockRejectedValueOnce(error);
+            else hoisted.tokenRootGet.mockResolvedValueOnce({ docs: [], empty: true }).mockRejectedValueOnce(error);
+            await expect(processSleepSyncQueueItem(item)).rejects.toBe(error);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('keeps a failed completion retryable', async () => {
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('temporary commit failure'));
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Failed);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+    });
+
+    describe('COROS polls after completed disconnect', () => {
+        const disconnectedMeta = {
+            connectionStateGeneration: 'cleared-generation',
+            connectionAccountsRevisionKey: 'confirmed-empty-accounts',
+            connectionAccounts: [],
+        };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+        const committedLogs = () => hoisted.loggerInfo.mock.calls.filter(([message, data]) =>
+            message === '[HealthSleep]' && data?.event === 'committed');
+
+        beforeEach(() => {
+            hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
+            hoisted.getServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            item = {
+                id: 'coros-disconnected-poll', dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500, queueRevision: 'original-revision',
+                processed: false, provider: 'COROSAPI', userID: 'test-user-uid',
+                providerUserId: 'old-coros-account', retryCount: 0, type: 'coros_poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => item }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        it.each([undefined, 'original-revision'])('commits an INFO-only skip through existing completion guards (revision: %s)', async revision => {
+            item.queueRevision = revision;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                skippedContext: 'SERVICE_DISCONNECTED',
+            }));
+            expect(hoisted.loggerInfo).toHaveBeenCalledWith('[SleepSync][COROS] Skipping poll after completed disconnect.', {
+                queueItemId: item.id, reason: 'service_disconnected',
+            });
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({
+                provider: 'COROSAPI', workload: 'sleep_sync', outcome: 'skipped',
+            })]]);
+            expect(hoisted.loggerWarn).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(hoisted.batchDelete).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith(item.userID, item.providerUserId);
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            null, {},
+            { ...disconnectedMeta, connectionState: 'connected' },
+            { ...disconnectedMeta, connectionState: 'reconnect_required' },
+            { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+            { ...disconnectedMeta, connectionStateGeneration: undefined },
+            { ...disconnectedMeta, connectionStateGeneration: 42 },
+            { ...disconnectedMeta, connectionStateGeneration: ' ' },
+            { ...disconnectedMeta, connectionAccountsRevisionKey: undefined },
+            { ...disconnectedMeta, connectionAccountsRevisionKey: 42 },
+            { ...disconnectedMeta, connectionAccounts: undefined },
+            { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'another-account' }] },
+        ])('preserves missing-token failures without confirmed disconnect evidence: %j', async meta => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(meta);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({ outcome: 'dead_lettered' })]]);
+        });
+
+        it('preserves mismatch failures when a token root still exists despite an empty account projection', async () => {
+            hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({}) });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+        });
+
+        it('does not infer disconnect for a legacy poll without a recorded owner', async () => {
+            item.userID = undefined;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.getServiceConnectionMeta).not.toHaveBeenCalled();
+            expect(queueRef.update).not.toHaveBeenCalled();
+        });
+
+        it.each(['replaced', 'processed', 'removed', 'leased'])('does not count or overwrite a %s queue row', async state => {
+            queueRef.get.mockResolvedValue({
+                exists: state !== 'removed',
+                data: () => ({ ...item, ...(state === 'replaced'
+                    ? { queueRevision: 'new-revision' }
+                    : state === 'leased' ? {
+                        processingOwner: 'another-worker', processingRevision: 'revision:original-revision',
+                        processingLeaseExpiresAt: Date.now() + 60_000,
+                    } : { processed: true }) }),
+            });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('rechecks account deletion before committing a skip', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it.each(['metadata', 'root'])('keeps %s read failures retryable without inventing a skip or DLQ', async stage => {
+            const error = new Error('temporary Firestore failure');
+            if (stage === 'metadata') hoisted.getServiceConnectionMeta.mockRejectedValueOnce(error);
+            else hoisted.docGet.mockRejectedValueOnce(error);
+            await expect(processSleepSyncQueueItem(item)).rejects.toBe(error);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('keeps failed completion retryable and does not count an uncommitted skip', async () => {
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('temporary commit failure'));
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Failed);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
     });
 
     it('does not process a COROS sleep queue item for an inactive legacy account', async () => {

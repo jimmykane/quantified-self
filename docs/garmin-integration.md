@@ -77,6 +77,15 @@ repeated identical downloads; normal files retain their original bytes. Review a
 changing the limit and worker memory. Fetch failures retain only a fixed error message and status category, never
 provider bodies or signed URL text. Parser work limits are a separate concern.
 
+### Health worker diagnostics
+
+Health worker ERROR diagnostics distinguish token refresh, legacy identity lookup, callback request/mapping,
+Health writes, checkpoints and sync-state writes using `failureStage`. Only typed request errors can report a validated
+`providerStatusCode`; internal failures retain allowlisted RPC/transport codes instead. Correlate by `queueItemId`
+and platform trace, never by credentials or provider data. The separate failure-state write ERROR uses
+`failureStage="failure_state_write"` and cannot replace the original failure or bypass its existing retry accounting.
+These are logging-only changes; deploy only `processSleepSyncTask` after separate approval. #830 monitoring is unchanged.
+
 ## Temporary webhook URL probe
 
 `garminWebhookProbe` was a temporary public Gen 2 endpoint for checking Garmin's URL transport. It discarded
@@ -114,6 +123,22 @@ Queue admission resolves the callback account to a token owned by the Firebase u
 Legacy active connections without a pinned provider ID or generation fields remain supported. Before following a Health callback for such a connection, the worker calls Garmin's authenticated user-ID endpoint and requires the returned account to match the ping. A normal reconnect pins the identity for future work; no bulk credential migration or mandatory reconnect is required.
 
 Disconnecting Garmin stops future imports and retains imported Sleep and Health history. Recursive account deletion removes the user-scoped Health records, sample chunks, sync state, Sleep sessions, and queue work. Queue and lifecycle writes recheck the deletion guard so delayed work cannot recreate user data.
+
+Recorded-activity jobs with a saved Firebase owner look up credentials only beneath that owner; they never adopt
+another owner's connection to the same Garmin account. If no matching credential exists, a cleared connection
+lifecycle with a nonempty generation and an explicit, revisioned empty `connectionAccounts` projection confirms
+disconnect completion. The worker then commits `processed=true`, `resultStatus=skipped` and
+`skippedReason=service_disconnected`, removes the callback URL, and logs INFO with the opaque queue ID. Completion
+rechecks user deletion and the original queue identity transactionally; removed, completed or replaced rows are not
+written. The guard also compares the captured download credentials, callback URL, file type and start timestamp:
+duplicate Garmin webhooks can refresh those fields without changing the creation time or queue revision.
+If only that payload changed, the current attempt fails retryably so Cloud Tasks rereads it; acknowledging the
+still-dispatched row would otherwise leave it unprocessed outside the dispatcher's undispatched-only query.
+Unknown/legacy metadata and connected, reconnect-required or disconnect-pending states retain the existing
+`NO_TOKEN_FOUND` warning/DLQ behavior. Firestore failures remain retryable. Closed skips do not reopen on reconnect;
+this classification does not replay or delete historical failed jobs. It uses existing import-skip monitoring and
+requires no new index, metric, frontend or MCP change. An approved rollout needs only `processWorkoutTask`;
+the scheduled `parseGarminAPIActivityQueue` dispatcher and all Function runtime options remain unchanged.
 
 ## Revision and replacement rules
 

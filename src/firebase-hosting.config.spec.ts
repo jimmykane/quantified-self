@@ -346,7 +346,7 @@ describe('Firebase Hosting configuration', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
     // and bounded background Training rebuilds during bulk imports/reparse.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -380,9 +380,12 @@ describe('Firebase Hosting configuration', () => {
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
     // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
     // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
+    // Event details also distinguishes session Max HR from selected-lap peaks, including rest.
     // Event details now documents the compact TSS / Workout CTL / Day CTL strip.
     // The same-day Help revision clarifies preview timeouts, source provenance and checked/ready/excluded draft counts.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-18');
+    // Account deletion now lives in the separate Data management settings section.
+    // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
