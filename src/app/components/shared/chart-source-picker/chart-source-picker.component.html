@@ -3,7 +3,7 @@
     <span [class.cdk-visually-hidden]="compact()">Measurement</span>
     <button mat-button type="button" class="chart-source-trigger chart-reading-trigger" [disabled]="disabled()"
       #measurementTrigger="matMenuTrigger" [matMenuTriggerFor]="measurementMenu" (menuOpened)="opened()"
-      [attr.aria-label]="'Heart rate measurement: ' + (choice()?.readingLabel || 'Choose measurement')">
+      [attr.aria-label]="chartTitle() + ' measurement: ' + (choice()?.readingLabel || 'Choose measurement')">
       <span class="chart-source-trigger-content"><span>{{ choice()?.readingLabel || 'Choose measurement' }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
     </button>
   </div>

@@ -17,7 +17,7 @@ describe('compact chart source picker', () => {
   function create(options: ChartSourceChoice[] = choices, key: string | null = '0') {
     const fixture = TestBed.createComponent(ChartSourcePickerComponent);
     fixture.componentRef.setInput('choices', options); fixture.componentRef.setInput('selectedKey', key);
-    fixture.componentRef.setInput('chartTitle', 'Sleep duration'); fixture.detectChanges(); return fixture;
+    fixture.componentRef.setInput('chartTitle', options.some(option => option.readingKey) ? 'Heart rate' : 'Sleep duration'); fixture.detectChanges(); return fixture;
   }
   it('chooses a measurement first and offers only matching providers in its source menu', async () => {
     const daytime = choices.map(choice => ({ ...choice, readingKey: 'daytime', readingLabel: 'Throughout the day', readingMethod: 'Recorded intervals' }));

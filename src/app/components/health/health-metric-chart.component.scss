@@ -71,3 +71,10 @@
 .health-chart-reading-value { display:block; font-family:'Barlow Condensed',sans-serif; font-size:2.5rem; font-weight:600; line-height:1.15; overflow-wrap:anywhere; }
 .health-chart-recorded-date { max-width:50%; text-align:end; }
 .health-chart-coverage { margin-block:0.25rem 0.5rem; overflow-wrap:anywhere; }
+
+.health-hrv-status { margin-block:0.25rem 0.5rem; font:var(--mat-sys-body-medium); }
+.health-hrv-summary { display:flex; flex-wrap:wrap; gap:0.5rem 2rem; margin:0; }
+.health-hrv-summary > div { flex:1 1 130px; min-width:0; }
+.health-hrv-summary dt, .health-hrv-attribution { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); }
+.health-hrv-summary dd { margin:0; font:600 1.5rem/1.2 'Barlow Condensed',sans-serif; overflow-wrap:anywhere; }
+.health-hrv-attribution { margin-block:0.5rem; }

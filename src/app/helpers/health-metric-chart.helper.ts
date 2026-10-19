@@ -141,6 +141,25 @@ export function healthHrvChartStatusDescription(
   return status ? `${status.label}. ${status.detailText}.` : null;
 }
 
+/** Display existing nightly range results; never calculate a baseline from another reading type. */
+export function buildHealthHrvReadingSummary(model: HealthChartSeriesModel, status: HealthHrvPersonalRangeStatus | null,
+  units: UserUnitSettingsInterface | null = null) {
+  const series = model.series;
+  if (series.metricId !== HEALTH_METRIC_IDS.HeartRateVariability || series.nativeOnly
+    || !(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS as readonly string[]).includes(series.semanticVariant)) return null;
+  const average = status?.currentAverage;
+  const hasAverage = typeof average === 'number' && Number.isFinite(average);
+  const format = (value: number) => formatHealthValue(series.metricId, value, series.unit, false, units);
+  return {
+    headlineLabel: hasAverage ? '7-day average' : 'Latest night',
+    headlineText: hasAverage ? format(average) : model.latestText,
+    latestText: hasAverage ? model.latestText : null,
+    statusLabel: status?.label === 'Building personal range' ? 'Learning your range' : status?.label || 'Personal range unavailable',
+    progressText: status && !hasAverage ? status.detailText : null,
+    rangeText: status?.normalRange ? `${format(status.normalRange.min)}–${format(status.normalRange.max)}` : null,
+  };
+}
+
 const MAX_DISPLAY_POINTS = 600;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Match the app's light KPI strokes, including hover and coloured HRV segments.
