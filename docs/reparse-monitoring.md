@@ -10,8 +10,8 @@ the heavy admission cap tracked separately in [#543](https://github.com/jimmykan
 
 | Existing Function | Generation / memory / timeout | Monitoring |
 | --- | --- | --- |
-| `scheduleSportsLibReparseScan` | Gen2 / 512 MiB / 300 s | Existing ten-minute discovery; bounded normal/heavy observation afterward |
-| `scheduleSportsLibRouteReparseScan` | Gen2 / 512 MiB / 300 s | Existing ten-minute discovery; bounded route observation afterward |
+| `scheduleSportsLibReparseScan` | Gen2 / 512 MiB / 300 s | Existing ten-minute discovery; bounded normal/heavy observation hourly |
+| `scheduleSportsLibRouteReparseScan` | Gen2 / 512 MiB / 300 s | Existing ten-minute discovery; bounded route observation hourly |
 | `processSportsLibReparseTask` | Gen2 / 1 GiB / 1,800 s | Whole attempt, task admission and committed job outcome |
 | `processSportsLibReparseHeavyTask` | Gen2 / 8 GiB / 960 s | Same; existing maxInstances/concurrency/maxConcurrentDispatches remain one |
 | `processSportsLibRouteReparseTask` | Gen2 / 4 GiB / 1,800 s | Whole attempt and committed route job outcome |
@@ -51,15 +51,24 @@ enqueue exception. Metrics count observations/attempts, not distinct jobs or ath
 
 ## Bounded observations, progress and cost
 
-Each existing scanner observes its queue even when **new discovery is disabled**, because
-turning discovery off does not cancel tasks already admitted. It queries only its root
-job collection, not user histories, activity bodies, Storage, provider APIs or Cloud Tasks:
+Each existing scanner observes its queue **hourly**, only on its top-of-hour scheduled
+tick. The Scheduler event's `scheduleTime`, not the Function's wall-clock start time, owns
+that decision so late delivery does not shift the observation slot. The other five
+ten-minute ticks still run discovery and emit its existing outcome telemetry, but perform
+no monitoring queries. There is no new schedule, timer, persisted throttle or monitoring
+record. Missing/invalid scheduled time reports unavailable observation without querying.
+
+Hourly observation still runs when **new discovery is disabled**, because turning
+discovery off does not cancel tasks already admitted. It queries only its root job
+collection, not user histories, activity bodies, Storage, provider APIs or Cloud Tasks:
 
 - At most ten oldest pending/processing/failed job documents, plus one cap sentinel, per
   collection. `limitToLast` reverses the wire order and needs `status ASC, updatedAt ASC`;
   the existing DESC admin-history index is not sufficient.
-- Latest completed/skipped job for the running target and each applicable tier (two reads
-  for normal/heavy, one for route). This prevents busy normal work hiding heavy starvation.
+- Latest completed/skipped job for the running target, **only for tiers with validated
+  eligible outstanding work** (at most two reads for normal/heavy, one for route).
+  Empty, excluded or backoff-only tiers require no progress query. This prevents busy
+  normal work hiding heavy starvation.
   Progress can include handled source skips; it does not assert a rewrite or a full batch total.
   Only `updatedAt` is selected. A completion inside the five-second observation window is
   fresh progress; a timestamp beyond that window is unknown rather than a fabricated stall.
@@ -70,9 +79,15 @@ job collection, not user histories, activity bodies, Storage, provider APIs or C
 - Five-second cooperative observation deadline; late reads cannot emit healthy samples or
   start further reads. In-flight reads are not forcibly cancelled. If discovery already used
   290 seconds, observation is skipped rather than extending the existing 300-second budget.
-- At most five queue/progress queries and eighty candidate-validation document reads across
-  both scanners per ten-minute cycle: at most 105 returned document reads before database
-  billing/index details, with no application writes. Empty queries still have billing minima.
+- Empty queues require **one query per collection per hour**, no progress or candidate
+  validation reads: 48 query-minimum document reads per day across both scanners, down
+  from 720. At most five queue/progress queries and eighty candidate-validation document
+  reads are performed per hourly observation: at most 105 returned document reads, or
+  2,520 per day at continuously full samples, down from 15,120. These are application-level
+  budgets for 24 ordinary scheduled observations, before database billing/index details,
+  late/repeated Scheduler delivery or service retries. No application writes are added.
+  Worker/enqueue/scanner failure telemetry and native Cloud Tasks charts require no extra
+  Firestore observation reads. Function runtime, logging and Monitoring are separate costs.
   This is bounded overhead, not zero cost; measure actual usage after separately approved activation.
 
 Four new **collection-scoped** indexes use existing fields:
@@ -119,17 +134,21 @@ queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 | --- | --- | --- |
 | Normal/route worker failures | Five exceptional attempts per tier in 30 minutes | Error |
 | Heavy worker failures | Three exceptional attempts in six hours | Warning |
-| Normal/route no progress | Three positive stalled observations per tier in one hour | Error |
-| Heavy no progress | Three six-hour-stalled observations in two hours | Warning |
+| Normal/route no progress | Two positive hourly stalled observations per tier in three hours | Error |
+| Heavy no progress | Two six-hour-stalled hourly observations in three hours | Warning |
 | Task admission failures | Three actual enqueue exceptions per tier in one hour | Error |
 | Discovery failures | Three scanner exceptions in one hour | Error |
-| Observation health | Two unavailable/unknown observations per tier in one hour | Warning |
+| Observation health | Two unavailable/unknown hourly observations per tier in three hours | Warning |
 
 Policies use a 60-second retest window, inactive missing-data evaluation and two-hour
 autoclose, notifying the independently configured existing Alerts **email channel** on
 OPENED and CLOSED. The Firebase email extension is not involved. No new test email or
 notification channel is needed; reuse the recorded #655 opened/closed email proof.
 Rolling alignment/retest means these are initial sustained thresholds, not exact wall-clock SLAs.
+Hourly observation deliberately trades slower silent-stall detection for lower database
+load; normal/route still need one-hour eligible age/no progress, heavy still needs six hours.
+Three-hour observation windows allow multiple hourly samples despite boundary/ingestion
+drift. Event-driven worker/enqueue/discovery failure thresholds are unchanged.
 Multi-tier policy filters use exact `one_of` membership rather than mixed label AND/OR
 expressions, following [Monitoring filter syntax](https://docs.cloud.google.com/monitoring/api/v3/filters).
 
@@ -163,7 +182,7 @@ node tools/reparse-monitoring/cli.mjs --project=quantified-self-io \
 
 Read back all ten metrics, seven enabled policies, condition IDs, dashboard queries and
 the unchanged email channel; reapply serially to verify identity preservation. Await natural
-ten-minute scanner samples **after metric creation**, including positive normal/heavy/route
+hourly scanner samples **after metric creation**, including positive normal/heavy/route
 sample series while discovery is inactive. Verify expected zero sampled work, not inferred
 successful parsing. Never manually invoke a reparse just to seed telemetry. Actual production
 batch success/failure/latency and heavy thresholds require an independently approved reparse;
@@ -196,7 +215,7 @@ queries (`analyze: false`, no document results) confirmed both existing DESC job
 the corresponding ASC queries returned `FAILED_PRECONDITION: no matching index found`.
 This is why the two oldest-first indexes are included despite passing emulator tests.
 
-Local verification on 19 October 2026:
+Initial implementation verification on 19 October 2026:
 
 - Fifteen focused Functions suites: 394 tests passed, including unchanged original-file
   parsing, non-activity skips, normal/heavy routing, native retries and deletion fences.
@@ -214,3 +233,20 @@ Local verification on 19 October 2026:
   Focused non-mutating ESLint had zero errors; 74 existing `no-explicit-any` warnings
   in the legacy scheduler specs were left out of scope. `git diff --check` passed.
 - MCP/Help review: no wire or user-action changes; no additional consent or public metric.
+
+Hourly sampling cost review on 19 October 2026:
+
+- Six focused Functions suites / 142 tests passed. Regressions cover all six discovery
+  ticks but only one scheduled hourly observation, late delivery, invalid scheduled time,
+  unchanged error propagation, deadline protection and one-query empty queues.
+- Complete isolated `mcp-data` emulator group: twenty files / 499 tests, none skipped.
+  The twelve reparse cases also assert actual query counts: one per empty collection,
+  no completion query for excluded/backoff-only work or an idle sibling tier, and no
+  candidate validation for empty queues. Account/source fences and tier isolation remain.
+- All nine offline monitoring bundles / 84 tests and emulator coverage guards / 14 tests
+  passed. Hourly stall/observation policies allow two bad samples in three hours;
+  event-driven failure thresholds and resource ownership/reapplication contracts remain.
+- Functions build, compiled entrypoint checks (180 endpoints / 99 isolated targets),
+  focused non-mutating ESLint and `git diff --check` passed. Index
+  definitions, discovery schedules/settings, workers, retry limits, Rules, MCP and Help
+  are unchanged by the cost reduction. No production action or push was performed.

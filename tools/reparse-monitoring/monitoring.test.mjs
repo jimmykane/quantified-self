@@ -99,7 +99,29 @@ test('heavy thresholds are longer; no absence or depth policies can page an inte
     }
   }
   assert.equal(bundle().policies.find(p => p.userLabels.policy_id === 'heavy_worker').conditions[0].conditionThreshold.aggregations[0].alignmentPeriod, '21600s');
-  assert.equal(bundle().policies.find(p => p.userLabels.policy_id === 'heavy_stall').conditions[0].conditionThreshold.aggregations[0].alignmentPeriod, '7200s');
+  for (const id of ['stall', 'heavy_stall', 'telemetry']) {
+    const condition = bundle().policies.find(p => p.userLabels.policy_id === id).conditions[0].conditionThreshold;
+    assert.equal(condition.aggregations[0].alignmentPeriod, '10800s');
+    assert.equal(condition.thresholdValue, 1); // Two hourly samples, not an unreachable three-in-one-hour threshold.
+  }
+});
+test('hourly probe policies tolerate boundary/ingestion drift while event-driven failure thresholds stay unchanged', () => {
+  const eventPolicies = { worker: [4, '1800s'], heavy_worker: [2, '21600s'], enqueue: [2, '3600s'], scanner: [2, '3600s'] };
+  for (const [id, [threshold, period]] of Object.entries(eventPolicies)) {
+    const condition = bundle().policies.find(p => p.userLabels.policy_id === id).conditions[0].conditionThreshold;
+    assert.equal(condition.thresholdValue, threshold); assert.equal(condition.aggregations[0].alignmentPeriod, period);
+  }
+  for (const id of ['stall', 'heavy_stall', 'telemetry']) {
+    const condition = bundle().policies.find(p => p.userLabels.policy_id === id).conditions[0].conditionThreshold;
+    const seconds = Number.parseInt(condition.aggregations[0].alignmentPeriod, 10);
+    const samples = [0, 3_600]; const evaluationTime = 7_260;
+    const recent = samples.filter(time => time > evaluationTime - seconds && time <= evaluationTime);
+    assert.equal(recent.length, 2);
+    assert.ok(recent.length > condition.thresholdValue);
+    assert.equal(1 > condition.thresholdValue, false); // One isolated bad observation cannot open an incident.
+  }
+  assert.match(bundle().dashboard.mosaicLayout.tiles[0].widget.text.content, /top-of-hour scheduled tick/);
+  assert.match(metric('queue_samples').description, /hourly/);
 });
 test('preview is offline, unconfirmed apply is rejected, CI and narrowly scoped progress indexes are registered', () => {
   for (const args of [[`--project=${project}`], [`--project=${project}`, '--apply'], [`--project=${project}`, '--delete']]) {

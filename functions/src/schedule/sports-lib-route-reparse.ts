@@ -659,10 +659,10 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
     schedule: 'every 10 minutes',
     memory: '512MiB',
     timeoutSeconds: 300,
-}, async () => afterReparseScan(
+}, async event => afterReparseScan(
     () => monitorReparseAttempt('route', 'scan_attempt', scanSportsLibRouteReparse),
     () => observeReparseQueue(admin.firestore(), {
         collection: SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION, target: resolveRouteReparseTargetSportsLibVersion(),
         terminal: isSportsLibRouteReparseTerminalFailureMessage, hasSource: data => !!extractPrimaryRouteSourceFile(data),
-    }), ['route'],
+    }), ['route'], event.scheduleTime,
 ));

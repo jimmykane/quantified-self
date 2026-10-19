@@ -880,8 +880,9 @@ The scheduler treats `superseded` as settled. A later candidate scan can create 
 ## Observability
 The separately owned [Cloud Monitoring runbook](../../../docs/reparse-monitoring.md) covers
 normal/heavy/route attempt, committed-outcome and bounded pending-progress observations.
-It reuses the two existing ten-minute scanners, adds no scheduler or monitoring state, and
-does not enable discovery or change reparse limits. Activation and live evidence are tracked
+It reuses the two existing ten-minute scanners with hourly observations and an empty-queue
+fast path, adds no scheduler or monitoring state, and does not enable discovery or change
+reparse limits. Activation and live evidence are tracked
 in #834; the heavy admission cap remains #543. Admin queue inspection below remains independent.
 
 Check:

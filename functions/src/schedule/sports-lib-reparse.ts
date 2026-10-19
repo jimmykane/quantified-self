@@ -786,10 +786,10 @@ export const scheduleSportsLibReparseScan = onSchedule({
     schedule: 'every 10 minutes',
     memory: '512MiB',
     timeoutSeconds: 300,
-}, async () => afterReparseScan(
+}, async event => afterReparseScan(
     () => monitorReparseAttempt('normal', 'scan_attempt', scanSportsLibReparse),
     () => observeReparseQueue(admin.firestore(), {
         collection: SPORTS_LIB_REPARSE_JOBS_COLLECTION, target: resolveTargetSportsLibVersion(),
         terminal: isSportsLibReparseTerminalFailureMessage, hasSource: data => extractSourceFiles(data).length > 0,
-    }), ['normal', 'heavy'],
+    }), ['normal', 'heavy'], event.scheduleTime,
 ));

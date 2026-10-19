@@ -36,11 +36,52 @@ describe('reparse observability boundary', () => {
   });
   it('keeps scanner results even when observation fails and avoids probing near the deadline', async () => {
     const error = new Error('original'); const observe = vi.fn().mockRejectedValue(new Error('probe'));
-    await expect(afterReparseScan(async () => { throw error; }, observe, ['normal', 'heavy'])).rejects.toBe(error);
+    await expect(afterReparseScan(async () => { throw error; }, observe, ['normal', 'heavy'], '2026-10-19T09:00:00Z')).rejects.toBe(error);
     expect(observe).toHaveBeenCalledOnce(); observe.mockClear();
     const clock = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(290_000);
-    await afterReparseScan(async () => undefined, observe, ['route'], clock);
+    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T09:00:00Z', clock);
     expect(observe).not.toHaveBeenCalled();
+  });
+  it('observes once per scheduled hour without changing any of the six discovery ticks', async () => {
+    const operation = vi.fn().mockResolvedValue(undefined); const observe = vi.fn().mockResolvedValue(undefined);
+    for (let minute = 0; minute < 60; minute += 10) {
+      await afterReparseScan(operation, observe, ['normal', 'heavy'], `2026-10-19T09:${String(minute).padStart(2, '0')}:00Z`);
+    }
+    expect(operation).toHaveBeenCalledTimes(6);
+    expect(observe).toHaveBeenCalledOnce();
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+  it('uses scheduled time for late delivery and needs no process-local hourly state', async () => {
+    const observe = vi.fn().mockResolvedValue(undefined);
+    const lateClock = () => Date.parse('2026-10-19T10:20:00Z');
+    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T09:00:00Z', lateClock);
+    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T10:00:00Z', lateClock);
+    await afterReparseScan(async () => undefined, observe, ['route'], '2026-10-19T10:10:00Z', lateClock);
+    expect(observe).toHaveBeenCalledTimes(2);
+  });
+  it.each([undefined, '', 'invalid'])('reports missing/invalid scheduled time (%s) without any observation reads', async scheduleTime => {
+    const observe = vi.fn(); const error = new Error('original');
+    await expect(afterReparseScan(async () => { throw error; }, observe, ['normal', 'heavy'], scheduleTime)).rejects.toBe(error);
+    expect(observe).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.info).mock.calls.map(call => call[1]?.event)).toEqual(['queue_sample_unavailable', 'queue_sample_unavailable']);
+  });
+  it('preserves a discovery error on ticks that skip monitoring', async () => {
+    const observe = vi.fn(); const error = new Error('original');
+    await expect(afterReparseScan(async () => { throw error; }, observe, ['route'], '2026-10-19T09:10:00Z')).rejects.toBe(error);
+    expect(observe).not.toHaveBeenCalled();
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+  it.each(['sportsLibReparseJobs', 'sportsLibRouteReparseJobs'] as const)('uses one query and no validation/progress reads for empty %s', async collection => {
+    const chain = { where: vi.fn(), orderBy: vi.fn(), select: vi.fn(), limitToLast: vi.fn(), get: vi.fn().mockResolvedValue({ docs: [], size: 0 }) };
+    for (const key of ['where', 'orderBy', 'select', 'limitToLast'] as const) chain[key].mockReturnValue(chain);
+    const db = { collection: vi.fn(() => chain), runTransaction: vi.fn(), doc: vi.fn() };
+    await observeReparseQueue(db as never, { ...profile, collection }, now);
+    expect(db.collection).toHaveBeenCalledExactlyOnceWith(collection);
+    expect(chain.get).toHaveBeenCalledOnce();
+    expect(db.runTransaction).not.toHaveBeenCalled(); expect(db.doc).not.toHaveBeenCalled();
+    const logs = vi.mocked(logger.info).mock.calls;
+    expect(logs).toHaveLength(collection === 'sportsLibReparseJobs' ? 2 : 1);
+    for (const [, fields] of logs) expect(fields).toMatchObject({ event: 'queue_sample', pendingSample: 0, unknownSample: 0, truncated: false, stalled: false });
   });
   it('excludes rollout, terminal, manual-heavy and future work', () => {
     expect(reparseCandidate(job(), profile, now)).toBe('eligible');

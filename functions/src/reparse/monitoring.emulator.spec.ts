@@ -31,8 +31,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('reparse monitoring / real
     return ref;
   }
   it('emits genuine idle samples in all three tiers without an inactive-batch stall', async () => {
+    const query = vi.spyOn(Query.prototype, 'get'); const validation = vi.spyOn(Transaction.prototype, 'getAll');
     await observeReparseQueue(db, profile, now);
     await observeReparseQueue(db, { ...profile, collection: 'sportsLibRouteReparseJobs' }, now);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(validation).not.toHaveBeenCalled();
     expect(observations()).toHaveLength(3);
     for (const tier of ['normal', 'heavy', 'route']) expect(sample(tier)).toMatchObject({ pendingSample: 0, unknownSample: 0, truncated: false, stalled: false });
   });
@@ -57,10 +60,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('reparse monitoring / real
   it.each(['normal', 'heavy', 'route'])('applies %s timing without changing parsers or task limits', async tier => {
     const route = tier === 'route'; const p = route ? { ...profile, collection: 'sportsLibRouteReparseJobs' as const } : profile;
     const ref = await seed('candidate', { ...(route ? {} : { processingTier: tier }), updatedAt: ts(now - 2 * hour), enqueuedAt: ts(now - 2 * hour) }, route);
+    const query = vi.spyOn(Query.prototype, 'get');
     await observeReparseQueue(db, p, now);
+    expect(query).toHaveBeenCalledTimes(2); // No progress query for the other, idle activity tier.
     expect(sample(tier)).toMatchObject({ pendingSample: 1, stalled: tier !== 'heavy' });
     await ref.update({ status: 'failed', updatedAt: ts(now - hour) }); vi.clearAllMocks();
     await observeReparseQueue(db, p, now);
+    expect(query).toHaveBeenCalledOnce(); // Backoff-only work needs no progress query.
     expect(sample(tier)).toMatchObject({ pendingSample: 0, stalled: false });
   });
   it('excludes source deletion, missing originals, manual-heavy approval, future retries and superseded targets', async () => {
@@ -71,7 +77,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('reparse monitoring / real
     await seed('backoff', { status: 'failed', updatedAt: ts(now - hour) });
     await seed('missing-parent'); await db.doc(`users/${owner}/events/missing-parent`).delete();
     await seed('no-original'); await db.doc(`users/${owner}/events/no-original`).set({ private: true });
+    const query = vi.spyOn(Query.prototype, 'get');
     await observeReparseQueue(db, profile, now);
+    expect(query).toHaveBeenCalledOnce();
     expect(sample()).toMatchObject({ pendingSample: 0, unknownSample: 0, stalled: false });
     expect(sample('heavy')).toMatchObject({ pendingSample: 0, unknownSample: 0, stalled: false });
   });

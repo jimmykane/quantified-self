@@ -1934,8 +1934,10 @@ Stopping closes retry authority for provider-confirmed processing failures and r
 
 Original-file reprocessing monitoring is independently tracked in [#834](https://github.com/jimmykane/quantified-self/issues/834)
 and the [reprocessing monitoring runbook](reparse-monitoring.md). It uses existing normal/heavy/route workers
-and ten-minute scanners with bounded read-only job observations; no new scheduler, provider call, queue state,
-reparse, admission cap, retention, retry or MCP contract change. Fixed-label telemetry separates accepted task
+and ten-minute scanners with bounded read-only job observations only on the hourly scheduled tick;
+empty queues need one query per collection and progress is read only for eligible outstanding tiers.
+There is no new scheduler, provider call, queue state, reparse, admission cap, retention,
+retry or MCP contract change. Fixed-label telemetry separates accepted task
 admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
 review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
 five existing Function updates, dashboard/metrics/policies and live evidence need separate approval before

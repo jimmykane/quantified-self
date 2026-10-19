@@ -41,7 +41,7 @@ export function reparseCandidate(data: Data, profile: ReparseProbeProfile, now: 
   return Math.max(updated, enqueued ?? 0) + grace <= now ? 'eligible' : 'excluded';
 }
 
-/** Existing ten-minute scanners call this even when discovery is off: queued tasks still run.
+/** Existing scanners call this hourly even when discovery is off: queued tasks still run.
  * Two bounded root collections, masked read-only transactions, no parser/provider/task APIs or writes.
  */
 export async function observeReparseQueue(db: FirebaseFirestore.Firestore, profile: ReparseProbeProfile, now = Date.now()): Promise<void> {
@@ -56,21 +56,6 @@ export async function observeReparseQueue(db: FirebaseFirestore.Firestore, profi
       .orderBy('updatedAt', 'desc').select(...FIELDS).limitToLast(REPARSE_PROBE_LIMIT + 1).get();
     if (stopped) return;
     const groups = tiers.map(tier => ({ tier, pending: 0, age: 0, unknown: 0, progress: null as number | null }));
-    // Each tier gets independent progress: busy normal jobs cannot hide a stalled heavy batch.
-    for (const group of groups) {
-      if (stopped) return;
-      let query = db.collection(profile.collection).where('targetSportsLibVersion', '==', profile.target)
-        .where('status', 'in', ['completed', 'skipped']);
-      if (!route) query = query.where('processingTier', '==', group.tier);
-      const last = await query.orderBy('updatedAt', 'desc').select('updatedAt').limit(1).get();
-      if (stopped) return;
-      // No completion for this target/tier is known: compare against epoch. Unknown
-      // metadata instead withholds a stall, never fabricates a positive progress read.
-      group.progress = last.empty ? 0 : millis(last.docs[0].get('updatedAt'));
-      // A real completion can commit between probe start and this read. Only a
-      // timestamp beyond the bounded observation window is unexplained future data.
-      if (group.progress === null || group.progress > now + REPARSE_PROBE_TIMEOUT_MS) { group.progress = null; group.unknown++; }
-    }
     for (const doc of snapshot.docs.slice(-REPARSE_PROBE_LIMIT)) {
       if (stopped) return;
       const data = doc.data();
@@ -99,6 +84,23 @@ export async function observeReparseQueue(db: FirebaseFirestore.Firestore, profi
       group.pending++;
       group.age = Math.max(group.age, now - Math.max(millis(data.updatedAt)!, millis(data.enqueuedAt) ?? 0));
     }
+    // Empty/excluded queues need no progress reads. Each tier with proven pending work
+    // gets independent progress so busy normal jobs cannot hide a stalled heavy batch.
+    for (const group of groups) {
+      if (stopped) return;
+      if (group.pending === 0) continue;
+      let query = db.collection(profile.collection).where('targetSportsLibVersion', '==', profile.target)
+        .where('status', 'in', ['completed', 'skipped']);
+      if (!route) query = query.where('processingTier', '==', group.tier);
+      const last = await query.orderBy('updatedAt', 'desc').select('updatedAt').limit(1).get();
+      if (stopped) return;
+      // No completion for this target/tier is known: compare against epoch. Unknown
+      // metadata instead withholds a stall, never fabricates a positive progress read.
+      group.progress = last.empty ? 0 : millis(last.docs[0].get('updatedAt'));
+      // A real completion can commit between probe start and this read. Only a
+      // timestamp beyond the bounded observation window is unexplained future data.
+      if (group.progress === null || group.progress > now + REPARSE_PROBE_TIMEOUT_MS) { group.progress = null; group.unknown++; }
+    }
     if (stopped) return;
     const truncated = snapshot.size > REPARSE_PROBE_LIMIT;
     for (const group of groups) emitReparseMonitoring({ event: 'queue_sample', tier: group.tier,
@@ -119,15 +121,21 @@ export async function observeReparseQueue(db: FirebaseFirestore.Firestore, profi
   } finally { if (timer) clearTimeout(timer); }
 }
 
-/** Always preserve original scanner success/error; skip observation near its existing deadline. */
+/** Observe only the top-of-hour scheduled tick, not wall-clock start time (delivery can be late).
+ * No timer/cursor or schedule change; preserve scanner success/error and its existing deadline.
+ */
 export async function afterReparseScan(operation: () => Promise<void>, observe: () => Promise<void>,
-  tiers: ReparseTier[], clock = Date.now): Promise<void> {
+  tiers: ReparseTier[], scheduleTime: string | undefined, clock = Date.now): Promise<void> {
   const start = clock();
   try { await operation(); }
   finally {
-    if (clock() - start >= 290_000) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
-    else {
-      try { await observe(); } catch { tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier })); }
+    const scheduledAt = typeof scheduleTime === 'string' ? Date.parse(scheduleTime) : NaN;
+    if (!Number.isFinite(scheduledAt)) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
+    else if (new Date(scheduledAt).getUTCMinutes() === 0) {
+      if (clock() - start >= 290_000) tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier }));
+      else {
+        try { await observe(); } catch { tiers.forEach(tier => emitReparseMonitoring({ event: 'queue_sample_unavailable', tier })); }
+      }
     }
   }
 }
