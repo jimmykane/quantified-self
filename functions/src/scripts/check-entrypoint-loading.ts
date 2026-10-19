@@ -110,6 +110,11 @@ const RUNTIME_CONTRACT_TARGETS = [
   ...Object.keys(GEN1_DISPATCHER_METADATA),
   'processGarminHealthBackfillTask',
   'observeDerivedMetricsHealth',
+  'processSportsLibReparseTask',
+  'processSportsLibReparseHeavyTask',
+  'processSportsLibRouteReparseTask',
+  'scheduleSportsLibReparseScan',
+  'scheduleSportsLibRouteReparseScan',
 ];
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
@@ -125,6 +130,10 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   maxInstances?: number;
   cpu?: number;
 }>> = {
+  processSportsLibReparseTask: { memoryMb: 1024, timeoutSeconds: 1800, trigger: 'task', cpu: 2, concurrency: 1 },
+  processSportsLibReparseHeavyTask: { memoryMb: 8192, timeoutSeconds: 960, trigger: 'task', cpu: 4, concurrency: 1,
+    maxInstances: 1, maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
+  processSportsLibRouteReparseTask: { memoryMb: 4096, timeoutSeconds: 1800, trigger: 'task', cpu: 2, concurrency: 1 },
   processSleepSyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
@@ -188,6 +197,8 @@ const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
   maxInstances?: number;
   secrets?: readonly string[];
 }>> = {
+  scheduleSportsLibReparseScan: { timeoutSeconds: 300, memoryMb: 512, schedule: 'every 10 minutes' },
+  scheduleSportsLibRouteReparseScan: { timeoutSeconds: 300, memoryMb: 512, schedule: 'every 10 minutes' },
   observeDerivedMetricsHealth: { timeoutSeconds: 60, memoryMb: 512, schedule: '*/15 * * * *', timeZone: 'UTC', maxInstances: 1 },
   cleanupActivitySends: { timeoutSeconds: 300, memoryMb: 256, schedule: 'every 60 minutes' },
   scheduleSuuntoHealthSync: { timeoutSeconds: 300 },

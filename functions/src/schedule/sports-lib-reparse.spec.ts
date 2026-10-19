@@ -1,6 +1,11 @@
 import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
+// Processing tests keep discovery assertions separate from the independently
+// emulator-tested, read-only observation appended to each invocation.
+vi.mock('../reparse/monitoring-probe', async importOriginal => ({
+    ...await importOriginal<typeof import('../reparse/monitoring-probe')>(), observeReparseQueue: vi.fn().mockResolvedValue(undefined),
+}));
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
 const TARGET_SPORTS_LIB_VERSION_CODE = 16_000_000;
