@@ -46,10 +46,11 @@ describe('owner-unit workout analysis display', () => {
     const swimming = { ...recipe, sport: ActivityTypes.Swimming };
     const swimDistance = resolveUnitAwareDisplayStat(new DataSwimDistance(1609.344), units)!.text;
     expect(formatWorkoutPrescriptionSummaryV1(swimming, units, swimming.sport)).toContain(`${swimDistance} prescribed`);
-    const rowing = { ...recipe, sport: ActivityTypes.Rowing };
     const rowDistance = resolveUnitAwareDisplayFromValue(DataDistance.type, 1609.344,
       { ...units, distanceUnits: DistanceUnits.Kilometers })!.text;
-    expect(formatWorkoutPrescriptionSummaryV1(rowing, units, rowing.sport)).toContain(`${rowDistance} prescribed`);
+    for (const sport of [ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.VirtualRowing]) {
+      expect(formatWorkoutPrescriptionSummaryV1({ ...recipe, sport }, units, sport)).toContain(`${rowDistance} prescribed`);
+    }
   });
   it('shows unavailable totals for overflow without fabricating a number', () => {
     expect(formatWorkoutPrescriptionSummaryV1({ ...recipe, nodes: [{ kind: 'repeat', id: 'repeat', count: 100,

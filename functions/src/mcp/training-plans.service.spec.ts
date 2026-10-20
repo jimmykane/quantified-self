@@ -898,7 +898,8 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.displaySteps[0].text).toContain('25 m');
   });
 
-  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s canonical in the planned-workout read', async sport => {
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.VirtualRowing])('keeps %s canonical in the planned-workout read', async sport => {
+    const rowing = [ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.VirtualRowing].includes(sport);
     const f = fixture();
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
       startDate: '2026-09-01', endDate: '2027-01-01',
@@ -911,22 +912,24 @@ describe('Training plan MCP reads', () => {
           data: { ...doc.data, structure: { ...structure, sport,
             nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
               ending: { kind: 'distance', meters: 500 },
-              targets: sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing
+              targets: rowing
                 ? [{ kind: 'speed', mode: 'absolute', presentation: 'pace',
                   minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 }]
                 : [] }] } },
         } : doc;
       },
     }));
-    const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', {
-      workoutRef: list.workouts[0].workoutRef,
-    }));
-    expect(result.workout.structure.sport).toBe(sport);
-    expect(result.workout.displaySteps[0].text).toContain(
-      sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing ? '500' : 'mi',
-    );
-    if (sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing) {
-      expect(result.workout.displaySteps[0].text).toContain('/ 500');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef: list.workouts[0].workoutRef }));
+      expect(result.workout.structure.sport).toBe(sport);
+      expect(result.workout.displaySteps[0].text).toContain(rowing ? '500' : 'mi');
+      if (rowing) {
+        expect(result.workout.displaySteps[0].text).toContain('01m 45s–02m 00s / 500.0 m');
+        expect(JSON.parse(JSON.stringify(result.workout.structure))).toMatchObject({ sport, nodes: [{
+          ending: { kind: 'distance', meters: 500 }, targets: [{ minimumMetersPerSecond: 500 / 120,
+            maximumMetersPerSecond: 500 / 105 }],
+        }] });
+      }
     }
   });
 

@@ -374,6 +374,8 @@ Garmin, COROS and Wahoo do not inherit these Suunto-only aliases or bypass their
 warning and review), and Wahoo Indoor Rowing (Plan family `6`, indoor location `0`, dated Workout type `22`). Wahoo
 keeps timed, untargeted steps only; unsupported distance/manual endings and intensity targets cannot be approved away.
 All three providers retain the original QS recipe name and require mapping review. COROS rowing remains unsupported.
+Virtual Rowing uses rowing's metric distances and 500 m split presentation in QS/MCP and the Suunto app description,
+including with imperial preferences. Provider target speeds remain canonical m/s; native watch units stay watch-controlled.
 The catalog audit checked all 283 recipe-valid sports across all four assessors and serializers (1,132 pairs): no
 advertised mapping disagreed with serialization for a timed, untargeted recipe. All 45 interval-editor sports have
 Suunto, Garmin and Wahoo mappings; COROS retains its nine documented unsupported editor sports and stays disabled.

@@ -12,6 +12,25 @@ const options = { name: 'Test', owner: 'QS', url: 'https://quantified-self.io/tr
   sourceWorkoutId: 'test', allowDegraded: true };
 
 describe('Suunto app-only Guide preview', () => {
+  it('keeps Virtual Rowing distance and pace in rowing units with metric and imperial preferences', () => {
+    const structure = { version: 1, sport: ActivityTypes.VirtualRowing, nodes: [
+      { kind: 'step', id: 'row', purpose: 'work', ending: { kind: 'distance', meters: 500 }, targets: [
+        { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 500 / 120,
+          maximumMetersPerSecond: 500 / 105 },
+      ] },
+    ] };
+    const before = structuredClone(structure);
+    const guide = serializeSuuntoGuideJsonV1(structure, options).artifact;
+    for (const units of [undefined, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] })]) {
+      const text = suuntoGuideDescription(structure, 'Rowing', units);
+      expect(text).toContain('Virtual Rowing');
+      expect(text).toContain('01m 45s–02m 00s / 500');
+      expect(text).not.toMatch(/min\/k?mi?/);
+      expect(withSuuntoGuideDescription(guide, text).steps).toEqual(guide.steps);
+    }
+    expect(structure).toEqual(before);
+  });
+
   it('groups repeats and preserves targets, fractional-minute durations and literal notes', () => {
     const text = suuntoGuideDescription(recipe, 'Test');
     expect(text).toContain('Repeat 100 times');

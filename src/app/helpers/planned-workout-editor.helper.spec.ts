@@ -31,8 +31,11 @@ describe('manual planned-workout editor conversion', () => {
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1).toHaveLength(45);
     expect(new Set(MANUAL_WORKOUT_EDITOR_SPORTS_V1).size).toBe(45);
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1).not.toContain(ActivityTypes.StrengthTraining);
-    expect(() => workoutStructureToManualEditor('Unsupported', '2026-10-11', { version: 1, sport: ActivityTypes.Football, nodes: [] }))
-      .toThrow('not supported');
+    for (const sport of [ActivityTypes.Football, ActivityTypes.VirtualRowing]) {
+      expect(() => workoutStructureToManualEditor('Unsupported', '2026-10-11', { version: 1, sport, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] },
+      ] })).toThrow('not supported');
+    }
   });
   it.each([ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill,
     ActivityTypes.Cycling, ActivityTypes.IndoorCycling, ActivityTypes.MountainBiking])('round-trips editable cadence for %s', sport => {

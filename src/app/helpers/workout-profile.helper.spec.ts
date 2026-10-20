@@ -8,6 +8,24 @@ const step = (id: string, seconds = 60): WorkoutStepV1 => ({ kind: 'step', id, p
 const recipe = (nodes: WorkoutStructureV1['nodes'], sport = ActivityTypes.Running): WorkoutStructureV1 => ({ version: 1, sport, nodes });
 
 describe('workout profile presentation', () => {
+  it('uses rowing splits for Virtual Rowing profile bounds and axes without rewriting canonical speeds', () => {
+    const structure = recipe([{ ...step('row'), ending: { kind: 'distance', meters: 500 }, targets: [
+      { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 500 / 120,
+        maximumMetersPerSecond: 500 / 105 },
+    ] }], ActivityTypes.VirtualRowing);
+    const before = structuredClone(structure);
+    for (const units of [undefined, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] })]) {
+      const model = buildWorkoutProfile(structure, units);
+      expect(model.occurrences[0].ending).toBe('500.0 m');
+      expect(model.occurrences[0].targets[0]).toMatchObject({ metric: 'pace',
+        text: '01m 45s–02m 00s / 500.0 m' });
+      expect(model.occurrences[0].targets[0].minimum).toBeCloseTo(105, 10);
+      expect(model.occurrences[0].targets[0].maximum).toBeCloseTo(120, 10);
+      expect(formatWorkoutProfileAxis(120, 'pace', structure, units)).toBe('02:00 min/500m');
+    }
+    expect(structure).toEqual(before);
+  });
+
   it.each([...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, ...MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1])('prioritizes available power for %s without changing the recipe', sport => {
       const structure = recipe([{ ...step('power-and-hr'), targets: [
         { kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 145 },

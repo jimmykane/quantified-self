@@ -483,14 +483,15 @@ describe('planned workout formatting', () => {
       .toContain('min/100yd');
   });
 
-  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('renders %s as a 500 m split even with imperial distance settings', sport => {
+  it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.VirtualRowing])('renders %s as a 500 m split across distance settings', sport => {
     const imperial = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const ending = { kind: 'distance', meters: 500 } as const;
     const target = { kind: 'speed', mode: 'absolute', presentation: 'pace',
       minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 } as const;
-    expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('500');
-    expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('m');
-    expect(formatWorkoutTargetV1(target, imperial, undefined, sport)).toBe('01m 45s–02m 00s / 500.0 m');
+    for (const units of [undefined, imperial]) {
+      expect(formatWorkoutEndingV1(ending, units, undefined, sport)).toBe('500.0 m');
+      expect(formatWorkoutTargetV1(target, units, undefined, sport)).toBe('01m 45s–02m 00s / 500.0 m');
+    }
   });
 });
 

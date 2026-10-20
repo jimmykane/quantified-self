@@ -1173,6 +1173,11 @@ and Wahoo's Indoor Rowing Plan family `6`, indoor location `0` and dated Workout
 require mapping review. Garmin retains its device-support warning and authored-name description. Wahoo retains
 timed, untargeted steps only, including exact repeat durations; distance/manual endings and intensity targets remain
 unsupported even after approval. COROS remains unsupported for rowing. The other additions above stay Suunto-only.
+Virtual Rowing shares the rowing display rule: prescribed distances stay metric, and pace targets, profile
+bounds/axes, summaries, MCP display steps and the Suunto app preview use 500 m splits under metric or imperial
+preferences. Canonical distance and speed values remain unchanged. This display classification does not add a
+manual-editor option or claim control over the watch's native pace units. MCP schemas and recipe round trips stay
+unchanged; focused public-read, chart, summary and Guide-preview regressions cover this rule.
 All keep their authored sport in storage, history and public recipe reads; they do not become exercise-aware
 strength workouts or gain repetition/load tracking or new manual-editor choices. On normal delivery reconciliation,
 previously unsupported eligible workouts are
