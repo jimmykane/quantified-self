@@ -346,7 +346,9 @@ describe('Firebase Hosting configuration', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
     // measurement-first Heart rate choices, compact history, source comparison, visible coverage and recording details,
-    // bounded background Training rebuilds during bulk imports/reparse, and browser verification recovery with bounded temporary-error retries.
+    // bounded background Training rebuilds during bulk imports/reparse,
+    // browser verification recovery with bounded temporary-error retries,
+    // and display-only Raw/3s Power charts with recorded peaks and dips.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -375,7 +377,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
-    // Health Sources help also explains automatic retries and final failures.
+    // Health help also covers primary Heart rate choices, nightly HRV history, same-account daily averages, automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.

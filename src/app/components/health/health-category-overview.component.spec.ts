@@ -62,10 +62,10 @@ describe('Health category overview', () => {
     context.selectedKey = opaqueHealthSeriesId('selected-daytime');
     context.selected!.model.series.semanticVariant = 'activity_interval_average';
     component.observeSources(context); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('#health-overview-heart_rate')?.textContent).toContain('Heart rate throughout the day');
+    expect(fixture.nativeElement.querySelector('#health-overview-heart_rate')?.textContent).toContain('Heart rate');
     const opened = vi.fn(), selected = vi.fn();
     component.readingOpened.subscribe(opened); component.metricSelected.subscribe(selected);
-    fixture.nativeElement.querySelector('[aria-label="View Heart rate throughout the day history"]').click();
+    fixture.nativeElement.querySelector('[aria-label="View Heart rate history"]').click();
     expect(opened).toHaveBeenCalledExactlyOnceWith({ uid: 'owner', metric: 'heart_rate', sourceKey: context.selectedKey });
     expect(selected).toHaveBeenCalledExactlyOnceWith('heart_rate');
     fixture.componentRef.setInput('user', { uid: 'other-owner', settings: { unitSettings: {} } }); fixture.detectChanges();

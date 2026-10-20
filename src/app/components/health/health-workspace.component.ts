@@ -43,7 +43,7 @@ import { SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { healthMetricUsesSleep } from '../../helpers/health-workspace.helper';
 import { heartRateReading, restingHeartRateSupportNote } from '../../helpers/chart-source.helper';
-import { selectDefaultHealthSourceKey } from '../../helpers/health-source-selection.helper';
+import { resolveHealthSourceKey } from '../../helpers/health-source-selection.helper';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
 import { from, Subscription } from 'rxjs';
 import { distinctUntilChanged, map, take } from 'rxjs/operators';
@@ -769,8 +769,8 @@ export class HealthWorkspaceComponent {
     if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRate
       || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
     const available = this.metricView().series;
-    const selectedKey = this.preferredMetricSources()[HEALTH_METRIC_IDS.HeartRate]
-      || selectDefaultHealthSourceKey(available.map(item => ({ ...item, key: item.id })));
+    const selectedKey = resolveHealthSourceKey(available.map(item => ({ ...item, key: item.id })),
+      this.preferredMetricSources()[HEALTH_METRIC_IDS.HeartRate]);
     const selected = available.find(item => item.id === selectedKey);
     const readingKey = selected && heartRateReading(selected)?.key;
     const series = readingKey ? available.filter(item => heartRateReading(item)?.key === readingKey) : [];

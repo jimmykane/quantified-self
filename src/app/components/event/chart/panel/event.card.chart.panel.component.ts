@@ -7,6 +7,8 @@ import {
   ElementRef,
   EventEmitter,
   Input,
+  inject,
+  signal,
   NgZone,
   OnChanges,
   OnDestroy,
@@ -15,7 +17,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChartCursorBehaviours, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, DataPower, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
@@ -71,7 +73,7 @@ import type {
   EventChartZoneColorPiece,
 } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
-import type { LineSeriesOption } from 'echarts/charts';
+import type { LineSeriesOption, CustomSeriesOption } from 'echarts/charts';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import {
   EChartsHorizontalTouchGestureController,
@@ -80,6 +82,9 @@ import {
 } from '../../../../helpers/echarts-horizontal-touch-gesture.controller';
 import { resolveEventChartPinchRange } from '../../../../helpers/event-chart-pinch-zoom.helper';
 import { resolveEventChartPanRange } from '../../../../helpers/event-chart-pan-range.helper';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
+import { buildEventPowerDisplay, buildEventPowerWhiskers, buildEventPowerWhiskerOption,
+  type EventPowerDisplayMode, type EventPowerDisplayProjection } from '../../../../helpers/event-power-display.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -293,6 +298,25 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   public rangeStats: EventPanelRangeStat[] = [];
   public isFullscreen = false;
   public readonly zoomCursorBehaviour = ChartCursorBehaviours.ZoomX;
+  public readonly powerView = signal<EventPowerDisplayMode>('raw');
+  private readonly haptics = inject(AppHapticsService);
+  private powerViews = new WeakMap<EventChartPanelSeries, EventPowerDisplayProjection>();
+
+  public get canSmoothPower(): boolean {
+    return this.panel?.dataType === DataPower.type
+      && this.panel.series.some(series => this.powerProjection(series).hasAverage);
+  }
+
+  private get powerIs3s(): boolean {
+    return this.powerView() === '3s' && this.canSmoothPower;
+  }
+
+  public setPowerView(mode: EventPowerDisplayMode): void {
+    if (this.destroyed || !this.canSmoothPower || (mode !== 'raw' && mode !== '3s') || mode === this.powerView()) return;
+    this.powerView.set(mode);
+    this.haptics.selection();
+    this.queueChartRefresh('powerDisplay');
+  }
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
@@ -382,6 +406,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         useDirtyRect: true,
       },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      onContainerResize: () => {
+        if (this.powerIs3s) this.scheduleCanonicalAxisScaleUpdate();
+      },
     });
   }
 
@@ -592,6 +619,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.panel) {
+      this.powerViews = new WeakMap();
+      const previous = changes.panel.previousValue as EventChartPanelModel | null;
+      if (previous?.dataType !== this.panel?.dataType
+        || previous?.series.map(series => series.id).join('|') !== this.panel?.series.map(series => series.id).join('|')) {
+        this.powerView.set('raw');
+      }
+    }
     if (!this.chartHost.getChart()) {
       return;
     }
@@ -831,8 +866,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const overlayPanel = this.getActiveOverlayPanel();
     const shareOverlayYAxis = canShareEventPanelYAxis(panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
-      ? this.buildSharedYAxisPanel(panel, overlayPanel)
-      : panel;
+      ? this.buildSharedYAxisPanel(this.powerYAxisPanel(panel), overlayPanel)
+      : this.powerYAxisPanel(panel);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: primaryYAxisPanel,
       visibleRange,
@@ -854,7 +889,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionEnabled, this.isMobile);
 
-    const seriesOptions: ChartLineSeriesOption[] = [];
+    const seriesOptions: Array<ChartLineSeriesOption | CustomSeriesOption> = [];
     const seriesVisualMaps: Record<string, unknown>[] = [];
     panel.series.forEach((series) => {
       if (this.isAltitudeGradeColorSeries(series)) {
@@ -897,7 +932,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           ...(this.areaFillColor
             ? { color: this.areaFillColor }
             : (!useZoneColors ? { color: series.color } : {})),
-          opacity: seriesFillOpacity,
+          opacity: this.powerIs3s ? 0 : seriesFillOpacity,
           origin: primaryAreaFillOrigin,
         },
         emphasis: {
@@ -905,15 +940,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         silent: !this.interactionsEnabled,
         dimensions: ['x', 'y'],
-        data: this.getSeriesLineData(series),
+        data: this.powerIs3s
+          ? this.powerProjection(series).lineValues as unknown as ChartLineSeriesOption['data']
+          : this.getSeriesLineData(series),
       });
 
       if (useZoneColors) {
         seriesVisualMaps.push(this.buildZoneVisualMapOption(series, seriesIndex));
       }
+      if (this.powerIs3s) seriesOptions.push(this.powerWhiskers(series, visibleRange));
     });
 
-    if (seriesOptions[0]) {
+    if (seriesOptions[0]?.type === 'line') {
       seriesOptions[0].markLine = this.buildMarkerMarkLine(chartStyle);
     }
 
@@ -1062,6 +1100,31 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return this.overlayPanel.series?.length ? this.overlayPanel : null;
+  }
+
+  private powerProjection(series: EventChartPanelSeries): EventPowerDisplayProjection {
+    let projection = this.powerViews.get(series);
+    if (!projection) {
+      projection = buildEventPowerDisplay(series);
+      this.powerViews.set(series, projection);
+    }
+    return projection;
+  }
+
+  private powerYAxisPanel(panel: EventChartPanelModel): EventChartPanelModel {
+    if (!this.powerIs3s) return panel;
+    return { ...panel, series: [...panel.series, ...panel.series.map(series => ({ ...series,
+      lineValues: this.powerProjection(series).lineValues,
+      timeValues: series.timeValues ?? Float64Array.from((series.points ?? []).map(point => point.time)),
+      pointCount: getEventChartSeriesPointCount(series),
+    }))] };
+  }
+
+  private powerWhiskers(series: EventChartPanelSeries, range: EventChartRange): CustomSeriesOption {
+    const width = this.chartHost.getChart()?.getWidth?.() || this.chartDiv?.nativeElement?.clientWidth || 360;
+    const points = buildEventPowerWhiskers(series, this.powerProjection(series), range, Math.max(1, width - 64));
+    const color = this.showActivityNamesInTooltip ? series.color : buildEventEChartsVisualTokens(this.darkTheme, this.isMobile).textColor;
+    return buildEventPowerWhiskerOption(series.id, points, color);
   }
 
   private buildSharedYAxisPanel(
@@ -1854,6 +1917,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const label = this.buildTooltipRowLabel(resolvedPoint, hasOverlay);
       const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y, resolvedPoint.index);
       const gradeLabel = this.buildTooltipGradeLabel(resolvedPoint.series, resolvedPoint.index);
+      if (this.powerIs3s && resolvedPoint.panel === this.panel) {
+        const average = this.powerProjection(resolvedPoint.series).lineValues[resolvedPoint.index * 2 + 1];
+        const formattedAverage = Number.isFinite(average) ? this.formatDataValue(resolvedPoint.series.streamType, average) : '—';
+        tooltipLines.push(`<div>${label ? `${label} · ` : ''}3s average: ${formattedAverage}</div>`);
+        tooltipLines.push(`<div>${label ? `${label} · ` : ''}Recorded: ${formatted}</div>`);
+        continue;
+      }
       tooltipLines.push(
         `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label ? `${label}: ` : ''}${formatted}${gradeLabel}</div>`
       );
@@ -2222,8 +2292,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const overlayPanel = this.getActiveOverlayPanel();
     const shareOverlayYAxis = canShareEventPanelYAxis(this.panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
-      ? this.buildSharedYAxisPanel(this.panel, overlayPanel)
-      : this.panel;
+      ? this.buildSharedYAxisPanel(this.powerYAxisPanel(this.panel), overlayPanel)
+      : this.powerYAxisPanel(this.panel);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: primaryYAxisPanel,
       visibleRange,
@@ -2259,6 +2329,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartHost.setOption({
       ...(scaleOptions ? { xAxis: scaleOptions } : {}),
       yAxis: yAxisUpdate,
+      ...(this.powerIs3s ? { series: this.panel.series.map(series => this.powerWhiskers(series, visibleRange)) } : {}),
     }, {
       notMerge: false,
       lazyUpdate: true,

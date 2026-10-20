@@ -216,6 +216,21 @@ describe('HealthMetricChartComponent', () => {
     expect(fixture.componentInstance.comparingSources()).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('keeps the same source across detailed and daily-average views without saving another selection', async () => {
+    const host = await render(null);
+    const changed = vi.fn(); fixture.componentInstance.sourceSelected.subscribe(changed);
+    const day = { ...series(null), id: 'day', metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'activity_interval_average', alternateResolutionKey: 'daily' };
+    const daily = { ...day, id: 'daily', semanticVariant: 'qs_daily_interval_mean', alternateResolutionKey: 'day',
+      origin: HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived, recordingMethod: HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated };
+    fixture.componentRef.setInput('selectedSourceKey', 'day'); fixture.componentRef.setInput('series', [daily]); fixture.detectChanges();
+    expect(fixture.componentInstance.chosenKey()).toBe('daily');
+    expect(host.querySelector('h3')?.textContent).toBe('Latest daily average');
+    expect(host.querySelector('.health-chart-reading-header')?.textContent).toContain('Calculated by QS');
+    expect(host.textContent).not.toContain('no readings in this period');
+    fixture.componentRef.setInput('selectedSourceKey', 'daily'); fixture.componentRef.setInput('series', [day]); fixture.detectChanges();
+    expect(fixture.componentInstance.chosenKey()).toBe('day');
+    expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
 
   it('uses flat shared rows while preserving source separation and status labels', async () => {
     const host = await render('Garmin Test');
@@ -247,6 +262,51 @@ describe('HealthMetricChartComponent', () => {
     expect(host.querySelector('.health-chart-unit')?.textContent?.trim()).toBe('mi');
     expect(chart.unitSettings).toEqual(units);
     expect(chart.model.ariaLabel).toContain('1.00 mi');
+  });
+
+  it('opens one overnight HRV chart, compares only overnight sources and retains secondary or unavailable saved choices', async () => {
+    const host = await render(null);
+    const night = { ...series(null), id: 'night', metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant: 'overnight_rmssd', unit: 'millisecond' };
+    const other = { ...night, id: 'other-night', provider: HEALTH_PROVIDERS.SuuntoApp, sourceLabel: 'Suunto', semanticVariant: 'overnight_average' };
+    const spot = { ...night, id: 'spot', semanticVariant: 'health_snapshot_rmssd',
+      points: [{ ...night.points[0], timestampMs: 1, value: 70 }] };
+    fixture.componentRef.setInput('series', [spot, night, other]); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['night']);
+    expect(host.querySelector('button[aria-label="HRV measurement: Overnight HRV"]')).not.toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentInstance.toggleComparison(); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['night', 'other-night']);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    const changed = vi.fn(); fixture.componentInstance.sourceSelected.subscribe(changed);
+    fixture.componentInstance.chooseSource('spot'); expect(changed).toHaveBeenCalledExactlyOnceWith('spot');
+    expect(fixture.componentInstance.comparingSources()).toBe(false);
+    fixture.componentRef.setInput('selectedSourceKey', 'spot'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels().map(chart => chart.model.series.id)).toEqual(['spot']);
+    expect(host.querySelector('.health-hrv-summary')).toBeNull();
+    expect(host.querySelector('button[aria-label="HRV measurement: HRV spot check"]')).not.toBeNull();
+    fixture.componentRef.setInput('selectedSourceKey', 'missing'); fixture.detectChanges();
+    expect(fixture.componentInstance.renderedModels()).toEqual([]);
+    expect(host.textContent).toContain('no readings in this period');
+    expect(changed).toHaveBeenCalledTimes(1); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('shows latest-night evidence while learning and never gives native HRV a nightly range', async () => {
+    const host = await render(null);
+    const night = { ...series(null), id: 'learning', metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant: 'overnight_rmssd', unit: 'millisecond' };
+    fixture.componentRef.setInput('series', [night]);
+    fixture.componentRef.setInput('chartStatuses', { learning: { tone: 'neutral', label: 'Building personal range',
+      detailText: '6/14 nights', observationDayCount: 6, requiredObservationDayCount: 14,
+      currentAverage: null, normalRange: null, pointStatuses: [] } }); fixture.detectChanges();
+    expect(host.querySelector('h3')?.textContent).toBe('Latest night');
+    expect(host.querySelector('.health-chart-reading-value')?.textContent).toBe('50 ms');
+    expect(host.querySelector('.health-hrv-status')?.textContent).toContain('Learning your range');
+    expect(host.querySelector('.health-hrv-status')?.textContent).toContain('6/14 nights');
+    expect(host.querySelector('.health-hrv-summary')).toBeNull();
+    expect(host.querySelector('.health-chart-recorded-date')?.textContent).toContain('1970');
+    fixture.componentRef.setInput('series', [{ ...night, nativeOnly: true }]); fixture.detectChanges();
+    expect(host.querySelector('.health-hrv-summary')).toBeNull();
+    expect(fixture.debugElement.query(By.directive(HealthMetricSeriesChartStubComponent)).componentInstance.statusOverlay).toBeNull();
   });
 
   it('passes HRV personal-range styling and accessible context to the series chart', async () => {
@@ -281,5 +341,10 @@ describe('HealthMetricChartComponent', () => {
       pointStatuses: [{ timestampMs: 0, label: 'Within personal range', normalRange: { min: 30, max: 45 } }],
     });
     expect(chart.statusDescription).toContain('Within personal range');
+    expect(fixture.nativeElement.querySelector('h3')?.textContent).toBe('7-day average');
+    expect(fixture.nativeElement.querySelector('.health-chart-reading-value')?.textContent).toBe('42 ms');
+    expect(fixture.nativeElement.querySelector('.health-hrv-summary')?.textContent).toContain('50 ms');
+    expect(fixture.nativeElement.querySelector('.health-hrv-summary')?.textContent).toContain('35 ms–48 ms');
+    expect(fixture.nativeElement.querySelector('.health-hrv-attribution')?.textContent).toContain('calculated by QS');
   });
 });

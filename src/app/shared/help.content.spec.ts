@@ -25,6 +25,13 @@ describe('help.content', () => {
       expect(copy).toContain(text);
     }
   });
+  it('explains display-only Power averaging without changing statistics or benchmarks', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Power** starts in **Raw**', 'including coasting zeros', 'whiskers for recorded peaks and dips',
+      'even on a distance axis', 'gaps stay empty', 'Stats and benchmarks use the original data']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains bounded bulk Training refreshes without promising instant edit results', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(copy).toContain('background rebuild may wait up to two minutes');
@@ -747,10 +754,10 @@ describe('help.content', () => {
   });
   it('explains the category overview, recorded source choices and manual history actions', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
-    for (const phrase of ['**Category overview**', 'latest 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
-      '**Recovery & sleep**', '**Fitness**', '**View history**', '**Back to overview**', 'manual and synced readings separately',
+    for (const phrase of ['**Category overview**', 'last 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
+      '**Recovery & sleep**', '**Fitness**', '**View history**', '**Back to overview**', 'manual and synced readings separate',
       'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
-    expect(health).toContain('**All** starts with **Your recent Health** highlights');
+    expect(health).toContain('**All** starts with **Your recent Health** in this order');
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
     expect(health).toContain('**At a glance is currently hidden on Dashboard.** Today and your saved charts remain available.');
@@ -773,45 +780,45 @@ describe('help.content', () => {
     expect(health).toContain('Your saved Dashboard charts stay visible and unchanged');
     expect(health).toContain('**seven-day average** separately from the **latest nightly reading**');
     expect(health).toContain('**Multiple recorded sources** rather than borrowing a source selected in another chart');
-    expect(health).toContain('not repeated as cards on All');
-    expect(health).toContain('Moderate and vigorous intensity durations appear in **Movement & energy**, and are not shown by default on **All**');
+    expect(health).toContain('Sleep and HRV count toward these six and are not repeated');
+    expect(health).toContain('Moderate and vigorous intensity durations belong to **Movement & energy**, not the default All view');
     expect(health).toContain('**Sleep → HRV → Resting heart rate → VO₂ max → Weight → Steps**');
-    expect(health).toContain('Missing metrics leave fewer cards; other measurements never fill their places');
-    expect(health).toContain('Default metric cards with no readings in the last 30 days are omitted after loading finishes');
-    expect(health).toContain('an unavailable selected source or an incomplete or failed load stay visible');
-    expect(health).toContain('New readings can bring an omitted card back');
-    expect(health).toContain('Each chart identifies its own period');
-    expect(health).toContain('saved per metric in your account and restored across visits');
+    expect(health).toContain('missing metrics leave fewer cards');
+    expect(health).toContain('Default cards without readings in the last 30 days disappear after loading');
+    expect(health).toContain('Unavailable saved sources and incomplete or failed loads stay visible');
+    expect(health).toContain('new readings can restore an omitted card');
+    expect(health).toContain('Default cards cover 30 days, HRV covers 14');
+    expect(health).toContain('Your explicit overview choice is saved per metric');
     expect(health).toContain('Missing or filtered saved choices stay unavailable');
-    expect(health).toContain('metric-aware gaps');
+    expect(health).toContain('heart and recovery use shorter gaps');
     expect(health).toContain('monthly fitness estimates');
     expect(health).toContain('**Two readings, not a trend.**');
-    expect(health).toContain('Exactly two comparable numeric readings from the same source and reading type');
-    expect(health).toContain('recorded-local times distinguish them');
+    expect(health).toContain('Exactly two comparable numeric readings from one source');
+    expect(health).toContain('recorded-local times distinguish readings on the same day');
     expect(health).not.toContain('Overview source choices stay local');
-    expect(health).toContain('the HRV highlight uses 14 days');
+    expect(health).toContain('Default cards cover 30 days, HRV covers 14');
     expect(health).toContain('**Automatic source selection** considers usable readings, freshness, and distinct days of coverage');
-    expect(health).toContain('All recorded zeros remain available');
-    expect(health).toContain('selecting a source explicitly keeps it selected');
-    expect(health).toContain('An automatic overview choice can update when new readings arrive');
-    expect(health).toContain('**Vitals** includes today’s heart-rate highlight');
-    expect(health).toContain('replacing its general Heart rate card');
-    expect(health).toContain('Other category views show their metric cards without highlights');
-    expect(health).toContain('Recent-health highlights stay on the overview, not above the selected metric');
-    expect(health).toContain('previous scroll position');
-    expect(health).toContain('Changing to a different metric starts at the top');
-    expect(health).toContain('refreshing readings does not reset your scroll');
+    expect(health).toContain('All zeros remain available');
+    expect(health).toContain('explicit choices remain selected');
+    expect(health).toContain('Automatic choices may update after sync');
+    expect(health).toContain('**Vitals** replaces its general Heart rate card with today’s highlight');
+    expect(health).toContain('with today’s highlight when readings exist');
+    expect(health).toContain('Other categories show cards without highlights');
+    expect(health).toContain('Highlights remain on the overview');
+    expect(health).toContain('restores cards, category and scroll position');
+    expect(health).toContain('Switching metrics starts at the top');
+    expect(health).toContain('filtering or refreshing does not reset scroll');
     expect(health).not.toContain("detailed charts, Highlights, and **Source observations**");
   });
   it('explains the Health metric title picker on both layouts and remembered selection', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
-    expect(health).toContain('tap the metric title and its arrow');
-    expect(health).toContain('closing the picker changes nothing');
-    expect(health).toContain('Detailed history uses the full workspace width on mobile and desktop');
-    expect(health).toContain('Your metric selection is remembered in your account settings');
-    expect(health).toContain('browser’s **Back** and **Forward** controls');
-    expect(health).toContain('inspected date window and source filters stay in place');
-    expect(health).toContain('Choosing the current metric or cancelling the picker adds no entry');
+    expect(health).toContain('Tap the metric title and arrow');
+    expect(health).toContain('closing the picker or choosing the current metric adds none');
+    expect(health).toContain('History uses the full workspace width');
+    expect(health).toContain('Metric and range are saved to your account');
+    expect(health).toContain('**Back** and **Forward** revisit metrics or the overview');
+    expect(health).toContain('retaining your inspected dates and source filters');
+    expect(health).toContain('closing the picker or choosing the current metric adds none');
   });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
@@ -974,6 +981,10 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Suunto supplies the average HR for each short recording period');
     expect(healthSection?.content).toContain('**Recording details** explains how the source recorded it');
     expect(healthSection?.content).toContain('**Compare sources**');
+    expect(healthSection?.content).toContain('**More measurements**');
+    expect(healthSection?.content).toContain('**Latest daily average**');
+    expect(healthSection?.content).toContain('not another Suunto feed');
+    expect(healthSection?.content).toContain('An existing secondary selection stays visible');
     expect(healthSection?.content).toContain('**Hide comparison**');
     expect(healthSection?.content).toContain('Missing readings and unknown completeness stay visible');
     expect(healthSection?.content).toContain('giving each reading equal weight');
@@ -1018,12 +1029,12 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('show the matching reading once under the same connected account');
     expect(healthSection?.content).toContain('Independently recorded Sleep HRV remains separate');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
-    expect(healthSection?.content).toContain('only that domain stays unfiltered');
+    expect(healthSection?.content).toContain('a failed check leaves that domain unfiltered');
     expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed readings');
     expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries');
     expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
-    expect(healthSection?.content).toContain('selected metric and range are saved to your account');
-    expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
+    expect(healthSection?.content).toContain('Metric and range are saved to your account');
+    expect(healthSection?.content).toContain('inspected dates and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('**Choose a Highlight source.**');
     expect(healthSection?.content).toContain('**Today’s heart rate**');
@@ -2607,4 +2618,13 @@ it('explains explicit family shortcuts and the climbing default display rule', (
   for (const phrase of ['**All Running / Trail**', '**All Cycling / MTB**', '**All Walking / Hiking**', 'Existing saved individual selections stay exact', 'partial check', 'full stats, exports, and explicitly selected metrics', 'unconfigured lap columns', 'saved lap columns', 'Floor Climbing']) {
     expect(section?.content).toContain(phrase);
   }
+});
+
+describe('nightly HRV history help', () => {
+  it('explains the primary view, secondary measurements and QS attribution', () => {
+    const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**HRV history** opens one **Overnight HRV** source', '**Latest night**',
+      '**60-day personal range**', '**Learning your range**', 'Spot check: overall variation',
+      'These are different measurements with separate histories', 'accounts and baselines separate']) expect(health).toContain(phrase);
+  });
 });
