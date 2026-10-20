@@ -63,9 +63,10 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header.workout_type_family)
       .toBe(sport === ActivityTypes.Cycling ? 0 : 1);
   });
-  it('covers every editor sport and the explicit strength/virtual rowing additions', () => {
+  it('covers every editor sport and the explicit strength, virtual rowing and fitness additions', () => {
     expect(new Set(WAHOO_PLANNED_WORKOUT_SPORTS_V1)).toEqual(new Set([
       ...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining, ActivityTypes.VirtualRowing,
+      ActivityTypes.Yoga, ActivityTypes.EllipticalTrainer, ActivityTypes.CardioTraining,
     ]));
     for (const row of WAHOO_SPORT_FIXTURES) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(row.sport);
     for (const sport of MANUAL_WORKOUT_EDITOR_SPORTS_V1) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(sport);
@@ -108,7 +109,7 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
         location: location === 0 ? 'indoor' : 'outdoor', allowDegraded: false })).toThrow();
     }
   });
-  it.each([ActivityTypes.Yoga, ActivityTypes.Other])('never admits arbitrary recorded activity %s or defaults it to running', sport => {
+  it.each([ActivityTypes.Soccer, ActivityTypes.Other])('never admits arbitrary recorded activity %s or defaults it to running', sport => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
     expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('unsupported');
     expect(() => wahooWorkoutBody(workout, 'destination', 'UTC', '123')).toThrow();

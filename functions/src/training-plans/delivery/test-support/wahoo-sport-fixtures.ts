@@ -22,4 +22,7 @@ export const WAHOO_SPORT_FIXTURES = [
   { sport: ActivityTypes.OpenWaterSwimming, family: 2, type: 26, location: 1, level: 'exact' },
   { sport: ActivityTypes.Rowing, family: 3, type: 39, location: 1, level: 'exact' },
   { sport: ActivityTypes.IndoorRowing, family: 6, type: 22, location: 0, level: 'exact' },
+  { sport: ActivityTypes.Yoga, family: 6, type: 66, location: 0, level: 'exact' },
+  { sport: ActivityTypes.EllipticalTrainer, family: 6, type: 20, location: 0, level: 'exact' },
+  { sport: ActivityTypes.CardioTraining, family: 6, type: 43, location: 0, level: 'degraded' },
 ] as const;

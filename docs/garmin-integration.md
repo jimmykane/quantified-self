@@ -224,6 +224,9 @@ Generic fallback fixtures. Fixture coverage alone is not live provider or device
 Workout content and date-only Workout Schedule payloads are deliberately separate because Garmin assigns and manages
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
+Yoga, Pilates and Cardio Training additionally use the native `YOGA`, `PILATES` and `CARDIO_TRAINING` values in the
+partner contract. Their canonical prescriptions remain unchanged, with no inferred pose/exercise identifiers. Local
+serializer and MCP tests establish these mappings; account-side and device behavior have not been newly tested.
 
 Training API V2 accepts only broad `RUNNING` and `CYCLING` values for supported running/cycling planned workouts and does
 not define a sub-sport field. The adapter keeps the authored QS sport unchanged and maps Trail Running, Treadmill, Indoor Running and

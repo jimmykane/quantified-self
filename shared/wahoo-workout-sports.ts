@@ -6,6 +6,8 @@ import { plannedWorkoutAliasedSportsV1, plannedWorkoutSportAliasV1 } from './pla
  * The 21 base profiles have owner-confirmed timed playback (#789). Additional
  * QS names alias those profiles; they add no native playback claim or proof
  * of distance/intensity support.
+ * Yoga, Elliptical and Cardio Class additionally have authorized cloud
+ * Plan/prescription/Workout readback; that is not app/watch playback proof.
  * https://cloud-api.wahooligan.com/#workout-types */
 export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Running,
@@ -29,12 +31,15 @@ export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Rowing,
   ActivityTypes.IndoorRowing,
   ActivityTypes.StrengthTraining,
+  ActivityTypes.Yoga,
+  ActivityTypes.EllipticalTrainer,
+  ActivityTypes.CardioTraining,
   ...plannedWorkoutAliasedSportsV1('wahoo'),
 ])] as const;
 
 export interface WahooWorkoutSportProfileV1 {
   family: 0 | 1 | 2 | 3 | 6 | 9;
-  workoutType: 0 | 1 | 4 | 5 | 6 | 9 | 12 | 13 | 22 | 25 | 26 | 39 | 42 | 64 | 68 | 70 | 71;
+  workoutType: 0 | 1 | 4 | 5 | 6 | 9 | 12 | 13 | 20 | 22 | 25 | 26 | 39 | 42 | 43 | 64 | 66 | 68 | 70 | 71;
   location: 0 | 1;
   foldedTo?: string;
   untargetedTimeOnly?: true;
@@ -69,6 +74,10 @@ export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSp
     case ActivityTypes.Rowing: return { family: 3, workoutType: 39, location: 1, untargetedTimeOnly: true };
     case ActivityTypes.IndoorRowing: return { family: 6, workoutType: 22, location: 0, untargetedTimeOnly: true };
     case ActivityTypes.StrengthTraining: return { family: 6, workoutType: 42, location: 0 };
+    case ActivityTypes.Yoga: return { family: 6, workoutType: 66, location: 0, untargetedTimeOnly: true };
+    case ActivityTypes.EllipticalTrainer: return { family: 6, workoutType: 20, location: 0, untargetedTimeOnly: true };
+    case ActivityTypes.CardioTraining: return { family: 6, workoutType: 43, location: 0, untargetedTimeOnly: true,
+      foldedTo: 'Cardio Class' };
     default: return null;
   }
 }

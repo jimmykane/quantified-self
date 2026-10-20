@@ -115,6 +115,9 @@ export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
   ActivityTypes.Swimming,
   ActivityTypes.StrengthTraining,
+  ActivityTypes.Yoga,
+  ActivityTypes.Pilates,
+  ActivityTypes.CardioTraining,
   ...GARMIN_GENERIC_WORKOUT_SPORTS_V1,
   ...plannedWorkoutAliasedSportsV1('garmin'),
 ])] as const;
@@ -165,7 +168,7 @@ export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSpo
   return null;
 }
 
-export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING' | 'GENERIC';
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING' | 'LAP_SWIMMING' | 'STRENGTH_TRAINING' | 'YOGA' | 'PILATES' | 'CARDIO_TRAINING' | 'GENERIC';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
   sport = plannedWorkoutSportAliasV1('garmin', sport);
@@ -173,6 +176,9 @@ export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutS
   if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
   if (sport === ActivityTypes.Swimming) return 'LAP_SWIMMING';
   if (sport === ActivityTypes.StrengthTraining) return 'STRENGTH_TRAINING';
+  if (sport === ActivityTypes.Yoga) return 'YOGA';
+  if (sport === ActivityTypes.Pilates) return 'PILATES';
+  if (sport === ActivityTypes.CardioTraining) return 'CARDIO_TRAINING';
   if ((GARMIN_GENERIC_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'GENERIC';
   return null;
 }
@@ -231,6 +237,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
       'Running and cycling sub-sports fold to broad families; pool swimming maps to LAP_SWIMMING.',
+      'Yoga, Pilates and Cardio Training use their documented native Training API profiles. Local fixtures establish payload mapping, not Garmin Connect or device receipt.',
       'Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming map to Generic with approval. Generic workouts work only on some devices and do not guarantee native sport tracking or display; QS keeps the authored sport.',
       'Unspecified pool length is permitted by the API but may not work on older devices. Swim intensity targets are not mapped.',
       'Strength requires the complete exercise prescription and a verified Garmin exercise name. Reps, timed holds, kilogram load and rest are preserved; arbitrary names are unsupported.',
@@ -300,6 +307,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'The public plan.json schema is version 1.0.0 and documents running/cycling. The 21 base sport profiles have account-tested acceptance and owner-confirmed native profile/timed playback. Additional QS names reuse those profiles with mapping review; other devices and intensity/distance support are not established by those tests.',
       'Walking/Hiking and pool/open-water swimming and outdoor/indoor rowing support only time-based steps without intensity targets. Wahoo has no documented physical pool-length delivery field; QS does not support sending that setting.',
+      'Yoga, Elliptical Trainer and Cardio Training additionally support timed, untargeted steps using Gym family 6 and Workout types 66, 20 and 43. Cloud Plan/file/Workout/association readback is verified; app/watch playback is not. Cardio Training uses the disclosed Cardio Class profile.',
       'Timed strength uses the owner-tested Gym family 6 / indoor Workout type 42. Repetition sets are unsupported; exercise/load instructions are not native tracking.',
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
@@ -426,7 +434,8 @@ export function assessPlannedWorkoutProviderMappingV1(
   } else if ((provider === 'garmin' || provider === 'coros')
     && structure.sport !== ActivityTypes.Running
     && structure.sport !== ActivityTypes.Cycling
-    && !(provider === 'garmin' && structure.sport === ActivityTypes.Swimming)
+    && !(provider === 'garmin' && ([ActivityTypes.Swimming, ActivityTypes.Yoga, ActivityTypes.Pilates,
+      ActivityTypes.CardioTraining] as readonly ActivityTypes[]).includes(structure.sport))
     && !(provider === 'coros' && structure.sport === ActivityTypes.TrailRunning)) {
     const family = provider === 'garmin'
       ? garminWorkoutSportFamilyV1(structure.sport)
@@ -491,17 +500,17 @@ export function assessPlannedWorkoutProviderMappingV1(
   const referenceSnapshots = new Map<string, number>();
   if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport) && wahooDurationSeconds(structure) === null) {
     issues.push({ severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
-      message: 'Wahoo Walking/Hiking and swim/rowing delivery require a finite positive timed duration; QS never estimates other endings.' });
+      message: `Wahoo ${structure.sport} delivery requires a finite positive timed duration; QS never estimates other endings.` });
   }
   for (const { path, step } of structureSteps(structure)) {
     if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport)) {
       if (step.ending.kind !== 'time') issues.push({
         severity: 'unsupported', code: 'unsupported_ending', path: `${path}.ending`,
-        message: 'Wahoo Walking/Hiking and swim/rowing validation support timed steps only; distance or manual steps cannot be estimated.',
+        message: `Wahoo ${structure.sport} delivery supports timed steps only; distance or manual steps cannot be estimated.`,
       });
       if (step.targets.length > 0) issues.push({
         severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets`,
-        message: 'Wahoo Walking/Hiking and swim/rowing intensity-target delivery is not verified. Keep this prescription in QS or use another compatible provider.',
+        message: `Wahoo ${structure.sport} intensity-target delivery is not verified. Keep this prescription in QS or use another compatible provider.`,
       });
     }
     if (provider !== 'suunto' && (step.ending.kind === 'time' || step.ending.kind === 'distance')

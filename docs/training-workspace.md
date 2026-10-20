@@ -1172,7 +1172,17 @@ Additional approved Suunto generic-interval profiles use HR-only default live re
 and Wahoo's Indoor Rowing Plan family `6`, indoor location `0` and dated Workout type `22`. All three substitutions
 require mapping review. Garmin retains its device-support warning and authored-name description. Wahoo retains
 timed, untargeted steps only, including exact repeat durations; distance/manual endings and intensity targets remain
-unsupported even after approval. COROS remains unsupported for rowing. The other additions above stay Suunto-only.
+unsupported even after approval. COROS remains unsupported for rowing. Garmin additionally maps Yoga, Pilates and
+Cardio Training to native `YOGA`, `PILATES` and `CARDIO_TRAINING` profiles documented by Training API V2 §3.2.1.
+Their original recipe, ordered steps and values are preserved; no exercise names, poses or repetitions are inferred.
+These three native profiles have local serializer and strict MCP read/compatibility coverage, not new Garmin account
+or device proof. Wahoo additionally maps Yoga (`66`), Elliptical Trainer (`20`) and Cardio Training (`43`, disclosed
+Cardio Class substitution), all using indoor Gym Plan family `6`. These support timed steps without intensity targets
+only, including inside repeats. Authorized direct API probes on 20 October 2026 verified Plan metadata, exact downloaded
+JSON prescriptions, dated Workout type/duration, and the independent Plan association for all three; every temporary
+test copy was removed and removal checked. This is cloud evidence, not app/watch playback or an integrated QS queue
+test. No deployment or QS workout/plan creation was performed. Other additional fitness profiles remain limited to the
+explicitly supported provider mappings.
 Virtual Rowing shares the rowing display rule: prescribed distances stay metric, and pace targets, profile
 bounds/axes, summaries, MCP display steps and the Suunto app preview use 500 m splits under metric or imperial
 preferences. Canonical distance and speed values remain unchanged. This display classification does not add a
@@ -1194,8 +1204,14 @@ Wahoo mappings; COROS keeps its nine documented exclusions. Suunto maps 65 names
 remaining outside planned delivery support. Recorded import, route delivery and provider activity recording are
 separate contracts; other catalog sports do not gain outbound support from their group. The existing Training
 monitoring bundle still covers these unchanged adapters, queue states and provider labels; no monitoring changes.
-Comparison with the preceding mapping batch preserves all 180 previously supported serializer results byte for byte;
-only the 11 approved Suunto sport names and the Garmin/Wahoo Virtual Rowing pairs become supported.
+The preceding Suunto/Virtual Rowing batch preserved all 180 previously supported serializer results byte for byte;
+its additions were the 11 approved Suunto sport names and the Garmin/Wahoo Virtual Rowing pairs.
+The subsequent native-fitness audit again checked all 1,132 timed, untargeted cases: all 193 previously supported
+serializer artifacts and compatibility levels remained unchanged. Only Garmin Yoga/Pilates/Cardio Training and Wahoo
+Yoga/Elliptical Trainer/Cardio Training became supported. Their profiles do not expand the manual editor or grant
+strength-companion, repetition/load or new COROS support. Strict MCP compatibility reads use the same local assessment;
+no wire schema, scope, consent, tool, mutation or plugin changed. Existing provider-labelled delivery workers, queues
+and terminal outcomes remain covered by the unchanged Training monitoring bundle.
 
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal

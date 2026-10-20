@@ -78,6 +78,11 @@ time-based Running/Cycling subprofiles, untargeted outdoor Walking/Hiking, accou
 and companion-aware timed Strength/Gym, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
 recovery, positive-only cloud checks, scope migration and lifecycle fences. Device receipt remains provider-managed and
 is never inferred from cloud acceptance.
+Yoga, Elliptical Trainer and Cardio Training additionally support timed, untargeted steps through indoor Gym Plan
+family `6` and Workout types `66`, `20` and `43`; Cardio Training discloses the Cardio Class substitution for approval.
+Authorized direct cloud tests on 20 October 2026 read back each Plan, its full JSON prescription, its dated Workout and
+its Plan association, then verified removal of the temporary test records. This does not establish app/watch playback,
+distance/intensity support or integrated QS queue behavior. These probes performed no deployment.
 The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
 the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
 workout title for interval sports and an explicit instruction-only description for timed Gym. Every untargeted interval

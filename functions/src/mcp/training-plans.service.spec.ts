@@ -58,6 +58,22 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each([ActivityTypes.Yoga, ActivityTypes.Pilates, ActivityTypes.CardioTraining])(
+    'reads %s unchanged and exposes its native Garmin compatibility', async sport => {
+      const f = fixture();
+      const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 123 }, targets: [] },
+      ] };
+      f.structures.w1 = recipe;
+      const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const read = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse(await f.run('get_planned_workout_v3', { workoutRef }));
+      expect(JSON.parse(JSON.stringify(read.workout.structure))).toEqual(recipe);
+      const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
+        'assess_planned_workout_compatibility', { workoutRef, providers: ['garmin'] }));
+      expect(compatibility.assessments).toEqual([{ provider: 'garmin', level: 'exact', issues: [] }]);
+      expect(f.structures.w1).toEqual(recipe);
+    });
+
   it.each([
     [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
     [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
@@ -82,7 +98,8 @@ describe('Training plan MCP reads', () => {
     const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
       'assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'coros', 'wahoo'] }));
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
-      ['suunto', fallback ? 'degraded' : 'exact'], ['garmin', sport === ActivityTypes.VirtualRowing ? 'degraded' : 'unsupported'],
+      ['suunto', fallback ? 'degraded' : 'exact'], ['garmin', sport === ActivityTypes.VirtualRowing ? 'degraded'
+        : sport === ActivityTypes.Yoga || sport === ActivityTypes.Pilates ? 'exact' : 'unsupported'],
       ['coros', 'unsupported'], ['wahoo', 'unsupported'],
     ]);
     expect(compatibility.assessments[0].issues).toEqual(fallback ? [{ severity: 'degraded', code: 'sport_profile_degraded',

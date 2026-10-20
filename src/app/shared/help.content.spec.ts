@@ -614,6 +614,9 @@ describe('help.content', () => {
     expect(content).toContain('The manual interval editor keeps its current sport choices');
     for (const sport of ['Yoga', 'Pilates', 'Stretching', 'Flexibility Training', 'Crossfit', 'Circuit Training', 'Aerobics',
       'Crosstrainer', 'Elliptical Trainer', 'Meditation', 'Breathwork']) expect(content).toContain(`**${sport}**`);
+    expect(content).toContain('**Garmin fitness profiles:** **Yoga**, **Pilates** and **Cardio Training**');
+    expect(content).toContain('**Wahoo fitness profiles:** **Yoga** and **Elliptical Trainer**');
+    expect(content).toContain('app/watch playback has not');
     expect(content).toContain('**Virtual Rowing** uses **Indoor Rowing** on Suunto and Wahoo, and **Generic** on Garmin');
     expect(content).toContain('Prescribed distances use metric units and pace targets use **500 m splits**, including with imperial distance settings');
     expect(content).toContain('Wahoo accepts only timed steps with no intensity targets');

@@ -69,6 +69,8 @@ describe('approved planned-workout sport aliases', () => {
       expect(() => serializeSuuntoGuideJsonV1(structure, { ...suuntoOptions, allowDegraded: false })).toThrow();
     }
     for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+      if (provider === 'garmin' && (name === 'Yoga' || name === 'Pilates')) continue;
+      if (provider === 'wahoo' && (name === 'Yoga' || name === 'Elliptical Trainer')) continue;
       expect(assessPlannedWorkoutProviderMappingV1(provider, recipe(structure.sport))).toMatchObject({ level: 'unsupported',
         issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_sport' })]) });
     }

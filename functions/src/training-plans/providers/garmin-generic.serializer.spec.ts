@@ -92,9 +92,9 @@ describe('Garmin explicit Generic fallback', () => {
     });
 
     it('does not map unrelated activity-catalog sports through a Generic catch-all', () => {
-        expect(assessPlannedWorkoutProviderMappingV1('garmin', recipe(ActivityTypes.Yoga)))
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', recipe(ActivityTypes.Soccer)))
             .toMatchObject({ level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_sport' })]) });
-        expect(() => serializeGarminWorkoutV1(recipe(ActivityTypes.Yoga), { name: 'Yoga', allowDegraded: true }))
+        expect(() => serializeGarminWorkoutV1(recipe(ActivityTypes.Soccer), { name: 'Soccer', allowDegraded: true }))
             .toThrow(ProviderWorkoutMappingError);
     });
 
