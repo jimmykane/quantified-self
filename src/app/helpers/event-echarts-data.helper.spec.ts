@@ -41,7 +41,7 @@ import {
   buildEventChartPanelsFromSnapshot,
   createEventChartPanelBuildSnapshot,
   eventChartSeriesToPoints,
-  buildEventHeartRateLineValues,
+  buildEventRecordedLineValues,
   normalizeEventLapType,
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
@@ -69,7 +69,7 @@ describe('event-echarts-data.helper', () => {
     vi.restoreAllMocks();
   });
 
-  describe('heart-rate display lines', () => {
+  describe('recorded activity display lines', () => {
     function hrSeries(points: Array<{ x: number; y: number | null; time: number }>, format: 'legacy' | 'packed'): EventChartPanelSeries {
       return {
         id: 'hr', activityID: 'test', activityName: 'Test', color: '#ff0000',
@@ -86,7 +86,7 @@ describe('event-echarts-data.helper', () => {
         .map((y, x) => ({ x, y, time: x * 1000 }));
       const series = hrSeries(points, format);
       const before = structuredClone(series);
-      expect(Array.from(buildEventHeartRateLineValues(series)))
+      expect(Array.from(buildEventRecordedLineValues(series)))
         .toEqual([1, 118, 2, 119, 4, 117, 6, 116, 9, NaN, 9, 115, 10, 114]);
       expect(series).toEqual(before);
     });
@@ -97,7 +97,7 @@ describe('event-echarts-data.helper', () => {
         { x: 5, y: 102, time: 5000 }, { x: 6, y: 103, time: 6000 },
         { x: 40, y: 104, time: 40000 }, { x: 42, y: 105, time: 42000 },
       ], format);
-      expect(Array.from(buildEventHeartRateLineValues(series)))
+      expect(Array.from(buildEventRecordedLineValues(series)))
         .toEqual([0, 100, 2, 101, 5, NaN, 5, 102, 6, 103, 40, NaN, 40, 104, 42, 105]);
     });
 
@@ -107,7 +107,7 @@ describe('event-echarts-data.helper', () => {
         { x: 500, y: 102, time: 4000 }, { x: 501, y: 103, time: 10000 },
         { x: 501, y: 0, time: 11000 },
       ], format);
-      expect(Array.from(buildEventHeartRateLineValues(series)))
+      expect(Array.from(buildEventRecordedLineValues(series)))
         .toEqual([0, 100, 500, 101, 500, 102, 501, NaN, 501, 103, 501, 0]);
     });
 
@@ -116,15 +116,15 @@ describe('event-echarts-data.helper', () => {
         { x: 0, y: 100, time: 0 }, { x: 1, y: 101, time },
         { x: 2, y: 102, time: 1000 },
       ], 'legacy');
-      const line = Array.from(buildEventHeartRateLineValues(series));
+      const line = Array.from(buildEventRecordedLineValues(series));
       expect(line.slice(0, 6)).toEqual([0, 100, 1, NaN, 1, 101]);
       if (!Number.isFinite(time) || time >= 1000) expect(line.slice(6)).toEqual([2, NaN, 2, 102]);
     });
 
     it('handles empty and single readings without inventing a neighbour', () => {
-      expect(buildEventHeartRateLineValues(hrSeries([], 'legacy'))).toHaveLength(0);
-      expect(buildEventHeartRateLineValues(hrSeries([{ x: 0, y: null, time: 0 }], 'packed'))).toHaveLength(0);
-      expect(Array.from(buildEventHeartRateLineValues(hrSeries([{ x: 0, y: 118, time: 0 }], 'packed'))))
+      expect(buildEventRecordedLineValues(hrSeries([], 'legacy'))).toHaveLength(0);
+      expect(buildEventRecordedLineValues(hrSeries([{ x: 0, y: null, time: 0 }], 'packed'))).toHaveLength(0);
+      expect(Array.from(buildEventRecordedLineValues(hrSeries([{ x: 0, y: 118, time: 0 }], 'packed'))))
         .toEqual([0, 118]);
     });
   });

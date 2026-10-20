@@ -551,30 +551,42 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
-### Event heart-rate gaps
+### Event chart gaps and zoom
 
-Event Details Heart Rate panels and overlays use a separate display buffer connecting consecutive recorded readings
-up to two seconds apart. This supports both one-second and every-other-second sampling without dots or fabricated
+Event Details metric panels and overlays use a separate display buffer connecting consecutive recorded readings
+up to two seconds apart. This applies to Heart Rate, raw Power, Cadence, Speed/Pace, Elevation, Stroke Rate and the
+other recorded metric lines. It supports both one-second and every-other-second sampling without dots or fabricated
 intermediate measurements. Longer intervals remain line breaks, including when the chart grid omitted the empty
 positions entirely. Missing, repeated or backward timestamps do not establish a connection.
 
-`buildEventHeartRateLineValues` applies the same rule to packed worker buffers and legacy point arrays. It uses
+`buildEventRecordedLineValues` applies the same rule to packed worker buffers and legacy point arrays. It uses
 absolute sample timestamps on Duration, Time and Distance axes, never index spacing or distance differences. The
 buffer contains only original finite coordinates plus null separators; ECharts retains `connectNulls: false`, normal
-hover markers, zone colors, overlay styling and zoom. HR panels (including HR overlays) retain line endpoints for
-native viewport clipping instead of filtering away offscreen endpoints. This keeps a valid segment visible when
-zoomed between its samples, while null-separated gaps stay blank even when neither boundary is in view. Tooltip
-headers and individual rows outside the visible range are suppressed. Nearby-row matching uses the current native
-viewport, including before shared zoom state catches up. Panels without HR retain their existing zoom filtering;
-removing an HR overlay restores it. No gap-dependent marker updates or synthetic measurements are needed on zoom.
-The HR vertical scale also includes the recorded endpoints of segments crossing a viewport edge, using the same
-timestamp connection rule. This prevents tight zooms from cutting off a valid segment vertically; readings across
-a real gap do not widen the scale. Those context readings remain outside tooltip and selection-statistic results.
+hover markers, zone colors and overlay styling. Grade-colored elevation segments use the same timestamp rule and
+retain the original grade-to-reading association. Each comparison activity retains its own gaps.
+
+The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
+endpoints. This keeps a valid segment visible when zoomed between its samples, while null-separated gaps stay blank
+even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.
+Nearby-row matching uses the current native viewport, including before shared zoom state catches up. The vertical scale
+includes the recorded endpoints of segments crossing a viewport edge, following each series' connection policy. Readings
+across a real gap do not widen the scale. Context readings remain outside tooltip and selection-statistic results.
+
+Battery retains its intentional connection across sparse readings. Untimed route series explicitly use adjacent-row
+connections: distance/point-index coordinates are not elapsed time, and missing elevations still break route lines.
+Power's 3s display retains its complete-window requirement and adjacent-row gaps; its recorded whiskers do not add
+line context from offscreen raw readings. These policies also govern viewport scaling.
 
 Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. Tooltips
-continue reading the original series and do not invent values at the skipped positions. The two-second connection
-limit is a display policy, not a claim that a missing measurement was recorded. Other metrics retain their existing
-rendering rules, including Battery's explicit connection across missing values.
+continue reading the original series and do not invent values at skipped positions. The two-second connection limit
+is a display policy, not a claim that a missing measurement was recorded.
+
+### Dashboard Efficiency single-week display
+
+When the selected Efficiency Trend range contains one finite weekly observation, ECharts displays that observation as
+a small circle in the line's theme color. Two or more observations keep the existing line presentation. Changing the
+range updates this choice, and a valid zero remains visible. This affects only rendering of the existing weekly values;
+calculation, filtering, stored/derived data, Training and MCP contracts are unchanged.
 
 ### Event Power display views
 

@@ -20,6 +20,8 @@ export interface TrackChartPanelSeries {
   streamType: string;
   displayName: string;
   unit: string;
+  /** Untimed/derived rows connect adjacent points; whiskers have no line. Activities default to recorded time. */
+  lineGapPolicy?: 'adjacent' | 'none';
   lineValues?: Float64Array;
   timeValues?: Float64Array;
   gradeColorValues?: Float64Array;

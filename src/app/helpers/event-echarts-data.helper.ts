@@ -807,8 +807,8 @@ export function getEventChartSeriesY(series: EventChartPanelSeries, index: numbe
   return Number.isFinite(value) ? value : null;
 }
 
-/** Display-only HR line: join recorded 1/2-second samples, never manufacture a measurement. */
-export function buildEventHeartRateLineValues(series: EventChartPanelSeries): Float64Array {
+/** Display-only activity line: join recorded 1/2-second samples, never manufacture a measurement. */
+export function buildEventRecordedLineValues(series: EventChartPanelSeries): Float64Array {
   const count = getEventChartSeriesPointCount(series);
   // Each recorded point can need a preceding null separator for a timestamp gap.
   const values = new Float64Array(count * 4);
@@ -826,7 +826,7 @@ export function buildEventHeartRateLineValues(series: EventChartPanelSeries): Fl
     const time = getEventChartSeriesTime(series, index);
     // Use absolute sample times, including on the Distance axis. Do not bridge
     // longer gaps just because their empty rows were omitted by the chart grid.
-    if (offset && !isEventHeartRateLineInterval(previousTime, time)) {
+    if (offset && !isEventRecordedLineInterval(previousTime, time)) {
       values[offset++] = x;
       values[offset++] = Number.NaN;
     }
@@ -837,10 +837,23 @@ export function buildEventHeartRateLineValues(series: EventChartPanelSeries): Fl
   return values.slice(0, offset);
 }
 
-/** Shared by HR line rendering and its display-only viewport scale. */
-export function isEventHeartRateLineInterval(previousTime: number, time: number): boolean {
+/** Shared by activity line rendering and its display-only viewport scale. */
+export function isEventRecordedLineInterval(previousTime: number, time: number): boolean {
   const elapsedMs = time - previousTime;
   return Number.isFinite(elapsedMs) && elapsedMs > 0 && elapsedMs <= 2000;
+}
+
+/** Keep intentionally sparse battery readings and untimed route geometry on their existing policies. */
+export function getEventChartLineGapPolicy(series: EventChartPanelSeries): 'recorded-time' | 'adjacent' | 'connect' | 'none' {
+  if (series.lineGapPolicy) return series.lineGapPolicy;
+  return `${series.streamType || ''}`.toLowerCase().includes('battery') ? 'connect' : 'recorded-time';
+}
+
+export function canConnectEventChartPoints(series: EventChartPanelSeries, left: number, right: number): boolean {
+  const policy = getEventChartLineGapPolicy(series);
+  if (policy === 'none') return false;
+  if (policy === 'adjacent') return right === left + 1;
+  return policy === 'connect' || isEventRecordedLineInterval(getEventChartSeriesTime(series, left), getEventChartSeriesTime(series, right));
 }
 
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {

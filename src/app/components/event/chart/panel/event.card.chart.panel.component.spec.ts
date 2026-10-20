@@ -8,6 +8,10 @@ import { resolve } from 'node:path';
 import {
   DataAirPower,
   DataAltitude,
+  DataCadence,
+  DataSpeed,
+  DataStrokeRate,
+  DataSwimPace,
   ChartCursorBehaviours,
   DataDepth,
   DataDistance,
@@ -362,7 +366,7 @@ describe('EventCardChartPanelComponent', () => {
     component.setPowerView('raw');
     await renderComponent();
     expect(getFullPowerOption().series).toHaveLength(1);
-    expect(getFullPowerOption().series[0].data).toEqual(source!.series[0].points!.map(p => [p.x, p.y]));
+    expect(Array.from(getFullPowerOption().series[0].data)).toEqual(source!.series[0].points!.flatMap(p => [p.x, p.y]));
     expect(component.rangeStats).toEqual(stats);
   });
 
@@ -411,6 +415,22 @@ describe('EventCardChartPanelComponent', () => {
     expect(recordedStats[0].min.value).toBe(String(DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 480).getDisplayValue()));
     expect(recordedStats[0].max.value).toBe(String(DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 500).getDisplayValue()));
     expect(component.panel!.series[0].points!.slice(3).map(point => point.y)).toEqual([500, 490, 480]);
+  });
+
+  it('scales a narrow 3s view to the average segment without offscreen raw whiskers', async () => {
+    setPowerPanel([100, 100, 100, 900, 100]);
+    await renderComponent();
+    const before = structuredClone(component.panel);
+    component.setPowerView('3s');
+    await renderComponent();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 2.25, endValue: 2.75 }] });
+    component['applyCanonicalAxisScales']();
+    const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
+    expect(update.yAxis.min).toBeLessThanOrEqual(100);
+    expect(update.yAxis.max).toBeGreaterThanOrEqual(1100 / 3);
+    expect(update.yAxis.max).toBeLessThan(900);
+    expect(update.series[0].data).toEqual([]); // No recorded whisker lies inside this range.
+    expect(component.panel).toEqual(before);
   });
 
   it('renders recorded whiskers in ECharts, keeps the 3s line on zoom and removes whiskers on Raw', async () => {
@@ -612,11 +632,11 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.brush?.brushMode).toBe('single');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[0]?.disabled).toBe(false);
-    expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
+    expect(option?.dataZoom?.[0]?.filterMode).toBe('none');
     expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
-    expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
+    expect(option?.dataZoom?.[1]?.filterMode).toBe('none');
   });
 
   it('renders a non-interactive chart when preview mode is enabled', async () => {
@@ -776,14 +796,15 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.axisLabel?.formatter(100)).toBe('100');
   });
 
-  it.each([['legacy', false], ['packed', false], ['legacy', true], ['packed', true]] as const)(
-    'connects two-second HR readings with real line breaks, no dots and unchanged data (%s, overlay=%s)',
-    async (format, overlay) => {
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type].flatMap(streamType =>
+    (['legacy', 'packed'] as const).flatMap(format => [false, true].map(overlay => ({ streamType, format, overlay })))))(
+    'connects two-second recorded readings with real line breaks, no dots and unchanged data ($streamType, $format, overlay=$overlay)',
+    async ({ streamType, format, overlay }) => {
       const points = [118, null, 117, null, null, null, 115, 114, null, 113]
         .map((y, x) => ({ x, y, time: x * 1000 }));
       const base = component.panel!.series[0];
       const series = {
-        ...base, id: 'test::hr', streamType: DataHeartRate.type,
+        ...base, id: 'test::hr', streamType,
         zoneColorPieces: [
           { zone: 'Zone 1', color: '#0099ff', lt: 110 },
           { zone: 'Zone 2', color: '#00aa00', gte: 110, lt: 120 },
@@ -796,7 +817,7 @@ describe('EventCardChartPanelComponent', () => {
           pointCount: points.length,
         } : {}),
       };
-      const hrPanel = { ...component.panel!, dataType: DataHeartRate.type, minX: 0, maxX: 9, series: [series] };
+      const hrPanel = { ...component.panel!, dataType: streamType, minX: 0, maxX: 9, series: [series] };
       if (overlay) {
         component.overlayPanel = hrPanel;
       } else {
@@ -899,13 +920,17 @@ describe('EventCardChartPanelComponent', () => {
     }
   );
 
-  it.each([['legacy', false], ['packed', false], ['legacy', true], ['packed', true]] as const)(
-    'keeps connected HR segments inside the vertical scale through zoom cycles (%s, overlay=%s)',
-    (format, overlay) => {
-      const hrPanel = buildTestPanel(DataHeartRate.type, [
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type].flatMap(streamType =>
+    (['legacy', 'packed'] as const).flatMap(format => [false, true].flatMap(overlay => [XAxisTypes.Duration, XAxisTypes.Time, XAxisTypes.Distance].map(axis => ({ streamType, format, overlay, axis }))))))(
+    'keeps connected recorded segments inside the vertical scale through zoom cycles ($streamType, $format, overlay=$overlay, $axis)',
+    ({ streamType, format, overlay, axis }) => {
+      const x = (seconds: number) => axis === XAxisTypes.Time ? 1700000000000 + seconds * 1000
+        : axis === XAxisTypes.Distance ? 500 + seconds * 0.1 : seconds;
+      component.xAxisType = axis;
+      const hrPanel = buildTestPanel(streamType, [
         { x: 0, y: 100, time: 0 }, { x: 2, y: 120, time: 2000 },
         { x: 6, y: 80, time: 6000 }, { x: 8, y: 100, time: 8000 },
-      ], { color: '#008800' });
+      ].map(point => ({ ...point, x: x(point.x) })), { color: '#008800' });
       if (format === 'packed') {
         hrPanel.series = hrPanel.series.map(series => ({
           ...series,
@@ -917,7 +942,7 @@ describe('EventCardChartPanelComponent', () => {
       }
       if (overlay) component.overlayPanel = hrPanel;
       else component.panel = hrPanel;
-      component.xDomain = { start: 0, end: 8 };
+      component.xDomain = { start: x(0), end: x(8) };
       const before = JSON.stringify(hrPanel);
       const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
       const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
@@ -927,22 +952,22 @@ describe('EventCardChartPanelComponent', () => {
       try {
         rendered.setOption(component['buildOption']());
         const seriesIndex = overlay ? 1 : 0;
-        const expectVisible = (x: number, y: number) => {
-          const pixel = rendered.convertToPixel({ seriesIndex }, [x, y]) as number[];
+        const expectVisible = (seconds: number, y: number) => {
+          const pixel = rendered.convertToPixel({ seriesIndex }, [x(seconds), y]) as number[];
           expect(rendered.containPixel({ gridIndex: 0 }, pixel)).toBe(true);
         };
         for (let cycle = 0; cycle < 2; cycle++) {
-          for (const [start, end, x, y] of [
+          for (const [start, end, seconds, y] of [
             [0, 1.5, 1.4, 114], // Following endpoint lies outside the viewport.
             [0.5, 1.5, 1, 110], // Both endpoints lie outside the viewport.
             [6.5, 8, 6.6, 86], // Preceding endpoint lies outside the viewport.
             [0, 8, 1, 110],
           ]) {
-            rendered.dispatchAction({ type: 'dataZoom', startValue: start, endValue: end });
+            rendered.dispatchAction({ type: 'dataZoom', startValue: x(start), endValue: x(end) });
             component['applyCanonicalAxisScales']();
-            expectVisible(x, y);
+            expectVisible(seconds, y);
           }
-          rendered.dispatchAction({ type: 'dataZoom', startValue: 2.5, endValue: 5.5 });
+          rendered.dispatchAction({ type: 'dataZoom', startValue: x(2.5), endValue: x(5.5) });
           component['applyCanonicalAxisScales']();
           const displayList = rendered.getZr().storage.getDisplayList() as unknown as Array<{
             type: string;
@@ -961,7 +986,7 @@ describe('EventCardChartPanelComponent', () => {
               && Math.min(pixels[i - 2], pixels[i]) <= clip.x + clip.width;
             expect(crossesView).toBe(false);
           }
-          component['updateRangeStats']({ start: 2.5, end: 5.5 });
+          component['updateRangeStats']({ start: x(2.5), end: x(5.5) });
           expect(component.rangeStats).toEqual([]);
         }
         expect(JSON.stringify(hrPanel)).toBe(before);
@@ -974,15 +999,15 @@ describe('EventCardChartPanelComponent', () => {
     }
   );
 
-  it('uses native clipping only while HR is present and restores filtering after removing the overlay', async () => {
+  it('keeps native clipping when overlays are added and removed', async () => {
     await renderComponent();
-    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['filter', 'filter']);
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
     fixture.componentRef.setInput('overlayPanel', buildTestPanel(DataHeartRate.type, [120, 130]));
     await renderComponent();
     expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
     fixture.componentRef.setInput('overlayPanel', null);
     await renderComponent();
-    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['filter', 'filter']);
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
   });
 
   it('uses native confined tooltip placement on mobile panels', async () => {
@@ -1908,18 +1933,18 @@ describe('EventCardChartPanelComponent', () => {
     component.panel = buildTestPanel(
       DataStamina.type,
       [
-        { x: 0, y: 80 },
-        { x: 200, y: 85 },
-        { x: 600, y: 95 },
+        { x: 0, y: 80, time: 0 },
+        { x: 200, y: 85, time: 200000 },
+        { x: 600, y: 95, time: 600000 },
       ],
       { unit: '%', displayName: DataStamina.type }
     );
     component.overlayPanel = buildTestPanel(
       DataPotentialStamina.type,
       [
-        { x: 0, y: 40 },
-        { x: 200, y: 45 },
-        { x: 600, y: 100 },
+        { x: 0, y: 40, time: 0 },
+        { x: 200, y: 45, time: 200000 },
+        { x: 600, y: 100, time: 600000 },
       ],
       { unit: '%', displayName: DataPotentialStamina.type, color: '#0066cc' }
     );
@@ -1956,7 +1981,7 @@ describe('EventCardChartPanelComponent', () => {
           inverse: false,
           interval: 5,
           min: 35,
-          max: 90,
+          max: 90, // Readings across a real gap do not widen the shared viewport scale.
         }
       },
       {
@@ -2320,6 +2345,45 @@ describe('EventCardChartPanelComponent', () => {
     ]);
   });
 
+  it.each([false, true])('preserves grade-colored gap policy for activity/route lines (route=%s)', route => {
+    const points = [100, null, 120, null, null, null, 80, null, 100]
+      .map((y, x) => ({ x, y, time: x * 1000 }));
+    component.panel = buildTestPanel(DataAltitude.type, points);
+    const series = component.panel!.series[0];
+    if (route) series.lineGapPolicy = 'adjacent';
+    series.gradeColorValues = Float64Array.from(points.map(() => 4));
+    component.colorAltitudeByGrade = true;
+    const snapshot = () => ({ ...series, gradeColorValues: Array.from(series.gradeColorValues!) });
+    const before = structuredClone(snapshot());
+    const option = component['buildOption']();
+    const lines = option.series as LineSeriesOption[];
+    if (route) expect(lines).toEqual([]); // Explicit missing route elevations still break the line.
+    else {
+      expect(lines).toHaveLength(1);
+      expect(Array.from(lines[0].data as unknown as Float64Array))
+        .toEqual([0, 100, 2, 120, 6, NaN, 6, 80, 8, 100]);
+    }
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('keeps untimed route segments connected regardless of distance spacing, without closing missing elevations', () => {
+    component.panel = buildTestPanel(DataAltitude.type, [
+      { x: 0, y: 100, time: 0 }, { x: 5000, y: 120, time: 5000 },
+      { x: 6000, y: null, time: 6000 }, { x: 7000, y: 80, time: 7000 },
+      { x: 12000, y: 100, time: 12000 },
+    ]);
+    const series = component.panel!.series[0];
+    series.lineGapPolicy = 'adjacent';
+    series.gradeColorValues = Float64Array.from([4, 4, 4, 4, 4]);
+    component.colorAltitudeByGrade = true;
+    const line = (component['buildOption']().series as LineSeriesOption[])[0];
+    expect(Array.from(line.data as unknown as Float64Array))
+      .toEqual([0, 100, 5000, 120, 7000, NaN, 7000, 80, 12000, 100]);
+    component.colorAltitudeByGrade = false;
+    const plain = (component['buildOption']().series as LineSeriesOption[])[0];
+    expect(plain.data).toEqual([[0, 100], [5000, 120], [6000, null], [7000, 80], [12000, 100]]);
+  });
+
   it('renders altitude grade color segments without third-dimension visual maps', async () => {
     component.fillOpacity = 0.3;
     component.panel = {
@@ -2442,10 +2506,7 @@ describe('EventCardChartPanelComponent', () => {
         color: '#00aa00',
       })
     );
-    expect(option?.series?.[0]?.data).toEqual([
-      [0, 100],
-      [10, 120],
-    ]);
+    expect(Array.from(option?.series?.[0]?.data)).toEqual([0, 100, 10, 120]);
     expect(option?.visualMap).toBeUndefined();
     expect(component.gradeLegendItems).toEqual([]);
   });
@@ -2486,7 +2547,7 @@ describe('EventCardChartPanelComponent', () => {
         color: '#00aa00',
       })
     );
-    expect(option?.series?.[0]?.data).toEqual([[0, 100]]);
+    expect(Array.from(option?.series?.[0]?.data)).toEqual([0, 100]);
     expect(option?.visualMap).toBeUndefined();
     expect(component.gradeLegendItems).toEqual([]);
   });

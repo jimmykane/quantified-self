@@ -211,11 +211,38 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.max).toBeLessThan(999);
   });
 
-  it('keeps boundary context out of other metric scales', () => {
+  it('includes connected boundary context for other metric scales', () => {
     const panel = buildPanel(DataPower.type, [100, 999]);
     panel.series[0].points[1].time = 2000;
     const config = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
-    expect(config.max).toBeLessThan(999);
+    expect(config.max).toBeGreaterThanOrEqual(999);
+  });
+
+  it.each(['Altitude', 'Power'])('retains adjacent-only gaps for routes and derived windows (%s)', type => {
+    const panel = buildPanel(type, [100, NaN, 120]);
+    panel.series[0].lineGapPolicy = 'adjacent';
+    panel.series[0].points.forEach(point => { point.time = point.x * 1000; });
+    expect(buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0.5, end: 1.5 } }))
+      .toEqual({ inverse: false });
+    panel.series[0].points[1].y = 110;
+    const scale = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0.5, end: 1.5 } });
+    expect(scale.min).toBeLessThanOrEqual(100);
+    expect(scale.max).toBeGreaterThanOrEqual(120);
+  });
+
+  it('includes connected battery endpoints in a narrow zoom despite sparse timestamps', () => {
+    const panel = buildPanel('Battery Charge', [100, NaN, 90]);
+    panel.series[0].points.forEach(point => { point.time = point.x * 10000; });
+    const scale = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0.5, end: 1.5 } });
+    expect(scale.min).toBeLessThanOrEqual(90);
+    expect(scale.max).toBeGreaterThanOrEqual(100);
+  });
+
+  it('does not use offscreen raw whisker readings as line context', () => {
+    const panel = buildPanel(DataPower.type, [100, 999]);
+    panel.series[0].lineGapPolicy = 'none';
+    const scale = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
+    expect(scale.max).toBeLessThan(999);
   });
 
   it('handles very large series without spreading values into Math.min/Math.max', () => {

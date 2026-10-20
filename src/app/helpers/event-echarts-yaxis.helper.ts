@@ -19,10 +19,10 @@ import {
   findFirstEventChartSeriesPointAfter,
   findFirstEventChartSeriesPointAtOrAfter,
   getEventChartSeriesPointCount,
-  getEventChartSeriesTime,
+  canConnectEventChartPoints,
+  getEventChartLineGapPolicy,
   getEventChartSeriesX,
   getEventChartSeriesY,
-  isEventHeartRateLineInterval,
 } from './event-echarts-data.helper';
 import { isEventPaceStreamType } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
@@ -214,12 +214,12 @@ function getVisibleExtrema(panel: EventChartPanelModel, visibleRange: EventChart
       foundValue = true;
     }
 
-    if (normalizedRange && HEART_RATE_STREAM_TYPES.has(series.streamType)) {
+    if (normalizedRange) {
       // Native clipping retains connected line endpoints outside the viewport.
       // Include those endpoints in the scale so the visible segment is not cut
       // off vertically. They do not become tooltip readings or range statistics.
       for (const boundary of [normalizedRange.start, normalizedRange.end]) {
-        for (const y of getHeartRateBoundaryValues(series, boundary)) {
+        for (const y of getLineBoundaryValues(series, boundary)) {
           min = Math.min(min, y);
           max = Math.max(max, y);
           foundValue = true;
@@ -235,7 +235,8 @@ function getVisibleExtrema(panel: EventChartPanelModel, visibleRange: EventChart
   return { min, max };
 }
 
-function getHeartRateBoundaryValues(series: EventChartPanelSeries, boundary: number): number[] {
+function getLineBoundaryValues(series: EventChartPanelSeries, boundary: number): number[] {
+  if (getEventChartLineGapPolicy(series) === 'none') return [];
   const count = getEventChartSeriesPointCount(series);
   let right = findFirstEventChartSeriesPointAtOrAfter(series, boundary);
   let left = right - 1;
@@ -244,13 +245,15 @@ function getHeartRateBoundaryValues(series: EventChartPanelSeries, boundary: num
   if (getEventChartSeriesX(series, right) === boundary && getEventChartSeriesY(series, right) !== null) return [];
   // Match the renderer's treatment of empty rows, while retaining invalid-X
   // barriers. Only the nearest recorded readings can form the crossing segment.
-  while (left >= 0 && Number.isFinite(getEventChartSeriesX(series, left)) && getEventChartSeriesY(series, left) === null) left--;
-  while (right < count && Number.isFinite(getEventChartSeriesX(series, right)) && getEventChartSeriesY(series, right) === null) right++;
+  if (getEventChartLineGapPolicy(series) !== 'adjacent') {
+    while (left >= 0 && Number.isFinite(getEventChartSeriesX(series, left)) && getEventChartSeriesY(series, left) === null) left--;
+    while (right < count && Number.isFinite(getEventChartSeriesX(series, right)) && getEventChartSeriesY(series, right) === null) right++;
+  }
   if (left < 0 || right >= count) return [];
   const leftX = getEventChartSeriesX(series, left);
   const rightX = getEventChartSeriesX(series, right);
   if (!Number.isFinite(leftX) || !Number.isFinite(rightX) || !(leftX < boundary && rightX > boundary)) return [];
-  if (!isEventHeartRateLineInterval(getEventChartSeriesTime(series, left), getEventChartSeriesTime(series, right))) return [];
+  if (!canConnectEventChartPoints(series, left, right)) return [];
   const leftY = getEventChartSeriesY(series, left);
   const rightY = getEventChartSeriesY(series, right);
   return leftY === null || rightY === null ? [] : [leftY, rightY];
