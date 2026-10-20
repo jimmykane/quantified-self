@@ -13,6 +13,7 @@
     "src/app/helpers/admin-user-table.helper.spec.ts",
     "src/app/helpers/aggregated-chart-row.helper.spec.ts",
     "src/app/helpers/app-chart-data-types.helper.spec.ts",
+    "src/app/helpers/app-check-error.helper.spec.ts",
     "src/app/helpers/assistant-measurement-review.helper.spec.ts",
     "src/app/helpers/assistant-reflection-review.helper.spec.ts",
     "src/app/helpers/assistant-training-deletion-review.helper.spec.ts",

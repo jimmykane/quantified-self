@@ -458,7 +458,13 @@ change to Training planning semantics or MCP read/write contracts, scopes, proje
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
-server snapshots; permission or App Check failures refresh both credentials with the existing bounded retry/backoff.
+server snapshots; permission and transient App Check network/server failures refresh both credentials with bounded
+retry/backoff. App Check `initial-throttle`/`throttled`, direct exchange 4xx rejections other than 408/429,
+reCAPTCHA failures and configuration failures stop automatic profile retries immediately. A forced refresh cannot
+clear the SDK's cooldown. The recovery panel explains browser verification separately and offers **Reload page**
+for these failures, with regular-window, trusted-network and script-blocking checks. Reloading starts a new check
+but does not guarantee acceptance. It never signs out, clears storage or writes account data; transient network
+failures and ordinary profile errors retain **Retry**.
 The recovery panel on `/login` explains that the user is still signed in. Its Retry action restarts the profile stream
 and refreshes credentials without signing out, clearing persistence, or writing account data. Actual Auth sign-out or
 an account switch cancels the old profile load and ends its recovery attempt.
@@ -481,6 +487,26 @@ restarted profile load invalidate the old shared result. Transient failures use 
 The fallback does not clear or repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
 without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
 beta, and production builds; only the App Check debug provider is development-specific.
+
+App Check initialization registers the public Firebase `onLog` callback before starting verification, and the public
+`onTokenChanged` error observer before downstream Auth/Firestore consumers. The log callback accepts only the
+App Check warning's exact initial-throttle grammar; unrelated Firebase logs and arbitrary arguments are ignored.
+This also captures initial refresh rejections when the SDK retains a still-valid cached token and its public token
+observer omits the error. Console logging and SDK log levels stay unchanged. `AppCheckReadinessService` also reports explicit token-request failures and invalidates memoized readiness
+after a background failure. The single `App Check verification failed` Sentry message uses fixed phase/code labels,
+a bounded HTTP status, a validated SDK retry duration (up to one day), source, online hint and document visibility.
+It never copies raw error messages/stacks, SDK custom data, response bodies, URLs, identifiers or tokens. Existing
+Sentry session context is retained. An initial rejection and its subsequent cooldown share one report until a usable
+fresh token arrives; repeated notifications of the same cached token do not reset deduplication. Token comparison
+is memory-only. An already active cooldown is labelled honestly when the original rejection was unavailable. These
+diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
+warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
+
+Monitoring impact: **unchanged** for Cloud Monitoring queues, dashboards and alert policies. This is browser-only
+App Check recovery; no workers, schedules, backlog/lease/dead-letter semantics, provider connections or monitoring
+bundle definitions change. Existing import monitoring remains authoritative for server queues; browser verification
+uses the scoped Sentry diagnostic above. No production App Check enforcement, risk threshold, token TTL, provider,
+Firebase settings or alert configuration changes are part of this fix.
 
 ## Surface elevation
 

@@ -16,6 +16,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains browser verification cooldowns and recovery without resetting account data', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const text of ["We couldn't verify this browser", '**Reload page**', '**24 hours**',
+      'Repeated retries in that page do not clear the pause', 'Reloading does not guarantee acceptance',
+      'another trusted network', 'your saved data stays unchanged', 'Never send passwords or verification tokens']) {
+      expect(copy).toContain(text);
+    }
+  });
   it('explains bounded bulk Training refreshes without promising instant edit results', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(copy).toContain('background rebuild may wait up to two minutes');

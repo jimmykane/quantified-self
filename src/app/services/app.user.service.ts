@@ -67,6 +67,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { mergeUserProfileDocuments, UserProfileVerificationService } from './user-profile-verification.service';
 import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
@@ -246,7 +247,7 @@ export type AppUserProfileReadState =
   | { status: 'loading'; uid: string }
   | { status: 'recovering'; uid: string; attempt: number; code: string | null }
   | { status: 'ready'; uid: string; profileExists: boolean }
-  | { status: 'error'; uid: string; code: string | null };
+  | { status: 'error'; uid: string; code: string | null; appCheckFailure?: AppCheckFailureDetails };
 
 const PROFILE_READ_ACTIONABLE_RETRY_ATTEMPT = 4;
 
@@ -341,11 +342,20 @@ export class AppUserService implements OnDestroy {
             catchError((error) => {
               const code = this.getErrorCode(error);
               this.markIncompleteProfileRead(firebaseUser.uid);
-              this.profileReadStateSignal.set({ status: 'error', uid: firebaseUser.uid, code });
-              this.logger.error('[AppUserService] User profile loading stopped after a non-recoverable error', {
-                uid: firebaseUser.uid,
-                code,
-              }, error);
+              const appCheckFailure = appCheckFailureDetails(error);
+              this.profileReadStateSignal.set({
+                status: 'error', uid: firebaseUser.uid, code,
+                ...(appCheckFailure ? { appCheckFailure } : {}),
+              });
+              if (appCheckFailure) {
+                // The App Check observer/readiness boundary owns the safe, deduplicated report.
+                this.logger.warn('[AppUserService] Browser verification blocked profile loading.', appCheckFailure);
+              } else {
+                this.logger.error('[AppUserService] User profile loading stopped after a non-recoverable error', {
+                  uid: firebaseUser.uid,
+                  code,
+                }, error);
+              }
               return of(null);
             })
           );
@@ -634,9 +644,10 @@ export class AppUserService implements OnDestroy {
   }
 
   private isRecoverableProfileReadError(error: unknown): boolean {
+    const appCheckFailure = appCheckFailureDetails(error);
+    if (appCheckFailure) return appCheckFailure.retryable;
     return this.isFirestoreAuthenticationReadError(error)
-      || this.isFirestoreTransientReadError(error)
-      || this.getErrorCode(error)?.startsWith('appCheck/') === true;
+      || this.isFirestoreTransientReadError(error);
   }
 
   private beginProfileRead(uid: string): void {

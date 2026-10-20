@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -15,6 +15,8 @@ import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppWindowService } from '../../services/app.window.service';
+import { appCheckFailureDetails } from '../../helpers/app-check-error.helper';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from '../../authentication/auth-redirect-url';
 
 
@@ -35,6 +37,16 @@ export class LoginComponent implements OnInit, OnDestroy {
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
   private readonly haptics = inject(AppHapticsService);
+  private readonly windowService = inject(AppWindowService);
+  readonly profileVerificationFailure = computed(() => {
+    const state = this.userService.profileReadState();
+    if (state.status === 'error') return state.appCheckFailure ?? appCheckFailureDetails({ code: state.code });
+    return state.status === 'recovering' ? appCheckFailureDetails({ code: state.code }) : null;
+  });
+  readonly profileVerificationNeedsReload = computed(() => {
+    const failure = this.profileVerificationFailure();
+    return !!failure && !failure.retryable;
+  });
   private static readonly nonReportableAuthenticationErrorCodes = new Set([
     'auth/account-exists-with-different-credential',
     'auth/cancelled-popup-request',
@@ -439,6 +451,12 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.haptics.selection();
     try {
+      if (this.profileVerificationNeedsReload()) {
+        // A new page starts a fresh browser check. A same-page forced token refresh
+        // cannot bypass the SDK's cooldown. Reloading does not guarantee acceptance.
+        this.windowService.windowRef.location.reload();
+        return;
+      }
       if (await this.userService.retryProfileRead()) {
         this.haptics.success();
       } else {

@@ -30,6 +30,7 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
 import { AppUpdateService } from './services/app.update.service';
+import { AppCheckDiagnosticsService } from './services/app-check-diagnostics.service';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
@@ -107,7 +108,11 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
 
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
       (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = !environment.production && !environment.beta;
-      return initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
+      const diagnostics = inject(AppCheckDiagnosticsService);
+      diagnostics.observeInitialRejections();
+      const appCheck = initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
+      diagnostics.monitor(appCheck);
+      return appCheck;
     })] : []),
     provideAuth(() => {
       const auth = getAuth();

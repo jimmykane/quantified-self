@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppCheck } from 'app/firebase/app-check';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 
 const hoisted = vi.hoisted(() => ({
   mockGetAppCheckToken: vi.fn(),
@@ -19,9 +20,10 @@ vi.mock('app/firebase/app-check', async (importOriginal) => {
 describe('AppCheckReadinessService', () => {
   let service: AppCheckReadinessService;
   let appCheckMock: object;
+  const diagnostics = { failureRevision: 0, reportFailure: vi.fn() };
 
   function configureTestingModule(options: { provideAppCheck?: boolean } = {}): AppCheckReadinessService {
-    const providers: any[] = [AppCheckReadinessService];
+    const providers: any[] = [AppCheckReadinessService, { provide: AppCheckDiagnosticsService, useValue: diagnostics }];
 
     if (options.provideAppCheck !== false) {
       providers.push({ provide: AppCheck, useValue: appCheckMock });
@@ -33,6 +35,8 @@ describe('AppCheckReadinessService', () => {
 
   beforeEach(() => {
     appCheckMock = {};
+    diagnostics.failureRevision = 0;
+    diagnostics.reportFailure.mockReset();
     hoisted.mockGetAppCheckToken.mockReset();
     hoisted.mockGetAppCheckToken.mockResolvedValue({ token: 'app-check-token' });
     service = configureTestingModule();
@@ -66,6 +70,16 @@ describe('AppCheckReadinessService', () => {
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
     expect(hoisted.mockGetAppCheckToken).toHaveBeenNthCalledWith(1, appCheckMock, false);
     expect(hoisted.mockGetAppCheckToken).toHaveBeenNthCalledWith(2, appCheckMock, true);
+  });
+
+  it('invalidates memoized readiness after a background verification failure', async () => {
+    await service.ensureReady();
+    diagnostics.failureRevision += 1;
+    const failure = { code: 'appCheck/throttled' };
+    hoisted.mockGetAppCheckToken.mockRejectedValueOnce(failure);
+    await expect(service.ensureReady()).rejects.toBe(failure);
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
+    expect(diagnostics.reportFailure).toHaveBeenCalledWith(failure, 'token-request');
   });
 
   it('should clear the memoized readiness promise after a failure', async () => {

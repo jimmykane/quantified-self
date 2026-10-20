@@ -2,7 +2,7 @@ import { EnvironmentProviders, InjectionToken, makeEnvironmentProviders } from '
 import type { AppCheck as FirebaseAppCheck } from 'firebase/app-check';
 import { FirebaseApp } from './app';
 
-export { ReCaptchaV3Provider, getToken, initializeAppCheck } from 'firebase/app-check';
+export { ReCaptchaV3Provider, getToken, initializeAppCheck, onTokenChanged } from 'firebase/app-check';
 export type { AppCheck as FirebaseAppCheckType } from 'firebase/app-check';
 
 export const AppCheck = new InjectionToken<FirebaseAppCheck>('AppCheck');

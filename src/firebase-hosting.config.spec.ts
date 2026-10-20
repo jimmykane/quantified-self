@@ -397,6 +397,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 
+  it('dates the browser verification recovery guidance in the public help sitemap entry', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
+  });
+
   it('keeps client-rendered routes out of the sitemap and noindexed at the hosting layer', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');

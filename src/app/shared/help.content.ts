@@ -1721,6 +1721,12 @@ This action cannot be undone.
 - If one sign-in method does not match your existing account, try the provider you originally used.
 - If you see **We couldn't load your account** or **We can't reach your account data**, check your connection and select **Retry**. This keeps you signed in while your account data is verified again; it does not reset your account or require you to repeat onboarding. If your sign-in session has actually expired, sign in again.
 
+### Browser verification paused
+
+If you see **We couldn't verify this browser**, you're still signed in, but the browser security check could not finish. A rejected check can pause verification in the current page for up to **24 hours**. Repeated retries in that page do not clear the pause.
+
+Select **Reload page** to start a new check. Reloading does not guarantee acceptance. If verification fails again, try a regular browser window instead of private browsing, or another trusted network. Check whether a privacy extension is blocking Google's verification scripts on Quantified Self. You do not need to sign out, clear browser storage, or repeat onboarding; your saved data stays unchanged. If you remain blocked, contact support with your browser name and the time of the failure. Never send passwords or verification tokens.
+
 ## Imports taking longer than expected
 
 - Garmin history imports can arrive gradually.
