@@ -810,8 +810,18 @@ Operational behavior:
 - malformed targeted or global checkpoint cursors are ignored and that scan restarts from the beginning
 
 Compile-time defaults remain in `functions/src/reparse/sports-lib-reparse.config.ts` under
-`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`. They supply `enabled`, `scanLimit`, `enqueueLimit`, and the legacy
-`uidAllowlist` only when the checkpoint has no persisted `runtimeSettings` value.
+`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`. The scan/enqueue limits always come from these defaults; `enabled`
+and the legacy `uidAllowlist` are fallbacks only when the checkpoint has no persisted `runtimeSettings` value.
+
+Activity discovery scans and admits at most 1,800 candidates/jobs per ten-minute tick, up from 1,200.
+The same activity scan default is reused by the local reparse and processing-metadata backfill scripts when
+`--limit` is omitted; their explicit limits and execute/dry-run controls are unchanged. Route discovery keeps
+independent 1,200-item limits. Worker concurrency, the serialized heavy queue, enqueue pacing logic, retry
+budgets, discovery enablement, version selection and checkpoint handling are unchanged. This is a local default
+change until separately approved deployment; deploying a newer library target can still make older-version
+activities eligible again. Monitoring coverage is **unchanged**: the existing normal/heavy metrics and policies
+cover committed outcomes, failures, admission, native scanner timeouts and eligible backlog age regardless of
+batch size; no alert/resource apply is needed. App Help and MCP contracts are unaffected by this internal limit.
 
 ## Required Firestore Index
 Global processing-query discovery requires:
