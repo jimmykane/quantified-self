@@ -567,6 +567,9 @@ zoomed between its samples, while null-separated gaps stay blank even when neith
 headers and individual rows outside the visible range are suppressed. Nearby-row matching uses the current native
 viewport, including before shared zoom state catches up. Panels without HR retain their existing zoom filtering;
 removing an HR overlay restores it. No gap-dependent marker updates or synthetic measurements are needed on zoom.
+The HR vertical scale also includes the recorded endpoints of segments crossing a viewport edge, using the same
+timestamp connection rule. This prevents tight zooms from cutting off a valid segment vertically; readings across
+a real gap do not widen the scale. Those context readings remain outside tooltip and selection-statistic results.
 
 Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. Tooltips
 continue reading the original series and do not invent values at the skipped positions. The two-second connection

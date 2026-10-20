@@ -899,6 +899,81 @@ describe('EventCardChartPanelComponent', () => {
     }
   );
 
+  it.each([['legacy', false], ['packed', false], ['legacy', true], ['packed', true]] as const)(
+    'keeps connected HR segments inside the vertical scale through zoom cycles (%s, overlay=%s)',
+    (format, overlay) => {
+      const hrPanel = buildTestPanel(DataHeartRate.type, [
+        { x: 0, y: 100, time: 0 }, { x: 2, y: 120, time: 2000 },
+        { x: 6, y: 80, time: 6000 }, { x: 8, y: 100, time: 8000 },
+      ], { color: '#008800' });
+      if (format === 'packed') {
+        hrPanel.series = hrPanel.series.map(series => ({
+          ...series,
+          lineValues: Float64Array.from(series.points.flatMap(point => [point.x, point.y])),
+          timeValues: Float64Array.from(series.points.map(point => point.time)),
+          pointCount: series.points.length,
+          points: undefined,
+        }));
+      }
+      if (overlay) component.overlayPanel = hrPanel;
+      else component.panel = hrPanel;
+      component.xDomain = { start: 0, end: 8 };
+      const before = JSON.stringify(hrPanel);
+      const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const hostChart = vi.spyOn(component['chartHost'], 'getChart').mockReturnValue(rendered);
+      const hostOptions = vi.spyOn(component['chartHost'], 'setOption')
+        .mockImplementation(update => rendered.setOption(update, { lazyUpdate: false }));
+      try {
+        rendered.setOption(component['buildOption']());
+        const seriesIndex = overlay ? 1 : 0;
+        const expectVisible = (x: number, y: number) => {
+          const pixel = rendered.convertToPixel({ seriesIndex }, [x, y]) as number[];
+          expect(rendered.containPixel({ gridIndex: 0 }, pixel)).toBe(true);
+        };
+        for (let cycle = 0; cycle < 2; cycle++) {
+          for (const [start, end, x, y] of [
+            [0, 1.5, 1.4, 114], // Following endpoint lies outside the viewport.
+            [0.5, 1.5, 1, 110], // Both endpoints lie outside the viewport.
+            [6.5, 8, 6.6, 86], // Preceding endpoint lies outside the viewport.
+            [0, 8, 1, 110],
+          ]) {
+            rendered.dispatchAction({ type: 'dataZoom', startValue: start, endValue: end });
+            component['applyCanonicalAxisScales']();
+            expectVisible(x, y);
+          }
+          rendered.dispatchAction({ type: 'dataZoom', startValue: 2.5, endValue: 5.5 });
+          component['applyCanonicalAxisScales']();
+          const displayList = rendered.getZr().storage.getDisplayList() as unknown as Array<{
+            type: string;
+            style: { stroke: string };
+            shape: { points: Float32Array };
+            __clipPaths: Array<{ getBoundingRect(): { x: number; width: number } }>;
+          }>;
+          const paths = displayList.filter(item => item.type === 'ec-polyline' && item.style.stroke === '#008800');
+          expect(paths).toHaveLength(1);
+          const path = paths[0];
+          const clip = path.__clipPaths[0].getBoundingRect();
+          const pixels = path.shape.points;
+          for (let i = 2; i < pixels.length; i += 2) {
+            if (![pixels[i - 2], pixels[i - 1], pixels[i], pixels[i + 1]].every(Number.isFinite)) continue;
+            const crossesView = Math.max(pixels[i - 2], pixels[i]) >= clip.x
+              && Math.min(pixels[i - 2], pixels[i]) <= clip.x + clip.width;
+            expect(crossesView).toBe(false);
+          }
+          component['updateRangeStats']({ start: 2.5, end: 5.5 });
+          expect(component.rangeStats).toEqual([]);
+        }
+        expect(JSON.stringify(hrPanel)).toBe(before);
+      } finally {
+        hostChart.mockRestore();
+        hostOptions.mockRestore();
+        rendered.dispose();
+        canvasContext.mockRestore();
+      }
+    }
+  );
+
   it('uses native clipping only while HR is present and restores filtering after removing the overlay', async () => {
     await renderComponent();
     expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['filter', 'filter']);

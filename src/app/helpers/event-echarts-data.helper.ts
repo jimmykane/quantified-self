@@ -824,10 +824,9 @@ export function buildEventHeartRateLineValues(series: EventChartPanelSeries): Fl
     if (y === null) continue;
 
     const time = getEventChartSeriesTime(series, index);
-    const elapsedMs = time - previousTime;
     // Use absolute sample times, including on the Distance axis. Do not bridge
     // longer gaps just because their empty rows were omitted by the chart grid.
-    if (offset && !(Number.isFinite(elapsedMs) && elapsedMs > 0 && elapsedMs <= 2000)) {
+    if (offset && !isEventHeartRateLineInterval(previousTime, time)) {
       values[offset++] = x;
       values[offset++] = Number.NaN;
     }
@@ -836,6 +835,12 @@ export function buildEventHeartRateLineValues(series: EventChartPanelSeries): Fl
     previousTime = time;
   }
   return values.slice(0, offset);
+}
+
+/** Shared by HR line rendering and its display-only viewport scale. */
+export function isEventHeartRateLineInterval(previousTime: number, time: number): boolean {
+  const elapsedMs = time - previousTime;
+  return Number.isFinite(elapsedMs) && elapsedMs > 0 && elapsedMs <= 2000;
 }
 
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {

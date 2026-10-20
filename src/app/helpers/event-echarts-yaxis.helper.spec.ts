@@ -169,6 +169,55 @@ describe('event-echarts-yaxis.helper', () => {
     expect((config.max as number)).toBeLessThan(200);
   });
 
+  it.each([
+    ['legacy', 1, 0], ['packed', 1, 0], // Duration
+    ['legacy', 1000, 1700000000000], ['packed', 1000, 1700000000000], // Time
+    ['legacy', 0.1, 500], ['packed', 0.1, 500], // Distance
+  ] as const)('includes only connected HR boundary endpoints without changing samples (%s, scale=%s, offset=%s)', (format, scale, offset) => {
+    const panel = buildPanel(DataHeartRate.type, [100, NaN, 120, NaN, NaN, NaN, 80, NaN, 100]);
+    const x = (value: number) => offset + value * scale;
+    panel.series[0].points.forEach(point => {
+      point.time = point.x * 1000;
+      point.x = x(point.x);
+    });
+    if (format === 'packed') {
+      const series = panel.series[0];
+      series.lineValues = Float64Array.from(series.points.flatMap(point => [point.x, point.y]));
+      series.timeValues = Float64Array.from(series.points.map(point => point.time));
+      series.pointCount = series.points.length;
+      delete series.points;
+    }
+    const before = structuredClone(panel);
+    for (const range of [{ start: x(0), end: x(1.5) }, { start: x(0.5), end: x(1.5) }]) {
+      const config = buildEventPanelYAxisConfig({ panel, visibleRange: range });
+      expect(config.min).toBeLessThanOrEqual(100);
+      expect(config.max).toBeGreaterThanOrEqual(120);
+      expect(config.min).toBeGreaterThan(80); // Other side of the real gap stays excluded.
+    }
+    const right = buildEventPanelYAxisConfig({ panel, visibleRange: { start: x(6.5), end: x(8) } });
+    expect(right.min).toBeLessThanOrEqual(80);
+    expect(right.max).toBeGreaterThanOrEqual(100);
+    expect(right.max).toBeLessThan(120);
+    expect(buildEventPanelYAxisConfig({ panel, visibleRange: { start: x(2.5), end: x(5.5) } }))
+      .toEqual({ inverse: false });
+    expect(panel).toEqual(before);
+  });
+
+  it.each([2001, 0, -1000, NaN, Infinity])('excludes boundary readings across an invalid HR interval (%s)', time => {
+    const panel = buildPanel(DataHeartRate.type, [100, 999]);
+    panel.series[0].points[1].time = time;
+    const config = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
+    expect(config.min).toBeLessThanOrEqual(100);
+    expect(config.max).toBeLessThan(999);
+  });
+
+  it('keeps boundary context out of other metric scales', () => {
+    const panel = buildPanel(DataPower.type, [100, 999]);
+    panel.series[0].points[1].time = 2000;
+    const config = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
+    expect(config.max).toBeLessThan(999);
+  });
+
   it('handles very large series without spreading values into Math.min/Math.max', () => {
     const values = Array.from({ length: 200000 }, (_, index) => index % 500);
     const config = buildEventPanelYAxisConfig({
