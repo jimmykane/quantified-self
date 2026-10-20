@@ -157,3 +157,45 @@ export function getVisibleEventLaps(
 export function hasVisibleEventLaps(activities: readonly EventLapActivityLike[] | null | undefined): boolean {
   return (activities || []).some((activity) => getVisibleEventLaps(activity).length > 0);
 }
+
+export interface EventLapTableGroup {
+  lapType: LapTypes;
+  laps: LapInterface[];
+}
+
+/** Group table rows only; source lap types and chart/map marker rules stay intact. */
+export function getEventLapTableGroups(
+  activity: EventLapActivityLike, activities: readonly EventLapActivityLike[] = [],
+): EventLapTableGroup[] {
+  const lapsByType = new Map<LapTypes, LapInterface[]>();
+  getVisibleEventLaps(activity, activities).forEach(lap => {
+    const laps = lapsByType.get(lap.type) || [];
+    laps.push(lap);
+    lapsByType.set(lap.type, laps);
+  });
+  const groups = Array.from(lapsByType, ([lapType, laps]) => ({ lapType, laps }));
+  const terminal = groups.find(group => normalizeEventLapType(group.lapType) === LapTypes.session_end);
+  if (groups.length !== 2 || terminal?.laps.length !== 1) return groups;
+
+  const sequence = groups.find(group => group !== terminal)!;
+  if (normalizeEventLapType(sequence.lapType) === LapTypes.session_end) return groups;
+  const final = terminal.laps[0];
+  const ordered = [...sequence.laps].sort((a, b) => +a.startDate - +b.startDate);
+  const combined = [...ordered, final];
+  const activityStart = activity.startDate?.getTime();
+  const activityEnd = activity.endDate?.getTime();
+  // Never guess an assignment for mixed schemes, overlapping/unknown intervals,
+  // multiple session endings or cross-leg laps. Gaps can be recorded pauses.
+  if (!Number.isFinite(activityStart) || !Number.isFinite(activityEnd) || activityEnd <= activityStart
+    || combined.some((lap, index) => {
+      const start = lap.startDate?.getTime();
+      const end = lap.endDate?.getTime();
+      return !Number.isFinite(start) || !Number.isFinite(end) || end <= start
+        || start < activityStart || end > activityEnd + 1000
+        || (index > 0 && start < +combined[index - 1].endDate)
+        || !!getEventLapContextLabel(activity, lap, activities);
+    }) || Math.abs(+final.endDate - activityEnd) > 1000) {
+    return groups;
+  }
+  return [{ lapType: sequence.lapType, laps: combined }];
+}

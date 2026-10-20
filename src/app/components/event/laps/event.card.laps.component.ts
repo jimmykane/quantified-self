@@ -33,7 +33,7 @@ import { getNominalSwimDistanceDisplayContext } from '../../../helpers/event-swi
 import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { getVisibleEventLaps, getEventLapContextLabel } from '../../../helpers/event-lap-type.helper';
+import { getVisibleEventLaps, getEventLapContextLabel, getEventLapTableGroups, normalizeEventLapType } from '../../../helpers/event-lap-type.helper';
 import {
   EventLapMetricOption,
   EventLapMetricOptionGroup,
@@ -69,6 +69,7 @@ interface LapTableRow extends Record<string, unknown> {
   members?: LapTableRow[];
   metricNotes?: Record<string, string>;
   isRest?: boolean;
+  isFinalLap?: boolean;
   contextLabel?: string;
   timingExplanation?: string;
   hasLengths?: boolean;
@@ -169,6 +170,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public readonly swolfColumn = EVENT_LAP_SWOLF_COLUMN;
   public readonly maximumHeartRateType = DataHeartRateMax.type;
   public readonly hasRecordedLengths = (_index: number, row: LapTableRow): boolean => !!row.hasLengths || !!row.members?.length;
+  public readonly isLapAverageRow = (_index: number, row: LapTableRow): boolean => !!row.isLapAverage;
+  public readonly isLapDataRow = (_index: number, row: LapTableRow): boolean => !row.isLapAverage;
   public swolfColumnLabel = '';
   private readonly expandedLapKeys = new Set<string>();
   public availableLapTypes: LapTypes[] = [];
@@ -209,7 +212,6 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   ngOnChanges() {
     this.hasMultipleEventActivities = (this.event?.getActivities?.() || []).length > 1;
-    this.updateAvailableLapTypes();
     this.updateData();
     if (!this.canCustomize || this.lapColumnMenuGroups.length === 0) {
       this.lapColumnsDialogRef?.close('context-changed');
@@ -244,26 +246,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     });
   }
 
-  private updateAvailableLapTypes() {
-    this.availableLapTypes = [];
-    if (this.selectedActivities) {
-      this.selectedActivities.forEach(activity => {
-        const laps = getVisibleEventLaps(activity, this.event?.getActivities?.() || this.selectedActivities);
-        this.availableLapTypes = [...new Set(this.availableLapTypes.concat(
-          laps.map(lap => lap.type)
-        ))];
-      });
-    }
-  }
-
   private updateData() {
     this.swolfColumnLabel = getSwolfColumnLabel(this.unitSettings);
-    const selectedLapKeysByTable = this.getSelectedLapKeysByTable();
+    const selectedLapKeys = this.getSelectedLapKeys();
     this.dataSourcesMap.clear();
     this.columnsMap.clear();
     this.lapTableGroups = [];
 
     if (!this.selectedActivities) {
+      this.availableLapTypes = [];
       this.lapColumnMenuGroups = [];
       this.changeDetectorRef.markForCheck();
       return;
@@ -271,10 +262,14 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
     const lapTypesWithData = new Set<LapTypes>();
     const tablesByKey = new Map<string, LapTableView>();
+    const groupsByActivity = new Map(this.selectedActivities.map(activity => [activity,
+      getEventLapTableGroups(activity, this.event?.getActivities?.() || this.selectedActivities),
+    ]));
+    this.availableLapTypes = [...new Set(Array.from(groupsByActivity.values()).flatMap(groups => groups.map(group => group.lapType)))];
 
     this.selectedActivities.forEach(activity => {
-      this.availableLapTypes.forEach(lapType => {
-        const data = this.generateLapData(activity, lapType);
+      groupsByActivity.get(activity)!.forEach(({ lapType, laps }) => {
+        const data = this.generateLapData(activity, lapType, laps);
         const key = this.getKey(activity, lapType);
 
         if (data.length > 0) {
@@ -284,11 +279,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           const columns = this.calculateColumns(dataSource, activity.type);
           this.columnsMap.set(key, columns);
           const selection = new SelectionModel<LapTableRow>(true);
-          const selectedLapKeys = selectedLapKeysByTable.get(key);
           const selectableRows = this.getSelectableRows(data);
-          if (selectedLapKeys) {
-            selection.select(...selectableRows.filter((row) => selectedLapKeys.has(row.selectionKey || '')));
-          }
+          selection.select(...selectableRows.filter((row) => selectedLapKeys.has(row.selectionKey || '')));
           const table: LapTableView = {
             key,
             activity,
@@ -338,8 +330,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     return `${activity.getID()}-${lapType}`;
   }
 
-  private generateLapData(activity: ActivityInterface, lapType: LapTypes): LapTableRow[] {
-    const laps = getVisibleEventLaps(activity, this.event?.getActivities?.() || this.selectedActivities).filter(lap => lap.type === lapType);
+  private generateLapData(activity: ActivityInterface, lapType: LapTypes, laps: readonly LapInterface[]): LapTableRow[] {
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
     const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
     const sourceIndexes = new Map((activity.getLaps?.() || []).map((lap, index) => [lap, index]));
@@ -352,13 +343,17 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       };
       const sourceIndex = sourceIndexes.get(lap) ?? index;
       const lapIdentity = `${Number.isFinite(lap.lapId) ? lap.lapId : 'index'}-${sourceIndex}`;
-      const selectionKey = `${this.getKey(activity, lapType)}-${lapIdentity}`;
+      // A final lap can move between display groups as more lap types hydrate.
+      // Selection/disclosure identity follows its original type, never its tab.
+      const selectionKey = `${this.getKey(activity, lap.type)}-${lapIdentity}`;
       const contextLabel = getEventLapContextLabel(activity, lap, this.event?.getActivities?.() || this.selectedActivities);
       const swim = contextLabel ? undefined : analytics.get(lap);
       Object.defineProperties(row, {
         contextLabel: { value: contextLabel, enumerable: false },
         timingExplanation: { value: getRejectedSwimTiming(lap) ? SWIM_TIMING_UNAVAILABLE_REASON : undefined, enumerable: false },
         isRest: { value: swim?.isRest || false, enumerable: false },
+        isFinalLap: { value: normalizeEventLapType(lap.type) === LapTypes.session_end
+          && normalizeEventLapType(lapType) !== LapTypes.session_end, enumerable: false },
         hasLengths: { value: !!swim?.lengths.length, enumerable: false },
         lengthsExpanded: { value: this.expandedLapKeys.has(selectionKey), writable: true, enumerable: false },
         detailId: { value: `lap-lengths-${encodeURIComponent(selectionKey)}`, enumerable: false },
@@ -414,6 +409,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   private groupRestRows(activity: ActivityInterface, rows: LapTableRow[], metricTypes: string[]): LapTableRow[] {
     const rowsByLap = new Map(rows.map(row => [row.lap, row]));
+    const rowOrder = new Map(rows.map((row, index) => [row, index]));
     return groupSwimRestLaps(activity.getLaps?.() || [], getSwimLapLengths(activity)).flatMap(laps => {
       const members = laps.map(lap => rowsByLap.get(lap)).filter((row): row is LapTableRow => !!row);
       if (members.length < 2) return members;
@@ -440,7 +436,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         }
       });
       return [row];
-    });
+    }).sort((a, b) => rowOrder.get(a.members?.[0] || a)! - rowOrder.get(b.members?.[0] || b)!);
   }
 
   private getSelectableRows(rows: readonly LapTableRow[]): LapTableRow[] {
@@ -840,13 +836,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       }));
   }
 
-  private getSelectedLapKeysByTable(): Map<string, Set<string>> {
-    return new Map(this.lapTableGroups.flatMap((group) => group.tables.map((table) => [
-      table.key,
-      new Set(table.selection.selected
-        .map((row) => row.selectionKey)
-        .filter((selectionKey): selectionKey is string => !!selectionKey)),
-    ])));
+  private getSelectedLapKeys(): Set<string> {
+    return new Set(this.lapTableGroups.flatMap(group => group.tables)
+      .flatMap(table => table.selection.selected.map(row => row.selectionKey))
+      .filter((selectionKey): selectionKey is string => !!selectionKey));
   }
 
   private refreshSelectedSummary(table: LapTableView): void {

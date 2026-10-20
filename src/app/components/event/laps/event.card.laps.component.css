@@ -57,6 +57,11 @@
   overflow-wrap: anywhere;
 }
 
+.lap-final-label {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+}
+
 .table-container .lap-rest-row mat-cell,
 .table-container .lap-rest-row:hover mat-cell {
   background: linear-gradient(var(--mat-sys-surface-container-high), var(--mat-sys-surface-container-high)), var(--mat-sys-surface-container-lowest);

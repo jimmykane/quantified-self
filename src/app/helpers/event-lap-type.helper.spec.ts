@@ -11,6 +11,7 @@ import {
   normalizeEventLapType,
   isEventLapEndpointInActivity,
   getEventLapContextLabel,
+  getEventLapTableGroups,
 } from './event-lap-type.helper';
 
 function createActivityWithLapTypes(types: Array<LapTypes | string | null | undefined>): ActivityInterface {
@@ -49,6 +50,105 @@ describe('event lap type helper', () => {
     expect(hasVisibleEventLaps([
       createActivityWithLapTypes([undefined, LapTypes.Manual]),
     ])).toBe(true);
+  });
+});
+
+describe('event lap table grouping', () => {
+  it.each([LapTypes.Manual, LapTypes.AutoLap, LapTypes.Distance, LapTypes.Time, LapTypes.Interval])(
+    'appends one final segment to an unambiguous %s sequence without rewriting source data', type => {
+      const first = createLap(type, 0, 120_000, 120, 300);
+      const final = createLap(LapTypes.session_end, 120_000, 600_000, 480, 1700);
+      const activity = createActivity([first, final]);
+      const groups = getEventLapTableGroups(activity);
+
+      expect(groups).toEqual([{ lapType: type, laps: [first, final] }]);
+      expect(groups[0].laps[1]).toBe(final);
+      expect(final.type).toBe(LapTypes.session_end);
+      expect(final.getDuration().getValue()).toBe(480);
+      expect(first.getDuration().getValue()).toBe(120);
+      expect(activity.getLaps()).toEqual([first, final]);
+      expect(getVisibleEventLaps(activity)).toEqual([first, final]);
+      expect(isEventLapTypeAllowed(final.type, [])).toBe(false);
+    },
+  );
+
+  it('orders the combined display chronologically without sorting the stored array', () => {
+    const first = createLap(LapTypes.Manual, 0, 120_000);
+    const second = createLap(LapTypes.Manual, 120_000, 599_000);
+    const final = createLap(LapTypes.session_end, 599_000, 600_000, 1, 1);
+    const activity = createActivity([final, second, first]);
+    expect(getEventLapTableGroups(activity)).toEqual([{ lapType: LapTypes.Manual, laps: [first, second, final] }]);
+    expect(activity.getLaps()).toEqual([final, second, first]);
+  });
+
+  it('allows a pause gap before the final segment', () => {
+    const first = createLap(LapTypes.Manual, 0, 120_000);
+    const final = createLap(LapTypes.session_end, 150_000, 600_000);
+    expect(getEventLapTableGroups(createActivity([first, final]))).toHaveLength(1);
+  });
+
+  it('allows one second of activity-end timestamp rounding', () => {
+    const first = createLap(LapTypes.Manual, 0, 120_000);
+    const final = createLap(LapTypes.session_end, 120_000, 600_500);
+    const activity = createActivity([first, final]);
+    expect(getEventLapTableGroups(activity, [activity])).toEqual([{ lapType: LapTypes.Manual, laps: [first, final] }]);
+  });
+
+  it('keeps Manual, Auto and Session end separate rather than guessing a sequence', () => {
+    const laps = [createLap(LapTypes.Manual, 0, 120_000), createLap(LapTypes.AutoLap, 0, 120_000),
+      createLap(LapTypes.session_end, 120_000, 600_000)];
+    expect(getEventLapTableGroups(createActivity(laps))).toEqual(laps.map(lap => ({ lapType: lap.type, laps: [lap] })));
+  });
+
+  it.each([
+    ['overlapping final', 100_000, 600_000],
+    ['non-terminal end', 120_000, 500_000],
+    ['out-of-activity end', 120_000, 602_000],
+    ['invalid date', NaN, 600_000],
+    ['empty interval', 600_000, 600_000],
+  ])('keeps an uncertain %s separate', (_reason, start, end) => {
+    const first = createLap(LapTypes.Manual, 0, 120_000);
+    const final = createLap(LapTypes.session_end, start as number, end as number);
+    expect(getEventLapTableGroups(createActivity([first, final]))).toHaveLength(2);
+  });
+
+  it('keeps multiple session endings separate', () => {
+    const laps = [createLap(LapTypes.Manual, 0, 120_000), createLap(LapTypes.session_end, 120_000, 300_000),
+      createLap(LapTypes.session_end, 300_000, 600_000)];
+    expect(getEventLapTableGroups(createActivity(laps))).toEqual([
+      { lapType: LapTypes.Manual, laps: [laps[0]] }, { lapType: LapTypes.session_end, laps: laps.slice(1) },
+    ]);
+  });
+
+  it('does not mistake differently named Session end aliases for a preceding lap sequence', () => {
+    const first = createLap(LapTypes.session_end, 0, 120_000);
+    const final = createLap(LapTypes.session_end, 120_000, 600_000);
+    final.type = 'session_end' as LapTypes;
+    expect(getEventLapTableGroups(createActivity([first, final]))).toHaveLength(2);
+  });
+
+  it('does not merge an overlapping sequence or a lap spanning activity legs', () => {
+    const first = createLap(LapTypes.Manual, 0, 180_000);
+    const second = createLap(LapTypes.Manual, 120_000, 300_000);
+    const final = createLap(LapTypes.session_end, 300_000, 600_000);
+    expect(getEventLapTableGroups(createActivity([first, second, final]))).toHaveLength(2);
+    const activity = createActivity([first, final]);
+    activity.startDate = new Date(100_000);
+    expect(getEventLapTableGroups(activity)).toHaveLength(2);
+  });
+
+  it('keeps missing timing separate and preserves sole-lap duplicate suppression', () => {
+    expect(getEventLapTableGroups(createActivityWithLapTypes([LapTypes.Manual, LapTypes.session_end]))).toHaveLength(2);
+    expect(getEventLapTableGroups(createActivity([createLap(LapTypes.session_end)]))).toEqual([]);
+    const partial = createLap(LapTypes.session_end, 120_000, 600_000, 480, 1700);
+    expect(getEventLapTableGroups(createActivity([partial]))).toEqual([{ lapType: LapTypes.session_end, laps: [partial] }]);
+  });
+
+  it('decides grouping independently for each activity', () => {
+    const first = createActivity([createLap(LapTypes.Manual, 0, 120_000), createLap(LapTypes.session_end, 120_000, 600_000)]);
+    const second = createActivity([createLap(LapTypes.AutoLap, 0, 120_000), createLap(LapTypes.session_end, 120_000, 600_000)]);
+    expect(getEventLapTableGroups(first, [first, second])[0].lapType).toBe(LapTypes.Manual);
+    expect(getEventLapTableGroups(second, [first, second])[0].lapType).toBe(LapTypes.AutoLap);
   });
 });
 

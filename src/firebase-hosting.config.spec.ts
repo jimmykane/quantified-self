@@ -390,6 +390,7 @@ describe('Firebase Hosting configuration', () => {
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
+    // Unambiguous Session end segments append as Final lap rows without changing recorded data.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

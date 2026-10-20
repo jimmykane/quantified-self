@@ -231,6 +231,7 @@
             }
             } @else if (column === '#' && !row.isLapAverage) {
             <span class="lap-index-label">{{ row[column] }}
+              @if (row.isFinalLap) { <span class="lap-final-label">Final lap</span> }
               @if (row.isRest) { <span class="mat-label-small">Rest</span> }
               @if (row.timingExplanation) { <mat-icon tabindex="0" aria-hidden="false" [matTooltip]="row.timingExplanation" [attr.aria-label]="row.timingExplanation">info</mat-icon> }
               @if (row.contextLabel) { <span class="mat-label-small">{{ row.contextLabel }}</span> }
@@ -270,7 +271,10 @@
           </mat-cell>
         </ng-container>
         <mat-header-row *matHeaderRowDef="lapTable.columns"></mat-header-row>
-        <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage" [class.lap-rest-row]="row.isRest"></mat-row>
+        <!-- CDK measures sticky offsets per row definition. Summary labels span both pinned
+             identifiers, so they must not supply the widths for ordinary lap rows. -->
+        <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapAverageRow" class="lap-average-row"></mat-row>
+        <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapDataRow" [class.lap-rest-row]="row.isRest"></mat-row>
         <mat-row *matRowDef="let row; columns: ['lengthDetails']; when: hasRecordedLengths" class="lap-length-detail-row"
           [attr.hidden]="row.lengthsExpanded ? null : ''"></mat-row>
         @if (!nested) {

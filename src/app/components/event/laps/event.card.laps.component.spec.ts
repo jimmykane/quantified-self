@@ -1123,11 +1123,17 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
         fixture.detectChanges();
 
+        const table = component.lapTableGroups[0].tables[0];
         const summary = fixture.nativeElement.querySelector('.lap-average-row') as HTMLElement;
         expect(summary.querySelector('.lap-average-label')?.textContent?.trim()).toBe('Summary');
         expect(summary.querySelector('.lap-average-index-spacer')?.textContent?.trim()).toBe('');
         expect(summary.querySelector('.lap-average-index-spacer .lap-index-label')).toBeNull();
         expect(summary.querySelector('mat-checkbox')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('mat-row:not(.lap-length-detail-row)')).toHaveLength(3);
+        expect(component.isLapAverageRow(0, table.dataSource.data[0])).toBe(true);
+        expect(component.isLapDataRow(0, table.dataSource.data[0])).toBe(false);
+        expect(component.isLapAverageRow(1, table.dataSource.data[1])).toBe(false);
+        expect(component.isLapDataRow(1, table.dataSource.data[1])).toBe(true);
         expect(fixture.nativeElement.querySelectorAll('input[aria-label^="Select lap "]')).toHaveLength(2);
 
         fixture.nativeElement.querySelector('input[aria-label="Select lap 1"]').click();
@@ -1652,7 +1658,7 @@ describe('EventCardLapsComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-section-header')).not.toBeNull();
     });
 
-    it('renders and selects a final session end segment after earlier splits', () => {
+    it('keeps a final segment separate when the sequence timing is missing', () => {
         const activity = createActivity([
             createRenderableLap(LapTypes.Manual),
             { ...createRenderableLap(LapTypes.session_end), getDuration: () => new DataDuration(480) } as LapInterface,
@@ -1688,8 +1694,100 @@ describe('EventCardLapsComponent', () => {
         component.unitSettings = { ...getDefaultUserUnitSettings(), distanceUnits, speedUnits: [speedUnits] };
         component.ngOnChanges();
 
-        const row = component.getDataSource(activity, LapTypes.session_end)?.data.find(row => !row.isLapAverage);
-        expect(row).toMatchObject({ Duration: '8:00.00', [DataDistance.type]: distance, [DataSpeedAvg.type]: speed });
+        const row = component.getDataSource(activity, LapTypes.Manual)?.data.find(row => row.lap?.type === LapTypes.session_end);
+        expect(row).toMatchObject({ '#': 2, isFinalLap: true, Duration: '8:00.00', [DataDistance.type]: distance, [DataSpeedAvg.type]: speed });
+        expect(component.getDataSource(activity, LapTypes.session_end)).toBeUndefined();
+    });
+
+    it('renders a final segment in the same table, preserving original values, summaries and selection', () => {
+        const activity = createHydratedActivity([
+            { lapId: 1, startDate: 0, endDate: 120_000, startIndex: null, endIndex: null,
+                type: LapTypes.Manual, stats: { [DataDuration.type]: 120, [DataDistance.type]: 300, [DataHeartRateAvg.type]: 120 } },
+            { lapId: 2, startDate: 120_000, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.session_end, stats: { [DataDuration.type]: 480, [DataDistance.type]: 1700, [DataHeartRateAvg.type]: 150 } },
+        ]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.availableLapTypes).toEqual([LapTypes.Manual]);
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('table[mat-table]')).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('.lap-final-label')?.textContent.trim()).toBe('Final lap');
+        const table = component.lapTableGroups[0].tables[0];
+        const rows = table.dataSource.data.filter(row => !row.isLapAverage);
+        expect(rows.map(row => row['#'])).toEqual([1, 2]);
+        expect(rows.map(row => row.Duration)).toEqual(['2:00.00', '8:00.00']);
+        expect(table.dataSource.data[0][DataHeartRateAvg.type]).toBe('135 bpm');
+        expect(haptics.selection).not.toHaveBeenCalled();
+
+        const checkbox = fixture.nativeElement.querySelectorAll('mat-row:not(.lap-average-row) mat-checkbox input')[1] as HTMLInputElement;
+        checkbox.click();
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(1);
+        expect(table.selection.selected[0].lap).toBe(activity.getLaps()[1]);
+        expect(table.selectedSummary.Duration).toBe('8:00.00 · 1/1');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        const selectionKey = rows[1].selectionKey;
+
+        component.unitSettings = { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const refreshed = component.lapTableGroups[0].tables[0];
+        expect(refreshed.selectedCount).toBe(1);
+        expect(refreshed.selection.selected[0].selectionKey).toBe(selectionKey);
+        expect(refreshed.selection.selected[0][DataDistance.type]).toBe('1.06 mi');
+        expect(activity.getLaps().map(lap => lap.type)).toEqual([LapTypes.Manual, LapTypes.session_end]);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+
+        component.toggleAllLapSelections(refreshed);
+        expect(refreshed.selectedCount).toBe(2);
+        expect(refreshed.selectedSummary.Duration).toContain('2/2');
+    });
+
+    it('keeps final-lap selection when a second lap scheme arrives and makes the assignment ambiguous', () => {
+        const activity = createHydratedActivity([
+            { lapId: 1, startDate: 0, endDate: 120_000, startIndex: null, endIndex: null,
+                type: LapTypes.Manual, stats: { [DataDuration.type]: 120, [DataDistance.type]: 300 } },
+            { lapId: 2, startDate: 120_000, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.session_end, stats: { [DataDuration.type]: 480, [DataDistance.type]: 1700 } },
+        ]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        const merged = component.lapTableGroups[0].tables[0];
+        component.toggleLapSelection(merged, merged.dataSource.data.find(row => row.isFinalLap)!);
+        const final = activity.getLaps()[1];
+        activity.addLap(EventImporterJSON.getLapFromJSON({ lapId: 3, startDate: 0, endDate: 120_000,
+            startIndex: null, endIndex: null, type: LapTypes.AutoLap,
+            stats: { [DataDuration.type]: 120, [DataDistance.type]: 300 } }, 0));
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.lapTableGroups).toHaveLength(3);
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).not.toBeNull();
+        const separate = component.lapTableGroups.find(group => group.lapType === LapTypes.session_end)!.tables[0];
+        expect(separate.selectedCount).toBe(1);
+        expect(separate.selection.selected[0].lap).toBe(final);
+        expect(separate.selection.selected[0]['#']).toBe(1);
+        expect(component.lapTableGroups.find(group => group.lapType === LapTypes.Manual)!.tables[0].selectedCount).toBe(0);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a merged swim final segment last even when the source array is out of order', () => {
+        const activity = createHydratedActivity([
+            { lapId: 2, startDate: 120_000, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.session_end, stats: { [DataDuration.type]: 480, [DataDistance.type]: 1700 } },
+            { lapId: 1, startDate: 0, endDate: 120_000, startIndex: null, endIndex: null,
+                type: LapTypes.Manual, stats: { [DataDuration.type]: 120, [DataDistance.type]: 300 } },
+        ]);
+        activity.type = ActivityTypes.Swimming;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const rows = component.lapTableGroups[0].tables[0].dataSource.data.filter(row => !row.isLapAverage);
+        expect(rows.map(row => row.lap?.type)).toEqual([LapTypes.Manual, LapTypes.session_end]);
+        expect(rows.map(row => row['#'])).toEqual([1, 2]);
+        expect(rows[1].isFinalLap).toBe(true);
+        expect(fixture.nativeElement.querySelector('.lap-final-label')).not.toBeNull();
     });
 
     it('uses the same visibility rule when another activity offers the hidden lap type', () => {
@@ -1723,18 +1821,15 @@ describe('EventCardLapsComponent', () => {
     });
 
     it('should hide the section when a lap type has no table rows', () => {
-        const lap = createRenderableLap(LapTypes.Manual);
-        const activity = {
-            type: 'Running',
-            getID: () => 'activity-1',
-            getLaps: vi.fn()
-                .mockReturnValueOnce([lap])
-                .mockReturnValueOnce([]),
-        } as unknown as ActivityInterface;
+        const laps = [createRenderableLap(LapTypes.Manual)];
+        const activity = createActivity(laps);
         component.selectedActivities = [activity];
-
         component.ngOnChanges();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).not.toBeNull();
 
+        laps.splice(0);
+        component.ngOnChanges();
         expect(component.availableLapTypes).toEqual([]);
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('mat-divider')).toBeNull();

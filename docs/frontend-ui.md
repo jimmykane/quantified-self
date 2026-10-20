@@ -275,15 +275,26 @@ Partial HR coverage is visible, and unsupported aggregate metrics remain blank w
 This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
 remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
-The persistent lap Summary row appears only when an activity/lap-type table contains at least two visible original
+Event lap tables use `getEventLapTableGroups` to append one Session end segment to a single unambiguous sequence.
+Its positive recorded interval must follow non-overlapping laps inside the activity and end at the activity boundary
+(allowing one second of end-time rounding). Recorded pause gaps are allowed. The final row continues the numbering
+and has a compact **Final lap** label without widening the 48px number column. Mixed types, multiple session endings,
+missing/overlapping intervals and cross-leg laps retain separate groups. Grouping is per activity, never across sports.
+Rows keep their original lap objects, types, metrics and source-index selection/disclosure keys, including when
+hydrating another lap type makes an assignment ambiguous. Only the table projection changes: source files, storage,
+chart/map marker exclusions, Training and MCP contracts remain unchanged; no reparse or migration is needed.
+
+The persistent lap Summary row appears only when an activity/display-group table contains at least two visible original
 laps and has summary metrics. A single lap retains its recorded row without a duplicate summary. Count original laps
-before rest-block grouping, not the number of collapsed display rows. Column availability follows the same rule:
+including any appended final segment before rest-block grouping, not the number of collapsed display rows. Column availability follows the same rule:
 session-only Max HR cannot advertise a column in a single-lap table without its own recorded peak. Temporary selection
 summaries remain available, including when one lap is selected. Changing the visible lap set recomputes this presentation.
 
 Ordinary lap numbers use a 48px pinned column with 8px inline cell padding instead of the former 88px column. The
 independent selection column keeps its 48px checkbox target. Persistent and selected summary labels span those two
 columns, with their combined width derived from the same local CSS variables so metric columns remain aligned.
+Summary and ordinary rows use separate Material row definitions: CDK measures sticky offsets per definition,
+so a spanning Summary label must not shift the number cells over the duration cells in ordinary rows.
 Cross-leg context tables retain a 128px number/context column; rest ranges and context labels wrap rather than clip.
 
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,

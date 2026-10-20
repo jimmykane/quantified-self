@@ -1715,6 +1715,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('A sole lap that repeats the whole activity is hidden');
     expect(gettingStartedSection?.content).toContain('If the lap and activity totals cannot be compared reliably, the lap stays visible');
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
+    expect(gettingStartedSection?.content).toContain('the last numbered row with a **Final lap** label, without a separate tab');
+    expect(gettingStartedSection?.content).toContain('Its recorded values stay separate from the preceding lap');
+    expect(gettingStartedSection?.content).toContain('Mixed lap types, overlapping or uncertain timing, multiple session endings');
     expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
     expect(gettingStartedSection?.content).toContain('typed metric search');
     expect(gettingStartedSection?.content).toContain('**Tab** and **Shift+Tab**');
@@ -1732,7 +1735,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
     expect(gettingStartedSection?.content).toContain('A lap table with multiple laps includes a persistent **Summary** row directly below its headers');
     expect(gettingStartedSection?.content).toContain("Single-lap tables omit this row and keep the lap's recorded values");
-    expect(gettingStartedSection?.content).toContain('checked separately for each activity and lap type');
+    expect(gettingStartedSection?.content).toContain('checked separately for each activity and displayed lap group, including any appended final segment');
     expect(gettingStartedSection?.content).toContain('a grouped rest block still counts its original laps');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');
     expect(gettingStartedSection?.content).toContain('checkboxes beside lap rows');
