@@ -16,6 +16,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains display-only Power averaging without changing statistics or benchmarks', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Power** starts in **Raw**', 'including coasting zeros', 'whiskers for recorded peaks and dips',
+      'even on a distance axis', 'gaps stay empty', 'Stats and benchmarks use the original data']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains bounded bulk Training refreshes without promising instant edit results', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(copy).toContain('background rebuild may wait up to two minutes');

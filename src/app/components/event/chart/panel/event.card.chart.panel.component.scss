@@ -41,6 +41,14 @@
   min-width: 0;
 }
 
+.event-chart-panel__title-row--power {
+  flex-wrap: wrap;
+}
+
+.event-chart-panel__power-view {
+  flex: 0 0 auto;
+}
+
 .event-chart-panel__title {
   display: flex;
   align-items: baseline;

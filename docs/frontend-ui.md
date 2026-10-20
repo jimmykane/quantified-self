@@ -489,6 +489,32 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
+### Event Power display views
+
+Event Details Power panels open in Raw. The Material Raw / 3s control is local to the panel and emits one selection
+haptic only on an accepted change. It resets silently for a different activity set, stays selected across axis/theme/zoom
+changes, and is omitted from inert previews and streams without a complete three-second window.
+
+`event-power-display.helper.ts` builds a separate packed display buffer from the existing raw/worker series. A trailing
+average needs three finite consecutive one-second samples according to their absolute recorded times; zeros count,
+missing readings and timestamp interruptions do not. The same computation therefore applies on Duration, Time and Distance
+axes, including repeated distance positions. The input series is never mutated. Each comparison activity has its own buffer.
+
+The 3s view keeps recorded peaks and dips as thin, silent ECharts whiskers alongside the average line. Both raw extrema
+are retained in each approximately seven-pixel visible interval, at their original x positions and separately within each
+uninterrupted recording run. Each whisker extends from the local 3s average to the actual raw value; a recorded-value cap
+remains visible when a complete average is unavailable. Zoom, container resize and fullscreen changes rebucket these
+extrema. The 3s line omits area fill so the whiskers stay visible; Raw keeps its original fill. Device patterns and zone coloring
+remain attached to the average line, including each independent comparison series. Tooltips show canonical Sports Lib-formatted
+3s and recorded values separately; the y-axis includes both raw and averaged values in the current view so zooming cannot
+clip an average whose window starts before the visible range. Original streams still own minimum/maximum, selection
+statistics, overlays, marker positions, power curves, benchmark calculations and recorded metrics. Existing shared tooltip,
+scrolling and chart haptic controllers retain interaction ownership.
+
+MCP/Training impact review: this is an in-memory frontend display projection. No stored activity or Training metric,
+benchmark calculation, chart/sample read response, catalog, plan/workout contract, consent, provider action or mutation changes.
+The three-second buffer is neither persisted nor exposed as another numeric metric or MCP stream.
+
 ### Lazy chart code and release bundle budgets
 
 `EChartsLoaderService` loads the core and `echarts-registrations.helper.ts` only in the browser, on chart demand.

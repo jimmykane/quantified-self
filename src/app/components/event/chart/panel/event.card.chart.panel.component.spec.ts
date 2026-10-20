@@ -33,6 +33,7 @@ import { MaterialModule } from '../../../../modules/material.module';
 import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { init } from 'echarts';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -85,6 +86,7 @@ describe('EventCardChartPanelComponent', () => {
   const snackBarMock = {
     open: vi.fn(),
   };
+  const hapticsMock = { selection: vi.fn() };
   const altitudeGradeColors = {
     moderate: '#F9A825',
     hard: '#E64A19',
@@ -216,6 +218,7 @@ describe('EventCardChartPanelComponent', () => {
       imports: [MaterialModule, NoopAnimationsModule],
       declarations: [EventCardChartPanelComponent],
       providers: [
+        { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: eChartsLoaderMock },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
         { provide: AppShareService, useValue: shareServiceMock },
@@ -316,6 +319,177 @@ describe('EventCardChartPanelComponent', () => {
   function getRenderedOption(): any {
     return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
   }
+
+  function setPowerPanel(values = [100, 100, 396, 200, 0, 100, 110]): void {
+    fixture.componentRef.setInput('panel', buildTestPanel(DataPower.type,
+      values.map((y, index) => ({ x: index, y, time: index * 1000 })), { displayName: 'Power' }));
+    fixture.componentRef.setInput('xDomain', { start: 0, end: values.length - 1 });
+  }
+
+  function getFullPowerOption(): ReturnType<typeof getRenderedOption> {
+    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series?.some(series => series.id === `a1::${DataPower.type}`))?.[1];
+  }
+
+  it('defaults Power to Raw, switches through Material with one haptic and keeps range stats and source data unchanged', async () => {
+    setPowerPanel();
+    fixture.componentRef.setInput('selectedRange', { start: 0, end: 6 });
+    await renderComponent();
+    expect(component.powerView()).toBe('raw');
+    expect(fixture.nativeElement.querySelector('mat-button-toggle[value="raw"] button').getAttribute('aria-checked')).toBe('true');
+    expect(getFullPowerOption().series).toHaveLength(1);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    const source = structuredClone(component.panel);
+    const stats = structuredClone(component.rangeStats);
+
+    fixture.nativeElement.querySelector('mat-button-toggle[value="3s"] button').click();
+    await renderComponent();
+    const option = getFullPowerOption();
+    expect(component.powerView()).toBe('3s');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    expect([...option.series[0].data].slice(0, 6)).toEqual([0, NaN, 1, NaN, 2, 596 / 3]);
+    expect(option.series).toHaveLength(2);
+    expect(option.series[0].areaStyle.opacity).toBe(0);
+    expect(option.series[1]).toMatchObject({ type: 'custom', silent: true, clip: true });
+    expect(option.series[1].data).toContainEqual([2, 396, 596 / 3]);
+    expect(option.series[1].data).toContainEqual([4, 0, 596 / 3]);
+    expect(component.panel).toEqual(source);
+    expect(component.rangeStats).toEqual(stats);
+
+    component.setPowerView('3s');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    component.setPowerView('raw');
+    await renderComponent();
+    expect(getFullPowerOption().series).toHaveLength(1);
+    expect(getFullPowerOption().series[0].data).toEqual(source!.series[0].points!.map(p => [p.x, p.y]));
+    expect(component.rangeStats).toEqual(stats);
+  });
+
+  it('keeps each comparison and its recorded extrema independent, preserves overlays and rebuckets on zoom', async () => {
+    setPowerPanel();
+    const primary = component.panel!;
+    fixture.componentRef.setInput('panel', { ...primary, series: [...primary.series,
+      { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
+    fixture.componentRef.setInput('overlayPanel', buildTestPanel(DataHeartRate.type, [120, 130]));
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    const option = getFullPowerOption();
+    expect(option.series.map(series => series.type)).toEqual(['line', 'custom', 'line', 'custom', 'line']);
+    expect(option.series[2].data[5]).toBe(option.series[0].data[5] * 2);
+    expect(option.series[4].data).toEqual([[0, 120], [10, 130]]);
+    expect(option.series[3].data).toContainEqual([2, 792, 1192 / 3]);
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 6 }] });
+    fixture.componentRef.setInput('sharedZoomRange', { start: 3, end: 6 });
+    component['applyCanonicalAxisScales']();
+    const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
+    expect(update.series.map(series => series.id)).toEqual(['power-whiskers::a1::Power', 'power-whiskers::second::Power']);
+    expect(update.series.every(series => series.data.every(point => point[0] >= 3 && point[0] <= 6))).toBe(true);
+    expect(eChartsLoaderMock.setOption.mock.calls.at(-1)![2].replaceMerge).toBeUndefined();
+    expect(component.panel).toEqual({ ...primary, series: [...primary.series,
+      { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
+    expect(component.powerView()).toBe('3s');
+  });
+
+  it('keeps recorded minimum and maximum while a zoomed 3s average includes samples before the visible range', async () => {
+    setPowerPanel([900, 900, 900, 500, 490, 480]);
+    fixture.componentRef.setInput('selectedRange', { start: 3, end: 5 });
+    await renderComponent();
+    const recordedStats = structuredClone(component.rangeStats);
+    component.setPowerView('3s');
+    await renderComponent();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 5 }] });
+    component['applyCanonicalAxisScales']();
+    const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
+    expect(update.yAxis.max).toBeGreaterThanOrEqual(2300 / 3);
+    expect(update.series[0].data).toContainEqual([3, 500, 2300 / 3]);
+    expect(update.series[0].data).toContainEqual([5, 480, 490]);
+    expect(component.rangeStats).toEqual(recordedStats);
+    expect(recordedStats[0].min.value).toBe(String(DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 480).getDisplayValue()));
+    expect(recordedStats[0].max.value).toBe(String(DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 500).getDisplayValue()));
+    expect(component.panel!.series[0].points!.slice(3).map(point => point.y)).toEqual([500, 490, 480]);
+  });
+
+  it('renders recorded whiskers in ECharts, keeps the 3s line on zoom and removes whiskers on Raw', async () => {
+    setPowerPanel();
+    await renderComponent();
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    const applyFull = () => rendered.setOption(getFullPowerOption(), { notMerge: false, replaceMerge: ['series', 'xAxis', 'yAxis', 'dataZoom'], lazyUpdate: false });
+    try {
+      applyFull();
+      component.setPowerView('3s');
+      await renderComponent();
+      applyFull();
+      expect(rendered.getOption().series).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'a1::Power', type: 'line' }),
+        expect.objectContaining({ id: 'power-whiskers::a1::Power', type: 'custom', silent: true }),
+      ]));
+      expect(rendered.renderToSVGString()).toMatch(/(?:stroke-)?opacity="0\.55"/);
+      chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 6 }] });
+      component['applyCanonicalAxisScales']();
+      rendered.setOption(eChartsLoaderMock.setOption.mock.calls.at(-1)![1], { notMerge: false, lazyUpdate: false });
+      expect(rendered.getOption().series).toHaveLength(2);
+      expect(rendered.getOption().series[0]).toMatchObject({ id: 'a1::Power', type: 'line' });
+      component.setPowerView('raw');
+      await renderComponent();
+      applyFull();
+      expect(rendered.getOption().series).toHaveLength(1);
+      expect(rendered.getOption().series[0]).toMatchObject({ id: 'a1::Power', type: 'line' });
+    } finally {
+      rendered.dispose();
+      canvasContext.mockRestore();
+    }
+  });
+
+  it('keeps zone coloring on both averaged lines rather than their whiskers', async () => {
+    setPowerPanel();
+    const base = component.panel!;
+    const colored = { ...base.series[0], zoneColorPieces: [
+      { zone: 'Easy', color: '#0099ff', lt: 200 }, { zone: 'Hard', color: '#ffaa00', gte: 200 },
+    ] };
+    fixture.componentRef.setInput('panel', { ...base, series: [colored, { ...colored, id: 'second::Power', activityID: 'second' }] });
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    expect(getFullPowerOption().visualMap.map(map => map.seriesIndex)).toEqual([0, 2]);
+  });
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('labels derived and original tooltip values through Sports Lib with %s settings', async distanceUnits => {
+    setPowerPanel([0, 300, 600]);
+    fixture.componentRef.setInput('userUnitSettings', { ...getDefaultUserUnitSettings(), distanceUnits });
+    fixture.componentRef.setInput('xAxisType', XAxisTypes.Distance);
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    const html = getFullPowerOption().tooltip.formatter([{ value: [2, 300] }]);
+    const average = DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 300);
+    const raw = DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 600);
+    expect(html).toContain(`3s average: ${average.getDisplayValue()}${average.getDisplayUnit()}`);
+    expect(html).toContain(`Recorded: ${raw.getDisplayValue()}${raw.getDisplayUnit()}`);
+    expect(html).not.toContain('3s average: 600');
+  });
+
+  it('silently resets Raw for another activity, keeps 3s across axis changes and hides controls for unsupported metrics or short streams', async () => {
+    setPowerPanel();
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    fixture.componentRef.setInput('xAxisType', XAxisTypes.Time);
+    await renderComponent();
+    expect(component.powerView()).toBe('3s');
+    fixture.componentRef.setInput('panel', { ...component.panel!, series: component.panel!.series.map(s => ({ ...s, id: 'new-ride::Power' })) });
+    await renderComponent();
+    expect(component.powerView()).toBe('raw');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    setPowerPanel([100, 200]);
+    await renderComponent();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__power-view')).toBeNull();
+    component.setPowerView('3s');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    fixture.componentRef.setInput('panel', buildTestPanel(DataHeartRate.type, [100, 200, 300]));
+    await renderComponent();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__power-view')).toBeNull();
+  });
 
   function createTouch(identifier: number, clientX: number, clientY: number): Touch {
     return { identifier, clientX, clientY } as Touch;
