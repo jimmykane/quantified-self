@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as admin from 'firebase-admin';
+import { initializeApp as initializeSignerApp, type App } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import * as logger from 'firebase-functions/logger';
 
 // Firebase still advertises the legacy `.appspot.com` default in
@@ -21,7 +23,7 @@ function readLocalCredential(credentialPath: string): Record<string, unknown> {
   throw new Error('Unable to read local Firebase signing credentials. Provide valid service-account JSON outside functions/.');
 }
 
-function emulatorHostedAuthSigner(): admin.app.App | undefined {
+function emulatorHostedAuthSigner(): App | undefined {
   if (process.env.FUNCTIONS_EMULATOR !== 'true' || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
     return undefined;
   }
@@ -56,7 +58,9 @@ function emulatorHostedAuthSigner(): admin.app.App | undefined {
     throw new Error('Local Firebase signing credentials must match the Functions emulator project.');
   }
 
-  return admin.initializeApp({
+  // Firebase CLI serializes options passed to the namespaced initializer,
+  // including private keys. The modular initializer avoids that logging shim.
+  return initializeSignerApp({
     projectId,
     credential: admin.credential.cert(credential),
   }, EMULATOR_SIGNER_APP);
@@ -64,7 +68,7 @@ function emulatorHostedAuthSigner(): admin.app.App | undefined {
 
 export function createFirebaseCustomToken(uid: string, claims?: object): Promise<string> {
   const signer = emulatorHostedAuthSigner();
-  const auth = admin.auth(signer);
+  const auth = signer ? getAuth(signer) : admin.auth();
   return claims === undefined ? auth.createCustomToken(uid) : auth.createCustomToken(uid, claims);
 }
 

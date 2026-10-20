@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   apps: [] as unknown[],
   initializeApp: vi.fn(),
+  initializeSignerApp: vi.fn(),
   settings: vi.fn(),
   warn: vi.fn(),
   existsSync: vi.fn(),
@@ -24,13 +25,19 @@ vi.mock('firebase-admin', () => ({
   initializeApp: mocks.initializeApp,
   credential: { cert: mocks.cert },
   app: () => mocks.defaultApp,
-  auth: (app?: unknown) => ({
-    createCustomToken: app ? mocks.signedToken : mocks.defaultToken,
-  }),
+  auth: () => ({ createCustomToken: mocks.defaultToken }),
   firestore: Object.assign(
     () => ({ settings: mocks.settings }),
     { FieldValue: {} },
   ),
+}));
+
+vi.mock('firebase-admin/app', () => ({
+  initializeApp: mocks.initializeSignerApp,
+}));
+
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({ createCustomToken: mocks.signedToken }),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -42,6 +49,11 @@ describe('initializeFirebase', () => {
     vi.resetModules();
     mocks.apps.length = 0;
     mocks.initializeApp.mockReset().mockImplementation((options, name = '[DEFAULT]') => {
+      const app = { name, options };
+      mocks.apps.push(app);
+      return app;
+    });
+    mocks.initializeSignerApp.mockReset().mockImplementation((options, name) => {
       const app = { name, options };
       mocks.apps.push(app);
       return app;
@@ -94,10 +106,11 @@ describe('initializeFirebase', () => {
 
     expect(mocks.readFileSync).toHaveBeenCalledExactlyOnceWith(keyPath, 'utf8');
     expect(mocks.cert).toHaveBeenCalledExactlyOnceWith({ type: 'service_account', project_id: 'test-project' });
-    expect(mocks.initializeApp).toHaveBeenCalledExactlyOnceWith({
+    expect(mocks.initializeSignerApp).toHaveBeenCalledExactlyOnceWith({
       projectId: 'test-project',
       credential: { localSigner: true },
     }, 'emulator-hosted-auth-signer');
+    expect(mocks.initializeApp).not.toHaveBeenCalled();
     expect(mocks.signedToken).toHaveBeenNthCalledWith(1, 'target', { impersonatedBy: 'admin' });
     expect(mocks.signedToken).toHaveBeenNthCalledWith(2, 'admin');
     expect(mocks.defaultToken).not.toHaveBeenCalled();
@@ -169,7 +182,8 @@ describe('initializeFirebase', () => {
       databaseURL: 'https://test-project.firebaseio.com',
       storageBucket: 'quantified-self-io',
     });
-    expect(mocks.initializeApp).toHaveBeenNthCalledWith(2, {
+    expect(mocks.initializeApp).toHaveBeenCalledOnce();
+    expect(mocks.initializeSignerApp).toHaveBeenCalledExactlyOnceWith({
       projectId: 'test-project', credential: { localSigner: true },
     }, 'emulator-hosted-auth-signer');
   });

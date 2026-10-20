@@ -26,6 +26,14 @@ describe('Firebase Admin custom-token signing', () => {
   it.each(['explicit', 'repository', 'cli-user-adc'])(
     'signs impersonation and restoration tokens locally with %s credentials', async source => {
       const { createFirebaseCustomToken, initializeFirebase } = await import('./bootstrap');
+      // Firebase CLI wraps the namespaced initializer and serializes its options
+      // into emulator logs. Credentials must never reach that wrapper.
+      const initializationLogs: string[] = [];
+      const originalInitializeApp = admin.initializeApp.bind(admin);
+      vi.spyOn(admin, 'initializeApp').mockImplementation((options, name) => {
+        initializationLogs.push(JSON.stringify(options));
+        return originalInitializeApp(options, name);
+      });
       const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
       temporaryDirectory = mkdtempSync(resolve(tmpdir(), 'qs-local-signing-'));
       const credentialPath = resolve(temporaryDirectory, 'quantified-self-io-firebase-adminsdk.json');
@@ -72,6 +80,7 @@ describe('Firebase Admin custom-token signing', () => {
       }
       expect(accessToken).not.toHaveBeenCalled();
       expect(admin.app().options.credential).toBe(defaultCredential);
+      expect(initializationLogs.some(log => log.includes('PRIVATE KEY'))).toBe(false);
     },
   );
 });

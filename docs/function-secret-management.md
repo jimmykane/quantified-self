@@ -136,6 +136,8 @@ GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.jso
 
 Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup happens only during custom-token creation and is skipped in deployed runtimes and whenever the Auth emulator is configured. Entering impersonation, restoring the original admin, and the existing provider custom-token helper reuse this signer; admin authorization and impersonation claims are unchanged. A wrong or malformed signing key cannot prevent unrelated Functions from starting.
 
+The signing app uses the modular `firebase-admin/app` initializer and `firebase-admin/auth` service accessor. Do not pass its credential to the namespaced `admin.initializeApp`: Firebase CLI's emulator wrapper serializes those options into debug logs, including private key material. The SDK regression tests reproduce that logging wrapper with synthetic credentials and assert that no private key reaches it.
+
 ### Local script environment precedence
 
 Repository operational scripts load local values in this order without overriding an existing shell variable:
