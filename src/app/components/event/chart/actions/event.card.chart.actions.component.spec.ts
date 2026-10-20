@@ -127,17 +127,37 @@ describe('EventCardChartActionsComponent', () => {
     expect(input.value).toBe('20');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(emit).toHaveBeenCalledExactlyOnceWith({ mode: 'custom', maxGapSeconds: 20 });
-    expect(input.value).toBe('10'); // Rejected before the parent applies an optimistic value.
+    expect(input.value).toBe('20');
     component.lineContinuity = { mode: 'custom', maxGapSeconds: 20 };
     expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     component.isSavingLineContinuity = true; fixture.detectChanges();
     expect(input.disabled).toBe(true);
+    expect(input.value).toBe('20');
     input.dispatchEvent(new Event('change', { bubbles: true }));
     expect(emit).toHaveBeenCalledOnce();
     component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 }; // Parent rolls a failed save back.
     component.isSavingLineContinuity = false; fixture.detectChanges();
     expect(input.value).toBe('10');
     expect(overlay.textContent).toContain('Custom gap limit');
+  });
+
+  it('retains a custom-limit draft for retry when rejected before the parent renders', async () => {
+    component.canChangeLineContinuity = true;
+    component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
+    const emit = vi.spyOn(component.lineContinuityChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const input = overlay.querySelector('input[type="number"]') as HTMLInputElement;
+    input.value = '20';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    // The parent rejects before exposing an optimistic settings snapshot.
+    fixture.detectChanges();
+    expect(component.lineContinuity.maxGapSeconds).toBe(10);
+    expect(input.value).toBe('20');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(emit).toHaveBeenCalledTimes(2);
+    expect(emit).toHaveBeenLastCalledWith({ mode: 'custom', maxGapSeconds: 20 });
   });
 
   it('keeps unauthorized, pending and unchanged continuity requests silent', async () => {

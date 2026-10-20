@@ -594,7 +594,9 @@ still break route lines. Power's 3s display retains its complete-window requirem
 whiskers do not add line context from offscreen raw readings. These policies also govern viewport scaling.
 
 Both preference surfaces validate custom limits, disable pending edits, and provide semantic haptic feedback. Event
-Details rolls back failed saves and ignores late completions after account changes or destruction. Settings refreshes
+Details rolls back failed saves to the latest saved preference and ignores late completions after account changes or
+destruction. The custom-limit input keeps its entered draft until the parent supplies a new value; a rejection before
+that update leaves the draft available for retry without changing the active chart preference. Settings refreshes
 an untouched preference pair without discarding unrelated edits, preserves edited pairs, and omits untouched continuity
 fields from unrelated saves. Existing settings writes and authentication safeguards apply; no new backend endpoint,
 index, rules, migration, or reparse is required.

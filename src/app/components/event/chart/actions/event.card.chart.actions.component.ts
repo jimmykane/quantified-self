@@ -180,19 +180,19 @@ export class EventCardChartActionsComponent {
     if (event.key !== 'Tab' && event.key !== 'Escape') event.stopPropagation();
     if (event.key === 'Enter') {
       event.preventDefault();
-      this.onGapLimitCommit(event);
+      this.onGapLimitCommit();
     }
   }
 
-  onGapLimitCommit(event?: Event): void {
+  onGapLimitCommit(): void {
     const seconds = this.gapLimitDraft();
     if (!this.user || !this.canChangeLineContinuity || this.isSavingLineContinuity
       || this.lineContinuity.mode !== 'custom' || !isValidEventLineGapSeconds(seconds)
       || seconds === this.lineContinuity.maxGapSeconds) return;
-    // Keep this controlled by the parent even if it rejects before a render.
-    // An unchanged settings snapshot must not erase an uncommitted draft.
-    this.gapLimitDraft.set(this.lineContinuity.maxGapSeconds);
-    if (event?.target instanceof HTMLInputElement) event.target.value = `${this.lineContinuity.maxGapSeconds}`;
+    // Keep the entered draft until the parent supplies its saved/optimistic value.
+    // Resetting the native input here can leave it stale when Angular batches the
+    // optimistic update back to the same draft value. A fast rejection keeps the
+    // draft available for retry without changing the active chart preference.
     this.lineContinuityChange.emit({ mode: 'custom', maxGapSeconds: seconds });
     this.analyticsService.logEvent('event_chart_settings_change', { property: 'eventLineContinuity' });
   }

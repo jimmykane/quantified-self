@@ -605,7 +605,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const settings = resolveEventLineContinuity(value);
     if (!userID || this.destroyRef.destroyed || this.isSavingLineContinuity()
       || equalEventLineContinuity(settings, this.lineContinuity())) return;
-    const previousValue = this.lineContinuity();
     const authRevision = this.chartSettingsAuthRevision;
     const isCurrentSave = () => !this.destroyRef.destroyed
       && authRevision === this.chartSettingsAuthRevision && this.chartSettingsUserID() === userID;
@@ -620,7 +619,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     } catch (error) {
       this.logger.error('[EventCardChart] Failed to save line continuity', error);
       if (isCurrentSave()) {
-        this.lineContinuityOverride.set(previousValue);
+        // Follow the current settings stream again. Restoring the value captured
+        // before this write can mask a newer preference saved in another tab.
+        this.lineContinuityOverride.set(null);
         this.hapticsService.error();
         this.snackBar.open('Could not save line continuity. Please try again.', 'OK', { duration: 5000 });
       }

@@ -112,7 +112,7 @@
       <input matInput type="number" min="1" [max]="maxLineGapSeconds" step="1"
         [value]="gapLimitDraft()" [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
         [attr.aria-invalid]="gapLimitInvalid()" [aria-describedby]="gapLimitInvalid() ? gapLimitErrorID : ''"
-        (input)="onGapLimitInput($event)" (change)="onGapLimitCommit($event)"
+        (input)="onGapLimitInput($event)" (change)="onGapLimitCommit()"
         (keydown)="onGapLimitKeydown($event)">
     </mat-form-field>
     @if (gapLimitInvalid()) {

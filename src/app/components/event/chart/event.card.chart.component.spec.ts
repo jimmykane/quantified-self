@@ -254,6 +254,35 @@ describe('EventCardChartComponent', () => {
     expect(mockHaptics.success).toHaveBeenCalledOnce();
   });
 
+  it('restores the latest saved continuity after a failed concurrent edit', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let reject!: (error: Error) => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(
+      () => new Promise<void>((_, fail) => { reject = fail; }),
+    );
+    const pending = component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    // Another settings surface changes the saved preference while this write is pending.
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 30 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    reject(new Error('Save rejected'));
+    await pending;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity()).toEqual({ mode: 'custom', maxGapSeconds: 30 });
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({
+      lineContinuity: { mode: 'custom', maxGapSeconds: 30 },
+    }));
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 60 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity().maxGapSeconds).toBe(60);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
   it.each(['sign-out', 'switch', 'destroy'] as const)('ignores a late continuity save after %s', async action => {
     let reject!: (error: Error) => void;
     mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }));
