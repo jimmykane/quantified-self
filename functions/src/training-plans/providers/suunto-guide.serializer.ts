@@ -14,7 +14,7 @@ import {
     type WorkoutTargetV1,
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
-import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { presentSuuntoRestScreens } from './suunto-rest-presentation';
 import { presentSuuntoSwimmingScreens } from './suunto-swimming-presentation';
 import { presentSuuntoSwimmingScreensV15 } from './suunto-swimming-presentation-v15';
@@ -97,6 +97,8 @@ export interface SerializeSuuntoGuideOptionsV1 {
     allowDegraded: boolean;
     /** Private strength-instruction presentation; canonical external loads remain kg. */
     weightUnits?: WeightUnits;
+    /** Authored strength alias; never inferred from an exercise name. */
+    strengthSport?: ActivityTypes;
 }
 
 const SUUNTO_MINIMUM_SUPPORTED_CHARACTERS = new Set(Array.from(
@@ -810,12 +812,14 @@ function serializeStrength(detailsValue: unknown, options: SerializeSuuntoGuideO
                 ending: { kind: 'time', seconds: set.restAfterSeconds }, targets: [] });
         }
     }));
-    const base = serializeGuide({ version: 1, sport: ActivityTypes.StrengthTraining, nodes }, {
+    const sport = options.strengthSport ?? ActivityTypes.StrengthTraining;
+    if (!isStrengthWorkoutSportV1(sport)) throw new Error('Invalid strength sport.');
+    const base = serializeGuide({ version: 1, sport, nodes }, {
         ...options, allowDegraded: true,
     }, presentation);
     const manualIssue: ProviderSerializationIssueV1 = {
         severity: 'degraded', code: 'manual_strength_repetitions', path: '$.steps',
-        message: 'Suunto Gym Guides show exercise/set instructions and require manual transitions for repetitions; they do not count reps or track load natively.',
+        message: `Suunto ${[ActivityTypes.Kettlebell, ActivityTypes.Calisthenics].includes(sport) ? sport : 'Gym'} Guides show exercise/set instructions and require manual transitions for repetitions; they do not count reps or track load natively.`,
     };
     const issues = [manualIssue, ...base.issues];
     // Manual rep transitions are the normal Gym Guide model, disclosed during Send/Enable sync.

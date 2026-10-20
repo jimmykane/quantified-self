@@ -102,12 +102,15 @@ export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
 ] as const;
 
 /** Explicitly approved fallback sports, not a catch-all for the activity catalog. */
+export const GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1 = [ActivityTypes.Stretching, ActivityTypes.FlexibilityTraining,
+  ActivityTypes.Meditation, ActivityTypes.Breathwork] as const;
 export const GARMIN_GENERIC_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Walking,
   ActivityTypes.Hiking,
   ActivityTypes.Rowing,
   ActivityTypes.IndoorRowing,
   ActivityTypes.OpenWaterSwimming,
+  ...GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1,
 ] as const;
 
 export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
@@ -405,14 +408,13 @@ export function assessPlannedWorkoutProviderMappingV1(
   strength?: StrengthWorkoutDetailsV1 | null,
 ): PlannedWorkoutProviderMappingAssessmentV1 {
   const structure = parseWorkoutStructureV1(value);
-  if (provider === 'coros' && structure.sport === ActivityTypes.StrengthTraining) {
-    return assessCorosStrengthWorkoutV1(structure, strength);
-  }
-  if (provider === 'garmin' && structure.sport === ActivityTypes.StrengthTraining) {
-    return assessGarminStrengthWorkoutV1(structure, strength);
-  }
-  if (provider === 'wahoo' && structure.sport === ActivityTypes.StrengthTraining) {
-    return assessWahooStrengthWorkoutV1(structure, strength);
+  if (provider !== 'suunto' && plannedWorkoutSportAliasV1(provider, structure.sport) === ActivityTypes.StrengthTraining) {
+    const assessment = provider === 'garmin' ? assessGarminStrengthWorkoutV1(structure, strength)
+      : provider === 'coros' ? assessCorosStrengthWorkoutV1(structure, strength) : assessWahooStrengthWorkoutV1(structure, strength);
+    if (structure.sport === ActivityTypes.StrengthTraining) return assessment;
+    return { ...assessment, level: assessment.level === 'unsupported' ? 'unsupported' : 'degraded',
+      issues: [...assessment.issues, { severity: 'degraded' as const, code: 'sport_profile_degraded' as const, path: '$.sport',
+        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} using its Strength Training profile; QS keeps the authored sport.` }].slice(0, 20) };
   }
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
   const profile = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile;
@@ -442,7 +444,7 @@ export function assessPlannedWorkoutProviderMappingV1(
       : corosWorkoutSportFamilyV1(structure.sport);
     if (family) {
       const familyLabel = provider === 'coros' && plannedWorkoutSportAliasV1('coros', structure.sport) === ActivityTypes.TrailRunning
-        ? 'Trail Running' : family === 'RUNNING' ? 'Running' : 'Cycling';
+        ? 'Trail Running' : family === 'RUNNING' ? 'Running' : family === 'CARDIO_TRAINING' ? 'Cardio Training' : 'Cycling';
       issues.push({
         severity: 'degraded',
         code: 'sport_profile_degraded',
@@ -503,6 +505,12 @@ export function assessPlannedWorkoutProviderMappingV1(
       message: `Wahoo ${structure.sport} delivery requires a finite positive timed duration; QS never estimates other endings.` });
   }
   for (const { path, step } of structureSteps(structure)) {
+    if (provider === 'garmin' && (GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(structure.sport)) {
+      if (step.ending.kind !== 'time') issues.push({ severity: 'unsupported', code: 'unsupported_ending',
+        path: `${path}.ending`, message: `Garmin ${structure.sport} Generic delivery supports timed steps only.` });
+      if (step.targets.length) issues.push({ severity: 'unsupported', code: 'unsupported_target',
+        path: `${path}.targets`, message: `Garmin ${structure.sport} Generic delivery supports steps without intensity targets only.` });
+    }
     if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport)) {
       if (step.ending.kind !== 'time') issues.push({
         severity: 'unsupported', code: 'unsupported_ending', path: `${path}.ending`,

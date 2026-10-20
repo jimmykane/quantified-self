@@ -1,3 +1,4 @@
+import { projectStrengthWorkoutToV1, STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -117,6 +118,24 @@ describe('parseRestoreTrainingScheduleRevisionRequest', () => {
 });
 
 describe('applyPlanRevisionRestore', () => {
+    it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('refuses a %s history restore that would lose the current exercise prescription', sport => {
+        const details = { version: 1 as const, workoutId: 'workout-1', revision: 1, exercises: [{ id: 'hold', name: 'Plank',
+            sets: [{ id: 'one', ending: { kind: 'time' as const, seconds: 60 } }] }] };
+        const current = workout({ structure: projectStrengthWorkoutToV1(details, sport) });
+        const before = snapshot([plan()], [current]); before.strengthDetails = new Map([[current.id, details]]);
+        const desired = { plan: plan({ revision: 1 }), workouts: new Map([[current.id, current]]) };
+        expect(() => applyPlanRevisionRestore(before, desired, planRequest(), NOW_MS)).toThrow('Strength history is missing');
+        expect(before.strengthDetails.get(current.id)).toEqual(details);
+        expect(() => applyPlanRevisionRestore(before, { ...desired, strengthDetails: new Map([[current.id, { ...details, workoutId: 'foreign' }]]) },
+            planRequest(), NOW_MS)).toThrow('Strength history is missing');
+        const standalone = { ...current, planId: null };
+        const alone = snapshot([], [standalone]); alone.strengthDetails = before.strengthDetails;
+        expect(() => applyStandaloneRevisionRestore(alone, standalone, { mutationId: 'restore-workout',
+            scope: { kind: 'workout', id: current.id }, targetRevision: 1, expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 9 }, { scope: 'workout', id: current.id, revision: 3 },
+            ] }, NOW_MS)).toThrow('Strength history is missing');
+    });
+
     it.each(['blue', undefined] as const)('restores a saved or pre-color plan revision (%s)', color => {
         const currentPlan = plan({ color: 'purple' });
         const currentWorkout = workout();

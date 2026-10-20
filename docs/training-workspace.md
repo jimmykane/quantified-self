@@ -1139,7 +1139,7 @@ implies workout delivery support. #738 and #739 are complete: approved account-s
 confirmation of all four sports on the watch are recorded there. Synthetic tests and positive API reads alone do not
 prove app/watch visibility, completed activities or behavior on other devices.
 
-Strength Training is one exact Sports Lib sport with a separate exercise-aware editor. Its strict `StrengthWorkoutDetailsV1`
+The exercise-aware editor supports Strength Training and the seven approved strength aliases below. Its strict `StrengthWorkoutDetailsV1`
 companion lives at `users/{uid}/scheduledWorkouts/{workoutId}/strengthDetails/current` and contains ordered exercises,
 individual repetition or timed-hold sets, optional external load in canonical kilograms, and optional rest seconds.
 Only server mutation paths write it. `ScheduledWorkoutV1.structure` stays a valid v1, server-derived compatibility
@@ -1152,7 +1152,7 @@ change load units. An unchanged rounded pound display preserves its stored kilog
 
 Separately, generic interval recipes authored as `Weight Training`, `Core Training`, `LES MILLS CORE`,
 `LES MILLS GRIT Strength` or `LES MILLS BODYPUMP` use Suunto's existing Gym (`23`) profile through the
-`Strength Training` planning alias. These substitutions are degraded
+`Strength Training` planning alias for Suunto interval recipes. These substitutions are degraded
 and require the existing explicit mapping review. `Kettlebell` and `Calisthenics` use their own native Suunto
 recommendation profiles (`63` and `104`), with HR-only default live readings and no profile-substitution loss.
 Additional approved Suunto generic-interval profiles use HR-only default live readings:
@@ -1181,8 +1181,37 @@ Cardio Class substitution), all using indoor Gym Plan family `6`. These support 
 only, including inside repeats. Authorized direct API probes on 20 October 2026 verified Plan metadata, exact downloaded
 JSON prescriptions, dated Workout type/duration, and the independent Plan association for all three; every temporary
 test copy was removed and removal checked. This is cloud evidence, not app/watch playback or an integrated QS queue
-test. No deployment or QS workout/plan creation was performed. Other additional fitness profiles remain limited to the
-explicitly supported provider mappings.
+test. No deployment or QS workout/plan creation was performed. The approved follow-up mappings are:
+
+| Authored QS sport | Garmin | Wahoo | COROS |
+| --- | --- | --- | --- |
+| Weight Training, Kettlebell, Calisthenics, Core Training, LES MILLS CORE, LES MILLS GRIT Strength, LES MILLS BODYPUMP | Strength Training, complete companion and verified exercise names required | Gym / type `42`, complete companion and timed sets/rests required | Existing full-strength mapper; delivery disabled |
+| Crossfit, Circuit Training, Aerobics, HIIT, AMRAP, EMOM, Tabata | Cardio Training | Cardio Class / type `43` | Unsupported |
+| Crosstrainer, Elliptical Trainer | Cardio Training | Elliptical / type `20` | Unsupported |
+| Stretching, Flexibility Training, Meditation, Breathwork | Generic; timed steps without targets | Gym / type `42`; timed steps without targets | Unsupported |
+| Pilates | Existing native Pilates | Gym / type `42`; timed steps without targets | Unsupported |
+
+All substitutions require the existing content-bound mapping review. Wahoo's cardio and elliptical mappings also
+require timed steps without intensity targets. Garmin cardio retains its existing validated interval/target rules.
+QS preserves the original sport in the recipe, editor, library, JSON, copies and revision history. The Strength editor
+now offers all eight names; no exercises, repetitions, loads or durations are inferred. Legacy Suunto interval recipes
+under these names can remain generic intervals without a companion; that does not admit them to Garmin, Wahoo or
+COROS strength delivery. A present companion must match the source workout and its projection. Editing, copying,
+plan transfer, library placement, history and restore retain it; restoring history that would drop it is blocked.
+Suunto rich-strength aliases keep native Kettlebell/Calisthenics recommendations; the other five use Gym, with the
+existing manual-repetition and instruction-only load limitation. Generic interval behavior remains available separately.
+
+Authorized API probes on 20 October 2026 checked all 14 cardio/mobility source names and all seven full-strength
+aliases: Plan metadata, exact downloaded JSON, dated Workout type/duration and independent Plan association.
+Every temporary test Plan and Workout was removed and checked. This proves Cloud acceptance and readback, not
+watch playback. The strength fixture included fractional and explicit zero loads, timed sets and final rests.
+
+The same probes found that Wahoo rejects fractional `workout[minutes]` values, including numeric JSON `1.5`, `1.6`
+and `2.5`, despite its public API describing the field as Number. Whole-minute controls succeeded. New Wahoo Sends
+are therefore blocked before provider writes unless their exact authored total is a positive whole number of minutes.
+QS does not round or pad steps; adjust the recipe explicitly. Exact seconds remain in the Plan file and historical
+payload reconstruction remains available for recovery. Compatibility reads disclose this scheduling limit using the
+existing issue contract. This restriction applies to all Wahoo planned-workout sports, not just strength.
 Virtual Rowing shares the rowing display rule: prescribed distances stay metric, and pace targets, profile
 bounds/axes, summaries, MCP display steps and the Suunto app preview use 500 m splits under metric or imperial
 preferences. Canonical distance and speed values remain unchanged. This display classification does not add a
@@ -1212,6 +1241,14 @@ Yoga/Elliptical Trainer/Cardio Training became supported. Their profiles do not 
 strength-companion, repetition/load or new COROS support. Strict MCP compatibility reads use the same local assessment;
 no wire schema, scope, consent, tool, mutation or plugin changed. Existing provider-labelled delivery workers, queues
 and terminal outcomes remain covered by the unchanged Training monitoring bundle.
+
+The current follow-up catalog audit checked all 1,132 timed/untargeted sport-provider pairs, found no assessment/serializer
+disagreement and preserved all 199 previously supported serializer artifacts and mapping levels. Exactly 26 generic
+recipe/provider pairs became supported; full-strength aliases are tested separately with matching companions.
+Monitoring decision: unchanged. Existing garmin/wahoo/suunto adapters, provider labels, delivery queues, failure and
+approval states remain covered by the Training monitoring bundle; no new endpoint, retry, worker or telemetry label.
+MCP impact: strict read and update coverage extends to all seven companions and preserves the authored sport.
+Registered wire schemas, scopes, confirmation and provider actions remain unchanged.
 
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal
@@ -1477,7 +1514,7 @@ disclosures and haptic ownership. Production deployment and physical device/prov
 
 The authenticated `/training/plans/library` route is a free, noindex part of the Plans workspace. A library entry is an
 undated, owner-scoped `WorkoutLibraryItemV1` at `users/{uid}/workoutLibrary/{itemId}`. It stores a validated v1
-`WorkoutStructureV1`, title, optional complete Strength Training exercise draft, active/archived status, revision and
+`WorkoutStructureV1`, title, optional complete strength exercise draft, active/archived status, revision and
 timestamps. It contains no schedule, completion, provider identity or delivery consent. The canonical structure JSON
 and Sports Lib unit boundary are unchanged. Browser rules permit owner reads only; `mutateWorkoutLibrary` owns
 create, snapshot-from-current-workout, update, status and confirmed deletion. It verifies Auth, App Check, account
@@ -3849,7 +3886,7 @@ Wahoo uses the shared plan settings, standalone Send, Stop, Retry, approval, rec
 available to authenticated Pro users with a connected, correctly scoped Wahoo account and explicit plan/workout consent;
 there is no UID allowlist. The editor and `WorkoutStructureV1` are unchanged. Delivery accepts the
 documented Running/Cycling baseline with time endings throughout. Required Workout `minutes` is the exact sum of
-step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
+step seconds times total repeat passes divided by 60. The exact total must be a whole number of minutes; the live API rejects fractional minutes. Distance endings cannot supply
 that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
 capabilities do not add editor features or imply delivery eligibility. Existing target/degradation approvals still apply.
 The unsupported verdict is visible at the first Send preview, before any Wahoo consent or HTTP operation. A supported
@@ -3864,8 +3901,7 @@ backend compatibility verdict.
 
 #### Wahoo sport-profile mappings and validation (#789)
 
-The explicit Wahoo planning whitelist covers all 15 manual-editor sports and the six already-authorized MCP
-running/cycling subprofiles. It does not widen the editor, recipe contract or MCP consent to the recorded-activity
+The explicit Wahoo planning whitelist covers all 45 manual interval-editor names and the additional fitness and complete-prescription strength names in the mapping table above. It does not widen the editor, recipe contract or MCP consent to the recorded-activity
 catalog. The [Cloud Workout types](https://cloud-api.wahooligan.com/#workout-types) and
 [families](https://cloud-api.wahooligan.com/#workout-type-families) define separate identifiers; the public
 [plan.json format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf) documents only Biking/Running families.
@@ -3884,7 +3920,7 @@ catalog. The [Cloud Workout types](https://cloud-api.wahooligan.com/#workout-typ
 | Swimming / Open Water Swimming | 25 / 26 | 2 | Indoor / Outdoor | Owner-confirmed timed/untargeted playback |
 | Rowing | 39 | 3 | Outdoor | Owner-confirmed timed/untargeted playback |
 | Indoor Rowing | 22 | 6 | Indoor | Owner-confirmed timed/untargeted playback |
-| Strength Training | 42 | 6 | Indoor | Existing full-companion timed sets/rests; instruction-only load |
+| Strength Training and the seven approved strength names | 42 | 6 | Indoor | Complete companion, timed sets/rests, instruction-only load; aliases require profile review |
 
 Authored sports, units and prescriptions remain unchanged in QS. Substitutions and loss of an authored pool length
 use existing degraded compatibility and digest-bound mapping approval; changing an approved prescription requires

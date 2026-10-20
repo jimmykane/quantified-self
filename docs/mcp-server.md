@@ -500,6 +500,17 @@ assessment before delivery; a local exact mapping never promises app/device rece
 evidence remain private. This is a no-wire-impact extension;
 it does not authorize a new provider action or count a planned workout as completed training.
 
+The seven approved strength aliases (Weight Training, Kettlebell, Calisthenics, Core Training, LES MILLS CORE,
+LES MILLS GRIT Strength and LES MILLS BODYPUMP) use the same validated companion when exercises are present.
+Existing strength-detail/recipe/analysis reads preserve the authored sport and complete sets/load/rest. The strict
+strength update proposal retains the existing workout's sport; canonical new strength creates keep their existing
+Strength Training default. No sport field, schema, tool, consent or provider action was added. Legacy generic aliases
+without companions remain readable as intervals; Garmin/COROS/Wahoo strength delivery requires complete matching
+exercise data. Malformed or foreign companions fail before exposure. New cardio/mobility substitutions use existing
+mapping issue codes. Wahoo compatibility additionally reports `scheduling_duration_unavailable` when the exact total
+is not a whole number of minutes: live API probes rejected fractional minutes. Neither read nor preview rounds steps.
+Existing owner/grant/revision-bound confirmation applies to updates and sport-profile losses.
+
 Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in
 canonical kilograms, and optional rest seconds. The old v1 recipe is a derived compatibility summary, not a complete
 prescription. The additive `get_strength_workout_details` read uses only `training-plans:read`, resolves the same

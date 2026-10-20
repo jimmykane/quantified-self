@@ -1,7 +1,8 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it } from 'vitest';
-import { projectStrengthWorkoutToV1, parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, projectStrengthWorkoutToV1, parseStrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { mutateTrainingScheduleForUser } from './persistence';
 import { restoreTrainingScheduleRevisionForUser } from './restore';
 import { deleteTrainingPlanForUser } from './delete-training-plan';
@@ -28,10 +29,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('strength lifecycle in iso
     await db.terminate();
   });
 
-  it('atomically retains details through create, edit, copy, plan transfer and standalone restore', async () => {
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('retains %s through create, edit, copy, plan transfer and restore', async sport => {
     const uid = `strength-${randomUUID()}`; uids.push(uid);
     await db.collection('users').doc(uid).set({ test: true });
-    const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'lift', revision: 1 });
+    const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'lift', revision: 1 }, sport);
     await apply(uid, 0, { kind: 'create-workout', workoutId: 'lift', planId: null,
       localDate: '2026-10-01', title: 'Strength day', structure, strength: draft, confirmPlanRangeExtension: false });
     expect(parseStrengthWorkoutDetailsV1((await detailsRef(uid, 'lift').get()).data()).exercises[0].sets[0].externalLoadKg).toBe(80);
@@ -40,7 +41,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('strength lifecycle in iso
     ] }] };
     await apply(uid, 1, { kind: 'update-workout', workoutId: 'lift', planId: null,
       localDate: '2026-10-01', title: 'Strength day',
-      structure: projectStrengthWorkoutToV1({ ...revised, workoutId: 'lift', revision: 2 }),
+      structure: projectStrengthWorkoutToV1({ ...revised, workoutId: 'lift', revision: 2 }, sport),
       strength: revised, confirmPlanRangeExtension: false }, [{ scope: 'workout', id: 'lift', revision: 1 }]);
     expect((await detailsRef(uid, 'lift').get()).data()?.revision).toBe(2);
     await apply(uid, 2, { kind: 'copy-workout', sourceWorkoutId: 'lift', workoutId: 'lift-copy',
@@ -63,15 +64,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('strength lifecycle in iso
     expect(restored.mutation.workouts[0].revision).toBe(3);
     expect((await detailsRef(uid, 'lift').get()).data()).toMatchObject({ revision: 3,
       exercises: [{ sets: [{ externalLoadKg: 80 }] }] });
+    expect((await workoutRef(uid, 'lift').get()).data()?.structure.sport).toBe(sport);
+    expect((await workoutRef(uid, 'lift-copy').get()).data()?.structure.sport).toBe(sport);
     expect((await detailsRef(uid, 'lift-copy').get()).data()?.exercises[0].sets[0].externalLoadKg).toBe(85);
   });
 
-  it('converts plan workouts without losing strength details', async () => {
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('converts a plan-bound %s workout without losing its companion', async sport => {
     const uid = `strength-${randomUUID()}`; uids.push(uid);
     await db.collection('users').doc(uid).set({ test: true });
     await apply(uid, 0, { kind: 'create-plan', planId: 'plan', name: 'Strength block',
       startLocalDate: '2026-10-01', endLocalDate: '2026-10-31', activate: true });
-    const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'lift', revision: 1 });
+    const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'lift', revision: 1 }, sport);
     await apply(uid, 1, { kind: 'create-workout', workoutId: 'lift', planId: 'plan',
       localDate: '2026-10-01', title: 'Strength day', structure, strength: draft, confirmPlanRangeExtension: false },
     [{ scope: 'plan', id: 'plan', revision: 1 }]);
@@ -82,7 +85,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('strength lifecycle in iso
     expect((await detailsRef(uid, 'lift').get()).data()).toMatchObject({ revision: 1,
       exercises: [{ sets: [{ externalLoadKg: 80, restAfterSeconds: 120 }] }] });
     expect((await workoutRef(uid, 'lift').collection('revisions').doc('0000000002').get()).data()?.strength)
-      .toMatchObject({ workoutId: 'lift', revision: 1 });
+      .toMatchObject({ workoutId: 'lift', revision: 1 }, sport);
   });
 
   it('fails closed when a strength workout has no companion record', async () => {

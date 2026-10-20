@@ -34,6 +34,11 @@ export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Yoga,
   ActivityTypes.EllipticalTrainer,
   ActivityTypes.CardioTraining,
+  ActivityTypes.Pilates,
+  ActivityTypes.Stretching,
+  ActivityTypes.FlexibilityTraining,
+  ActivityTypes.Meditation,
+  ActivityTypes.Breathwork,
   ...plannedWorkoutAliasedSportsV1('wahoo'),
 ])] as const;
 
@@ -78,6 +83,11 @@ export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSp
     case ActivityTypes.EllipticalTrainer: return { family: 6, workoutType: 20, location: 0, untargetedTimeOnly: true };
     case ActivityTypes.CardioTraining: return { family: 6, workoutType: 43, location: 0, untargetedTimeOnly: true,
       foldedTo: 'Cardio Class' };
+    case ActivityTypes.Pilates:
+    case ActivityTypes.Stretching:
+    case ActivityTypes.FlexibilityTraining:
+    case ActivityTypes.Meditation:
+    case ActivityTypes.Breathwork: return { family: 6, workoutType: 42, location: 0, untargetedTimeOnly: true, foldedTo: 'Gym' };
     default: return null;
   }
 }
@@ -102,4 +112,12 @@ export function wahooDurationSeconds(structure: WorkoutStructureV1): number | nu
     }
   }
   return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+/** The dated Workout API rejects fractional minutes (including numeric JSON values).
+ * The Plan file still retains exact seconds; never round the authored prescription. */
+export const WAHOO_WHOLE_MINUTE_ISSUE = 'Wahoo requires a whole-minute total duration for its dated Workout record. Adjust the authored steps to a whole-minute total before sending; QS keeps the exact prescription and does not round it.';
+export function wahooHasFractionalMinutes(structure: WorkoutStructureV1): boolean {
+  const seconds = wahooDurationSeconds(structure);
+  return seconds !== null && !Number.isSafeInteger(seconds / 60);
 }

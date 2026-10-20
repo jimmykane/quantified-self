@@ -1,3 +1,5 @@
+import { wahooHasFractionalMinutes, WAHOO_WHOLE_MINUTE_ISSUE } from '../../../shared/wahoo-workout-sports';
+import { plannedWorkoutSportAliasV1 } from '../../../shared/planned-workout-sport-aliases';
 import * as admin from 'firebase-admin';
 import { analyzeWorkoutStructureV1, WorkoutAnalysisArithmeticError } from '../../../shared/planned-workout-analysis';
 import { formatWorkoutAnalysisSummaryV1 } from '../../../shared/planned-workout-analysis-display';
@@ -10,7 +12,7 @@ import { buildTrainingDeliverySummaries } from '../../../shared/training-deliver
 import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
-import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { parseWorkoutLibraryItemV1 } from '../../../shared/workout-library';
 import { parseTrainingPlanPhasesV1, validateTrainingPlanDateRange, validateTrainingPlanPhaseRange } from '../../../shared/training-plans';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
@@ -169,8 +171,10 @@ export function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, 
   const assessment = assessPlannedWorkoutProviderMappingV1(provider, structure, strength);
   const needsWahooDuration = provider === 'wahoo' && structure.nodes.some(node =>
     (node.kind === 'step' ? [node] : node.steps).some(step => step.ending.kind !== 'time'));
-  const issues = [...(needsWahooDuration ? [WAHOO_SCHEDULING_DURATION_ISSUE] : []), ...assessment.issues].slice(0, 20);
-  const level = needsWahooDuration || assessment.level === 'unsupported' ? 'unsupported' as const
+  const fractional = provider === 'wahoo' && wahooHasFractionalMinutes(structure);
+  const issues = [...(needsWahooDuration ? [WAHOO_SCHEDULING_DURATION_ISSUE] : fractional
+    ? [{ ...WAHOO_SCHEDULING_DURATION_ISSUE, message: WAHOO_WHOLE_MINUTE_ISSUE }] : []), ...assessment.issues].slice(0, 20);
+  const level = needsWahooDuration || fractional || assessment.level === 'unsupported' ? 'unsupported' as const
     : assessment.level === 'degraded' ? 'degraded' as const : 'exact' as const;
   return { provider, level, issues };
 }
@@ -236,6 +240,17 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         measure({ id: 'units', data: { units } });
         return units;
       },
+    };
+    const strengthForWorkout = async (doc: Document, structure: WorkoutStructureV1): Promise<StrengthWorkoutDetailsV1 | undefined> => {
+      if (!isStrengthWorkoutSportV1(structure.sport)) return undefined;
+      const companion = await view.getStrengthDetails?.(doc.id);
+      if (!companion) {
+        if (structure.sport === ActivityTypes.StrengthTraining) throw unavailable();
+        return undefined;
+      }
+      const details = parseStrengthWorkoutDetailsV1(companion.data);
+      if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
+      return details;
     };
     const plans = new Map<string, Document>();
     const resolveSavedWorkout = async (token: string) => {
@@ -354,12 +369,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         const doc = await resolve(a.reference, 'workout', true);
         revision = (await projectWorkout(doc)).revision;
         structure = parseWorkoutStructureV1(doc.data.structure);
-        if (structure.sport === ActivityTypes.StrengthTraining) {
-          const companion = await view.getStrengthDetails?.(doc.id);
-          if (!companion) throw unavailable();
-          const details = parseStrengthWorkoutDetailsV1(companion.data);
-          if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
-        }
+        await strengthForWorkout(doc, structure);
       }
       try {
         const analysis = analyzeWorkoutStructureV1(structure);
@@ -396,12 +406,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const doc = await resolve(a.workoutRef, 'workout', true);
       const summary = await projectWorkout(doc);
       const canonicalStructure = parseWorkoutStructureV1(doc.data.structure);
-      if (canonicalStructure.sport === ActivityTypes.StrengthTraining) {
-        const companion = await view.getStrengthDetails?.(doc.id);
-        if (!companion) throw unavailable();
-        const details = parseStrengthWorkoutDetailsV1(companion.data);
-        if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(canonicalStructure, details)) throw unavailable();
-      }
+      await strengthForWorkout(doc, canonicalStructure);
       // Existing registered clients retain the frozen v1 projection. The additive
       // wire-v2 read returns the selected physical pool length when one was authored.
       if (input.tool !== 'get_planned_workout_v3' && hasAuthoredEarlyLapV1(canonicalStructure))
@@ -425,11 +430,9 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.get_strength_workout_details.parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const structure = parseWorkoutStructureV1(doc.data.structure);
-      if (structure.sport !== ActivityTypes.StrengthTraining) throw new TrainingReadError('invalid_request', 'This is not a strength workout.');
-      const companion = await view.getStrengthDetails?.(doc.id);
-      if (!companion) throw unavailable();
-      const details = parseStrengthWorkoutDetailsV1(companion.data);
-      if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
+      if (!isStrengthWorkoutSportV1(structure.sport)) throw new TrainingReadError('invalid_request', 'This is not a strength workout.');
+      const details = await strengthForWorkout(doc, structure);
+      if (!details) throw unavailable();
       return { scheduleRevision: state.revision, workoutRef: a.workoutRef,
         details: { version: details.version, revision: details.revision, exercises: details.exercises } };
     }
@@ -446,21 +449,18 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.assess_planned_workout_compatibility.parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const structure = parseWorkoutStructureV1(doc.data.structure);
-      let strength: StrengthWorkoutDetailsV1 | undefined;
-      if (structure.sport === ActivityTypes.StrengthTraining) {
-        const companion = await view.getStrengthDetails?.(doc.id);
-        if (!companion) throw unavailable();
-        const details = parseStrengthWorkoutDetailsV1(companion.data);
-        if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
-        strength = details;
-      }
+      const strength = await strengthForWorkout(doc, structure);
       const providers = a.providers ?? PLANNED_WORKOUT_PROVIDER_IDS;
       return { scheduleRevision: state.revision, workoutRef: a.workoutRef,
         assessments: providers.map(provider => {
-          if (structure.sport === ActivityTypes.StrengthTraining && provider === 'suunto') {
+          if (strength && provider === 'suunto') {
+            const native = plannedWorkoutSportAliasV1('suunto', structure.sport);
+            const profile = native === ActivityTypes.StrengthTraining ? 'Gym' : native;
             return { provider, level: 'degraded' as const, issues: [{ severity: 'degraded' as const,
               code: 'strength_guide_degraded' as const, field: '$.strength',
-              message: 'Suunto receives a Gym Guide with exercise and set instructions. Repetitions require manual transitions and this is not native strength tracking. This standard limitation needs no separate mapping approval; additional mapping losses still require review.' }] };
+              message: `Suunto receives a ${profile} Guide with exercise and set instructions. Repetitions require manual transitions and this is not native strength tracking. This standard limitation needs no separate mapping approval; additional mapping losses still require review.` },
+              ...(native !== structure.sport ? [{ severity: 'degraded' as const, code: 'sport_profile_degraded' as const, field: '$.sport',
+                message: `Suunto receives ${structure.sport} using its ${profile} profile; QS keeps the authored sport.` }] : [])] };
           }
           const assessment = assessDeliveryCompatibility(provider, structure, strength);
           return { provider: assessment.provider, level: assessment.level,

@@ -19,7 +19,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
     parseStrengthWorkoutDetailsV1,
     projectStrengthWorkoutToV1,
-    strengthProjectionMatchesDetails,
+    isStrengthWorkoutSportV1, strengthProjectionMatchesDetails,
     type StrengthWorkoutDetailsV1,
     type StrengthWorkoutDraftV1,
 } from '../../../shared/strength-workout';
@@ -228,11 +228,14 @@ export function applyTrainingScheduleMutation(
         structure: ScheduledWorkoutV1['structure'],
         draft: StrengthWorkoutDraftV1 | undefined,
     ): StrengthWorkoutDetailsV1 | null => {
-        if (structure.sport !== ActivityTypes.StrengthTraining) {
+        if (!isStrengthWorkoutSportV1(structure.sport)) {
             if (draft !== undefined) throw new TrainingScheduleMutationError('failed-precondition', 'Strength details require Strength Training.');
             return null;
         }
-        if (!draft) throw new TrainingScheduleMutationError('failed-precondition', 'Strength Training requires its complete exercise prescription.');
+        if (!draft) {
+            if (structure.sport === ActivityTypes.StrengthTraining) throw new TrainingScheduleMutationError('failed-precondition', 'Strength Training requires its complete exercise prescription.');
+            return null;
+        }
         const details = draftDetails(workoutId, revision, draft);
         if (!strengthProjectionMatchesDetails(structure, details)) {
             throw new TrainingScheduleMutationError('failed-precondition', 'Strength projection does not match its exercise prescription.');
@@ -347,7 +350,7 @@ export function applyTrainingScheduleMutation(
                 localDate: operation.localDate,
                 lifecycle: 'planned',
                 title: operation.title,
-                structure: strength ? projectStrengthWorkoutToV1(strength) : cloneValue(operation.structure),
+                structure: strength ? projectStrengthWorkoutToV1(strength, operation.structure.sport) : cloneValue(operation.structure),
                 revision: 1,
                 createdAtMs: nowMs,
                 updatedAtMs: nowMs,
@@ -375,7 +378,7 @@ export function applyTrainingScheduleMutation(
                     localDate: placement.localDate,
                     lifecycle: 'planned',
                     title: operation.title,
-                    structure: strength ? projectStrengthWorkoutToV1(strength) : cloneValue(operation.structure),
+                    structure: strength ? projectStrengthWorkoutToV1(strength, operation.structure.sport) : cloneValue(operation.structure),
                     revision: 1,
                     createdAtMs: nowMs,
                     updatedAtMs: nowMs,
@@ -396,7 +399,10 @@ export function applyTrainingScheduleMutation(
             const strength = validateStrengthInput(workout.id,
                 unchangedStrength ? previousStrength!.revision : (previousStrength?.revision ?? 0) + 1,
                 operation.structure, operation.strength);
-            if ((workout.structure.sport === ActivityTypes.StrengthTraining) !== Boolean(strength)) {
+            if (previousStrength && !strength) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'This workout requires its complete exercise prescription.');
+            }
+            if ((workout.structure.sport === ActivityTypes.StrengthTraining || Boolean(previousStrength)) !== Boolean(strength)) {
                 throw new TrainingScheduleMutationError('failed-precondition', 'Changing between Strength Training and another sport requires a new workout.');
             }
             if (workout.structure.sport === ActivityTypes.StrengthTraining && !after.strengthDetails!.has(workout.id)) {
@@ -411,7 +417,7 @@ export function applyTrainingScheduleMutation(
             workout.planId = operation.planId;
             workout.localDate = operation.localDate;
             workout.title = operation.title;
-            workout.structure = strength ? projectStrengthWorkoutToV1(strength) : cloneValue(operation.structure);
+            workout.structure = strength ? projectStrengthWorkoutToV1(strength, operation.structure.sport) : cloneValue(operation.structure);
             if (strength) after.strengthDetails!.set(workout.id, strength);
             affectPlan(sourcePlanId);
             affectPlan(operation.planId);
@@ -438,7 +444,7 @@ export function applyTrainingScheduleMutation(
         }
         case 'copy-workout': {
             const source = expectWorkout(operation.sourceWorkoutId);
-            if (source.structure.sport === ActivityTypes.StrengthTraining) {
+            if (source.structure.sport === ActivityTypes.StrengthTraining || after.strengthDetails!.has(source.id)) {
                 const sourceDetails = after.strengthDetails!.get(source.id);
                 if (!sourceDetails || !strengthProjectionMatchesDetails(source.structure, sourceDetails)) {
                     throw new TrainingScheduleMutationError('failed-precondition', 'Strength details are missing or mismatched; the workout cannot be copied.');
@@ -521,7 +527,7 @@ export function applyTrainingScheduleMutation(
             workout.revision = previous.revision + 1;
             workout.createdAtMs = previous.createdAtMs;
         }
-        if (workout.structure.sport === ActivityTypes.StrengthTraining) {
+        if (workout.structure.sport === ActivityTypes.StrengthTraining || after.strengthDetails!.has(workout.id)) {
             const details = after.strengthDetails!.get(workout.id);
             if (!details || !strengthProjectionMatchesDetails(workout.structure, details)) {
                 throw new TrainingScheduleMutationError('failed-precondition', 'Strength details are missing or mismatched.');

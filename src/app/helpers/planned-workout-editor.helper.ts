@@ -1,3 +1,4 @@
+import { isStrengthWorkoutSportV1, type StrengthWorkoutSportV1 } from '@shared/strength-workout';
 import { ActivityTypes, DistanceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   formatWorkoutEndingV1,
@@ -16,7 +17,7 @@ import {
 
 import { changeManualEditorTargetSport, manualEditorTargetToWorkout, workoutTargetToManualEditor, type ManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 
-export type ManualWorkoutSport = ManualWorkoutEditorSportV1 | ActivityTypes.StrengthTraining;
+export type ManualWorkoutSport = ManualWorkoutEditorSportV1 | StrengthWorkoutSportV1;
 export type ManualWorkoutEnding = 'time' | 'distance' | 'manual';
 
 export interface ManualWorkoutEditorStep {
@@ -226,7 +227,8 @@ export function workoutStructureToManualEditor(
   structure: WorkoutStructureV1,
   units?: UserUnitSettingsInterface | null,
 ): ManualWorkoutEditorValue {
-  if (!MANUAL_WORKOUT_EDITOR_SPORTS_V1.includes(structure.sport as ManualWorkoutEditorSportV1)) {
+  if (!MANUAL_WORKOUT_EDITOR_SPORTS_V1.includes(structure.sport as ManualWorkoutEditorSportV1)
+    && !(isStrengthWorkoutSportV1(structure.sport) && structure.sport !== ActivityTypes.StrengthTraining)) {
     throw new Error('This workout sport is not supported by the manual editor.');
   }
   return {

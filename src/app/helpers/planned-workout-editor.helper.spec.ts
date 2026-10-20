@@ -1,3 +1,4 @@
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '@shared/strength-workout';
 import { changeManualEditorTargetPresentation, workoutEditorTargetUnit, createManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 import { ActivityTypes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -15,6 +16,12 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('preserves a legacy generic %s recipe without inventing exercises', sport => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'step', id: 'hold', purpose: 'work',
+      ending: { kind: 'time', seconds: 31 }, targets: [] }] };
+    const editor = workoutStructureToManualEditor('Legacy guide', '2026-10-20', recipe);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(recipe);
+  });
   it.each(MANUAL_WORKOUT_EDITOR_SPORTS_V1)('retains the exact %s name and canonical values through JSON, edit and copy', sport => {
     const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] });
     const structure: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'repeat', id: 'pair', count: 2,

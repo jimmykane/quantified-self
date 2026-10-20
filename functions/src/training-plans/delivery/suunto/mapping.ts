@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import { ActivityTypes, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../../shared/unit-aware-display';
-import { strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { serializeSuuntoGuideJsonV1, serializeSuuntoStrengthGuideV1, serializeSuuntoGuideV2ForRecovery,
   serializeSuuntoStrengthGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
   serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery,
@@ -29,8 +29,8 @@ const POOL_SCREEN_MAPPING_VERSION = 'suunto-guides-v9';
 const SWIM_MAPPING_VERSION = 'suunto-guides-v10';
 const LEGACY_MAPPING_VERSIONS = ['suunto-guides-v13', 'suunto-guides-v12', 'suunto-guides-v11', 'suunto-guides-v7', 'suunto-guides-v6', 'suunto-guides-v5', 'suunto-guides-v4', 'suunto-guides-v3', 'suunto-guides-v2'] as const;
 // Choose the unchanged watch graph underneath v13's app-only metadata.
-function watchMappingVersion(workout: ScheduledWorkoutV1): string {
-  return workout.structure.sport === ActivityTypes.StrengthTraining ? STRENGTH_MAPPING_VERSION
+function watchMappingVersion(workout: ScheduledWorkoutV1, strength?: StrengthWorkoutDetailsV1 | null): string {
+  return workout.structure.sport === ActivityTypes.StrengthTraining || strength ? STRENGTH_MAPPING_VERSION
     : hasSuuntoRestPresentation(workout.structure) ? REST_MAPPING_VERSION
     : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(workout.structure.sport) ? SWIM_MAPPING_VERSION
       : workout.structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
@@ -57,15 +57,21 @@ const currentVersion = (workout: ScheduledWorkoutV1) => hasSuuntoTimedRest(worko
 function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: string,
   strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits,
   unitSettings?: UserUnitSettingsInterface, swimmingSettings?: SuuntoSwimmingGuideSettings, generation = 0): ReturnType<typeof serializeSuuntoGuideJsonV1> {
+  const fullStrength = workout.structure.sport === ActivityTypes.StrengthTraining || !!strength;
+  if (fullStrength && (!strength || !isStrengthWorkoutSportV1(workout.structure.sport)
+    || strength.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, strength))) {
+    throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{ severity: 'unsupported',
+      code: 'strength_details_missing', path: '$.strength', message: 'The complete strength prescription is unavailable or mismatched.' }]);
+  }
   if (version === SUUNTO_MAPPING_VERSION) {
     const settings = normalizeUserUnitSettings({ ...unitSettings, ...(weightUnits ? { weightUnits } : {}) });
     // Keep the existing complete-companion validation and weight presentation.
-    const result = workout.structure.sport === ActivityTypes.StrengthTraining
+    const result = fullStrength
       ? mapGuide(workout, destination, owner, strength, PREVIEW_MAPPING_VERSION, weightUnits, unitSettings, swimmingSettings, generation)
       : serializeSuuntoRestAlertGuideV16(workout.structure, { name: workout.title, owner: validateGuideOwner(owner),
         url: 'https://quantified-self.io/training/plans', localDate: workout.localDate, sourceWorkoutId: workout.id,
         externalId: guideExternalId(destination, workout.id, generation), allowDegraded: true }, swimmingSettings, settings);
-    const artifact = workout.structure.sport === ActivityTypes.StrengthTraining
+    const artifact = fullStrength
       ? { ...result.artifact, steps: addSuuntoRestCountdownAlerts(result.artifact.steps) } : result.artifact;
     return { ...result, artifact: withSuuntoGuideDescription(artifact,
       suuntoGuideDescription(workout.structure, workout.title, settings, strength)) };
@@ -83,19 +89,15 @@ function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: strin
   }
   if (version === PREVIEW_MAPPING_VERSION) {
     const settings = normalizeUserUnitSettings({ ...unitSettings, ...(weightUnits ? { weightUnits } : {}) });
-    const result = mapGuide(workout, destination, owner, strength, watchMappingVersion(workout), settings.weightUnits, undefined, undefined, generation);
+    const result = mapGuide(workout, destination, owner, strength, watchMappingVersion(workout, strength), settings.weightUnits, undefined, undefined, generation);
     return { ...result, artifact: withSuuntoGuideDescription(result.artifact,
       suuntoGuideDescription(workout.structure, workout.title, settings, strength)) };
-  }
-  if (workout.structure.sport === ActivityTypes.StrengthTraining &&
-    (!strength || strength.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, strength))) {
-    throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{ severity: 'unsupported',
-      code: 'strength_details_missing', path: '$.strength', message: 'The complete strength prescription is unavailable or mismatched.' }]);
   }
   const options = { name: workout.title, owner: validateGuideOwner(owner),
     url: 'https://quantified-self.io/training/plans', localDate: workout.localDate,
     sourceWorkoutId: workout.id, externalId: guideExternalId(destination, workout.id, generation), allowDegraded: true,
-    ...(version === STRENGTH_MAPPING_VERSION ? { weightUnits } : {}) };
+    ...(version === STRENGTH_MAPPING_VERSION ? { weightUnits } : {}),
+    ...(strength && workout.structure.sport !== ActivityTypes.StrengthTraining ? { strengthSport: workout.structure.sport } : {}) };
   const recipeSerializer = version === 'suunto-guides-v2' ? serializeSuuntoGuideV2ForRecovery
     : version === 'suunto-guides-v3' ? serializeSuuntoGuideV3ForRecovery
       : version === 'suunto-guides-v4' ? serializeSuuntoGuideV4ForRecovery

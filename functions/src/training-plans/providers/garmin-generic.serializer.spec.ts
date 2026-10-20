@@ -1,7 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { parseWorkoutStructureV1, type WorkoutStructureV1, type WorkoutTargetV1 } from '../../../../shared/planned-workout';
-import { GARMIN_GENERIC_WORKOUT_SPORTS_V1, assessPlannedWorkoutProviderMappingV1 } from '../../../../shared/planned-workout-providers';
+import { GARMIN_GENERIC_WORKOUT_SPORTS_V1, GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1, assessPlannedWorkoutProviderMappingV1 } from '../../../../shared/planned-workout-providers';
 import { serializeGarminWorkoutV1 } from './garmin-workout.serializer';
 import { ProviderWorkoutMappingError } from './provider-mapping';
 
@@ -18,7 +18,7 @@ function recipe(sport: ActivityTypes): WorkoutStructureV1 {
 }
 
 describe('Garmin explicit Generic fallback', () => {
-    it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('preserves %s while disclosing Generic and requiring approval', sport => {
+    it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1.filter(sport => !(GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)))('preserves %s while disclosing Generic and requiring approval', sport => {
         const structure = recipe(sport);
         const before = JSON.stringify(structure);
         expect(parseWorkoutStructureV1(JSON.parse(before))).toEqual(structure);

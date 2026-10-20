@@ -1,5 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../shared/strength-workout';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../shared/strength-workout';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
     TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
@@ -145,14 +145,15 @@ describe('applyTrainingScheduleMutation', () => {
         initial = snapshot();
     });
 
-    it('keeps exercise-aware strength details paired through create, move, copy, and edit', () => {
+    it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('keeps %s exercise details paired through create, move, copy, and edit', sport => {
         const strength: StrengthWorkoutDraftV1 = { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [
             { id: 'set-a', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 90 },
         ] }] };
-        const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'lift', revision: 1 });
+        const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'lift', revision: 1 }, sport);
         const created = applyTrainingScheduleMutation(initial, request({ kind: 'create-workout', workoutId: 'lift',
             planId: null, localDate: '2026-09-03', title: 'Lift', structure, strength,
             confirmPlanRangeExtension: false }), NOW_MS);
+        expect(created.after.workouts.get('lift')?.structure.sport).toBe(sport);
         expect(created.after.strengthDetails?.get('lift')).toMatchObject({ workoutId: 'lift', revision: 1,
             exercises: [{ sets: [{ externalLoadKg: 80, restAfterSeconds: 90 }] }] });
         const moved = applyTrainingScheduleMutation(created.after, {
@@ -184,7 +185,7 @@ describe('applyTrainingScheduleMutation', () => {
                 { scope: 'state', id: 'current', revision: 10 }, { scope: 'workout', id: 'lift', revision: 2 },
             ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
                 localDate: '2026-09-04', title: 'Heavier',
-                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }),
+                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }, sport),
                 strength: revisedStrength, confirmPlanRangeExtension: false },
         }, NOW_MS + 3);
         expect(edited.after.strengthDetails?.get('lift')?.revision).toBe(2);
@@ -194,7 +195,7 @@ describe('applyTrainingScheduleMutation', () => {
                 { scope: 'state', id: 'current', revision: 11 }, { scope: 'workout', id: 'lift', revision: 3 },
             ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
                 localDate: '2026-09-04', title: 'Renamed',
-                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }),
+                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }, sport),
                 strength: revisedStrength, confirmPlanRangeExtension: false },
         }, NOW_MS + 4);
         expect(renamed.after.strengthDetails?.get('lift')?.revision).toBe(2);

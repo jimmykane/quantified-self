@@ -1,4 +1,4 @@
-import { wahooDurationSeconds, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
+import { wahooHasFractionalMinutes, WAHOO_WHOLE_MINUTE_ISSUE, wahooDurationSeconds, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
@@ -39,7 +39,8 @@ export function assessWahooDelivery(workout: ScheduledWorkoutV1, destination: st
   strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
   const assessment = assessTrainingDeliveryMapping('wahoo', workout, destination, zone, strength);
   const duration = wahooDurationSeconds(workout.structure);
-  return { ...assessment, ...(duration === null ? { level: 'unsupported' as const, issues: [WAHOO_DURATION_ISSUE, ...assessment.issues].slice(0, 20) } : {}),
+  const issue = duration === null ? WAHOO_DURATION_ISSUE : wahooHasFractionalMinutes(workout.structure) ? WAHOO_WHOLE_MINUTE_ISSUE : null;
+  return { ...assessment, ...(issue ? { level: 'unsupported' as const, issues: [issue, ...assessment.issues].slice(0, 20) } : {}),
     mappingVersion: WAHOO_MAPPING_VERSION, digest: hashTrainingScheduleRequestPayload({ version: WAHOO_MAPPING_VERSION, digest: assessment.digest, duration }) };
 }
 export function wahooPlanBody(workout: ScheduledWorkoutV1, destination: string, create: boolean,
@@ -53,6 +54,8 @@ export function wahooPlanBody(workout: ScheduledWorkoutV1, destination: string, 
     'plan[filename]': 'plan.json', 'plan[provider_updated_at]': new Date(workout.updatedAtMs).toISOString(),
     ...(create ? { 'plan[external_id]': wahooIdentities(destination, workout.id, generation).externalId } : {}) }).toString();
 }
+/** Exact historical payload construction is also used for recovery. New sends
+ * must pass assessWahooDelivery, including the whole-minute API requirement. */
 export function wahooWorkoutFields(workout: ScheduledWorkoutV1, destination: string, zone: string, planId: string) {
   const seconds = wahooDurationSeconds(workout.structure);
   if (seconds === null) throw new TrainingDeliveryTransportError('terminal');

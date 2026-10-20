@@ -8,7 +8,7 @@ export type PlannedWorkoutSportAliasProvider = 'suunto' | 'garmin' | 'coros' | '
  * The authored sport stays on the QS recipe and in its approval digest. */
 export const PLANNED_WORKOUT_SPORT_ALIASES_V1: ReadonlyArray<{
   sport: ActivityTypes;
-  suunto: ActivityTypes;
+  suunto: ActivityTypes | null;
   garmin: ActivityTypes | null;
   coros: ActivityTypes | null;
   wahoo: ActivityTypes | null;
@@ -41,21 +41,30 @@ export const PLANNED_WORKOUT_SPORT_ALIASES_V1: ReadonlyArray<{
     suunto: ActivityTypes.Walking, garmin: ActivityTypes.Walking, coros: null, wahoo: ActivityTypes.Walking })),
   { sport: ActivityTypes.Trekking, suunto: ActivityTypes.Hiking, garmin: ActivityTypes.Hiking,
     coros: null, wahoo: ActivityTypes.Hiking },
-  // Generic lifting intervals reuse Suunto's existing Gym guide. Other providers
-  // require their exercise-aware strength contract; this alias does not grant it.
+  // Suunto retains generic interval delivery. Other providers require the full
+  // matching exercise prescription through their existing strength workflow.
   { sport: ActivityTypes.WeightTraining, suunto: ActivityTypes.StrengthTraining,
-    garmin: null, coros: null, wahoo: null },
+    garmin: ActivityTypes.StrengthTraining, coros: ActivityTypes.StrengthTraining, wahoo: ActivityTypes.StrengthTraining },
   ...[ActivityTypes.CoreTraining, ActivityTypes.LesMillsCore, ActivityTypes.LesMillsGritStrength,
     Refined.LesMillsBODYPUMP].map(sport => ({ sport, suunto: ActivityTypes.StrengthTraining,
-    garmin: null, coros: null, wahoo: null })),
+    garmin: ActivityTypes.StrengthTraining, coros: ActivityTypes.StrengthTraining, wahoo: ActivityTypes.StrengthTraining })),
+  ...[ActivityTypes.Kettlebell, ActivityTypes.Calisthenics].map(sport => ({ sport, suunto: sport,
+    garmin: ActivityTypes.StrengthTraining, coros: ActivityTypes.StrengthTraining, wahoo: ActivityTypes.StrengthTraining })),
   { sport: ActivityTypes.VirtualRowing, suunto: ActivityTypes.IndoorRowing,
     garmin: ActivityTypes.IndoorRowing, coros: null, wahoo: ActivityTypes.IndoorRowing },
   { sport: ActivityTypes.FlexibilityTraining, suunto: ActivityTypes.Stretching,
     garmin: null, coros: null, wahoo: null },
   { sport: ActivityTypes.EllipticalTrainer, suunto: ActivityTypes.Crosstrainer,
-    garmin: null, coros: null, wahoo: null },
+    garmin: ActivityTypes.CardioTraining, coros: null, wahoo: ActivityTypes.EllipticalTrainer },
   { sport: ActivityTypes.Breathwork, suunto: ActivityTypes.Meditation,
     garmin: null, coros: null, wahoo: null },
+  { sport: ActivityTypes.Crosstrainer, suunto: ActivityTypes.Crosstrainer,
+    garmin: ActivityTypes.CardioTraining, coros: null, wahoo: ActivityTypes.EllipticalTrainer },
+  ...[ActivityTypes.Crossfit, ActivityTypes['Circuit Training'], ActivityTypes.Aerobics,
+    ActivityTypes.HIIT, ActivityTypes.AMRAP, ActivityTypes.EMOM, ActivityTypes.Tabata].map(sport => ({ sport,
+    suunto: ([ActivityTypes.Crossfit, ActivityTypes['Circuit Training'], ActivityTypes.Aerobics] as ActivityTypes[])
+      .includes(sport) ? sport : null,
+    garmin: ActivityTypes.CardioTraining, coros: null, wahoo: ActivityTypes.CardioTraining })),
 ];
 
 export function plannedWorkoutSportAliasV1(provider: PlannedWorkoutSportAliasProvider, sport: ActivityTypes): ActivityTypes {

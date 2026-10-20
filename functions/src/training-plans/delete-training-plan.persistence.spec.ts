@@ -1,3 +1,4 @@
+import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -363,6 +364,26 @@ describe('deleteTrainingPlanForUser persistence', () => {
             db: db as never,
             nowMs: NOW_MS + 1,
         })).rejects.toMatchObject({ code: 'already-exists' });
+    });
+
+    it('rejects a foreign strength-alias companion reread while staging a chunked plan conversion', async () => {
+        const large = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, i) => ({ ...STRUCTURE.nodes[0],
+            id: `step-${i}`, note: 'High entropy conversion segment. '.repeat(15).slice(0, 490) })) };
+        const details = { version: 1 as const, workoutId: 'workout-000', revision: 1, exercises: [{ id: 'hold', name: 'Plank',
+            sets: [{ id: 'one', ending: { kind: 'time' as const, seconds: 60 } }] }] };
+        const workouts = Array.from({ length: 400 }, (_, i) => ({ ...workout(`workout-${`${i}`.padStart(3, '0')}`), structure: large }));
+        workouts[0].structure = projectStrengthWorkoutToV1(details, ActivityTypes.WeightTraining) as typeof large;
+        seed(db, workouts);
+        const path = 'users/user-1/scheduledWorkouts/workout-000/strengthDetails/current';
+        db.seed(path, details);
+        const getAll = db.getAll.bind(db);
+        vi.spyOn(db, 'getAll').mockImplementation(async (...refs) => {
+            if (refs.some(ref => ref.path === path)) db.seed(path, { ...details, workoutId: 'foreign-workout' });
+            return getAll(...refs);
+        });
+        await expect(deleteTrainingPlanForUser('user-1', request('convert-to-standalone'),
+            { db: db as never, nowMs: NOW_MS })).rejects.toThrow('Strength details are mismatched');
+        expect(db.read('users/user-1/scheduledWorkouts/workout-000')?.planId).toBe('plan-1');
     });
 
     it('stages 400 high-complexity conversion snapshots in bounded chunks and patches current roots atomically', async () => {

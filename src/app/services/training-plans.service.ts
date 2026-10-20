@@ -287,10 +287,15 @@ export class TrainingPlansService {
     return completions$;
   }
 
-  async getStrengthDetails(userId: string, workoutId: string): Promise<StrengthWorkoutDetailsV1> {
+  getStrengthDetails(userId: string, workoutId: string): Promise<StrengthWorkoutDetailsV1>;
+  getStrengthDetails(userId: string, workoutId: string, optional: true): Promise<StrengthWorkoutDetailsV1 | null>;
+  async getStrengthDetails(userId: string, workoutId: string, optional = false): Promise<StrengthWorkoutDetailsV1 | null> {
     const snapshot = await getDoc(doc(this.firestore, 'users', userId, SCHEDULED_WORKOUTS_COLLECTION_ID,
       workoutId, STRENGTH_DETAILS_COLLECTION_ID, STRENGTH_DETAILS_DOCUMENT_ID));
-    if (!snapshot.exists()) throw new Error('The strength prescription is missing. Reload before editing this workout.');
+    if (!snapshot.exists()) {
+      if (optional) return null;
+      throw new Error('The strength prescription is missing. Reload before editing this workout.');
+    }
     const details = parseStrengthWorkoutDetailsV1(snapshot.data());
     if (details.workoutId !== workoutId) throw new Error('The strength prescription does not match this workout.');
     return details;

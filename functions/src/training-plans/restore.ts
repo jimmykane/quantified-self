@@ -6,7 +6,7 @@ import {
     STRENGTH_DETAILS_COLLECTION_ID,
     STRENGTH_DETAILS_DOCUMENT_ID,
     parseStrengthWorkoutDetailsV1,
-    strengthProjectionMatchesDetails,
+    isStrengthWorkoutSportV1, strengthProjectionMatchesDetails,
     type StrengthWorkoutDetailsV1,
 } from '../../../shared/strength-workout';
 import {
@@ -240,9 +240,12 @@ export function applyPlanRevisionRestore(
             createdAtMs: current.createdAtMs,
             updatedAtMs: nowMs,
         });
-        if (restored.structure.sport === ActivityTypes.StrengthTraining) {
+        if (before.strengthDetails?.has(workoutId) && !desired.strengthDetails?.has(workoutId)) {
+            throw new TrainingScheduleMutationError('failed-precondition', `Strength history is missing for ${workoutId}.`);
+        }
+        if (restored.structure.sport === ActivityTypes.StrengthTraining || desired.strengthDetails?.has(workoutId)) {
             const source = desired.strengthDetails?.get(workoutId);
-            if (!source || !strengthProjectionMatchesDetails(restored.structure, source)) {
+            if (!source || source.workoutId !== workoutId || !strengthProjectionMatchesDetails(restored.structure, source)) {
                 throw new TrainingScheduleMutationError('failed-precondition', `Strength history is missing for ${workoutId}.`);
             }
             const currentDetails = before.strengthDetails?.get(workoutId);
@@ -254,7 +257,7 @@ export function applyPlanRevisionRestore(
             }));
         }
         if (!logicalValuesEqual(current, restored)
-            || (restored.structure.sport === ActivityTypes.StrengthTraining
+            || (desired.strengthDetails?.has(workoutId)
                 && JSON.stringify(before.strengthDetails?.get(workoutId)?.exercises)
                     !== JSON.stringify(desired.strengthDetails?.get(workoutId)?.exercises))) {
             after.workouts.set(workoutId, restored);
@@ -353,8 +356,11 @@ export function applyStandaloneRevisionRestore(
         updatedAtMs: nowMs,
         ...(desired.lifecycle === 'deleted' ? { deletedAtMs: nowMs } : {}),
     });
-    if (restored.structure.sport === ActivityTypes.StrengthTraining) {
-        if (!desiredStrength || !strengthProjectionMatchesDetails(restored.structure, desiredStrength)) {
+    if (before.strengthDetails?.has(current.id) && !desiredStrength) {
+        throw new TrainingScheduleMutationError('failed-precondition', 'Strength history is missing or mismatched.');
+    }
+    if (restored.structure.sport === ActivityTypes.StrengthTraining || desiredStrength) {
+        if (!desiredStrength || desiredStrength.workoutId !== current.id || !strengthProjectionMatchesDetails(restored.structure, desiredStrength)) {
             throw new TrainingScheduleMutationError('failed-precondition', 'Strength history is missing or mismatched.');
         }
         after.strengthDetails!.set(current.id, parseStrengthWorkoutDetailsV1({
@@ -421,14 +427,17 @@ export async function readCurrentScheduleForRestore(
         const parsed = parseScheduledWorkoutV1(documentData(snapshot));
         workouts.set(parsed.id, parsed);
     });
-    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const strengthWorkouts = [...workouts.values()].filter(workout => isStrengthWorkoutSportV1(workout.structure.sport));
     const strengthSnapshots = await Promise.all(strengthWorkouts.map(workout => transaction.get(
         workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
     )));
     const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
     strengthSnapshots.forEach((detailsSnapshot, index) => {
         const workout = strengthWorkouts[index];
-        if (!detailsSnapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+        if (!detailsSnapshot.exists) {
+            if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+            return;
+        }
         const details = parseStrengthWorkoutDetailsV1(documentData(detailsSnapshot));
         if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
             throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);

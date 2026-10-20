@@ -19,7 +19,7 @@ import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store'
 import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { processTrainingVerification } from '../training-plans/delivery/verification-worker';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
-import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { decodeOpaqueValue, encodeOpaqueValue } from './data.service';
 import { createFirestoreTrainingReads, readTrainingPlans } from './training-plans.service';
@@ -1075,7 +1075,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ]);
   });
 
-  it('previews and applies a complete strength prescription without widening the v1 recipe tool', async () => {
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('edits complete %s through the existing strength contract and keeps its authored sport', async sport => {
     const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Back squat', sets: [{
       id: 'set-one', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80,
       restAfterSeconds: 120,
@@ -1092,6 +1092,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const companion = await workout.ref.collection('strengthDetails').doc('current').get();
     expect(parseStrengthWorkoutDetailsV1(companion.data()).exercises[0].sets[0])
       .toMatchObject({ externalLoadKg: 80, restAfterSeconds: 120 });
+    await workout.ref.update({ structure: projectStrengthWorkoutToV1({ ...strength, workoutId: workout.id, revision: 1 }, sport) });
+    const edited = { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], externalLoadKg: 85 }] }] };
+    const update = await previewStrengthWorkoutChange({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: applied.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: applied.createdReferences[0].reference }, plan: null, localDate: '2026-09-18',
+        title: 'Edited strength', strength: edited } } }, deps);
+    await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: update.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await workout.ref.get()).get('structure.sport')).toBe(sport);
+    expect((await companion.ref.get()).get('exercises')[0].sets[0].externalLoadKg).toBe(85);
     expect(applied.createdReferences).toEqual([expect.objectContaining({ localKey: 'lift', kind: 'workout' })]);
     await expect(applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(applied);
@@ -1825,8 +1835,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const wahoo = new WahooHttpFixture();
     deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
-      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Yoga session',
-        structure: { ...structure, sport: ActivityTypes.Yoga },
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Football session',
+        structure: { ...structure, sport: ActivityTypes.Football },
         delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', availability: 'unavailable',
       summary: expect.stringContaining('cannot receive this workout') })]);
@@ -1892,8 +1902,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const wahoo = new WahooHttpFixture();
     deps.runtime.transport = provider => provider === 'wahoo' ? new WahooTrainingTransport(wahoo.request, deps.now) : null;
     const authored = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
-      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Yoga session',
-        structure: { ...structure, sport: ActivityTypes.Yoga } } }, deps);
+      arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Football session',
+        structure: { ...structure, sport: ActivityTypes.Football } } }, deps);
     const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: authored.proposalRef, permissionMode: 'schedule' } }, deps);
     const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,

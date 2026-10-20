@@ -396,7 +396,7 @@
             <ol class="workout-summary">
               @for (summary of row.summary; track $index) { <li>{{ summary }}</li> }
             </ol>
-            @if (row.item.structure.sport !== strengthSport) {
+            @if (!row.item.strength) {
               <app-workout-profile [structure]="row.item.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
                 [contextKey]="currentUser()?.uid + '/library/' + row.item.id + '/' + row.item.revision" [initiallyExpanded]="false"
                 unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
@@ -548,7 +548,7 @@
                   <mat-optgroup [label]="group.label">
                     @for (sport of group.options; track sport.value) {
                       <mat-option [value]="sport.value"
-                        [disabled]="session.mode === 'edit' && (sport.value === strengthSport || session.value.sport === strengthSport) && sport.value !== session.value.sport">{{ sport.label }}</mat-option>
+                        [disabled]="session.mode === 'edit' && (group.strength || !!session.strength || session.strengthLoading) && sport.value !== session.value.sport">{{ sport.label }}</mat-option>
                     }
                   </mat-optgroup>
                 }

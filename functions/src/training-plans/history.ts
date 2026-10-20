@@ -3,7 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
     parseStrengthWorkoutDetailsV1,
-    strengthProjectionMatchesDetails,
+    isStrengthWorkoutSportV1, strengthProjectionMatchesDetails,
     type StrengthWorkoutDetailsV1,
 } from '../../../shared/strength-workout';
 import {
@@ -49,11 +49,14 @@ export interface ReconstructedTrainingPlanRevisionV1 {
 }
 
 function checkedStrength(workout: ScheduledWorkoutV1 | null, candidate: unknown, path: string): StrengthWorkoutDetailsV1 | null {
-    if (!workout || workout.structure.sport !== ActivityTypes.StrengthTraining) {
+    if (!workout || !isStrengthWorkoutSportV1(workout.structure.sport)) {
         if (candidate !== undefined && candidate !== null) throw new Error(`${path} has strength details without Strength Training.`);
         return null;
     }
-    if (candidate === undefined || candidate === null) throw new Error(`${path} is missing strength details.`);
+    if (candidate === undefined || candidate === null) {
+        if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new Error(`${path} is missing strength details.`);
+        return null;
+    }
     const details = parseStrengthWorkoutDetailsV1(candidate);
     if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
         throw new Error(`${path} has mismatched strength details.`);

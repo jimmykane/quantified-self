@@ -1,7 +1,7 @@
+import { isStrengthWorkoutSportV1 } from '../../../../../shared/strength-workout';
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { normalizeTrainingLocalDate, type ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { assessTrainingDeliveryMapping, garminWorkoutMapping } from '../mapping';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
   type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
@@ -53,7 +53,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   }
 
   private validate(operation: DeliveryOperation): void {
-    if (operation.kind === 'upsert' && operation.workout?.structure.sport === ActivityTypes.StrengthTraining) {
+    if (operation.kind === 'upsert' && isStrengthWorkoutSportV1(operation.workout?.structure.sport)) {
       // Repair and recovery have early acceptance paths before execute's payload check.
       // Bind the full prescription there too, including load-only changes absent from v1.
       const assessment = this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength);

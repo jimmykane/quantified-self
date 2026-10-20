@@ -608,15 +608,17 @@ describe('help.content', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const sport of ['Weight Training', 'Core Training', 'LES MILLS CORE', 'LES MILLS GRIT Strength', 'LES MILLS BODYPUMP',
       'Virtual Rowing', 'Kettlebell', 'Calisthenics']) expect(content).toContain(`**${sport}**`);
-    expect(content).toContain('**Gym / Strength Training** profile');
-    expect(content).toContain('asks you to review these profile mappings before sending');
-    expect(content).toContain('**Kettlebell** and **Calisthenics** use their own Suunto profiles');
+    expect(content).toContain('Garmin and Wahoo use their existing Strength/Gym workflows after profile review');
+    expect(content).toContain('full-strength delivery to Garmin/Wahoo requires the complete exercise prescription');
+    expect(content).toContain('Suunto uses native Kettlebell/Calisthenics recommendations');
     expect(content).toContain('The manual interval editor keeps its current sport choices');
     for (const sport of ['Yoga', 'Pilates', 'Stretching', 'Flexibility Training', 'Crossfit', 'Circuit Training', 'Aerobics',
       'Crosstrainer', 'Elliptical Trainer', 'Meditation', 'Breathwork']) expect(content).toContain(`**${sport}**`);
     expect(content).toContain('**Garmin fitness profiles:** **Yoga**, **Pilates** and **Cardio Training**');
     expect(content).toContain('**Wahoo fitness profiles:** **Yoga** and **Elliptical Trainer**');
     expect(content).toContain('app/watch playback has not');
+    expect(content).toContain('**Wahoo total duration:**');
+    expect(content).toContain('QS keeps exact seconds and does not round or add time');
     expect(content).toContain('**Virtual Rowing** uses **Indoor Rowing** on Suunto and Wahoo, and **Generic** on Garmin');
     expect(content).toContain('Prescribed distances use metric units and pace targets use **500 m splits**, including with imperial distance settings');
     expect(content).toContain('Wahoo accepts only timed steps with no intensity targets');

@@ -26,7 +26,7 @@ import {
   type TrainingScheduleMutationOperationV1,
 } from '../../../shared/training-plans';
 import { formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
-import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
@@ -356,14 +356,17 @@ async function loadSnapshot(
       if (workout.id !== doc.id) unavailable();
       workouts.set(workout.id, workout);
     });
-    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const strengthWorkouts = [...workouts.values()].filter(workout => isStrengthWorkoutSportV1(workout.structure.sport));
     const strengthDocs = strengthWorkouts.length ? await tx.getAll(...strengthWorkouts.map(workout =>
       user.collection('scheduledWorkouts').doc(workout.id).collection('strengthDetails').doc('current'))) : [];
     const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
     strengthDocs.forEach((doc, index) => {
-      if (!doc.exists) unavailable();
-      const details = parseStrengthWorkoutDetailsV1(doc.data());
       const workout = strengthWorkouts[index];
+      if (!doc.exists) {
+        if (workout.structure.sport === ActivityTypes.StrengthTraining) unavailable();
+        return;
+      }
+      const details = parseStrengthWorkoutDetailsV1(doc.data());
       if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) unavailable();
       strengthDetails.set(workout.id, details);
     });
@@ -485,7 +488,7 @@ function describeScheduleEffects(
   if (workoutId) {
     const workout = after.workouts.get(workoutId);
     if (workout && operation.kind !== 'move-workout') {
-      details.push(workout.structure.sport === ActivityTypes.StrengthTraining
+      details.push(workout.structure.sport === ActivityTypes.StrengthTraining || after.strengthDetails?.has(workout.id)
         ? 'Strength recipe: review the full exercise prescription; the v1 structure is only a compatibility summary.'
         : describeTrainingRecipeReview(workout.structure));
     }
@@ -746,7 +749,7 @@ async function previewSimulatedProviderAvailability(
     : undefined;
   const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone,
     snapshot.strengthDetails?.get(item.id) ?? null,
-    item.structure.sport === ActivityTypes.StrengthTraining ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings));
+    snapshot.strengthDetails?.has(item.id) ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings));
   const warningCount = assessments.filter(item => item && item.level !== 'exact').length;
   const today = trainingDeliveryLocalDate(deps.now(), timeZone);
   const eligibleCount = workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
@@ -956,6 +959,11 @@ export async function previewTrainingChanges(
       }
     }
     const operation = resolveScheduleOperation(change, input, simulated, locals, deps.randomId);
+    if (recipeMode === 'strength' && operation.kind === 'update-workout' && operation.strength) {
+      const current = simulated.workouts.get(operation.workoutId);
+      if (!current || !simulated.strengthDetails?.has(current.id)) invalid('This workout needs its existing complete strength prescription.');
+      operation.structure = projectStrengthWorkoutToV1({ ...operation.strength, workoutId: current.id, revision: 1 }, current.structure.sport);
+    }
     const request = parseMutateTrainingScheduleRequestV1({ mutationId: `mcp-proposal-${index}-${deps.randomId()}`,
       expectedRevisions: expectedRevisions(simulated, operation), operation });
     const before = simulated;
@@ -967,7 +975,7 @@ export async function previewTrainingChanges(
       const previous = operation.kind === 'update-workout' ? before.workouts.get(operation.workoutId) : null;
       const unchangedRecipeAndTitle = previous?.title === operation.title
         && JSON.stringify(previous.structure) === JSON.stringify(operation.structure);
-      if (!unchangedRecipeAndTitle && operation.structure.sport !== ActivityTypes.StrengthTraining) {
+      if (!unchangedRecipeAndTitle && !operation.strength) {
         const conflict = findTrainingPrescriptionConflict(operation.title, operation.structure);
         if (conflict) invalid(`Change ${index + 1}: ${conflict}`);
       }
@@ -997,6 +1005,7 @@ export async function previewTrainingChanges(
       && 'workoutId' in operation ? simulated.workouts.get(operation.workoutId)?.structure : null;
     publicChanges.push({ index, kind: operation.kind, summary: summary + (reviewStructure
       && reviewStructure.sport !== ActivityTypes.StrengthTraining
+      && !('workoutId' in operation && simulated.strengthDetails?.has(operation.workoutId))
       ? describeTrainingRecipeSteps(reviewStructure, loaded.units, 500 - summary.length) : '') });
   });
 
@@ -1137,7 +1146,8 @@ function projectAssistantWorkoutReview(index: number, operation: TrainingSchedul
   if (!id) return null;
   const previous = operation.kind === 'copy-workout' ? before.workouts.get(operation.sourceWorkoutId) : before.workouts.get(id);
   const current = after.workouts.get(id);
-  if ([previous, current].some(workout => workout?.structure.sport === ActivityTypes.StrengthTraining)) return null;
+  if ([previous, current].some(workout => workout && (workout.structure.sport === ActivityTypes.StrengthTraining
+    || before.strengthDetails?.has(workout.id) || after.strengthDetails?.has(workout.id)))) return null;
   if (!previous && !current) return null;
   const project = (workout: ScheduledWorkoutV1 | undefined, snapshot: TrainingScheduleSnapshotV1): AssistantWorkoutSnapshot | null => workout ? {
     title: workout.title, localDate: workout.localDate, lifecycle: workout.lifecycle,

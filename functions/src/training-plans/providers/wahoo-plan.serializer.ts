@@ -314,11 +314,11 @@ export function serializeWahooPlanJsonV1(
 
 /** Full companion only. Never infer repetitions or load from the v1 summary. */
 export function serializeWahooStrengthPlanV1(detailsValue: unknown,
-    options: Pick<SerializeWahooPlanOptionsV1, 'name' | 'allowDegraded'>): ProviderSerializationResultV1<WahooPlanJsonV1> {
+    options: Pick<SerializeWahooPlanOptionsV1, 'name' | 'allowDegraded'> & { sport?: ActivityTypes }): ProviderSerializationResultV1<WahooPlanJsonV1> {
     const details = parseStrengthWorkoutDetailsV1(detailsValue);
     const resolved = resolveProviderSerializationIssuesV1({ provider: 'wahoo',
-        structure: projectStrengthWorkoutToV1(details), strength: details, allowDegraded: true });
-    const requiresApproval = resolved.issues.some(issue => issue.path.endsWith('.externalLoadKg'));
+        structure: projectStrengthWorkoutToV1(details, options.sport), strength: details, allowDegraded: true });
+    const requiresApproval = resolved.issues.some(issue => issue.path.endsWith('.externalLoadKg') || issue.path === '$.sport');
     if (requiresApproval && !options.allowDegraded) {
         throw new ProviderWorkoutMappingError('wahoo', 'degradation-confirmation-required', resolved.issues);
     }
