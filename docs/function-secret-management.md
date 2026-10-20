@@ -107,7 +107,35 @@ Firebase's Functions emulator uses `.secret.local` for bound secret parameters. 
 
 Create distinct restricted keys for Stripe test and live mode, and put only the matching key in each Firebase project's `STRIPE_ADMIN_BILLING_KEY` secret. The preview and grant callables must be deployed together after the `subscription_time_gift` email template is available. No other Function may bind this secret; `functions/src/secrets.spec.ts` and `npm --prefix functions run secrets:check` enforce that isolation.
 
-Firebase Admin uses keyless Application Default Credentials in every environment. Auth, Firestore, and Storage emulator traffic does not require Google credentials, so local emulator startup must not depend on a `service-account.json` file. Scripts that intentionally access managed Google Cloud or Firebase resources use local user ADC (`gcloud auth application-default login`) or an approved least-privilege service-account impersonation flow. Such scripts must select their target project explicitly; `.secret.local` is only for application/provider secrets and is not an Admin SDK credential store.
+Deployed Functions use keyless Application Default Credentials. Auth, Firestore, and Storage emulator traffic does not require Google credentials, so fully local emulator startup does not depend on a `service-account.json` file. Scripts that intentionally access managed Google Cloud or Firebase resources use local user ADC (`gcloud auth application-default login`) or an approved least-privilege service-account impersonation flow. Such scripts must select their target project explicitly; `.secret.local` is only for application/provider secrets and is not an Admin SDK credential store.
+
+### Functions-only emulation with hosted Auth
+
+The default browser configuration keeps hosted Firebase Auth and sends callable requests to the Functions emulator. Admin impersonation and restoration therefore need signed custom tokens that hosted Auth accepts.
+
+When `FUNCTIONS_EMULATOR=true` and `FIREBASE_AUTH_EMULATOR_HOST` is unset, the Admin bootstrap can sign locally using a service-account JSON file:
+
+1. An explicit `GOOGLE_APPLICATION_CREDENTIALS` path takes precedence. Service-account keys use local signing; other ADC types retain normal SDK handling. An explicit path never falls back to another identity.
+2. Without that variable, the bootstrap checks the existing Git-ignored `quantified-self-io-firebase-adminsdk.json` one directory above the emulator's `functions/` working directory.
+3. Without a local key, initialization retains ADC. Hosted custom-token signing then requires a separately configured signing identity; a user ADC login alone does not provide a local signing key.
+
+From the repository root, an existing root-level key needs only:
+
+```bash
+npm --prefix functions run build
+firebase emulators:start --only functions
+```
+
+For a key stored outside the checkout:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.json \
+  firebase emulators:start --only functions
+```
+
+Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup is skipped in deployed runtimes and whenever the Auth emulator is configured. Both entering impersonation and restoring the original admin reuse the same signer; admin authorization and impersonation claims are unchanged.
+
+### Local script environment precedence
 
 Repository operational scripts load local values in this order without overriding an existing shell variable:
 
