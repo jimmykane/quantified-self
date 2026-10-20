@@ -856,9 +856,11 @@ This is preferred over processing partner payloads directly in a webhook or call
 Shared recorded-activity imports and manual reuploads reuse an existing event's stored activity document IDs and
 source keys rather than adding legacy event/index IDs beside source-keyed reparse results. The shared
 `functions/src/shared/import-preservation.ts` helper reads only that owner's event activities, with a field mask and
-the existing 100-leg bound, after acquiring the existing source-write reservation and before original-file/source
-writes. Unique identity matching includes verified sport refinements and reordered multisport legs; ambiguous or
-changed saved leg sets fail through the existing error/retry path instead of guessing, appending or deleting rows.
+the existing 100-leg bound, inside the existing source-write reservation transaction before marking load pending.
+Rejected identities leave the saved source, load metadata and cache untouched; matched IDs/keys are applied only
+after the reservation commits, before original-file/source writes. Unique identity matching includes verified sport
+refinements and reordered multisport legs; ambiguous or changed saved leg sets fail through the existing error/retry
+path instead of guessing, appending or deleting rows.
 The existing first-import marker still permits missing legs on an interrupted initial-write retry, subject to ID
 collision checks. New imports retain their existing ID behavior; this is not a historical duplicate cleanup.
 Guarded document transactions preserve live titles, descriptions, tags, privacy, notes, legacy feedback fields,

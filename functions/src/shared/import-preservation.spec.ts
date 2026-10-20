@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import { EventWriter, type FirestoreAdapter } from './event-writer';
-import { preserveImportedActivityEdits, preserveImportedActivityIdentities, preserveImportedEventEdits } from './import-preservation';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './import-preservation';
 
 const state = vi.hoisted(() => ({
-  activities: new Map<string, Record<string, unknown>>(), metadata: {} as Record<string, unknown>,
-  get: vi.fn(), runTransaction: vi.fn(), collection: vi.fn(), select: vi.fn(), where: vi.fn(), limit: vi.fn(),
+  activities: new Map<string, Record<string, unknown>>(), metadata: {} as Record<string, unknown>, parentExists: true,
+  get: vi.fn(), prepare: vi.fn(), commit: vi.fn(), collection: vi.fn(), select: vi.fn(), where: vi.fn(), limit: vi.fn(),
 }));
-vi.mock('firebase-admin', () => ({ firestore: () => ({
-  doc: (path: string) => ({ path }), collection: state.collection, runTransaction: state.runTransaction,
-}) }));
+vi.mock('../training-load/training-load-metadata', () => ({ prepareTrainingLoadMetadata: state.prepare }));
 
 function activity(index = 0, type = 'Running') {
   let id = `legacy-${index}`;
@@ -31,14 +29,20 @@ function event(activities = [activity()]) {
 describe('shared import preservation', () => {
   let authorize: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.clearAllMocks(); state.activities.clear(); state.metadata = {};
+    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true;
     const query = { where: state.where, select: state.select, limit: state.limit };
     state.collection.mockReturnValue(query); state.where.mockReturnValue(query);
     state.select.mockReturnValue(query); state.limit.mockReturnValue(query);
     state.get.mockImplementation(async ref => ref === query
       ? { size: state.activities.size, docs: [...state.activities].map(([id, data]) => ({ id, data: () => data })) }
-      : { data: () => state.metadata });
-    state.runTransaction.mockImplementation(async callback => callback({ get: state.get }));
+      : ref.path.endsWith('/trainingLoad') ? { data: () => state.metadata } : { exists: state.parentExists });
+    state.prepare.mockImplementation(async (_uid, _event, authorize) => {
+      const db = { doc: (path: string) => ({ path }), collection: state.collection };
+      const transaction = { get: state.get };
+      await authorize(db, transaction);
+      state.commit();
+      return Object.assign(vi.fn(async () => authorize(db, transaction)), { sourceWriteId: 'attempt' });
+    });
     authorize = vi.fn(async () => undefined);
   });
 
@@ -48,18 +52,18 @@ describe('shared import preservation', () => {
 
   it('keeps new-import IDs unchanged and scopes/masks the existing-activity read', async () => {
     const parsed = activity();
-    await preserveImportedActivityIdentities('owner', event([parsed]), authorize);
+    await prepareImportedEventWrite('owner', event([parsed]), authorize);
     expect(parsed.getID()).toBe('legacy-0');
     expect(state.collection).toHaveBeenCalledWith('users/owner/activities');
     expect(state.where).toHaveBeenCalledWith('eventID', '==', 'event');
     expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance');
     expect(state.limit).toHaveBeenCalledWith(101);
-    expect(state.runTransaction).toHaveBeenCalledWith(expect.any(Function), { readOnly: true });
+    expect(state.get.mock.invocationCallOrder.at(-1)).toBeLessThan(state.commit.mock.invocationCallOrder[0]);
   });
 
   it.each([false, true])('reuses legacy or source-keyed stored identities (source key: %s)', async keyed => {
     const parsed = activity(); store('saved-id', parsed, keyed ? { sourceActivityKey: 'saved-source-key' } : {});
-    await preserveImportedActivityIdentities('owner', event([parsed]), authorize);
+    await prepareImportedEventWrite('owner', event([parsed]), authorize);
     expect(parsed.getID()).toBe('saved-id');
     if (keyed) expect(parsed).toHaveProperty('sourceActivityKey', 'saved-source-key');
   });
@@ -68,40 +72,74 @@ describe('shared import preservation', () => {
     const bike = activity(0, 'Cycling'), ski = activity(1, 'Backcountry Skiing');
     store('bike-id', bike); store('ski-id', ski, { stats: { Duration: { _value: 3600 }, Distance: { value: 10_000 } } });
     const parsedBike = activity(0, 'Road Cycling'), parsedSki = activity(1, 'Ski Touring');
-    await preserveImportedActivityIdentities('owner', event([parsedSki, parsedBike]), authorize);
+    await prepareImportedEventWrite('owner', event([parsedSki, parsedBike]), authorize);
     expect([parsedSki.getID(), parsedBike.getID()]).toEqual(['ski-id', 'bike-id']);
   });
 
-  it('retains partial-first-import recovery without granting saved events permission to append legs', async () => {
+  it.each([false, true])('retains partial-first-import recovery without granting saved events permission to append legs (missing parent: %s)', async missingParent => {
     store('saved-first', activity());
     const first = activity(), second = activity(1);
-    await expect(preserveImportedActivityIdentities('owner', event([first, second]), authorize)).rejects.toThrow('Cannot safely match');
+    await expect(prepareImportedEventWrite('owner', event([first, second]), authorize)).rejects.toThrow('Cannot safely match');
     expect(first.getID()).toBe('legacy-0');
-    state.metadata = { sourceFirstImport: true };
-    await preserveImportedActivityIdentities('owner', event([first, second]), authorize);
+    state.metadata = missingParent ? {} : { sourceFirstImport: true };
+    state.parentExists = !missingParent;
+    await prepareImportedEventWrite('owner', event([first, second]), authorize);
     expect([first.getID(), second.getID()]).toEqual(['saved-first', 'legacy-1']);
   });
 
   it('rejects ID collisions during partial-first-import recovery before changing any IDs', async () => {
     state.metadata = { sourceFirstImport: true }; store('legacy-1', activity());
     const first = activity(), second = activity(1);
-    await expect(preserveImportedActivityIdentities('owner', event([first, second]), authorize)).rejects.toThrow('Cannot safely reuse');
+    await expect(prepareImportedEventWrite('owner', event([first, second]), authorize)).rejects.toThrow('Cannot safely reuse');
     expect(first.getID()).toBe('legacy-0');
   });
 
   it('rejects ambiguous duplicates rather than choosing a device name or adding another copy', async () => {
     store('copy-1'); store('copy-2');
     const parsed = activity();
-    await expect(preserveImportedActivityIdentities('owner', event([parsed]), authorize)).rejects.toThrow('Cannot safely match');
+    await expect(prepareImportedEventWrite('owner', event([parsed]), authorize)).rejects.toThrow('Cannot safely match');
+    expect(state.commit).not.toHaveBeenCalled();
     expect(parsed.getID()).toBe('legacy-0');
     expect(state.activities.size).toBe(2);
   });
 
-  it('stops before reading or mutating identities when the existing source reservation is stale', async () => {
+  it('stops before reading or mutating identities when existing authorization rejects the import', async () => {
     authorize.mockRejectedValueOnce(new Error('superseded'));
     const parsed = activity();
-    await expect(preserveImportedActivityIdentities('owner', event([parsed]), authorize)).rejects.toThrow('superseded');
+    await expect(prepareImportedEventWrite('owner', event([parsed]), authorize)).rejects.toThrow('superseded');
     expect(state.get).not.toHaveBeenCalled(); expect(parsed.getID()).toBe('legacy-0');
+  });
+
+  it('does not apply identities from a failed or retried reservation transaction', async () => {
+    const parsed = activity(); store('aborted-id', parsed, { sourceActivityKey: 'aborted-key' });
+    const db = { doc: (path: string) => ({ path }), collection: state.collection };
+    const transaction = { get: state.get };
+    state.prepare.mockImplementationOnce(async (_uid, _event, authorize) => {
+      await authorize(db, transaction);
+      throw new Error('commit failed');
+    });
+    await expect(prepareImportedEventWrite('owner', event([parsed]))).rejects.toThrow('commit failed');
+    expect(parsed.getID()).toBe('legacy-0'); expect(parsed).not.toHaveProperty('sourceActivityKey');
+
+    state.prepare.mockImplementationOnce(async (_uid, _event, authorize) => {
+      await authorize(db, transaction);
+      expect(parsed.getID()).toBe('legacy-0');
+      state.activities.clear(); store('committed-id', parsed, { sourceActivityKey: 'committed-key' });
+      await authorize(db, transaction);
+      expect(parsed.getID()).toBe('legacy-0'); expect(parsed).not.toHaveProperty('sourceActivityKey');
+      return Object.assign(vi.fn(), { sourceWriteId: 'attempt' });
+    });
+    await prepareImportedEventWrite('owner', event([parsed]));
+    expect(parsed.getID()).toBe('committed-id'); expect(parsed).toHaveProperty('sourceActivityKey', 'committed-key');
+  });
+
+  it('rechecks authorization but does not prepare identities again during finalization', async () => {
+    store('saved-id');
+    const finish = await prepareImportedEventWrite('owner', event(), authorize);
+    state.get.mockClear(); state.activities.clear(); store('ambiguous-1'); store('ambiguous-2');
+    await finish();
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(state.get).not.toHaveBeenCalled();
   });
 
   it('reuploads through the real writer twice without adding duplicates and preserves live user edits', async () => {
@@ -115,7 +153,7 @@ describe('shared import preservation', () => {
     });
     const adapter: FirestoreAdapter = { setDoc, generateID: () => 'unexpected-new-id', createBlob: data => data,
       prepareTrainingLoad: async parsed => {
-        await preserveImportedActivityIdentities('owner', parsed, authorize);
+        await prepareImportedEventWrite('owner', parsed, authorize);
         // An edit after the identity read must win over the parsed payload too.
         state.activities.get('source-based-id')!.creator = { name: 'Latest custom watch' };
         return async () => undefined;

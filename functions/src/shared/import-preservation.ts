@@ -1,9 +1,11 @@
-import * as admin from 'firebase-admin';
+import type * as admin from 'firebase-admin';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
+import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
+import type { PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 
 export const IMPORTED_EVENT_EDIT_FIELDS = ['name', 'description', 'privacy', 'notes', 'rpe', 'feeling'] as const;
 
@@ -43,25 +45,38 @@ function storedIdentity(data: admin.firestore.DocumentData): ActivityIdentityLik
   };
 }
 
-/** Reuse persisted IDs, rather than adding legacy index IDs beside a prior reparse's source IDs. */
-export async function preserveImportedActivityIdentities(
+/** Validate identities in the reservation transaction, before it can mark saved load pending. */
+export async function prepareImportedEventWrite(
   uid: string, event: EventInterface,
-  assertCurrent: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
-): Promise<void> {
-  const db = admin.firestore();
+  authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
+): Promise<PreparedTrainingLoadWrite> {
+  let prepared = false;
+  let applyIdentities: () => void = () => undefined;
+  const finish = await prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
+    await authorize?.(db, transaction);
+    // The authorization callback also runs during finalization; identity preparation must not.
+    if (!prepared) applyIdentities = await prepareImportedActivityIdentities(uid, event, db, transaction);
+  });
+  prepared = true;
+  // Firestore can retry preparation. Only the committed attempt may change the parsed IDs/keys.
+  applyIdentities();
+  return finish;
+}
+
+/** Reuse persisted IDs, rather than adding legacy index IDs beside a prior reparse's source IDs. */
+async function prepareImportedActivityIdentities(
+  uid: string, event: EventInterface, db: admin.firestore.Firestore, transaction: admin.firestore.Transaction,
+): Promise<() => void> {
   const eventId = event.getID();
   if (!eventId) throw new Error('Import requires an event identity.');
-  // Read after acquiring the existing source-write reservation. A superseding reparse/import
-  // cannot lend obsolete IDs to this attempt; every later source write rechecks that reservation.
-  const { documents, firstImport } = await db.runTransaction(async transaction => {
-    await assertCurrent(db, transaction);
-    const metadata = await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`));
-    const snapshot = await transaction.get(db.collection(`users/${uid}/activities`).where('eventID', '==', eventId)
-      .select('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance').limit(101));
-    if (snapshot.size > 100) throw new Error('Import supports at most 100 stored activities per event.');
-    return { documents: snapshot.docs, firstImport: metadata.data()?.sourceFirstImport === true };
-  }, { readOnly: true });
-  if (!documents.length) return;
+  const parent = await transaction.get(db.doc(`users/${uid}/events/${eventId}`));
+  const metadata = await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`));
+  const snapshot = await transaction.get(db.collection(`users/${uid}/activities`).where('eventID', '==', eventId)
+    .select('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance').limit(101));
+  if (snapshot.size > 100) throw new Error('Import supports at most 100 stored activities per event.');
+  const documents = snapshot.docs;
+  const firstImport = !parent.exists || metadata.data()?.sourceFirstImport === true;
+  if (!documents.length) return () => undefined;
 
   const activities = event.getActivities();
   const matches = resolveActivityIdentityAssignments(documents.map(document => storedIdentity(document.data())), activities as ActivityIdentityLike[]);
@@ -77,7 +92,7 @@ export async function preserveImportedActivityIdentities(
   if (ids.some(id => !id) || new Set(ids).size !== ids.length) {
     throw new Error('Cannot safely reuse activity identities for this import.');
   }
-  matches.assignments.forEach((existingIndex, parsedIndex) => {
+  return () => matches.assignments.forEach((existingIndex, parsedIndex) => {
     const document = documents[existingIndex];
     activities[parsedIndex].setID(document.id);
     const key = document.data().sourceActivityKey;

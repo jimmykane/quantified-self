@@ -1,5 +1,4 @@
 import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
-import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -39,7 +38,7 @@ import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnost
 import { inspectFitPayload } from '../shared/fit-payload';
 import { uploadDebugFile } from '../debug-utils';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
-import { preserveImportedActivityEdits, preserveImportedActivityIdentities, preserveImportedEventEdits } from '../shared/import-preservation';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from '../shared/import-preservation';
 
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
 const ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE = 'Account deletion is in progress. Please sign in again.';
@@ -342,11 +341,7 @@ function generateUploadEventID(userID: string, payload: Buffer, resolvedExtensio
 
 function getFirestoreAdapter(userID: string, sourceWrite: TrainingLoadSourceWrite): FirestoreAdapter {
   return {
-    prepareTrainingLoad: async event => {
-      const finish = await sourceWrite.prepareTrainingLoad(event);
-      await preserveImportedActivityIdentities(userID, event, sourceWrite.assertCurrent);
-      return finish;
-    },
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: unknown) => {
       const documentPath = path.join('/');
       const documentRef = admin.firestore().doc(documentPath);
@@ -519,7 +514,7 @@ export const uploadActivity = onRequest({
       originalFilename,
     };
 
-    const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareTrainingLoadMetadata(userID, event));
+    const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareImportedEventWrite(userID, event));
     const writer = new EventWriter(getFirestoreAdapter(userID, sourceWrite), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, event, originalFile);
     await persistProcessingMetadata(userID, eventID, sourceWrite);

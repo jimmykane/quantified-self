@@ -1,5 +1,4 @@
 import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
-import { prepareTrainingLoadMetadata } from './training-load/training-load-metadata';
 import { TrainingLoadSourceWrite } from './training-load/training-load-source-write';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
@@ -18,7 +17,7 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
-import { preserveImportedActivityEdits, preserveImportedActivityIdentities, preserveImportedEventEdits } from './shared/import-preservation';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './shared/import-preservation';
 import {
   createMissingEventTagCatalogEntriesInTransaction,
   newlyAssignedEventTags,
@@ -358,7 +357,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   }
 
 
-  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareTrainingLoadMetadata(userID, event, async (db, transaction) => {
+  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareImportedEventWrite(userID, event, async (db, transaction) => {
     await assertHistoryWrite(transaction);
     await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
   }));
@@ -367,11 +366,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     await sourceWrite.assertCurrent(db, transaction);
   };
   const adapter: FirestoreAdapter = {
-    prepareTrainingLoad: async event => {
-      const finish = await sourceWrite.prepareTrainingLoad(event);
-      await preserveImportedActivityIdentities(userID, event, sourceWrite.assertCurrent);
-      return finish;
-    },
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();

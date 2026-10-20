@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
 // training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
 const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
-const preserveImportIdentities = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const prepareImportWrite = vi.hoisted(() => vi.fn());
 vi.mock('./shared/import-preservation', async importOriginal => ({
     ...await importOriginal<typeof import('./shared/import-preservation')>(),
-    preserveImportedActivityIdentities: preserveImportIdentities,
+    prepareImportedEventWrite: prepareImportWrite,
 }));
 vi.mock('./training-load/training-load-source-write', () => ({
     TrainingLoadSourceWrite: class {
@@ -188,6 +188,7 @@ vi.mock('./shared/user-deletion-guard', () => ({
 
 describe('utils higher-level helpers', () => {
     beforeEach(() => {
+        prepareImportWrite.mockImplementation((uid, event, authorize) => trainingLoadMetadata.prepareTrainingLoadMetadata(uid, event, authorize));
         vi.clearAllMocks();
         hoisted.setCount(0);
         hoisted.getUserDeletionGuardState.mockResolvedValue({
@@ -420,7 +421,7 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEvent', () => {
-        it('prepares the existing reservation before reusing import identities and preserves live edits in its guarded adapter', async () => {
+        it('uses atomic import preparation and preserves live edits in its guarded adapter', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };
             const finish = Object.assign(vi.fn(), { sourceWriteId: 'attempt' });
@@ -430,8 +431,7 @@ describe('utils higher-level helpers', () => {
                 writeAllEventDataMock.mockImplementationOnce(async () => {
                     const [adapter] = eventWriterConstructorMock.mock.calls.at(-1)!;
                     expect(await adapter.prepareTrainingLoad(event)).toBe(finish);
-                    expect(preserveImportIdentities).toHaveBeenCalledWith('user-1', event, sourceWriteGuard.assertCurrent);
-                    expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(preserveImportIdentities.mock.invocationCallOrder[0]);
+                    expect(prepareImportWrite).toHaveBeenCalledWith('user-1', event, expect.any(Function));
                     hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => saved });
                     await adapter.setDoc(['users', 'user-1', 'events', 'event-1'], { name: 'File title', description: 'File description' });
                     expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), saved);
