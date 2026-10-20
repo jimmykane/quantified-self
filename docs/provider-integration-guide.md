@@ -122,7 +122,7 @@ The canonical `receiveSuunto247Data` webhook uses isolated owner-module entrypoi
 its Gen 1 HTTP trigger, 60-second timeout and notification secret. See [entrypoint verification](functions-entrypoint-loading.md);
 this startup/memory configuration does not change webhook authentication, durable admission or provider registration.
 
-Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health queue with a five-minute dispatch bucket per UID, provider account, exact local-day window, and captured token/root/connection generations. The ingress still acknowledges only after durable staging and the retryable trigger retains its lifecycle checks. Queue admission schedules one bounded refetch just after the bucket closes; distinct notifications in that bucket reuse the same queued refetch. An ingress that reaches a bucket after dispatch has begun receives a deterministic notification-specific follow-up, so corrections are not lost. Poll and history jobs retain their current schedules. The 30-minute dispatcher preserves the earliest dispatch time when recovering an enqueue failure. Monitor `coalescedWindows` (reused bucket admissions, which can include an exact Eventarc retry), `duplicateIngressWindows` (exact late-ingress retries), actual task/worker counts, queue age, and Health freshness during rollout; revert the Functions revision to restore per-notification dispatch without migrating existing queue data. See [Suunto ingestion](suunto-integration.md#ingestion-and-revision-flow).
+Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health queue with a five-minute dispatch bucket per UID, provider account, exact local-day window, and captured token/root/connection generations. The ingress still acknowledges only after durable staging and the retryable trigger retains its lifecycle checks. Queue admission schedules one bounded refetch just after the bucket closes; distinct notifications in that bucket reuse the same queued refetch. An ingress that reaches a bucket after dispatch has begun receives a deterministic notification-specific follow-up, so corrections are not lost. Poll and manual bulk-history jobs retain their current schedules; connection-history children use the bounded prompt dispatch described below. The 30-minute dispatcher preserves the earliest dispatch time when recovering an enqueue failure. Monitor `coalescedWindows` (reused bucket admissions, which can include an exact Eventarc retry), `duplicateIngressWindows` (exact late-ingress retries), actual task/worker counts, queue age, and Health freshness during rollout; revert the Functions revision to restore per-notification dispatch without migrating existing queue data. See [Suunto ingestion](suunto-integration.md#ingestion-and-revision-flow).
 
 The Suunto Health worker also emits one safe per-invocation feed summary for Activity, daily statistics, and Recovery request attempts/time and source-record write outcomes. A compact webhook notification mask is unioned when Activity and Recovery share a queue row; a notification that cannot merge before the worker claims the row gets a deterministic follow-up. The mask changes telemetry only, not which feeds are fetched. Compare those summaries with whole-worker telemetry and billed Cloud Run time before considering feed-specific pulls. See [Suunto operations](suunto-integration.md#sleep-and-health) for field meanings and the correction/reconciliation limit.
 
@@ -1093,6 +1093,15 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 - Protect integer-shaped provider IDs before JSON parsing when the API can emit 64-bit numbers. Normalize them to bounded decimal strings and test values above JavaScript's safe-integer limit.
 
 ### History imports
+
+Connection-history Sleep/Health children dispatch through the existing immediate, revision-bound queue path after
+durable admission. The single-dispatch coordinator retains bounded batches, capacity checks and minute-long child waits;
+manual bulk backfills, Garmin Health pacing and the half-hour recovery scan are unchanged. Existing children are never
+reset or replayed to obtain faster dispatch. The Admin card distinguishes oldest **import age** from task delay and
+counts retained finished coordinators, not ingested records; unavailable metrics are not zero. See
+[coordination and recovery](connection-history-import.md#coordination-persistence-and-retries) for exact failure,
+monitoring and separately approved backend/frontend release boundaries. Coverage remains **covered/unchanged** under
+#847 and #830; no new monitoring resource, provider scope, MCP or Training contract is introduced.
 
 Health/Sleep request boundaries are provider-specific and shared through
 `getHealthBackfillStartMs` in `shared/sleep-backfill.ts`: Garmin requests the latest

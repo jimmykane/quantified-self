@@ -295,7 +295,8 @@ export interface AdminQueueProviderStats {
 }
 
 export interface AdminQueueStatsResponse {
-    connectionHistory?: { pending: number; failed: number; maxLagMs: number | null } | null;
+    /** Finished includes failed/skipped/request-only runs, not confirmed ingestion. Older backends omit it. */
+    connectionHistory?: { pending: number; finished?: number; failed: number; maxLagMs: number | null } | null;
     pending: number;
     succeeded: number;
     stuck: number;

@@ -1084,6 +1084,9 @@ async function enqueueHistorySleepItem(execution: HistoryExecution | undefined, 
     await execution?.beforeRequest();
     const ref = await addSleepSyncQueueItem({ ...input, ...(execution ? {
         dedupeKey: `connection-history:${execution.runId}:${input.type}:${input.rangeStartMs}:${input.rangeEndMs}`,
+        // The coordinator already bounds admission and waits for this batch.
+        // Manual bulk imports retain their scheduled dispatch behavior.
+        dispatchImmediately: true,
         preserveExisting: true,
         connectionHistoryRunId: execution.runId,
         requiredDocumentFieldValues: execution.requiredDocumentFieldValues,

@@ -121,6 +121,15 @@ An unavailable early Garmin Activity or Sleep window does not cancel later windo
 
 `processConnectionHistoryTask` has one concurrent dispatch, one dispatch per second, a 300-second timeout, and revision-bound task identity. A transactional lease outlives the worker. Before new admissions, both Firestore backlog and Cloud Tasks depth must be below half the existing 1,000-item capacity threshold. Capacity waits last a minute and spend no retry attempts. Provider failures use the shared retry/backoff policy and honor longer available provider retry hints.
 
+New connection-history Sleep/Health children use the canonical queue's immediate dispatch after durable admission,
+rather than waiting for each half-hour scan. The coordinator still admits only one bounded unit per invocation and
+waits at least a minute before advancing a batch with children; no worker concurrency or provider retry setting changes.
+Deterministic run/window identities and `preserveExisting` keep completed, dispatched, leased and retrying children
+unchanged. An enqueue or marker failure leaves durable work for the existing 30-minute recovery dispatcher; admission
+retries do not reset the child's revision or accelerate its backoff. Already-waiting children can wait for that recovery
+once; subsequent newly admitted batches use immediate dispatch. Manual bulk backfills retain their existing dispatch
+behavior, and Garmin's separate single-task Health request pacing is unchanged.
+
 Each operation retains its original range/cursor and a durable bounded completion receipt. An operation receipt survives a crash before the run advances. Queue admission remains idempotent if a failure occurs before a receipt can be persisted. Provider requests are at-least-once across an ambiguous network/commit failure; Garmin's existing duplicate-request handling is reused. Submission never proves delivery.
 
 Automatic Sleep/Health operations preserve credential-read and queue-admission errors for the coordinator's retry/authorization classification. Failed automatic admission keeps its claimed reservation and cooldown; manual callable error mapping and cooldown recovery retain their existing behavior.
@@ -149,7 +158,17 @@ Prepare and verify these changes locally; merging and production deployment requ
 2. Verify the dedicated queue limits, task invoker permissions, scheduled recovery, and all secret bindings. The coordinator receives Garmin, Suunto API, COROS and Wahoo API credentials; dispatch/recovery/retry endpoints receive none. Existing ingestion workers retain their bindings.
 3. Release the frontend after the backend can atomically accept jobs. Old clients remain opt-out by omission.
 4. `CONNECTION_HISTORY_IMPORT_ENABLED=false` in the OAuth completion functions' runtime environment stops new automatic admission. This is not a credential; do not create a Functions `.env` file. Existing accepted runs, manual imports and imported data remain intact. Restore the environment setting through the separately approved infrastructure workflow.
-5. Monitor the versioned `[ConnectionHistory]` observations below. Admin queue monitoring still includes coordination task depth, pending/failed runs and oldest pending age; its lifetime age and retained failed totals are diagnostics, not the new actionable alert predicates. Investigate private operational records without exporting identities or provider details into alerts.
+5. Monitor the versioned `[ConnectionHistory]` observations below. Admin queue monitoring includes coordination task depth, pending runs, retained failed runs and **Oldest import age** (time since the oldest unfinished run was created, not time a task has waited). **Finished runs** counts retained `processed=true` coordinators, including failed, skipped and request-only outcomes; it is not successful ingestion and overlaps the retained failed count. Missing completion counts from an older backend and the unsupported dead-letter metric show dashes, not invented zeroes. The card has no fixed 30-day range badge because runs can use different selected ranges. Lifetime age and retained totals are diagnostics, not actionable alert predicates. Investigate private operational records without exporting identities or provider details into alerts.
+
+For the prompt child-dispatch/dashboard correction, monitoring coverage is **covered/unchanged**: reviewed
+`tools/connection-history-monitoring/definitions.mjs` and `tools/health-sleep-monitoring/definitions.mjs`.
+Coordinator operation/admission failures, committed checkpoints and native attempts remain under #847; downstream
+worker failures, retries, terminal commits and undispatched observations remain under #830. The recovery scheduler,
+probe cadence/bounds, queue identities, retry budgets and fixed telemetry labels remain intact. No new queue, Function,
+Rules, index, metric, alert or cloud configuration is introduced. MCP/Assistant and Training contracts are unaffected.
+Help's existing background-import/range/retry guidance remains accurate; no user-facing promise of immediate coverage
+is added. Separately approved release needs only `processConnectionHistoryTask`, `getQueueStats`, and the frontend.
+Rollback restores those previous revisions; no data migration, replay or retained-work reset is required.
 
 Monitoring coverage: downstream recorded-activity and Health/Sleep ingestion remain **covered** by #829/#830. Coordinator coverage was **activated** on 9 October 2026 after separately approved Functions deployment and monitoring-bundle apply, with production configuration, query and positive heartbeat evidence recorded in [#847](https://github.com/jimmykane/quantified-self/issues/847), Project 2. Its independently owned bundle covers the coordinator omitted from those downstream bundles; Admin Queue Monitor and passing offline tests alone do not establish active alert coverage. Future cloud changes still require separate approval.
 

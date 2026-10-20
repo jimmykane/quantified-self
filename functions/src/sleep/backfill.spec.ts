@@ -357,6 +357,39 @@ describe('backfillSuuntoAppSleep', () => {
         vi.useRealTimers();
     });
 
+    it.each(['Suunto', 'COROS'])('dispatches new automatic %s history batches without waiting for the scheduled scan', async provider => {
+        if (provider === 'Suunto') seedSuuntoToken(); else seedCorosToken();
+        if (provider === 'COROS') {
+            hoisted.getTokenData.mockResolvedValue({ openId: 'coros-token-1' });
+            hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(hoisted.tokenDocs[0]);
+        }
+        const childPath = 'sleepSyncQueue/history-child';
+        hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'history-child', path: childPath });
+        const guards = [{ documentRef: { path: 'users/user-1/meta/service' }, expectedFields: { connectionState: 'connected' } }];
+        const execution = {
+            runId: 'run', tokenPath: provider === 'Suunto'
+                ? 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1'
+                : 'corosAPIAccessTokens/user-1/tokens/coros-token-1',
+            providerUserId: provider === 'Suunto' ? 'suunto-user-1' : 'coros-token-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: guards,
+            beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        const operation = provider === 'Suunto' ? queueSuuntoSleepHealthHistory : queueCorosSleepHealthHistory;
+        await operation('user-1', { execution, startMs: nowMs - 86400000, endMs: nowMs });
+        const inputs = hoisted.addSleepSyncQueueItem.mock.calls.map(([input]) => input);
+        expect(inputs).toHaveLength(provider === 'Suunto' ? 2 : 1);
+        for (const input of inputs) {
+            expect(input).toEqual(expect.objectContaining({
+                dispatchImmediately: true, preserveExisting: true, connectionHistoryRunId: 'run',
+                requiredDocumentFieldValues: guards,
+                dedupeKey: `connection-history:run:${input.type}:${input.rangeStartMs}:${input.rangeEndMs}`,
+            }));
+        }
+        expect(execution.onQueued).toHaveBeenCalledWith(childPath);
+        expect(execution.beforeRequest.mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.addSleepSyncQueueItem.mock.invocationCallOrder[0]);
+    });
+
     it.each(['Suunto', 'COROS'])('preserves automatic %s token-read failures for the coordinator to classify', async provider => {
         if (provider === 'Suunto') seedSuuntoToken(); else seedCorosToken();
         const error = Object.assign(new Error('Temporary credential read failure'), { retryAt: nowMs + 120000 });

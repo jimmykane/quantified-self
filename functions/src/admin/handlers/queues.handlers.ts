@@ -1477,14 +1477,16 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
     }
 });
 
-async function getConnectionHistoryMonitoring(db: admin.firestore.Firestore): Promise<{ pending: number; failed: number; maxLagMs: number } | null> {
+async function getConnectionHistoryMonitoring(db: admin.firestore.Firestore): Promise<{ pending: number; finished: number; failed: number; maxLagMs: number } | null> {
     try {
         const queue = db.collection(CONNECTION_HISTORY_COLLECTION);
-        const [pending, failed, oldest] = await Promise.all([
-            queue.where('processed', '==', false).count().get(), queue.where('failed', '==', true).count().get(),
+        const [pending, finished, failed, oldest] = await Promise.all([
+            queue.where('processed', '==', false).count().get(),
+            queue.where('processed', '==', true).count().get(),
+            queue.where('failed', '==', true).count().get(),
             queue.where('processed', '==', false).orderBy('dateCreated').limit(1).get(),
         ]);
-        return { pending: pending.data().count, failed: failed.data().count,
+        return { pending: pending.data().count, finished: finished.data().count, failed: failed.data().count,
             maxLagMs: oldest.empty ? 0 : Math.max(0, Date.now() - Number(oldest.docs[0].data().dateCreated)) };
     } catch { logger.warn('[ConnectionHistory]', { event: 'monitoring_unavailable' }); return null; }
 }

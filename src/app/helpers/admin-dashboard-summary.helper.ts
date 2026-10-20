@@ -19,11 +19,12 @@ export interface AdminDashboardQueueRow {
     completedLabel: string;
     problemCount: number | null;
     problemLabel: string;
-    dead: number;
+    dead: number | null;
     deadLabel: string;
     throughput: number | null;
     maxLagMs: number | null;
     maxLagLabel: string;
+    maxLagTitle: string;
     chips: string[];
     severity: AdminDashboardSeverity;
 }
@@ -70,6 +71,7 @@ interface QueueRowBase {
     deadLabel?: string;
     throughput?: number | null;
     maxLagMs?: number | null;
+    maxLagTitle?: string;
     automaticScanEnabled?: boolean;
     /** Preserve unavailable aggregates as unknown, rather than converting them to zero. */
     preserveMissingCounts?: boolean;
@@ -95,8 +97,10 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
     return [
         ...(stats.connectionHistory ? [buildQueueRow({ id: 'connection-history', label: 'Connection history', icon: 'history',
             route: '', pendingDb: stats.connectionHistory.pending, cloudTasks: queues?.connectionHistory?.pending,
-            problemCount: stats.connectionHistory.failed, problemLabel: 'Failed runs', maxLagMs: stats.connectionHistory.maxLagMs,
-            chips: ['30 days', 'Background imports'] })] : []),
+            completed: stats.connectionHistory.finished, completedLabel: 'Finished runs',
+            problemCount: stats.connectionHistory.failed, problemLabel: 'Retained failed runs',
+            maxLagMs: stats.connectionHistory.maxLagMs, maxLagTitle: 'Oldest import age',
+            preserveMissingCounts: true, chips: ['Background imports'] })] : []),
         buildQueueRow({
             id: 'workout',
             label: 'Workout',
@@ -367,10 +371,11 @@ function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {
         completedLabel: base.completedLabel || 'Completed',
         problemCount: base.preserveMissingCounts ? normalizeNullableCount(base.problemCount) : normalizeCount(base.problemCount),
         problemLabel: base.problemLabel || 'Stuck',
-        dead: normalizeCount(base.dead),
+        dead: base.preserveMissingCounts ? normalizeNullableCount(base.dead) : normalizeCount(base.dead),
         deadLabel: base.deadLabel || 'Dead',
         throughput: normalizeNullableCount(base.throughput),
         maxLagMs: normalizeNullableCount(base.maxLagMs),
+        maxLagTitle: base.maxLagTitle || 'Longest wait',
         automaticScanEnabled: base.automaticScanEnabled,
         chips: compactChips(base.chips || EMPTY_CHIPS),
     };
@@ -378,7 +383,7 @@ function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {
     return {
         ...row,
         maxLagLabel: row.maxLagMs === null ? '-' : formatAdminDashboardDuration(row.maxLagMs),
-        severity: resolveQueueSeverity(row.problemCount, row.dead, row.automaticScanEnabled,
+        severity: resolveQueueSeverity(row.problemCount, row.dead ?? 0, row.automaticScanEnabled,
             row.pendingDb === null || row.cloudTasks === null || row.completed === null || row.problemCount === null
                 || base.queuePaused === true),
     };

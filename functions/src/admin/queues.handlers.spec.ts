@@ -164,6 +164,34 @@ describe('getQueueStats Cloud Function', () => {
         };
     });
 
+    it('counts retained finished history runs separately from pending and failed runs', async () => {
+        const fallback = mockCollection.getMockImplementation()!;
+        const nowMs = Date.now();
+        const ageMs = 8 * 86400000 + 11 * 3600000;
+        const limit = vi.fn(() => ({ get: vi.fn().mockResolvedValue({ empty: false,
+            docs: [{ data: () => ({ dateCreated: nowMs - ageMs }) }] }) }));
+        const where = vi.fn((field: string, _op: string, value: boolean) => ({
+            count: () => ({ get: async () => ({ data: () => ({ count: field === 'failed' ? 1 : value ? 17 : 3 }) }) }),
+            orderBy: () => ({ limit }),
+        }));
+        mockCollection.mockImplementation((name: string) => name === 'connectionHistoryImports' ? { where } : fallback(name));
+        const result = await getQueueStats(request);
+        expect(result.connectionHistory).toEqual({ pending: 3, finished: 17, failed: 1, maxLagMs: expect.any(Number) });
+        expect(result.connectionHistory?.maxLagMs).toBeGreaterThanOrEqual(ageMs);
+        expect(where).toHaveBeenCalledWith('processed', '==', true);
+        expect(limit).toHaveBeenCalledWith(1);
+    });
+
+    it('leaves unavailable history counts unknown without hiding the other queues', async () => {
+        const fallback = mockCollection.getMockImplementation()!;
+        mockCollection.mockImplementation((name: string) => name === 'connectionHistoryImports' ? {
+            where: () => { throw new Error('Unavailable aggregate'); },
+        } : fallback(name));
+        const result = await getQueueStats(request);
+        expect(result.connectionHistory).toBeNull();
+        expect(result.providers).toHaveLength(4);
+    });
+
     it('should return queue statistics including DLQ', async () => {
         const nowMs = Date.now();
         // Mock permissions

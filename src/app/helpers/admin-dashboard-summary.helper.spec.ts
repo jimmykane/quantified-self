@@ -10,6 +10,31 @@ import {
 } from './admin-dashboard-summary.helper';
 
 describe('admin-dashboard-summary helper', () => {
+    it('labels history lifetime age and finished runs without inventing unsupported metrics or a fixed range', () => {
+        const rows = buildAdminDashboardQueueRows({
+            pending: 0, succeeded: 0, stuck: 0, providers: [],
+            cloudTasks: { pending: 3, queues: { connectionHistory: { queueId: 'history', pending: 3 } } },
+            connectionHistory: { pending: 3, finished: 17, failed: 1, maxLagMs: 8 * 86400000 + 11 * 3600000 },
+        });
+        expect(rows.find(row => row.id === 'connection-history')).toEqual(expect.objectContaining({
+            pendingDb: 3, cloudTasks: 3, completed: 17, completedLabel: 'Finished runs', dead: null,
+            problemCount: 1, problemLabel: 'Retained failed runs', maxLagTitle: 'Oldest import age',
+            maxLagLabel: formatAdminDashboardDuration(8 * 86400000 + 11 * 3600000),
+            chips: ['Background imports'], severity: 'error',
+        }));
+        expect(rows.find(row => row.id === 'workout')?.maxLagTitle).toBe('Longest wait');
+    });
+
+    it('keeps missing history completion and task counts unknown for older backend responses', () => {
+        const rows = buildAdminDashboardQueueRows({
+            pending: 0, succeeded: 0, stuck: 0, providers: [], cloudTasks: { pending: 0, queues: {} },
+            connectionHistory: { pending: 0, failed: 0, maxLagMs: 0 },
+        });
+        expect(rows.find(row => row.id === 'connection-history')).toEqual(expect.objectContaining({
+            completed: null, cloudTasks: null, dead: null, severity: 'warning',
+        }));
+    });
+
     it('normalizes malformed financial summary numbers', () => {
         const summary = buildAdminDashboardHealthSummary(
             [],

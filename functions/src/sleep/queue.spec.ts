@@ -559,6 +559,25 @@ describe('sleep queue', () => {
         expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])('does not reset or accelerate a retained immediate history job (processed=%s)', async processed => {
+        // The first read checks for duplicate immediate work; the transaction
+        // must still preserve an undispatched retry after an earlier enqueue failure.
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed, retryCount: 4, queueRevision: 'original', dateCreated: 123,
+                dispatchedToCloudTask: null }),
+        });
+        await addSleepSyncQueueItem({
+            type: 'suunto_health_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000,
+            connectionHistoryRunId: 'history-run',
+            dedupeKey: 'history-fixed-id', preserveExisting: true, dispatchImmediately: true,
+        });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
     it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'] as const)('accepts the admin catch-up job shape for %s', provider => {
         const jobs = buildHealthBackfillJobs(provider, 'test-user-uid', 'provider-account',
             Date.parse('2026-07-01'), Date.parse('2026-09-01'), 'campaign');
