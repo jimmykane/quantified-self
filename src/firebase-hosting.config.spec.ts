@@ -347,7 +347,7 @@ describe('Firebase Hosting configuration', () => {
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
     // measurement-first Heart rate choices, compact history, source comparison, visible coverage and recording details,
     // and bounded background Training rebuilds during bulk imports/reparse.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -388,7 +388,8 @@ describe('Firebase Hosting configuration', () => {
     // Account deletion now lives in the separate Data management settings section.
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
+    // Single-lap tables omit the persistent Summary row; selected summaries remain available.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

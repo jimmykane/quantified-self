@@ -1723,11 +1723,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('search or restore older choices');
     expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
-    expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Summary** row directly below its headers');
+    expect(gettingStartedSection?.content).toContain('A lap table with multiple laps includes a persistent **Summary** row directly below its headers');
+    expect(gettingStartedSection?.content).toContain("Single-lap tables omit this row and keep the lap's recorded values");
+    expect(gettingStartedSection?.content).toContain('checked separately for each activity and lap type');
+    expect(gettingStartedSection?.content).toContain('a grouped rest block still counts its original laps');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');
     expect(gettingStartedSection?.content).toContain('checkboxes beside lap rows');
     expect(gettingStartedSection?.content).toContain('**Selected summary · N** footer');
-    expect(gettingStartedSection?.content).toContain('**Max HR** is the whole-session peak, including rest');
+    expect(gettingStartedSection?.content).toContain('**Max HR** in the Summary row is the whole-session peak, including rest');
     expect(gettingStartedSection?.content).toContain('unweighted mean of available active-lap average heart rates');
     expect(gettingStartedSection?.content).toContain('unselected laps and the session peak do not contribute');
     expect(gettingStartedSection?.content).toContain('never borrows a cross-sport context lap');

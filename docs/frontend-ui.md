@@ -275,6 +275,12 @@ Partial HR coverage is visible, and unsupported aggregate metrics remain blank w
 This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
 remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
+The persistent lap Summary row appears only when an activity/lap-type table contains at least two visible original
+laps and has summary metrics. A single lap retains its recorded row without a duplicate summary. Count original laps
+before rest-block grouping, not the number of collapsed display rows. Column availability follows the same rule:
+session-only Max HR cannot advertise a column in a single-lap table without its own recorded peak. Temporary selection
+summaries remain available, including when one lap is selected. Changing the visible lap set recomputes this presentation.
+
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,
 including empty lists, retain precedence. The display-only `DataNormalizedSwolf` extends Sports Lib's numeric data
 class. Stroke, total strokes and normalized SWOLF choices are limited to swimming in both the chooser and the

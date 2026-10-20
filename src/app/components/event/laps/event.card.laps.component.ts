@@ -386,6 +386,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }, []);
 
     const displayRows = swimming ? this.groupRestRows(activity, lapRows, metricTypes) : lapRows;
+    if (laps.length < 2) {
+      return displayRows;
+    }
     const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, this.event?.getActivities?.() || this.selectedActivities));
     const averageMetrics = getAverageEventLapMetrics(localLaps, metricTypes, this.unitSettings, activity.type, activity,
       this.event?.getActivities?.() || this.selectedActivities);

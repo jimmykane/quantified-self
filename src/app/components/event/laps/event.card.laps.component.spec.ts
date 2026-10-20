@@ -510,19 +510,19 @@ describe('EventCardLapsComponent', () => {
     });
 
     it('uses one session peak across lap tabs, keeps selections local and never adds an empty activity table', () => {
-        const activity = createRestActivity([30, 30, 10], [100, 110, 130]);
+        const activity = createRestActivity([30, 30, 30, 10], [100, 100, 110, 130]);
         const laps = activity.getLaps();
-        for (const [index, maximum] of [110, 137, 165].entries()) {
+        for (const [index, maximum] of [110, 110, 137, 165].entries()) {
             laps[index].addStat(new DataHeartRateMax(maximum));
-            if (index < 2) {
+            if (index < 3) {
                 laps[index].addStat(new DataActiveLap(true));
                 laps[index].addStat(new DataDistance(25));
             }
-            if (index > 0) laps[index].type = LapTypes.AutoLap;
+            if (index > 1) laps[index].type = LapTypes.AutoLap;
         }
         activity.addStat(new DataHeartRateMax(155));
-        const samples = Array<number>(71).fill(120);
-        samples[65] = 170;
+        const samples = Array<number>(101).fill(120);
+        samples[95] = 170;
         activity.addStream(new Stream(DataHeartRate.type, samples));
         const empty = { ...createActivity([]), getID: () => 'empty', getStat: () => new DataHeartRateMax(210) } as ActivityInterface;
         component.selectedActivities = [activity, empty];
@@ -537,8 +537,8 @@ describe('EventCardLapsComponent', () => {
             expect(table.dataSource.data[0].metricNotes?.[DataHeartRateMax.type]).toContain('including rest');
             expect(table.dataSource.data[0].metricNotes?.[DataHeartRateAvg.type]).toContain('excludes rest');
         }
-        const automatic = tables.find(table => table.dataSource.data.some(row => row.lap === laps[2]))!;
-        component.toggleLapSelection(automatic, automatic.dataSource.data.find(row => row.lap === laps[2])!);
+        const automatic = tables.find(table => table.dataSource.data.some(row => row.lap === laps[3]))!;
+        component.toggleLapSelection(automatic, automatic.dataSource.data.find(row => row.lap === laps[3])!);
         fixture.detectChanges();
         expect(automatic.selectedSummaryLabel).toBe('Selected summary · 1');
         expect(automatic.selectedSummary[DataHeartRateMax.type]).toBe('165 bpm · 1/1');
@@ -548,13 +548,13 @@ describe('EventCardLapsComponent', () => {
     });
 
     it.each(['session', 'samples', 'other lap tab'] as const)('keeps the swim picker consistent with a peak from %s', source => {
-        const activity = createRestActivity([30, 30]);
+        const activity = createRestActivity(source === 'other lap tab' ? [30, 30, 30, 30] : [30, 30]);
         activity.getLaps().forEach(lap => lap.removeStat(DataHeartRateMax.type));
         if (source === 'session') activity.addStat(new DataHeartRateMax(170));
         if (source === 'samples') activity.addStream(new Stream(DataHeartRate.type, [120, 170]));
         if (source === 'other lap tab') {
-            activity.getLaps()[1].type = LapTypes.AutoLap;
-            activity.getLaps()[1].addStat(new DataHeartRateMax(170));
+            activity.getLaps().slice(2).forEach(lap => lap.type = LapTypes.AutoLap);
+            activity.getLaps()[3].addStat(new DataHeartRateMax(170));
         }
         component.selectedActivities = [activity];
         eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
@@ -1042,6 +1042,78 @@ describe('EventCardLapsComponent', () => {
         expect(rows?.[2]).toMatchObject({ '#': 2, [DataPaceAvg.type]: '03:20 min/km' });
     });
 
+    it.each(['Running', 'Cycling', 'Swimming', 'Hiking'])('omits the persistent summary for a single %s lap without hiding the lap or selection', sport => {
+        const lap = {
+            ...createRenderableLap(LapTypes.Manual),
+            getDuration: () => new DataDuration(60),
+            getStat: (type: string) => type === DataHeartRateAvg.type ? new DataHeartRateAvg(130) : undefined,
+        } as unknown as LapInterface;
+        const activity = { ...createActivity([lap]), type: sport } as ActivityInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const table = component.lapTableGroups[0].tables[0];
+        expect(table.dataSource.data).toHaveLength(1);
+        expect(table.dataSource.data[0]).toMatchObject({ '#': 1, [DataHeartRateAvg.type]: '130 bpm' });
+        expect(table.dataSource.data[0].lap).toBe(lap);
+        expect(fixture.nativeElement.querySelector('.lap-average-row')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('mat-row:not(.lap-length-detail-row)')).toHaveLength(1);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        fixture.nativeElement.querySelector('input[aria-label="Select lap 1"]').click();
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(1);
+        expect(fixture.nativeElement.querySelector('.lap-selected-summary-row:not([hidden])')?.textContent)
+            .toContain('Selected summary · 1');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+    });
+
+    it('adds and removes the persistent summary as the visible lap count changes', () => {
+        const laps = [300, 330].map(pace => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+        } as unknown as LapInterface));
+        const activity = createActivity(laps);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('.lap-average-row')).toHaveLength(1);
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataPaceAvg.type]).toBe('05:15 min/km');
+
+        laps.pop();
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.lap-average-row')).toBeNull();
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data).toHaveLength(1);
+
+        laps.push({ ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(330) : undefined,
+        } as unknown as LapInterface);
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('.lap-average-row')).toHaveLength(1);
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data).toHaveLength(3);
+    });
+
+    it('counts laps per activity and lap type instead of across the entire event', () => {
+        const createMeasuredLap = (type: LapTypes) => ({ ...createRenderableLap(type),
+            getStat: (metric: string) => metric === DataHeartRateAvg.type ? new DataHeartRateAvg(130) : undefined,
+        } as unknown as LapInterface);
+        const running = createActivity([createMeasuredLap(LapTypes.Manual), createMeasuredLap(LapTypes.AutoLap)]);
+        const cycling = { ...createActivity([createMeasuredLap(LapTypes.Manual), createMeasuredLap(LapTypes.Manual)]),
+            getID: () => 'cycling', type: 'Cycling',
+        } as ActivityInterface;
+        component.selectedActivities = [running, cycling];
+        component.ngOnChanges();
+
+        for (const type of [LapTypes.Manual, LapTypes.AutoLap]) {
+            expect(component.getDataSource(running, type)?.data).toHaveLength(1);
+            expect(component.getDataSource(running, type)?.data[0].isLapAverage).not.toBe(true);
+        }
+        expect(component.getDataSource(cycling, LapTypes.Manual)?.data).toHaveLength(3);
+        expect(component.getDataSource(cycling, LapTypes.Manual)?.data[0].isLapAverage).toBe(true);
+    });
+
     it('shows unit-aware metric averages directly below the table header', () => {
         const activity = createActivity([300, 330].map((pace) => ({
             ...createRenderableLap(LapTypes.Manual),
@@ -1081,15 +1153,15 @@ describe('EventCardLapsComponent', () => {
     });
 
     it('keeps table average rows sport-aware', () => {
-        const running = createActivity([{
+        const running = createActivity([300, 300].map(pace => ({
             ...createRenderableLap(LapTypes.Manual),
-            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined,
-        } as unknown as LapInterface]);
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+        } as unknown as LapInterface)));
         const cycling = {
-            ...createActivity([{
+            ...createActivity([5, 5].map(speed => ({
                 ...createRenderableLap(LapTypes.Manual),
-                getStat: (type: string) => type === DataSpeedAvg.type ? new DataSpeedAvg(5) : undefined,
-            } as unknown as LapInterface]),
+                getStat: (type: string) => type === DataSpeedAvg.type ? new DataSpeedAvg(speed) : undefined,
+            } as unknown as LapInterface))),
             getID: () => 'activity-2',
             type: 'Cycling',
         } as ActivityInterface;
@@ -1219,13 +1291,6 @@ describe('EventCardLapsComponent', () => {
             DataSpeedMax.type,
         ]);
         expect(component.getDataSource(activity, LapTypes.Manual)?.data).toEqual([
-            {
-                '#': 'Summary',
-                isLapAverage: true,
-                [DataSpeedAvg.type]: '18.00 km/h',
-                [DataSpeedMin.type]: '3.60 km/h',
-                [DataSpeedMax.type]: '36.00 km/h',
-            },
             {
                 '#': 1,
                 [DataSpeedAvg.type]: '18.00 km/h',
