@@ -604,6 +604,14 @@ describe('help.content', () => {
     expect(content).toContain('can remain target-free');
   });
 
+  it('explains the Suunto Weight Training mapping and the scope of unsupported delivery badges', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('**Weight Training** interval recipes can be sent to Suunto');
+    expect(content).toContain('**Gym / Strength Training** profile');
+    expect(content).toContain('asks you to review this profile mapping before sending');
+    expect(content).toContain('describes planned-workout delivery, not whether the service can record that sport or heart rate');
+  });
+
   it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('rep-based sets require manual transitions');

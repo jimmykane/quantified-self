@@ -1150,6 +1150,19 @@ edits; schedule shifts preserve it. Sports Lib `DataWeight` uses the owner's ind
 external-load display and converts edited pounds back to canonical kilograms; changing distance units does not
 change load units. An unchanged rounded pound display preserves its stored kilogram value.
 
+Separately, generic interval recipes authored as `Weight Training` use Suunto's existing Gym (`23`) profile through
+the `Strength Training` planning alias. They retain `Weight Training` in storage, history and public recipe reads;
+they do not become exercise-aware strength workouts or gain repetition/load tracking. Their mapping is degraded
+and requires the existing explicit mapping review. Garmin, COROS and Wahoo remain unsupported for this alias.
+On normal delivery reconciliation, previously unsupported eligible workouts are reassessed and become
+`approval_required`; sending still requires mapping approval and existing valid service consent. No migration,
+recorded-activity reparse or manual provider replay is needed, and deployment alone does not rewrite saved status.
+The local compatibility read and mutation preview share this mapping. MCP impact: the existing sport, issue code
+and exact/degraded/unsupported contracts already cover it; no schema, scope, consent, tool or plugin change.
+Focused strict read/JSON, serializer and delivery-intent tests verify the preserved name and approval boundary.
+The audit covered all 283 catalog sports accepted by recipe validation: all 45 manual interval-editor sports
+already have Suunto delivery mappings. Other catalog sports do not gain outbound support from their group.
+
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal
 Send/Enable plan sync; it does not require separate per-workout or per-edit mapping approval. Additional losses, such

@@ -58,6 +58,30 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it('keeps Weight Training in recipe reads and discloses its Suunto-only Gym fallback in compatibility', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.WeightTraining, nodes: [
+      { kind: 'step', id: 'lift', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] },
+    ] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(recipe);
+    }
+    const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
+      'assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'coros', 'wahoo'] }));
+    expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
+      ['suunto', 'degraded'], ['garmin', 'unsupported'], ['coros', 'unsupported'], ['wahoo', 'unsupported'],
+    ]);
+    expect(compatibility.assessments[0].issues).toContainEqual({ severity: 'degraded', code: 'sport_profile_degraded',
+      field: '$.sport', message: 'Suunto receives Weight Training using its Strength Training profile; QS keeps the authored sport.' });
+    expect(JSON.stringify(compatibility)).not.toMatch(/digest|destinationKey|activityIds|account-a|strengthDetails/);
+    expect(f.structures.w1).toEqual(recipe);
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef }, [])).rejects.toThrow();
+  });
+
   it('reads phases through a dedicated strict projection and independent consent with bound references', async () => {
     const f = fixture();
     const planRef = f.codec.encode({ kind: 'plan', id: 'p1', createdAtMs: 1 }, 'owner', 'connection');

@@ -1,7 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { resolveCompatibleActivityType } from '../../../../shared/activity-type-compatibility';
-import { parseWorkoutStructureV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, parseWorkoutStructureV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
 import { assessPlannedWorkoutProviderMappingV1, isPlannedWorkoutProviderDeliveryEnabled } from '../../../../shared/planned-workout-providers';
 import { wahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
 import { serializeSuuntoGuideJsonV1 } from './suunto-guide.serializer';
@@ -38,6 +38,40 @@ const corosOptions = { athleteId: 24680, workoutId: 13579, title: 'Alias fixture
   lastModifiedDate: '2026-10-10T12:00:00', allowDegraded: true };
 
 describe('approved planned-workout sport aliases', () => {
+  it('delivers Weight Training through Suunto Gym without changing the recipe or enabling other providers', () => {
+    const structure = parseWorkoutStructureV1(JSON.parse(JSON.stringify(recipe(ActivityTypes.WeightTraining))));
+    structure.nodes[0] = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' },
+      targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }], note: 'Lift with good form' };
+    const before = structuredClone(structure);
+    const guide = serializeSuuntoGuideJsonV1(structure, suuntoOptions);
+    const canonical = { ...structure, sport: ActivityTypes.StrengthTraining };
+    expect(guide.artifact).toEqual(serializeSuuntoGuideJsonV1(canonical, suuntoOptions).artifact);
+    expect(guide.artifact.activities).toEqual([23]);
+    expect(guide.artifact.steps[0]).toMatchObject({ type: 'fields', fields: expect.arrayContaining([
+      expect.objectContaining({ type: 'heartRate' }),
+      expect.objectContaining({ type: 'targetHeartRate', min: 100, max: 130 }),
+    ]), transitions: [{ condition: { type: 'manualLap' } }] });
+    expect(guide.level).toBe('degraded');
+    expect(guide.issues).toContainEqual(expect.objectContaining({ code: 'sport_profile_degraded', path: '$.sport',
+      message: expect.stringContaining('Weight Training using its Strength Training profile') }));
+    expect(() => serializeSuuntoGuideJsonV1(structure, { ...suuntoOptions, allowDegraded: false })).toThrow();
+    for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+      expect(assessPlannedWorkoutProviderMappingV1(provider, recipe(ActivityTypes.WeightTraining))).toMatchObject({
+        level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_sport' })]),
+      });
+    }
+    const repetitions = { ...structure, nodes: [{ kind: 'step', id: 'reps', purpose: 'work',
+      ending: { kind: 'repetitions', repetitions: 10 }, targets: [] }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', repetitions)).toMatchObject({ level: 'unsupported',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
+    expect(structure).toEqual(before);
+    expect(parseWorkoutStructureV1(JSON.parse(JSON.stringify(structure)))).toEqual(before);
+  });
+
+  it.each(MANUAL_WORKOUT_EDITOR_SPORTS_V1)('has a Suunto mapping for the editor sport %s', sport => {
+    expect(serializeSuuntoGuideJsonV1(recipe(sport), suuntoOptions).artifact.activities.length).toBeGreaterThan(0);
+  });
+
   it.each(rows)('delivers %s through the approved existing profiles and retains its QS recipe', (name, suunto, garmin, coros, wahoo) => {
     const sport = resolveCompatibleActivityType(name)!;
     expect(sport).toBe(name);

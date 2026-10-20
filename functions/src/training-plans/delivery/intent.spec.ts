@@ -4,6 +4,7 @@ import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display
 import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
+import { hashTrainingScheduleRequestPayload } from '../persistence';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { GarminTrainingTransport } from './garmin/transport';
@@ -24,6 +25,32 @@ const base: DeliveryContext = {
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
+  it('reassesses unsupported Weight Training, requires mapping approval and retains existing sync consent', () => {
+    const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
+    const context: DeliveryContext = { ...base,
+      transport: new SuuntoGuideTransport(request, 'Quantified Self'),
+      setting: { ...base.setting!, provider: 'suunto' },
+      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.WeightTraining } },
+    };
+    // The previous mapper hashed the complete workout when it rejected this sport.
+    const previousDigest = hashTrainingScheduleRequestPayload({ mappingVersion: 'suunto-guides-v13',
+      destination: 'account-a', zone: 'Europe/Helsinki', owner: 'Quantified Self', workout: context.workout });
+    const previous = { connectionEpoch: 0, destinationKey: 'account-a', status: 'unsupported',
+      desired: 'preserve', desiredDigest: previousDigest, acceptedDigest: null } as DeliveryLedgerV1;
+    const before = structuredClone(context.setting);
+    const reviewed = resolveDeliveryIntent(context, previous);
+    expect(reviewed).toMatchObject({ desired: 'preserve', status: 'approval_required', approvalDigest: reviewed.digest });
+    expect(reviewed.digest).not.toBe(previous.desiredDigest);
+    expect(reviewed.issues).toContainEqual(expect.stringContaining('Weight Training using its Strength Training profile'));
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: reviewed.digest } }, previous))
+      .toMatchObject({ desired: 'present', status: 'pending', digest: reviewed.digest, approvalDigest: null });
+    expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }, previous).status).toBe('paused_pro');
+    expect(context.setting).toEqual(before);
+    expect(context.workout!.structure.sport).toBe(ActivityTypes.WeightTraining);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['year boundary', '2026-12-31T22:30:00Z', 'Europe/Helsinki', '2027-01-01', '2028-01-01', '2028-01-02', '2026-12-31'],
     ['leap year', '2027-12-31T22:30:00Z', 'Europe/Helsinki', '2028-01-01', '2028-12-31', '2029-01-01', '2027-12-31'],

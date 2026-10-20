@@ -355,6 +355,15 @@ steps. COROS walking aliases remain unsupported and COROS delivery stays disable
 AMRAP/EMOM/Tabata/BODYPUMP have no approved outbound mapping. Recorded-activity uploads use their independent
 mapping contract; this planning table does not widen that contract.
 
+`Weight Training` has a **Suunto-only** planning alias to the existing `Strength Training` / Gym (`23`) Guide
+profile, matching Suunto's [published activity catalog](https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf).
+The original recipe sport survives reads and JSON round trips. This is the generic interval mapper, not the
+exercise-aware strength companion: existing ending/target validation and explicit mapping-loss approval apply.
+Garmin, COROS and Wahoo do not inherit this alias or bypass their strength-companion requirements.
+The catalog audit found all 45 manual interval-editor sports already covered by Suunto; Kettlebell, Calisthenics,
+Core Training, LES MILLS CORE, LES MILLS GRIT Strength and BODYPUMP still need separate delivery-profile decisions.
+Recorded-sport availability is independent of planned-workout delivery support.
+
 Monitoring coverage decision for this alias extension: **unchanged**. The existing Training monitoring bundle
 (`tools/training-monitoring/definitions.mjs`) already selects Garmin, Wahoo and Suunto delivery outcome/failure
 labels, due queue age, dispatch failures and unknown health samples. Aliases keep the same adapters, dispatchers,

@@ -9,9 +9,9 @@ export type PlannedWorkoutSportAliasProvider = 'suunto' | 'garmin' | 'coros' | '
 export const PLANNED_WORKOUT_SPORT_ALIASES_V1: ReadonlyArray<{
   sport: ActivityTypes;
   suunto: ActivityTypes;
-  garmin: ActivityTypes;
+  garmin: ActivityTypes | null;
   coros: ActivityTypes | null;
-  wahoo: ActivityTypes;
+  wahoo: ActivityTypes | null;
 }> = [
   ...[Refined.RoadRunning, Refined.TrackRunning, Refined.UltraRunning, Refined.CrosscountryRunning,
     Refined.IndoorTrackRunning, Refined.ObstacleRacing].map(sport => ({ sport,
@@ -41,6 +41,10 @@ export const PLANNED_WORKOUT_SPORT_ALIASES_V1: ReadonlyArray<{
     suunto: ActivityTypes.Walking, garmin: ActivityTypes.Walking, coros: null, wahoo: ActivityTypes.Walking })),
   { sport: ActivityTypes.Trekking, suunto: ActivityTypes.Hiking, garmin: ActivityTypes.Hiking,
     coros: null, wahoo: ActivityTypes.Hiking },
+  // Generic lifting intervals reuse Suunto's existing Gym guide. Other providers
+  // require their exercise-aware strength contract; this alias does not grant it.
+  { sport: ActivityTypes.WeightTraining, suunto: ActivityTypes.StrengthTraining,
+    garmin: null, coros: null, wahoo: null },
 ];
 
 export function plannedWorkoutSportAliasV1(provider: PlannedWorkoutSportAliasProvider, sport: ActivityTypes): ActivityTypes {
