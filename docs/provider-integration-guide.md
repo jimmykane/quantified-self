@@ -357,7 +357,7 @@ mapping contract; this planning table does not widen that contract.
 
 `Weight Training`, `Core Training`, `LES MILLS CORE`, `LES MILLS GRIT Strength` and `LES MILLS BODYPUMP` have
 **Suunto-only** planning aliases to the existing `Strength Training` / Gym (`23`) Guide profile.
-`Virtual Rowing` uses `Indoor Rowing` (`57`). `Kettlebell` (`63`) and `Calisthenics` (`104`) use their own native
+`Kettlebell` (`63`) and `Calisthenics` (`104`) use their own native
 recommendation profiles with HR-only default live readings, from Suunto's
 [published activity catalog](https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf).
 The [Guide contract](https://apizone.suunto.com/suuntoplus-guide-description) uses those IDs as activity recommendations;
@@ -365,15 +365,22 @@ they do not establish device availability or account-side delivery proof.
 The original recipe sport survives reads and JSON round trips. This is the generic interval mapper, not the
 exercise-aware strength companion: existing ending/target validation applies, and profile substitutions require
 explicit mapping-loss approval. Native Kettlebell/Calisthenics do not introduce a profile loss. These profiles do not
-gain repetition endings, external-load tracking or new manual-editor choices. Garmin, COROS and Wahoo do not inherit
-these aliases or bypass their strength-companion requirements.
+gain repetition endings, external-load tracking or new manual-editor choices. The approved additional Suunto modes
+are Yoga (`121`), Pilates (`120`), Stretching (`58`), Crossfit (`54`), Circuit training (`73`), Aerobics (`69`),
+Crosstrainer (`55`) and Meditation (`112`), with HR-only default live readings. Flexibility Training → Stretching,
+Elliptical Trainer → Crosstrainer and Breathwork → Meditation are disclosed substitutions requiring review.
+Garmin, COROS and Wahoo do not inherit these Suunto-only aliases or bypass their strength-companion requirements.
+`Virtual Rowing` uses Suunto Indoor Rowing (`57`), Garmin's existing Indoor Rowing → Generic mapping (with device
+warning and review), and Wahoo Indoor Rowing (Plan family `6`, indoor location `0`, dated Workout type `22`). Wahoo
+keeps timed, untargeted steps only; unsupported distance/manual endings and intensity targets cannot be approved away.
+All three providers retain the original QS recipe name and require mapping review. COROS rowing remains unsupported.
 The catalog audit checked all 283 recipe-valid sports across all four assessors and serializers (1,132 pairs): no
 advertised mapping disagreed with serialization for a timed, untargeted recipe. All 45 interval-editor sports have
 Suunto, Garmin and Wahoo mappings; COROS retains its nine documented unsupported editor sports and stays disabled.
-Suunto now maps 54 catalog sports; its other 229 names remain unsupported for generic planned-workout delivery.
-That is a support boundary, not 229 import bugs: native activity recording alone never establishes workout delivery.
-Remaining profile decisions include yoga/pilates, flexibility, conditioning, elliptical exercise and other provider
-Virtual Rowing aliases. No additional classifications were inferred from activity groups.
+Suunto now maps 65 catalog sports; its other 218 names remain unsupported for generic planned-workout delivery.
+That is a support boundary, not 218 import bugs: native activity recording alone never establishes workout delivery.
+All 180 preceding supported serializer results remain byte-identical. This batch adds exactly 11 Suunto sport names
+and Garmin/Wahoo Virtual Rowing; no additional classifications were inferred from activity groups.
 
 Monitoring coverage decision for this alias extension: **unchanged**. The existing Training monitoring bundle
 (`tools/training-monitoring/definitions.mjs`) already selects Garmin, Wahoo and Suunto delivery outcome/failure

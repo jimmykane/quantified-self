@@ -611,7 +611,11 @@ describe('help.content', () => {
     expect(content).toContain('**Gym / Strength Training** profile');
     expect(content).toContain('asks you to review these profile mappings before sending');
     expect(content).toContain('**Kettlebell** and **Calisthenics** use their own Suunto profiles');
-    expect(content).toContain('do not add sport choices to the manual interval editor or enable delivery to other services');
+    expect(content).toContain('The manual interval editor keeps its current sport choices');
+    for (const sport of ['Yoga', 'Pilates', 'Stretching', 'Flexibility Training', 'Crossfit', 'Circuit Training', 'Aerobics',
+      'Crosstrainer', 'Elliptical Trainer', 'Meditation', 'Breathwork']) expect(content).toContain(`**${sport}**`);
+    expect(content).toContain('**Virtual Rowing** uses **Indoor Rowing** on Suunto and Wahoo, and **Generic** on Garmin');
+    expect(content).toContain('Wahoo accepts only timed steps with no intensity targets');
     expect(content).toContain('describes planned-workout delivery, not whether the service can record that sport or heart rate');
   });
 

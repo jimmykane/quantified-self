@@ -23,6 +23,22 @@ export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
     ] } };
 }
 describe('Wahoo delivery mapping (no editor changes)', () => {
+  it('sends Virtual Rowing as indoor rowing in both the Plan and dated Workout after mapping review', () => {
+    const workout = wahooFixtureWorkout();
+    workout.structure.sport = ActivityTypes.VirtualRowing;
+    const before = structuredClone(workout);
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'degraded',
+      issues: expect.arrayContaining([expect.stringContaining('Virtual Rowing using its Indoor Rowing profile')]) });
+    // Delivery intent enforces approval; this helper builds the approved create/update payload.
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    expect(recipe.header).toMatchObject({ workout_type_family: 6, workout_type_location: 0, duration_s: 183 });
+    const fields = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
+    expect(fields.get('workout[workout_type_id]')).toBe('22');
+    expect(fields.get('workout[minutes]')).toBe('3.05');
+    expect(workout).toEqual(before);
+  });
+
   it.each([[ActivityTypes.Walking, 6], [ActivityTypes.Hiking, 9]] as const)('keeps %s Plan family and exact Workout type aligned, including repeats', (sport, type) => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
     expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('exact');
@@ -47,9 +63,9 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header.workout_type_family)
       .toBe(sport === ActivityTypes.Cycling ? 0 : 1);
   });
-  it('covers every editor sport and only the explicit additional running/cycling profiles', () => {
+  it('covers every editor sport and the explicit strength/virtual rowing additions', () => {
     expect(new Set(WAHOO_PLANNED_WORKOUT_SPORTS_V1)).toEqual(new Set([
-      ...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining,
+      ...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining, ActivityTypes.VirtualRowing,
     ]));
     for (const row of WAHOO_SPORT_FIXTURES) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(row.sport);
     for (const sport of MANUAL_WORKOUT_EDITOR_SPORTS_V1) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(sport);

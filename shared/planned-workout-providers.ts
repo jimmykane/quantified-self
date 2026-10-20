@@ -66,6 +66,14 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.StrengthTraining,
   ActivityTypes.Kettlebell,
   ActivityTypes.Calisthenics,
+  ActivityTypes.Yoga,
+  ActivityTypes.Pilates,
+  ActivityTypes.Stretching,
+  ActivityTypes.Crossfit,
+  ActivityTypes['Circuit Training'],
+  ActivityTypes.Aerobics,
+  ActivityTypes.Crosstrainer,
+  ActivityTypes.Meditation,
   ...plannedWorkoutAliasedSportsV1('suunto'),
 ])] as const;
 

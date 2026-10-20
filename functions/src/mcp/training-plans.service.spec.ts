@@ -63,7 +63,11 @@ describe('Training plan MCP reads', () => {
     [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
     [ActivityTypes['LES MILLS BODYPUMP'], 'Strength Training'], [ActivityTypes.VirtualRowing, 'Indoor Rowing'],
     [ActivityTypes.Kettlebell, null], [ActivityTypes.Calisthenics, null],
-  ] as const)('keeps %s in recipe reads and reports its Suunto-only profile accurately', async (sport, fallback) => {
+    [ActivityTypes.Yoga, null], [ActivityTypes.Pilates, null], [ActivityTypes.Stretching, null],
+    [ActivityTypes.FlexibilityTraining, 'Stretching'], [ActivityTypes.Crossfit, null],
+    [ActivityTypes['Circuit Training'], null], [ActivityTypes.Aerobics, null], [ActivityTypes.Crosstrainer, null],
+    [ActivityTypes.EllipticalTrainer, 'Crosstrainer'], [ActivityTypes.Meditation, null], [ActivityTypes.Breathwork, 'Meditation'],
+  ] as const)('keeps %s in recipe reads and reports its approved profiles accurately', async (sport, fallback) => {
     const f = fixture();
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [
       { kind: 'step', id: 'lift', purpose: 'work', ending: { kind: 'time', seconds: 600 },
@@ -78,13 +82,34 @@ describe('Training plan MCP reads', () => {
     const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
       'assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'coros', 'wahoo'] }));
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
-      ['suunto', fallback ? 'degraded' : 'exact'], ['garmin', 'unsupported'], ['coros', 'unsupported'], ['wahoo', 'unsupported'],
+      ['suunto', fallback ? 'degraded' : 'exact'], ['garmin', sport === ActivityTypes.VirtualRowing ? 'degraded' : 'unsupported'],
+      ['coros', 'unsupported'], ['wahoo', 'unsupported'],
     ]);
     expect(compatibility.assessments[0].issues).toEqual(fallback ? [{ severity: 'degraded', code: 'sport_profile_degraded',
       field: '$.sport', message: `Suunto receives ${sport} using its ${fallback} profile; QS keeps the authored sport.` }] : []);
     expect(JSON.stringify(compatibility)).not.toMatch(/digest|destinationKey|activityIds|account-a|strengthDetails/);
     expect(f.structures.w1).toEqual(recipe);
     await expect(f.run('assess_planned_workout_compatibility', { workoutRef }, [])).rejects.toThrow();
+  });
+
+  it('discloses all three Virtual Rowing fallbacks and keeps Wahoo timed and untargeted', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.VirtualRowing, nodes: [
+      { kind: 'step', id: 'row', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] },
+    ] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const assess = () => f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'wahoo', 'coros'] });
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess());
+    expect(result.assessments.map(item => [item.provider, item.level])).toEqual([
+      ['suunto', 'degraded'], ['garmin', 'degraded'], ['wahoo', 'degraded'], ['coros', 'unsupported'],
+    ]);
+    expect(result.assessments[1].issues[0].message).toContain('Generic workouts are supported only on some devices');
+    expect(result.assessments[2].issues[0].message).toContain('using its Indoor Rowing profile');
+    recipe.nodes[0] = { kind: 'step', id: 'row', purpose: 'work', ending: { kind: 'distance', meters: 500 }, targets: [] };
+    expect(TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess()).assessments[2])
+      .toMatchObject({ level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
+    expect(JSON.stringify(result)).not.toMatch(/digest|destinationKey|workout_type|activityIds/);
   });
 
   it('reads phases through a dedicated strict projection and independent consent with bound references', async () => {

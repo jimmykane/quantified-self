@@ -49,6 +49,12 @@ export const PLANNED_WORKOUT_SPORT_ALIASES_V1: ReadonlyArray<{
     Refined.LesMillsBODYPUMP].map(sport => ({ sport, suunto: ActivityTypes.StrengthTraining,
     garmin: null, coros: null, wahoo: null })),
   { sport: ActivityTypes.VirtualRowing, suunto: ActivityTypes.IndoorRowing,
+    garmin: ActivityTypes.IndoorRowing, coros: null, wahoo: ActivityTypes.IndoorRowing },
+  { sport: ActivityTypes.FlexibilityTraining, suunto: ActivityTypes.Stretching,
+    garmin: null, coros: null, wahoo: null },
+  { sport: ActivityTypes.EllipticalTrainer, suunto: ActivityTypes.Crosstrainer,
+    garmin: null, coros: null, wahoo: null },
+  { sport: ActivityTypes.Breathwork, suunto: ActivityTypes.Meditation,
     garmin: null, coros: null, wahoo: null },
 ];
 
