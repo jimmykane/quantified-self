@@ -9,7 +9,7 @@ import {
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import {
   buildEventChartPanelsFromSnapshot,
-  type EventChartPanelBuildSnapshotInput, type EventChartPanelModel,
+  type EventChartPanelBuildSnapshotInput,
   type EventChartPanelWorkerRequest, type EventChartPanelWorkerResponse,
 } from './event-echarts-data.helper';
 
@@ -72,10 +72,6 @@ function worker() {
   return { send: (data: EventChartPanelWorkerRequest) => receive({ data }), messages };
 }
 
-function comparable(panels: EventChartPanelModel[]) {
-  return JSON.parse(JSON.stringify(panels, (_key, value) => ArrayBuffer.isView(value) ? Array.from(value as Float64Array) : value));
-}
-
 describe('compiled event chart worker', () => {
   it('emits one worker and excludes all file adapters and parser chunks', () => {
     expect(bundle.outputFiles).toHaveLength(1);
@@ -94,10 +90,12 @@ describe('compiled event chart worker', () => {
     instance.send({ requestID: 42, input });
     const { response, transferables } = instance.messages[0];
     expect(response.requestID).toBe(42);
-    expect('error' in response).toBe(false);
-    expect(comparable((response as { panels: EventChartPanelModel[] }).panels)).toEqual(comparable(expected));
+    if ('error' in response) throw new Error(response.error);
+    // Compare in one realm without JSON's loss of typed arrays, NaN or undefined fields.
+    expect(response.panels).toStrictEqual(structuredClone(expected));
     expect(transferables.length).toBeGreaterThan(0);
     expect(new Set(transferables).size).toBe(transferables.length);
+    expect(transferables.every(buffer => buffer instanceof ArrayBuffer && buffer.byteLength === 0)).toBe(true);
   });
 
   it('preserves the error envelope and handles the next request', () => {
