@@ -127,6 +127,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('workout library Firestore
         await mutateWorkoutLibraryForUser(uid, { mutationId: 'strength-create', operation: {
             kind: 'create', itemId: 'strength-template', title: 'Strength A', structure: strengthStructure, strength,
         } }, { db, nowMs });
+        await expect(mutateWorkoutLibraryForUser(uid, { mutationId: 'summary-only-update', operation: {
+            kind: 'update', itemId: 'strength-template', expectedRevision: 1, title: 'Keep complete strength', structure: strengthStructure,
+        } }, { db, nowMs: nowMs + 1 })).rejects.toThrow('exercise prescription');
+        expect((await ref.collection('workoutLibrary').doc('strength-template').get()).get('strength')).toEqual(strength);
         const placed = await placeWorkoutLibraryForUser(uid, {
             mutationId: 'strength-place', itemId: 'strength-template', expectedTemplateRevision: 1,
             expectedStateRevision: 0, planId: null, expectedPlanRevision: null,

@@ -1,3 +1,4 @@
+import { assessWahooDelivery } from './mapping';
 import { randomUUID } from 'node:crypto';
 import * as logger from 'firebase-functions/logger';
 import { Firestore } from 'firebase-admin/firestore';
@@ -504,6 +505,28 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, changed.id); await drain();
     expect(server.plans.size).toBe(0); expect(server.workouts.size).toBe(0);
   });
+  it('withdraws an older fractional-minute Plan after Stop without creating a dated Workout', async () => {
+    const sent = await send(); const ids = sent.actual!.ids;
+    server.workouts.clear();
+    const workout = wahooFixtureWorkout();
+    workout.structure.nodes = [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] }];
+    await user().collection('scheduledWorkouts').doc('w').set(workout);
+    const artifact = { ...sent.actual!, ids: { externalId: ids.externalId, workoutToken: ids.workoutToken, plan: ids.plan } };
+    const operation: DeliveryOperation = { id: 'legacy-fractional', kind: 'upsert', deliveryId: sent.id,
+      generation: sent.desiredGeneration, connectionGeneration: 'connection', destinationKey: sent.destinationKey,
+      timeZone: sent.timeZone, digest: assessWahooDelivery(workout, sent.destinationKey, sent.timeZone).digest,
+      contentDigest: sent.contentDigest, workout, artifact, progress: { version: 1, step: 'workout-create', state: 'rejected' } };
+    await user().collection(DELIVERY_LEDGER).doc(sent.id).update({ actual: artifact, acceptedDigest: null, attempt: operation });
+    server.calls.length = 0;
+    await command('stop'); await drain();
+    await processTrainingDelivery(runtime, uid, sent.id); await drain();
+    expect((await ledger()).attempt).toBeNull();
+    await processTrainingDelivery(runtime, uid, sent.id); await drain();
+    expect((await ledger()).actual).toBeNull();
+    expect(server.plans.size).toBe(0); expect(server.workouts.size).toBe(0);
+    expect(server.calls.every(call => call.method === 'GET' || call.method === 'DELETE')).toBe(true);
+  });
+
   it('blocks fractional-minute duration before any provider POST', async () => {
     const ref = user().collection('scheduledWorkouts').doc('w');
     const workout = wahooFixtureWorkout();

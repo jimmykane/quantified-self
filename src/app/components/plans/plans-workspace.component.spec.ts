@@ -2879,6 +2879,9 @@ describe('PlansWorkspaceComponent', () => {
     const editor = fixture.componentInstance;
     expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', details.workoutId, true);
     expect(editor.editorIsStrength()).toBe(true); expect(editor.editor()?.value.sport).toBe(sport);
+    editor.updateEditorField('sport', ActivityTypes.Running);
+    expect(editor.editor()?.value.sport).toBe(sport);
+    expect(haptics.selection).not.toHaveBeenCalled();
     editor.updateStrengthSet(0, 0, 'externalLoadKg', 5); await editor.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
       kind: 'update-workout', structure: expect.objectContaining({ sport }),
@@ -2900,6 +2903,39 @@ describe('PlansWorkspaceComponent', () => {
     }) }));
     expect(mutate.mock.calls[0][0].operation.strength).toBeUndefined();
   });
+  it('preserves title and date edits while resolving a legacy strength-name companion', async () => {
+    const structure = { version: 1 as const, sport: ActivityTypes.WeightTraining, nodes: [{ kind: 'step' as const,
+      id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61 }, targets: [] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure } : workout) };
+    let resolveDetails!: (value: null) => void;
+    getStrengthDetails.mockImplementation(() => new Promise(resolve => { resolveDetails = resolve; }));
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans(); const editor = fixture.componentInstance;
+    expect(editor.editor()?.strengthLoading).toBe(true);
+    editor.updateEditorField('title', 'Typing during the lookup'); editor.updateEditorField('localDate', '2026-09-25');
+    resolveDetails(null); await fixture.whenStable(); fixture.detectChanges();
+    expect(editor.editor()?.value).toMatchObject({ title: 'Typing during the lookup', localDate: '2026-09-25' });
+    expect(editor.editor()?.strengthLoading).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('changes a legacy strength-name interval sport without dropping its steps', async () => {
+    const structure = { version: 1 as const, sport: ActivityTypes.WeightTraining, nodes: [{ kind: 'step' as const,
+      id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61 }, targets: [] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure } : workout) };
+    getStrengthDetails.mockResolvedValue(null); setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans(); await fixture.whenStable(); const editor = fixture.componentInstance;
+    editor.updateEditorField('sport', ActivityTypes.Running);
+    expect(editor.editor()?.value.sport).toBe(ActivityTypes.Running);
+    expect(manualWorkoutEditorToStructure(editor.editor()!.value).nodes).toEqual(structure.nodes);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      structure: { ...structure, sport: ActivityTypes.Running },
+    }) }));
+  });
+
   it('keeps entered sets when selecting another approved strength name in a new draft', async () => {
     const fixture = await renderPlans(); const editor = fixture.componentInstance;
     editor.openNewWorkout(); editor.updateEditorField('sport', ActivityTypes.WeightTraining);

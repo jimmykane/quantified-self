@@ -1,5 +1,6 @@
+import { assessTrainingDeliveryMapping } from '../mapping';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
+import { wahooHasFractionalMinutes, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
@@ -108,11 +109,16 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
     return assessWahooDelivery(workout, destination, zone, strength);
   }
-  private validatePrescription(operation: DeliveryOperation): void {
+  private validatePrescription(operation: DeliveryOperation, recovering = false): void {
     if (operation.kind !== 'upsert') return;
     if (!operation.workout) throw new TrainingDeliveryTransportError('terminal');
     const assessment = this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength);
-    if (assessment.level === 'unsupported' || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
+    // Old attempts may have created a Plan before the dated Workout rejected
+    // fractional minutes. Inspect that journal so Stop can retire/withdraw it.
+    // execute still requires current compatibility before any create or update.
+    const historicalDuration = recovering && wahooHasFractionalMinutes(operation.workout.structure)
+      && assessTrainingDeliveryMapping('wahoo', operation.workout, operation.destinationKey, operation.timeZone, operation.strength).level !== 'unsupported';
+    if ((assessment.level === 'unsupported' && !historicalDuration) || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
   }
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
     return !artifact.completed && (artifact.localDate >= (artifact.timeZone ? trainingDeliveryLocalDate(this.now(), artifact.timeZone) : today)
@@ -401,7 +407,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   }
   async recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery> {
     this.validate(operation);
-    this.validatePrescription(operation);
+    this.validatePrescription(operation, true);
     const progress = operation.progress;
     if (progress === undefined) return { kind: 'uncertain' };
     if (progress === null) return { kind: operation.artifact ? 'resume' : 'not-accepted' };

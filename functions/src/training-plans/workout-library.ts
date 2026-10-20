@@ -144,6 +144,9 @@ export async function mutateWorkoutLibraryForUser(
             if (previous.revision !== operation.expectedRevision) {
                 throw new TrainingScheduleMutationError('revision-conflict', 'This library workout changed. Reload it first.');
             }
+            if (operation.kind === 'update' && previous.strength && isStrengthWorkoutSportV1(operation.structure.sport) && !operation.strength) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'This saved workout requires its complete exercise prescription.');
+            }
             if (operation.kind === 'delete') {
                 // Library entries are leaf documents. Receipts and ID tombstones live under trainingPlanState.
                 transaction.delete(itemRef);

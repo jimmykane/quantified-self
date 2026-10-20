@@ -15,7 +15,7 @@ import {
 } from '../../../shared/workout-library';
 import { parseScheduledWorkoutV1, parseTrainingPlanV1,
   TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '../../../shared/training-plans';
-import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
 import { mutateWorkoutLibraryForUser, placeWorkoutLibraryForUser } from '../training-plans/workout-library';
 import { TrainingScheduleMutationError } from '../training-plans/mutation';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
@@ -148,6 +148,9 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
       if (recipeMode === 'legacy' && change.kind === 'update' && hasAuthoredEarlyLapV1(item.structure))
         invalid('Read the saved recipe with v2 and use the v2 preview to preserve or explicitly change early Lap permission.');
       if (change.kind === 'place' && item.status !== 'active') invalid('Archived workouts cannot be placed.');
+      if (change.kind === 'update' && item.strength && isStrengthWorkoutSportV1(change.structure.sport) && !change.strength) {
+        invalid('This saved workout requires its complete exercise prescription.');
+      }
       savedItemId = item.id;
       savedItemCreatedAtMs = item.createdAtMs;
       title = item.title;
@@ -163,12 +166,14 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
         || workout.revision !== change.expectedWorkoutRevision || workout.lifecycle === 'deleted') {
         invalid('The source workout changed. Read it again.');
       }
-      if (workout.structure.sport === ActivityTypes.StrengthTraining) {
+      if (isStrengthWorkoutSportV1(workout.structure.sport)) {
         const detailsDoc = await tx.get(workoutRef.collection('strengthDetails').doc('current'));
-        if (!detailsDoc.exists) invalid('The source workout has incomplete strength details.');
-        const details = parseStrengthWorkoutDetailsV1(detailsDoc.data());
-        if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
-          invalid('The source workout has inconsistent strength details.');
+        if (!detailsDoc.exists && workout.structure.sport === ActivityTypes.StrengthTraining) invalid('The source workout has incomplete strength details.');
+        if (detailsDoc.exists) {
+          const details = parseStrengthWorkoutDetailsV1(detailsDoc.data());
+          if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
+            invalid('The source workout has inconsistent strength details.');
+          }
         }
       }
       sourceWorkoutId = workout.id;

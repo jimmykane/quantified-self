@@ -1198,6 +1198,11 @@ now offers all eight names; no exercises, repetitions, loads or durations are in
 under these names can remain generic intervals without a companion; that does not admit them to Garmin, Wahoo or
 COROS strength delivery. A present companion must match the source workout and its projection. Editing, copying,
 plan transfer, library placement, history and restore retain it; restoring history that would drop it is blocked.
+Library updates to a strength sport must include the complete prescription when the saved item already has one;
+app and MCP previews reject summary-only replacements. MCP save previews validate companion identity and projection
+for all eight strength names, while interval-only legacy aliases can be saved without inventing exercise details.
+Opening an older interval-only workout preserves title/date edits made during its companion lookup, and changing
+its interval sport preserves the authored steps.
 Suunto rich-strength aliases keep native Kettlebell/Calisthenics recommendations; the other five use Gym, with the
 existing manual-repetition and instruction-only load limitation. Generic interval behavior remains available separately.
 
@@ -1210,7 +1215,10 @@ The same probes found that Wahoo rejects fractional `workout[minutes]` values, i
 and `2.5`, despite its public API describing the field as Number. Whole-minute controls succeeded. New Wahoo Sends
 are therefore blocked before provider writes unless their exact authored total is a positive whole number of minutes.
 QS does not round or pad steps; adjust the recipe explicitly. Exact seconds remain in the Plan file and historical
-payload reconstruction remains available for recovery. Compatibility reads disclose this scheduling limit using the
+payload reconstruction remains available for recovery. Recovery still validates the original digest and complete
+prescription, and may inspect an older fractional-minute attempt so its retained Plan can be withdrawn through Stop.
+This exception permits no new create or update; current delivery compatibility remains mandatory for creates and
+updates. Compatibility reads disclose this scheduling limit using the
 existing issue contract. This restriction applies to all Wahoo planned-workout sports, not just strength.
 Virtual Rowing shares the rowing display rule: prescribed distances stay metric, and pace targets, profile
 bounds/axes, summaries, MCP display steps and the Suunto app preview use 500 m splits under metric or imperial

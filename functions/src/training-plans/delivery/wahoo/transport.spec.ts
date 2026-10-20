@@ -1,3 +1,5 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { wahooIdentities, wahooPlanBody } from './mapping';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
@@ -28,6 +30,46 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     op.strength = wahooFixtureStrengthDetails();
     next({ title: 'Timed strength', structure: projectStrengthWorkoutToV1(op.strength) });
   };
+  it('recovers a retained fractional-minute Plan without permitting a new provider write', async () => {
+    op.workout!.structure.nodes = [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] }];
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    const seeded = await server.request({ method: 'POST', path: '/v1/plans', body: wahooPlanBody(op.workout!, op.destinationKey, true) }, guard);
+    const plan = String((seeded.body as { id: string }).id);
+    op.artifact = { ids: { ...wahooIdentities(op.destinationKey, op.workout!.id), plan }, localDate: op.workout!.localDate,
+      completed: false, timeZone: op.timeZone };
+    op.progress = { version: 1, step: 'plan-create', state: 'started' };
+    server.calls.length = 0;
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect(op.artifact?.ids.plan).toBe(plan);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    op.digest = 'changed-after-journal'; server.calls.length = 0;
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('keeps full-companion validation while recovering a fractional-minute strength attempt', async () => {
+    timedStrength(); op.strength!.exercises[0].sets[0].ending = { kind: 'time', seconds: 31 };
+    next({ structure: projectStrengthWorkoutToV1(op.strength) });
+    op.strength!.workoutId = 'foreign';
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('keeps other unsupported prescriptions blocked during recovery', async () => {
+    op.workout!.structure = { version: 1, sport: ActivityTypes.Yoga, nodes: [{ kind: 'step', id: 'yoga', purpose: 'work',
+      ending: { kind: 'time', seconds: 90 }, targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] }] };
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+    op.workout!.structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'distance', purpose: 'work',
+      ending: { kind: 'distance', meters: 1000 }, targets: [] }] };
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
   it('keeps a renewed Plan identity through create, edit and reschedule, with stable completion correlation', async () => {
     op.wahooPlanGeneration = 1;
     const artifact = (await execute())!;

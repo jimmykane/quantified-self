@@ -506,7 +506,9 @@ Existing strength-detail/recipe/analysis reads preserve the authored sport and c
 strength update proposal retains the existing workout's sport; canonical new strength creates keep their existing
 Strength Training default. No sport field, schema, tool, consent or provider action was added. Legacy generic aliases
 without companions remain readable as intervals; Garmin/COROS/Wahoo strength delivery requires complete matching
-exercise data. Malformed or foreign companions fail before exposure. New cardio/mobility substitutions use existing
+exercise data. Malformed or foreign companions fail before exposure. Saved-workout previews validate all eight
+companion-bearing source sports before issuing a proposal, and reject strength-library updates that omit existing
+exercise data. Legacy interval aliases remain supported without companions. New cardio/mobility substitutions use existing
 mapping issue codes. Wahoo compatibility additionally reports `scheduling_duration_unavailable` when the exact total
 is not a whole number of minutes: live API probes rejected fractional minutes. Neither read nor preview rounds steps.
 Existing owner/grant/revision-bound confirmation applies to updates and sport-profile losses.

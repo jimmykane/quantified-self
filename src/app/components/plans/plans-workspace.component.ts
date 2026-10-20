@@ -1162,7 +1162,7 @@ export class PlansWorkspaceComponent {
           if (!details) {
             if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new Error('The strength prescription is missing.');
             this.editor.update(session => session && session.original?.id === workout.id ? { ...session,
-              value: workoutStructureToManualEditor(workout.title, workout.localDate, workout.structure, unitSettings),
+              value: workoutStructureToManualEditor(session.value.title, session.value.localDate, workout.structure, unitSettings),
               strength: null, strengthLoading: false } : session);
             return;
           }
@@ -1242,7 +1242,7 @@ export class PlansWorkspaceComponent {
   updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
     if (this.busyAction() || this.editor()?.value[field] === value) return;
     if (field === 'sport' && this.editor()?.mode === 'edit'
-      && (isStrengthWorkoutSportV1(this.editor()?.value.sport) || isStrengthWorkoutSportV1(value))) return;
+      && (this.editorIsStrength() || isStrengthWorkoutSportV1(value))) return;
     if (field === 'sport' || field === 'poolLengthUnit') this.haptics.selection();
     this.editor.update(session => {
       if (!session) return null;
@@ -1257,7 +1257,7 @@ export class PlansWorkspaceComponent {
         strength: { version: 1, exercises: [{ id: this.nextNodeId('exercise'), name: '',
           sets: [{ id: this.nextNodeId('set'), ending: { kind: 'repetitions', repetitions: 8 } }] }] } as StrengthWorkoutDraftV1,
       };
-      const manual = isStrengthWorkoutSportV1(session.value.sport)
+      const manual = session.strength || session.value.sport === ActivityTypes.StrengthTraining
         ? { ...session.value, sport, nodes: [createManualWorkoutEditorStep(this.nextNodeId('step'))] }
         : changeManualWorkoutEditorSport(session.value, sport, session.unitSettings);
       return { ...session, value: manual, strength: null };
