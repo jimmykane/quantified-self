@@ -9,7 +9,11 @@ Apply when adding/changing Functions emulator or integration specs, their runner
 See [CI test coverage](../../docs/ci-testing.md#functions-emulator-matrix) for commands and isolation details.
 
 - Register each real emulator spec exactly once in `tools/functions-emulator-suites.mjs`, including ordinary specs
-  referencing Firestore/Auth emulator hosts. Preserve the mandatory stress cases. New delivery specs join the
+  reading Firestore/Auth emulator hosts. Literal `vi.stubEnv`/`vitest.stubEnv` host keys alone do not imply an emulator
+  dependency: keep mocked or strictly offline environment-behavior tests in the ordinary suite and verify them there.
+  Real emulator users must retain emulator/integration filenames and registration even if they set hosts with stubs.
+  Discovery changes must retain regression cases for host reads alongside stubs and named emulator files.
+  Preserve the mandatory stress cases. New delivery specs join the
   `delivery` registry; never assign permanent file lists to its two CI shards. Inspect heavier group growth using
   successful CI timings before proposing additional concurrency.
 - Ordinary Functions tests use `functions/vitest.config.ts`, which excludes exact registered emulator paths before

@@ -58,8 +58,15 @@ export function discoverEmulatorSpecs(functionsRoot, directory = 'src') {
     // Naming alone must not hide a describe.skipIf(emulatorMissing) suite in
     // the ordinary Functions run. Require explicit coverage for host consumers.
     const named = /\.(emulator|integration)\.spec\.ts$/.test(entry.name);
+    // Unit tests can simulate the host environment without using an emulator.
+    // Ignore only Vitest's literal stub keys; real reads (including in the
+    // stub's value) and every other host reference still require registration.
+    const hostUsage = readFileSync(join(functionsRoot, path), 'utf8').replace(
+      /(\b(?:vi|vitest)\s*\.\s*stubEnv\s*\(\s*)(['"])(?:FIRESTORE_EMULATOR_HOST|FIREBASE_AUTH_EMULATOR_HOST)\2(?=\s*,)/g,
+      '$1"stubbed-host"',
+    );
     const needsEmulator = /FIRESTORE_EMULATOR_HOST|FIREBASE_AUTH_EMULATOR_HOST/
-      .test(readFileSync(join(functionsRoot, path), 'utf8'));
+      .test(hostUsage);
     return named || needsEmulator ? [path] : [];
   }).sort();
 }

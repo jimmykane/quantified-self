@@ -126,6 +126,39 @@ test('emulator host consumers cannot disappear behind an ordinary spec filename'
   }
 });
 
+test('literal Vitest host stubs stay ordinary without hiding real host consumers', () => {
+  const temporary = mkdtempSync(resolve(tmpdir(), 'qs-emulator-host-stubs-'));
+  try {
+    mkdirSync(resolve(temporary, 'src'), { recursive: true });
+    const fixtures = {
+      'unit.spec.ts': `import { vi } from 'vitest';
+        vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '');
+        vi.stubEnv("FIRESTORE_EMULATOR_HOST", '127.0.0.1:8081');`,
+      'multiline-unit.spec.ts': `vitest . stubEnv (
+        'FIREBASE_AUTH_EMULATOR_HOST', '');`,
+      'read.spec.ts': `vi.stubEnv('FIRESTORE_EMULATOR_HOST', '');
+        const host = process.env.FIRESTORE_EMULATOR_HOST;`,
+      'bracket-read.spec.ts': `vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '');
+        const host = process.env['FIREBASE_AUTH_EMULATOR_HOST'];`,
+      'gated.spec.ts': `vi.stubEnv('FIRESTORE_EMULATOR_HOST', '');
+        describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('real', () => {});`,
+      'stub-value.spec.ts': `vi.stubEnv('FIRESTORE_EMULATOR_HOST', process.env.FIREBASE_AUTH_EMULATOR_HOST);`,
+      'other-key.spec.ts': `vi.stubEnv('OTHER', 'FIREBASE_AUTH_EMULATOR_HOST');`,
+      'unknown-stub.spec.ts': `stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '');`,
+      'named.emulator.spec.ts': `vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '');`,
+      'named.integration.spec.ts': `vi.stubEnv('FIRESTORE_EMULATOR_HOST', '');`,
+    };
+    for (const [file, text] of Object.entries(fixtures)) writeFileSync(resolve(temporary, 'src', file), text);
+    const expected = ['bracket-read.spec.ts', 'gated.spec.ts', 'named.emulator.spec.ts',
+      'named.integration.spec.ts', 'other-key.spec.ts', 'read.spec.ts', 'stub-value.spec.ts', 'unknown-stub.spec.ts']
+      .map(file => `src/${file}`).sort();
+    assert.deepEqual(discoverEmulatorSpecs(temporary), expected);
+    assert.throws(() => assertSuiteCoverage(expected, { named: ['src/named.emulator.spec.ts'] }), /Unregistered/);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test('CI matrix gates every registered group, including the 400-workout stress test', () => {
   const workflow = readFileSync(resolve(root, '.github/workflows/_run-tests.yml'), 'utf8');
   const matrix = JSON.parse(workflow.match(/group: (\[[^\n]+\])/)[1]);
