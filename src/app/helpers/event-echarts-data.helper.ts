@@ -807,6 +807,13 @@ export function getEventChartSeriesY(series: EventChartPanelSeries, index: numbe
   return Number.isFinite(value) ? value : null;
 }
 
+/** A recorded point with no drawable neighbour needs a symbol: a line alone cannot show it. */
+export function isEventChartSeriesIsolatedPoint(series: EventChartPanelSeries, index: number): boolean {
+  const isDrawable = (pointIndex: number) => Number.isFinite(getEventChartSeriesX(series, pointIndex))
+    && getEventChartSeriesY(series, pointIndex) !== null;
+  return isDrawable(index) && !isDrawable(index - 1) && !isDrawable(index + 1);
+}
+
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {
   if (!isEventChartSeriesIndexInRange(series, index)) {
     return Number.NaN;

@@ -551,6 +551,16 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
+### Event heart-rate gaps
+
+Event Details Heart Rate panels and overlays draw an isolated finite reading as a dot when neither neighbouring
+chart position is drawable. This keeps intermittent samples visible (for example, every-other-second pool HR)
+without connecting across nulls, interpolating values or adding a sampling-gap cutoff. Connected readings retain
+their line-only style; the ECharts symbol callback returns `none` for them to avoid allocating unnecessary symbols.
+The same rule uses packed worker buffers and legacy point arrays and retains recorded indices when zooming.
+Original streams, chart coordinates, statistics, Training load and MCP responses are unchanged. Other metrics retain
+their existing rendering rules, including Battery's explicit connection across missing values.
+
 ### Event Power display views
 
 Event Details Power panels open in Raw. The Material Raw / 3s control is local to the panel and emits one selection

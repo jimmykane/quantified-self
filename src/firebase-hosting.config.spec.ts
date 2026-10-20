@@ -350,6 +350,7 @@ describe('Firebase Hosting configuration', () => {
     // bounded background Training rebuilds during bulk imports/reparse,
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
+    // Includes the Event Details explanation of isolated HR dots and preserved missing-data gaps.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

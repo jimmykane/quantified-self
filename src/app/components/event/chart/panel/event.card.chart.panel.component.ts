@@ -17,7 +17,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChartCursorBehaviours, DataPower, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, DataHeartRate, DataPower, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
@@ -44,6 +44,7 @@ import {
   getEventChartSeriesPointCount,
   getEventChartSeriesPackedLineValues,
   getEventChartSeriesX,
+  isEventChartSeriesIsolatedPoint,
 } from '../../../../helpers/event-echarts-data.helper';
 import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
@@ -911,7 +912,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         type: 'line',
         yAxisIndex: 0,
         smooth: false,
-        showSymbol: false,
+        ...this.getSeriesSymbolOptions(series),
         symbolSize: 5,
         connectNulls: connectAcrossMissingValues,
         progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
@@ -1211,7 +1212,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       type: 'line',
       yAxisIndex,
       smooth: false,
-      showSymbol: false,
+      ...this.getSeriesSymbolOptions(series),
       symbolSize: 5,
       connectNulls: this.isBatteryStreamType(series.streamType),
       progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
@@ -2978,6 +2979,22 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       point.x,
       typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : null,
     ]) as ChartLineSeriesOption['data'];
+  }
+
+  private getSeriesSymbolOptions(
+    series: EventChartPanelSeries
+  ): Pick<ChartLineSeriesOption, 'showSymbol' | 'showAllSymbol' | 'symbol'> {
+    if (series.streamType !== DataHeartRate.type) {
+      return { showSymbol: false, showAllSymbol: false, symbol: 'emptyCircle' };
+    }
+
+    // Keep null breaks intact. Sparse recorded HR is visible as dots without filling missing seconds.
+    // Returning 'none' for connected points avoids allocating a symbol for every normal HR sample.
+    return {
+      showSymbol: true,
+      showAllSymbol: true,
+      symbol: (_value, params) => isEventChartSeriesIsolatedPoint(series, params.dataIndex) ? 'circle' : 'none',
+    };
   }
 
   private requestFrame(callback: () => void): number {

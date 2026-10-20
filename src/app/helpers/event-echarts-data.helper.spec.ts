@@ -41,9 +41,11 @@ import {
   buildEventChartPanelsFromSnapshot,
   createEventChartPanelBuildSnapshot,
   eventChartSeriesToPoints,
+  isEventChartSeriesIsolatedPoint,
   normalizeEventLapType,
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
+import type { EventChartPanelSeries } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
 
 it('places a shared multisport lap at its actual ending leg even when it is that leg\'s sole lap', () => {
@@ -65,6 +67,44 @@ it('places a shared multisport lap at its actual ending leg even when it is that
 describe('event-echarts-data.helper', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('isolated recorded points', () => {
+    it.each(['legacy', 'packed'] as const)('identifies only visible singletons without changing %s data', format => {
+      const points = [118, null, 117, null, null, null, 115, 114, null, 0]
+        .map((y, x) => ({ x, y, time: x * 1000 }));
+      const series: EventChartPanelSeries = {
+        id: 'test', activityID: 'test', activityName: 'Test', color: '#ff0000',
+        streamType: DataHeartRate.type, displayName: DataHeartRate.type, unit: '',
+        ...(format === 'legacy' ? { points } : {
+          lineValues: Float64Array.from(points.flatMap(p => [p.x, p.y ?? NaN])),
+          timeValues: Float64Array.from(points.map(p => p.time)),
+          pointCount: points.length,
+        }),
+      };
+      const before = structuredClone(series);
+
+      expect(points.map((_, i) => isEventChartSeriesIsolatedPoint(series, i)))
+        .toEqual([true, false, true, false, false, false, false, false, false, true]);
+      expect(isEventChartSeriesIsolatedPoint(series, -1)).toBe(false);
+      expect(isEventChartSeriesIsolatedPoint(series, points.length)).toBe(false);
+      expect(series).toEqual(before);
+    });
+
+    it('handles single readings, empty series and non-finite coordinates', () => {
+      const series: EventChartPanelSeries = {
+        id: 'test', activityID: 'test', activityName: 'Test', color: '#ff0000',
+        streamType: DataHeartRate.type, displayName: DataHeartRate.type, unit: '',
+        points: [{ x: 0, y: 118, time: 0 }],
+      };
+      expect(isEventChartSeriesIsolatedPoint(series, 0)).toBe(true);
+      expect(isEventChartSeriesIsolatedPoint({ ...series, points: [] }, 0)).toBe(false);
+      for (const point of [{ x: NaN, y: 118, time: 1000 }, { x: 1, y: NaN, time: 1000 }]) {
+        const invalidNeighbour = { ...series, points: [...series.points!, point] };
+        expect(isEventChartSeriesIsolatedPoint(invalidNeighbour, 0)).toBe(true);
+        expect(isEventChartSeriesIsolatedPoint(invalidNeighbour, 1)).toBe(false);
+      }
+    });
   });
 
   function mockEventChartStreamDependencies(displayType = 'Heart Rate', unit = 'bpm'): void {

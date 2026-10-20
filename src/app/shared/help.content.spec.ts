@@ -1855,6 +1855,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Reset zoom or selection** button');
     expect(gettingStartedSection?.content).toContain('clears the shared chart state for the event');
     expect(gettingStartedSection?.content).toContain('Each event chart panel can use the **Overlay** button');
+    expect(gettingStartedSection?.content).toContain('isolated recorded readings as dots, including in overlays');
+    expect(gettingStartedSection?.content).toContain('Missing readings still break the line');
     expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
     expect(gettingStartedSection?.content).toContain('swim length end boundaries');

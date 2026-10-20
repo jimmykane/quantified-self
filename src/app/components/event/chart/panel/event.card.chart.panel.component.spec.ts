@@ -33,6 +33,7 @@ import { MaterialModule } from '../../../../modules/material.module';
 import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { init } from 'echarts';
+import type { LineSeriesOption } from 'echarts/charts';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
 
 describe('EventCardChartPanelComponent', () => {
@@ -771,6 +772,73 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.max).toBe(100);
     expect(option?.yAxis?.axisLabel?.formatter(100)).toBe('100');
   });
+
+  it.each([['legacy', false], ['packed', false], ['legacy', true], ['packed', true]] as const)(
+    'shows isolated HR readings while retaining null gaps (%s, overlay=%s)',
+    async (format, overlay) => {
+      const points = [118, null, 117, null, null, null, 115, 114, null, 113]
+        .map((y, x) => ({ x, y, time: x * 1000 }));
+      const base = component.panel!.series[0];
+      const series = {
+        ...base, id: 'test::hr', streamType: DataHeartRate.type,
+        points: format === 'legacy' ? points : undefined,
+        ...(format === 'packed' ? {
+          lineValues: Float64Array.from(points.flatMap(p => [p.x, p.y ?? NaN])),
+          timeValues: Float64Array.from(points.map(p => p.time)),
+          pointCount: points.length,
+        } : {}),
+      };
+      const hrPanel = { ...component.panel!, dataType: DataHeartRate.type, minX: 0, maxX: 9, series: [series] };
+      if (overlay) {
+        component.overlayPanel = hrPanel;
+      } else {
+        component.panel = hrPanel;
+      }
+      component.xDomain = { start: 0, end: 9 };
+      const snapshot = () => ({
+        ...hrPanel,
+        series: hrPanel.series.map(item => ({
+          ...item,
+          lineValues: item.lineValues && Array.from(item.lineValues),
+          timeValues: item.timeValues && Array.from(item.timeValues),
+        })),
+      });
+      const before = structuredClone(snapshot());
+      const option = component['buildOption']();
+      const lines = option.series as LineSeriesOption[];
+      const seriesIndex = overlay ? 1 : 0;
+      const line = lines[seriesIndex];
+      expect(line).toMatchObject({ showSymbol: true, showAllSymbol: true, connectNulls: false });
+      expect(line.data).toEqual(format === 'packed' ? series.lineValues : points.map(p => [p.x, p.y]));
+      if (overlay) expect(lines[0].showSymbol).toBe(false);
+
+      const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      try {
+        rendered.setOption(option);
+        const model = (rendered as unknown as {
+          getModel(): { getSeriesByIndex(index: number): { getData(): {
+            count(): number;
+            getItemGraphicEl(index: number): unknown;
+            getRawIndex(index: number): number;
+          } } };
+        }).getModel();
+        const visibleSymbols = (seriesIndex: number) => {
+          const data = model.getSeriesByIndex(seriesIndex).getData();
+          return Array.from({ length: data.count() }, (_, index) => index)
+            .filter(index => !!data.getItemGraphicEl(index)).map(index => data.getRawIndex(index));
+        };
+        expect(visibleSymbols(seriesIndex)).toEqual([0, 2, 9]);
+        // DataZoom filters indices; the callback must still refer to the original recorded points.
+        rendered.dispatchAction({ type: 'dataZoom', startValue: 1, endValue: 8 });
+        expect(visibleSymbols(seriesIndex)).toEqual([2]);
+        expect(snapshot()).toEqual(before);
+      } finally {
+        rendered.dispose();
+        canvasContext.mockRestore();
+      }
+    }
+  );
 
   it('uses native confined tooltip placement on mobile panels', async () => {
     Object.defineProperty(window, 'matchMedia', {
