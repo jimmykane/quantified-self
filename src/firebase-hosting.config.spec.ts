@@ -42,6 +42,7 @@ interface AngularBuildOptions {
 }
 
 interface AngularBuildConfiguration {
+  budgets?: Array<{ type: string; maximumWarning?: string; maximumError?: string }>;
   optimization?: boolean | {
     styles?: {
       inlineCritical?: boolean;
@@ -517,6 +518,13 @@ describe('Firebase Hosting configuration', () => {
         },
       });
     }
+  });
+
+  it.each(['production', 'beta'])('retains the original total-script budget for %s', configuration => {
+    const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
+    expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13600kb',
+    });
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {

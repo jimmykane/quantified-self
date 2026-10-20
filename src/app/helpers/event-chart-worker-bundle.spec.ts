@@ -1,0 +1,110 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
+import { runInNewContext } from 'node:vm';
+import {
+  ActivityTypes, DataAltitude, DataDistance, DataHeartRate, DataPower, DataSpeed,
+  DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, XAxisTypes,
+} from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import {
+  buildEventChartPanelsFromSnapshot,
+  type EventChartPanelBuildSnapshotInput, type EventChartPanelModel,
+  type EventChartPanelWorkerRequest, type EventChartPanelWorkerResponse,
+} from './event-echarts-data.helper';
+
+// Use the same esbuild version as Angular's worker compiler, without loading Angular.
+const requireBuildTool = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'));
+const { build } = requireBuildTool('esbuild') as typeof import('esbuild');
+let workerCode: string;
+let bundle: Awaited<ReturnType<typeof build>>;
+
+beforeAll(async () => {
+  bundle = await build({
+    entryPoints: ['src/app/workers/event-chart-panels.worker.ts'],
+    bundle: true, splitting: true, format: 'esm', platform: 'browser', target: 'es2022',
+    minify: true, metafile: true, tsconfig: 'src/tsconfig.app.json',
+    outdir: resolve('tmp/event-chart-worker-test'), write: false,
+  });
+  workerCode = bundle.outputFiles![0].text;
+});
+
+function snapshot(swimming: boolean, imperial: boolean, xAxisType: XAxisTypes): EventChartPanelBuildSnapshotInput {
+  const startTimeMs = Date.UTC(2026, 0, 1);
+  return {
+    selectedActivities: [{
+      id: 'fixture', activityName: 'Fixture', activityType: swimming ? ActivityTypes.Swimming : ActivityTypes.Running,
+      startTimeMs, intensityZones: [],
+      streams: [
+        { type: XAxisTypes.Time, values: new Float64Array([0, 1, 2, 3].map(second => startTimeMs + second * 1000)) },
+        { type: DataPower.type, values: new Float64Array([0, 100, NaN, 300]) },
+        { type: DataHeartRate.type, values: new Float64Array([120, 121, 122, 123]) },
+        { type: DataSpeed.type, values: new Float64Array([2.5, 3, 3.5, 0]) },
+        { type: DataDistance.type, values: new Float64Array([0, 3, 6.5, 6.5]) },
+        { type: DataAltitude.type, values: new Float64Array([10, 11, 12, 13]) },
+      ],
+    }],
+    xAxisType, showAllData: true, dataTypesToUse: [DataPower.type, DataHeartRate.type, DataSpeed.type],
+    userUnitSettings: {
+      ...getDefaultUserUnitSettings(),
+      ...(imperial ? {
+        distanceUnits: DistanceUnits.Miles,
+        speedUnits: [SpeedUnits.MilesPerHour], paceUnits: [PaceUnits.MinutesPerMile],
+        swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+      } : {}),
+    },
+    zoneColors: {},
+  };
+}
+
+function worker() {
+  let receive: (event: { data: EventChartPanelWorkerRequest }) => void;
+  const messages: Array<{ response: EventChartPanelWorkerResponse; transferables: Transferable[] }> = [];
+  runInNewContext(workerCode, {
+    Float64Array, ArrayBuffer, Date,
+    addEventListener: (name: string, callback: typeof receive) => {
+      expect(name).toBe('message'); receive = callback;
+    },
+    postMessage: (response: EventChartPanelWorkerResponse, transferables: Transferable[] = []) => {
+      messages.push({ response: structuredClone(response, { transfer: transferables }), transferables });
+    },
+  }, { timeout: 5000 });
+  return { send: (data: EventChartPanelWorkerRequest) => receive({ data }), messages };
+}
+
+function comparable(panels: EventChartPanelModel[]) {
+  return JSON.parse(JSON.stringify(panels, (_key, value) => ArrayBuffer.isView(value) ? Array.from(value as Float64Array) : value));
+}
+
+describe('compiled event chart worker', () => {
+  it('emits one worker and excludes all file adapters and parser chunks', () => {
+    expect(bundle.outputFiles).toHaveLength(1);
+    expect(Object.keys(bundle.metafile!.inputs).filter(path =>
+      /fit-file-parser|\/events\/adapters\/|\/routes\/adapters\/|sports-lib\/lib\/esm\/index\.js$/.test(path))).toEqual([]);
+  });
+
+  it.each([
+    [false, false, XAxisTypes.Duration], [false, true, XAxisTypes.Distance],
+    [false, false, XAxisTypes.Time], [true, false, XAxisTypes.Duration], [true, true, XAxisTypes.Distance],
+  ])('matches the synchronous builder for swimming=%s, imperial=%s, axis=%s', (swimming, imperial, axis) => {
+    const input = snapshot(swimming as boolean, imperial as boolean, axis as XAxisTypes);
+    const expected = buildEventChartPanelsFromSnapshot(input);
+    expect(expected.length).toBeGreaterThan(0);
+    const instance = worker();
+    instance.send({ requestID: 42, input });
+    const { response, transferables } = instance.messages[0];
+    expect(response.requestID).toBe(42);
+    expect('error' in response).toBe(false);
+    expect(comparable((response as { panels: EventChartPanelModel[] }).panels)).toEqual(comparable(expected));
+    expect(transferables.length).toBeGreaterThan(0);
+    expect(new Set(transferables).size).toBe(transferables.length);
+  });
+
+  it('preserves the error envelope and handles the next request', () => {
+    const instance = worker();
+    instance.send({ requestID: 1, input: null as unknown as EventChartPanelBuildSnapshotInput });
+    expect(instance.messages[0].response).toMatchObject({ requestID: 1, error: expect.any(String) });
+    instance.send({ requestID: 2, input: snapshot(false, false, XAxisTypes.Duration) });
+    expect(instance.messages[1].response).toMatchObject({ requestID: 2, panels: expect.any(Array) });
+  });
+});

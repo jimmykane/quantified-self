@@ -41,7 +41,7 @@ import {
   StreamInterface,
   UserUnitSettingsInterface,
   XAxisTypes
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import type { AppEventColorService } from '../services/color/app.event.color.service';
 import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';

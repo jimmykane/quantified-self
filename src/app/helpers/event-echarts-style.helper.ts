@@ -84,7 +84,7 @@ import {
   DataVerticalSpeedMetersPerHour,
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import { isInverseMetric } from '@shared/metric-semantics';
 import { AppColors } from '../services/color/app.colors';
 import { AppDataColors } from '../services/color/app.data.colors';

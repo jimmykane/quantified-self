@@ -3,7 +3,7 @@ import {
   ActivityInterface, ActivityUtilities, DataActiveLengths, DataCadenceAvg,
   DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPaceAvg, DataTotalCycles,
   LapInterface, SwimPaceUnits, UserUnitSettingsInterface,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import {
   createSwimDistanceDisplayStat, normalizeUserUnitSettings, resolveUnitAwareDisplayStat,
 } from '@shared/unit-aware-display';

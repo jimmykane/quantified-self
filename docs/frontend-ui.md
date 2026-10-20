@@ -599,6 +599,33 @@ chart/loader/host/public-preview tests, frontend environment/workflow/policy che
 and the public startup/prerender checks pass. A synthetic browser smoke test imports the production chunks and
 renders all six chart types on Canvas, including resize and connect/disconnect. No account or provider data is used.
 
+#### Worker metrics imports
+
+The event chart worker and its transitive metric helpers use the public
+`@sports-alliance/sports-lib/metrics` entry introduced in Sports Lib 23.3. Root imports stay available for file
+import/export consumers. A root import anywhere in the worker graph can make a splitting bundler emit unused FIT/GPX
+parser chunks even when the worker never imports those chunks at runtime. Inspect every emitted script when measuring
+the `allScript` budget. The app has no local adapter, internal package-file imports or custom resolution aliases.
+
+The new entry shares the root API's exact data classes, `DataStore`, `DynamicDataLoader`, units and stream utilities.
+The two shared metric helpers use the same public entry on frontend and Functions, so both consumers must adopt the
+compatible package release. No calculations, serialized tokens, data catalog, persistence, Training/MCP contracts,
+user preferences, consent or Help behavior change.
+
+`event-chart-worker-bundle.spec.ts` compiles the actual worker with Angular's esbuild version and checks all output
+files for parser/adapter code. It executes the bundled worker against the synchronous builder for running/swimming,
+metric/imperial preferences and all three x-axis modes, including zero readings, gaps, transferable buffers and
+error recovery. The worker service's existing fallback coverage remains in place. Production and beta retain the
+`13600kb` total-script error limit and `13000kb` warning limit; the hosting configuration spec guards both values.
+
+Verification with the Sports Lib 23.3.0 release artifact: production on Node 22 emits 13,307,265 script bytes
+against the 13,600,000-byte cap, leaving 292,735 bytes of headroom. Beta also passes with the same artifact.
+Production service-worker and public
+startup/prerender checks pass, as does beta's service-worker check. All 722 targeted app assertions pass, including
+the existing App Check recovery tests. Functions compilation and the MCP compatibility check also pass. Package
+verification covers ESM/CommonJS identity, TypeScript resolution and every emitted metrics-worker chunk. Both the
+app and Functions pin 23.3.0 with registry URLs and the verified release integrity in their lockfiles.
+
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
 `ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px

@@ -11,7 +11,7 @@ import {
   DataStrokeRate,
   DataSwimDistance,
   LapInterface,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 
 export interface AppSwimLength {
   timingValidity?: RejectedSwimTiming;

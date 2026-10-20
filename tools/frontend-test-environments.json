@@ -79,6 +79,7 @@
     "src/app/helpers/event-chart-pan-range.helper.spec.ts",
     "src/app/helpers/event-chart-pinch-zoom.helper.spec.ts",
     "src/app/helpers/event-chart-sport-profile.helper.spec.ts",
+    "src/app/helpers/event-chart-worker-bundle.spec.ts",
     "src/app/helpers/event-details-form.helper.spec.ts",
     "src/app/helpers/event-dive-profile.helper.spec.ts",
     "src/app/helpers/event-dive-source-records.helper.spec.ts",

@@ -1,4 +1,4 @@
-import { ActivityInterface, LapInterface, LapTypes } from '@sports-alliance/sports-lib';
+import { ActivityInterface, LapInterface, LapTypes } from '@sports-alliance/sports-lib/metrics';
 
 export type EventLapTypeInput = LapTypes | string | null | undefined;
 type EventLapActivityLike = Pick<ActivityInterface, 'getLaps'> & Partial<Pick<

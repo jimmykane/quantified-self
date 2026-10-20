@@ -1,4 +1,4 @@
-import { DataInterface, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataInterface, DynamicDataLoader } from '@sports-alliance/sports-lib/metrics';
 import { EnduranceLabelContext, getEnduranceMetricLabel } from '@shared/endurance-metrics';
 
 type StatQualifierKey = 'average' | 'minimum' | 'maximum';
