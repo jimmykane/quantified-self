@@ -561,7 +561,11 @@ positions entirely. Missing, repeated or backward timestamps do not establish a 
 `buildEventHeartRateLineValues` applies the same rule to packed worker buffers and legacy point arrays. It uses
 absolute sample timestamps on Duration, Time and Distance axes, never index spacing or distance differences. The
 buffer contains only original finite coordinates plus null separators; ECharts retains `connectNulls: false`, normal
-hover markers, zone colors, overlay styling and zoom. No gap-dependent marker updates are needed on zoom.
+hover markers, zone colors, overlay styling and zoom. HR panels (including HR overlays) retain line endpoints for
+native viewport clipping instead of filtering away offscreen endpoints. This keeps a valid segment visible when
+zoomed between its samples, while null-separated gaps stay blank even when neither boundary is in view. Tooltip
+headers outside the visible range are suppressed. Panels without HR retain their existing zoom filtering; removing
+an HR overlay restores it. No gap-dependent marker updates or synthetic measurements are needed on zoom.
 
 Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. Tooltips
 continue reading the original series and do not invent values at the skipped positions. The two-second connection

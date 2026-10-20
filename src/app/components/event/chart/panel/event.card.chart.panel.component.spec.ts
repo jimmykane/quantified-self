@@ -846,16 +846,48 @@ describe('EventCardChartPanelComponent', () => {
             .filter(path => overlay ? path.getAttribute('stroke') === series.color : path.getAttribute('stroke')?.startsWith('url('))
             .map(path => path.getAttribute('d') || '').filter(d => d.includes('L'));
         };
+        // Inspect the actual ECharts geometry and clip rectangle, not just its input data.
+        const visibleHrSegments = () => {
+          const displayList = rendered.getZr().storage.getDisplayList() as unknown as Array<{
+            type: string;
+            shape: { points: Float32Array };
+            style: { lineWidth: number };
+            __clipPaths: Array<{ getBoundingRect(): { x: number; width: number } }>;
+          }>;
+          const paths = displayList.filter(item => item.type === 'ec-polyline' && item.style.lineWidth === line.lineStyle!.width);
+          expect(paths).toHaveLength(1);
+          const path = paths[0];
+          const clip = path.__clipPaths[0].getBoundingRect();
+          const points = path.shape.points;
+          let segments = 0;
+          for (let i = 2; i < points.length; i += 2) {
+            const coordinates = [points[i - 2], points[i - 1], points[i], points[i + 1]];
+            if (coordinates.every(Number.isFinite)
+              && Math.max(points[i - 2], points[i]) >= clip.x
+              && Math.min(points[i - 2], points[i]) <= clip.x + clip.width) segments++;
+          }
+          return segments;
+        };
+        const zoom = (startValue: number, endValue: number) => {
+          rendered.dispatchAction({ type: 'dataZoom', startValue, endValue });
+          component['applyCanonicalAxisScales']();
+          return visibleHrSegments();
+        };
         // ECharts renders two continuous subpaths: [0,2] and [6,7,9].
         expect(hrPaths().map(d => [(d.match(/M/g) || []).length, (d.match(/L/g) || []).length])).toContainEqual([2, 3]);
+        expect(visibleHrSegments()).toBe(3);
         rendered.dispatchAction({ type: 'highlight', seriesIndex, dataIndex: 3 });
         expect(model.getSeriesByIndex(seriesIndex).getData().getItemGraphicEl(3)?.getSymbolType()).toBe('emptyCircle');
         rendered.dispatchAction({ type: 'downplay', seriesIndex, dataIndex: 3 });
-        rendered.dispatchAction({ type: 'dataZoom', startValue: 0, endValue: 2 });
-        component['applyCanonicalAxisScales']();
-        expect(hrPaths().some(d => (d.match(/M/g) || []).length === 1 && (d.match(/L/g) || []).length === 1)).toBe(true);
-        rendered.dispatchAction({ type: 'dataZoom', startValue: 0, endValue: 9 });
-        component['applyCanonicalAxisScales']();
+        expect(zoom(0, 2)).toBe(1);
+        expect(zoom(0.5, 1.5)).toBe(1); // Both recorded endpoints are outside the view.
+        expect(zoom(3, 5)).toBe(0); // A real gap stays blank, with neither endpoint in view.
+        expect(component['formatTooltip']([{ value: [2, 117], seriesId: line.id as string }])).toBe('');
+        expect(component['formatTooltip']([{ value: [6, 115], seriesId: line.id as string }])).toBe('');
+        component['updateRangeStats']({ start: 3, end: 5 });
+        expect(component.rangeStats.filter(stat => stat.activityID === series.activityID)).toEqual([]);
+        expect(zoom(5.5, 6.5)).toBe(1); // Only one recorded endpoint is in view.
+        expect(zoom(0, 9)).toBe(3);
         expect(hrPaths().map(d => [(d.match(/M/g) || []).length, (d.match(/L/g) || []).length])).toContainEqual([2, 3]);
         expect(snapshot()).toEqual(before);
       } finally {
@@ -866,6 +898,17 @@ describe('EventCardChartPanelComponent', () => {
       }
     }
   );
+
+  it('uses native clipping only while HR is present and restores filtering after removing the overlay', async () => {
+    await renderComponent();
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['filter', 'filter']);
+    fixture.componentRef.setInput('overlayPanel', buildTestPanel(DataHeartRate.type, [120, 130]));
+    await renderComponent();
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
+    fixture.componentRef.setInput('overlayPanel', null);
+    await renderComponent();
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['filter', 'filter']);
+  });
 
   it('uses native confined tooltip placement on mobile panels', async () => {
     Object.defineProperty(window, 'matchMedia', {
@@ -2078,6 +2121,8 @@ describe('EventCardChartPanelComponent', () => {
   it('keeps heart-rate zone coloring mapped to y values on time-axis charts', async () => {
     const startTime = Date.UTC(2024, 0, 1, 12, 0, 0);
     component.xAxisType = XAxisTypes.Time;
+    component.xDomain = { start: startTime, end: startTime + 2_000 };
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: startTime, endValue: startTime + 2_000 }] });
     component.panel = {
       dataType: DataHeartRate.type,
       displayName: 'Heart Rate',
@@ -3849,6 +3894,7 @@ describe('EventCardChartPanelComponent', () => {
     component.showActivityNamesInTooltip = true;
     component.xAxisType = XAxisTypes.Duration;
     component.xDomain = { start: 0, end: 36_000 };
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 0, endValue: 36_000 }] });
     component.panel = {
       ...(component.panel as any),
       minX: 0,

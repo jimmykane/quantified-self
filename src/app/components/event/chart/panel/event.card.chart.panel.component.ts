@@ -865,6 +865,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const restoredZoomRange = this.getStoredZoomRange();
     const visibleRange = restoredZoomRange ?? this.getVisibleXAxisRange();
     const overlayPanel = this.getActiveOverlayPanel();
+    // Retain endpoints outside the viewport so native clipping can draw a
+    // two-second HR segment through a narrow zoom. Null separators still break it.
+    const zoomFilterMode = [panel, overlayPanel].some(candidate =>
+      candidate?.series.some(series => series.streamType === DataHeartRate.type)) ? 'none' : 'filter';
     const shareOverlayYAxis = canShareEventPanelYAxis(panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
       ? this.buildSharedYAxisPanel(this.powerYAxisPanel(panel), overlayPanel)
@@ -1070,7 +1074,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           startValue: restoredZoomRange?.start,
           endValue: restoredZoomRange?.end,
           disabled: !interactionEnabled || this.cursorBehaviour === ChartCursorBehaviours.SelectX,
-          filterMode: 'filter',
+          filterMode: zoomFilterMode,
           throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
@@ -1085,7 +1089,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           show: this.showZoomBar,
           height: 16,
           top: 8,
-          filterMode: 'filter',
+          filterMode: zoomFilterMode,
           showDataShadow: false,
           throttle: DATA_ZOOM_THROTTLE_MS,
         }
@@ -1901,6 +1905,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     const xValue = this.getTooltipXAxisValue(tooltipParams);
     if (!Number.isFinite(xValue)) {
+      return '';
+    }
+
+    // Context retained for clipped lines must not become an offscreen tooltip.
+    const visibleRange = this.getVisibleXAxisRange();
+    if (xValue < visibleRange.start || xValue > visibleRange.end) {
       return '';
     }
 
