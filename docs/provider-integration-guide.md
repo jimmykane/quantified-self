@@ -853,6 +853,23 @@ Provider OAuth / webhook / history request
 
 This is preferred over processing partner payloads directly in a webhook or callable because provider requests can be retried, payloads may be incomplete, original files may need another download, and processing can exceed partner timeouts.
 
+Shared recorded-activity imports and manual reuploads reuse an existing event's stored activity document IDs and
+source keys rather than adding legacy event/index IDs beside source-keyed reparse results. The shared
+`functions/src/shared/import-preservation.ts` helper reads only that owner's event activities, with a field mask and
+the existing 100-leg bound, after acquiring the existing source-write reservation and before original-file/source
+writes. Unique identity matching includes verified sport refinements and reordered multisport legs; ambiguous or
+changed saved leg sets fail through the existing error/retry path instead of guessing, appending or deleting rows.
+The existing first-import marker still permits missing legs on an interrupted initial-write retry, subject to ID
+collision checks. New imports retain their existing ID behavior; this is not a historical duplicate cleanup.
+Guarded document transactions preserve live titles, descriptions, tags, privacy, notes, legacy feedback fields,
+canonical Feeling/RPE stats (including cleared ratings), and custom device names. Parsed measurements and source-file
+provenance keep their existing write behavior. Reparse shares the event-edit preservation policy.
+Monitoring coverage is **unchanged**: the existing #829 provider/worker retry, failure and committed-outcome metrics
+still cover these imports; no queue, schedule, lease, retry, metric label, alert, Rules or index changes are added.
+Training formulas, source-write reservation/finalization, planning and MCP contracts remain unchanged. Existing Help
+already promises retained activity names and saved load preferences; no frontend release or client refresh is needed.
+Local tests do not authorize deployment, provider calls, replay or production data cleanup.
+
 Provider health/wellness data uses the separate [unified health foundation](unified-health-data.md):
 
 ```text

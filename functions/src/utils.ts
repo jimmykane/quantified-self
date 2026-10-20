@@ -18,7 +18,7 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
-import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
+import { preserveImportedActivityEdits, preserveImportedActivityIdentities, preserveImportedEventEdits } from './shared/import-preservation';
 import {
   createMissingEventTagCatalogEntriesInTransaction,
   newlyAssignedEventTags,
@@ -367,7 +367,11 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     await sourceWrite.assertCurrent(db, transaction);
   };
   const adapter: FirestoreAdapter = {
-    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
+    prepareTrainingLoad: async event => {
+      const finish = await sourceWrite.prepareTrainingLoad(event);
+      await preserveImportedActivityIdentities(userID, event, sourceWrite.assertCurrent);
+      return finish;
+    },
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();
@@ -392,13 +396,14 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         docRef = docRef.collection(path[i]).doc(path[i + 1]);
       }
       const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      const isActivityDocument = path.length === 4 && path[0] === 'users' && path[2] === 'activities';
       await setEventDocumentIfUserActive(
         userID,
         `event_writer:${path.join('/')}`,
         docRef,
         data,
         undefined,
-        isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
         assertSourceWrite,
       );
     },

@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
 // training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
 const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
+const preserveImportIdentities = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('./shared/import-preservation', async importOriginal => ({
+    ...await importOriginal<typeof import('./shared/import-preservation')>(),
+    preserveImportedActivityIdentities: preserveImportIdentities,
+}));
 vi.mock('./training-load/training-load-source-write', () => ({
     TrainingLoadSourceWrite: class {
         assertCurrent = sourceWriteGuard.assertCurrent;
@@ -198,6 +203,7 @@ describe('utils higher-level helpers', () => {
         hoisted.transactionSet.mockClear();
         hoisted.transactionCreate.mockClear();
         hoisted.transactionGet.mockClear();
+        hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.runTransaction.mockClear();
         eventWriterConstructorMock.mockClear();
     });
@@ -414,6 +420,30 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEvent', () => {
+        it('prepares the existing reservation before reusing import identities and preserves live edits in its guarded adapter', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };
+            const finish = Object.assign(vi.fn(), { sourceWriteId: 'attempt' });
+            const prepare = vi.spyOn(trainingLoadMetadata, 'prepareTrainingLoadMetadata').mockResolvedValueOnce(finish);
+            const saved = { name: 'Edited title', description: 'Edited description', notes: 'Notes', tags: ['Race'], rpe: 7, feeling: 4, privacy: 'private' };
+            try {
+                writeAllEventDataMock.mockImplementationOnce(async () => {
+                    const [adapter] = eventWriterConstructorMock.mock.calls.at(-1)!;
+                    expect(await adapter.prepareTrainingLoad(event)).toBe(finish);
+                    expect(preserveImportIdentities).toHaveBeenCalledWith('user-1', event, sourceWriteGuard.assertCurrent);
+                    expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(preserveImportIdentities.mock.invocationCallOrder[0]);
+                    hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => saved });
+                    await adapter.setDoc(['users', 'user-1', 'events', 'event-1'], { name: 'File title', description: 'File description' });
+                    expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), saved);
+                    hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ creator: { name: 'Latest watch name' }, sourceActivityKey: 'saved-key' }) });
+                    await adapter.setDoc(['users', 'user-1', 'activities', 'saved-id'], { creator: { name: 'Parsed name' } });
+                    expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), { creator: { name: 'Latest watch name' }, sourceActivityKey: 'saved-key' });
+                    return mockSavedOriginalFiles;
+                });
+                await setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], { serviceName: 'GARMINAPI', toJSON: () => ({}) });
+            } finally { prepare.mockRestore(); }
+        });
+
         it.each(['prepare', 'finalize'] as const)('blocks Training metadata %s when history-import authority changes', async phase => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };

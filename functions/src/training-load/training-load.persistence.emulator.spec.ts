@@ -17,6 +17,8 @@ import { prepareMergedTrainingLoad, type MergeTrainingLoadSource } from '../even
 import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { persistReparsedEvent, writeReparseStatus } from '../reparse/sports-lib-reparse.service';
 import { EventWriter, type FirestoreAdapter } from '../shared/event-writer';
+import { preserveImportedActivityEdits, preserveImportedActivityIdentities, preserveImportedEventEdits } from '../shared/import-preservation';
+import { TrainingLoadSourceWrite } from './training-load-source-write';
 
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
 // Contended real Firestore transactions can retry beyond the five-second unit-test budget.
@@ -61,6 +63,42 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const promise = new Promise<void>(resolve => { release = resolve; });
     return { promise, release };
   }
+  it('reuploads a source-keyed activity without duplicating it or losing live edits and load overrides', async () => {
+    const uid = setup(); await importWorkout(uid, workout('source-keyed-id'));
+    const parent = db.doc(`users/${uid}/events/workout`);
+    const child = db.doc(`users/${uid}/activities/source-keyed-id`);
+    await parent.update({ name: 'Edited title', description: 'Edited description', tags: ['Saved tag'],
+      notes: 'Saved notes', 'stats.Feeling': 5, 'stats.Rated Perceived Exertion': 8 });
+    await child.update({ 'creator.name': 'Custom device', sourceActivityKey: 'saved-source-key' });
+    await db.doc(metadataPath(uid)).update({ controls: { 'source-keyed-id': { override: 42 } } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const parsed = workout('legacy-index-id');
+      const guard = new TrainingLoadSourceWrite(uid, event => prepareTrainingLoadMetadata(uid, event));
+      const writer = new EventWriter({
+        prepareTrainingLoad: async event => {
+          const finish = await guard.prepareTrainingLoad(event);
+          await preserveImportedActivityIdentities(uid, event, guard.assertCurrent);
+          return finish;
+        },
+        setDoc: async (path, data) => db.runTransaction(async transaction => {
+          await guard.assertCurrent(db, transaction);
+          const ref = db.doc(path.join('/')); const current = await transaction.get(ref);
+          const preserve = path[2] === 'events' ? preserveImportedEventEdits : preserveImportedActivityEdits;
+          transaction.set(ref, preserve(data as admin.firestore.DocumentData, current.data() ?? null));
+        }),
+        createBlob: data => Buffer.from(data), generateID: () => randomUUID(),
+      });
+      await writer.writeAllEventData(uid, parsed);
+      const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+      expect(children.docs.map(doc => doc.id)).toEqual(['source-keyed-id']);
+      expect((await child.get()).data()).toMatchObject({ creator: { name: 'Custom device' }, sourceActivityKey: 'saved-source-key' });
+      expect((await parent.get()).data()).toMatchObject({ name: 'Edited title', description: 'Edited description', tags: ['Saved tag'],
+        notes: 'Saved notes', stats: { Feeling: 5, 'Rated Perceived Exertion': 8 } });
+      const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(metadata).toMatchObject({ sourceWritePending: false, controls: { 'source-keyed-id': { override: 42 } } });
+      expect(resolveEffectiveTrainingLoad({}, metadata)).toMatchObject({ score: 42, status: 'available' });
+    }
+  });
   it('advances the benchmark save guard before an ordinary workout has its first report', async () => {
     const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
     const uid = setup();
