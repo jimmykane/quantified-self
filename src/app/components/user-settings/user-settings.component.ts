@@ -7,6 +7,14 @@ import { AppAppSettingsInterface, AppChartSettingsInterface, AppUserInterface, A
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
+import {
+  EVENT_LINE_CONTINUITY_OPTIONS,
+  MAX_EVENT_LINE_GAP_SECONDS,
+  EventLineContinuitySettings,
+  equalEventLineContinuity,
+  isValidEventLineGapSeconds,
+  resolveEventLineContinuity,
+} from '../../helpers/event-chart-line-continuity.helper';
 
 import { MatDialog } from '@angular/material/dialog';
 import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-account-dialog.component';
@@ -82,6 +90,9 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   @Input() user: AppUserInterface;
   public isSaving: boolean;
   private lastDistinctLinePatternsValue = false;
+  private lastLineContinuity = resolveEventLineContinuity(undefined);
+  public readonly lineContinuityOptions = EVENT_LINE_CONTINUITY_OPTIONS;
+  public readonly maxLineGapSeconds = MAX_EVENT_LINE_GAP_SECONDS;
   public isDeleting: boolean;
   public consentToDelete: boolean;
   public errorDeleting;
@@ -229,6 +240,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     xAxisType: 'Data Scaling (X-Axis)',
     chartStrokeWidth: 'Line Width',
     chartFillOpacity: 'Fill Intensity',
+    eventLineContinuityMode: 'Line continuity',
+    eventLineGapSeconds: 'Maximum gap between readings',
     startOfTheWeek: 'Start of the Week',
     distanceUnitsToUse: 'Distance Units',
     weightUnitsToUse: 'Weight Units',
@@ -321,6 +334,18 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         linePatternsControl.setValue(savedValue, { emitEvent: false });
         this.lastDistinctLinePatternsValue = savedValue;
       }
+      const continuityMode = this.userSettingsFormGroup.get('eventLineContinuityMode');
+      const continuityLimit = this.userSettingsFormGroup.get('eventLineGapSeconds');
+      if (continuityMode.pristine && continuityLimit.pristine) {
+        const saved = resolveEventLineContinuity(
+          (this.user.settings?.chartSettings as AppChartSettingsInterface | undefined)?.eventLineContinuity,
+        );
+        this.userSettingsFormGroup.patchValue({
+          eventLineContinuityMode: saved.mode,
+          eventLineGapSeconds: saved.maxGapSeconds,
+        }, { emitEvent: false });
+        this.lastLineContinuity = saved;
+      }
       this.syncBrandTextControlState();
       this.refreshSectionSummaries();
       return;
@@ -329,6 +354,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     const settings = AppUserUtilities.fillMissingAppSettings(this.user as unknown as User);
     const chartSettings = settings.chartSettings as unknown as AppChartSettingsInterface;
     this.lastDistinctLinePatternsValue = chartSettings.useDistinctComparisonLinePatterns === true;
+    this.lastLineContinuity = resolveEventLineContinuity(chartSettings.eventLineContinuity);
 
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) =>
@@ -387,6 +413,13 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       ]),
       useAnimations: new UntypedFormControl(settings.chartSettings.useAnimations, []),
       useDistinctComparisonLinePatterns: new UntypedFormControl(this.lastDistinctLinePatternsValue, []),
+      eventLineContinuityMode: new UntypedFormControl(this.lastLineContinuity.mode, [
+        control => EVENT_LINE_CONTINUITY_OPTIONS.some(option => option.value === control.value) ? null : { mode: true },
+      ]),
+      eventLineGapSeconds: new UntypedFormControl(this.lastLineContinuity.maxGapSeconds, [
+        control => control.parent?.get('eventLineContinuityMode')?.value !== 'custom'
+          || isValidEventLineGapSeconds(control.value) ? null : { gapSeconds: true },
+      ]),
       chartHideAllSeriesOnInit: new UntypedFormControl(settings.chartSettings.hideAllSeriesOnInit, []),
       showAllData: new UntypedFormControl(settings.chartSettings.showAllData, []),
       chartDisableGrouping: new UntypedFormControl(settings.chartSettings.disableGrouping, []),
@@ -428,6 +461,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.syncBrandTextControlState();
     this.refreshSectionSummaries();
     this.formSubscription = this.userSettingsFormGroup.valueChanges.subscribe(() => {
+      this.userSettingsFormGroup.get('eventLineGapSeconds').updateValueAndValidity({ emitEvent: false });
       if (!this.isSaving) this.errorSaving = null;
       this.refreshSectionSummaries();
     });
@@ -533,6 +567,20 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.hapticsService.selection();
   }
 
+  onLineContinuityChange(): void {
+    if (this.isSaving || this.isDeleting) return;
+    const mode = this.userSettingsFormGroup.get('eventLineContinuityMode').value;
+    const limitControl = this.userSettingsFormGroup.get('eventLineGapSeconds');
+    // A hidden invalid custom limit must not block saving another mode.
+    if (mode !== 'custom' && !isValidEventLineGapSeconds(limitControl.value)) {
+      limitControl.setValue(this.lastLineContinuity.maxGapSeconds);
+    }
+    const settings = { mode, maxGapSeconds: limitControl.value } as EventLineContinuitySettings;
+    if (!isValidEventLineGapSeconds(settings.maxGapSeconds) || equalEventLineContinuity(settings, this.lastLineContinuity)) return;
+    this.lastLineContinuity = settings;
+    this.hapticsService.selection();
+  }
+
   onPrivacyPreferenceChange(): void {
     if (this.isSaving || this.isDeleting) return;
     this.hapticsService.selection();
@@ -562,7 +610,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.isSaving = true;
     this.errorSaving = null;
     const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
+    const continuityMode = this.userSettingsFormGroup.get('eventLineContinuityMode');
+    const continuityLimit = this.userSettingsFormGroup.get('eventLineGapSeconds');
     const lockedControls = [linePatternsControl,
+      continuityMode, continuityLimit,
       this.userSettingsFormGroup.get('acceptedTrackingPolicy'),
       this.userSettingsFormGroup.get('acceptedMarketingPolicy')];
     lockedControls.forEach(control => control.disable({ emitEvent: false }));
@@ -586,6 +637,11 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         ...(linePatternsControl.dirty
           ? { useDistinctComparisonLinePatterns: linePatternsControl.value === true }
+          : {}),
+        ...(continuityMode.dirty || continuityLimit.dirty
+          ? { eventLineContinuity: resolveEventLineContinuity({
+            mode: continuityMode.value, maxGapSeconds: continuityLimit.value,
+          }) }
           : {}),
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,

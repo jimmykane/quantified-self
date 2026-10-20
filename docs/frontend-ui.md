@@ -553,33 +553,54 @@ extra padding is needed.
 
 ### Event chart gaps and zoom
 
-Event Details metric panels and overlays use a separate display buffer connecting consecutive recorded readings
-up to two seconds apart. This applies to Heart Rate, raw Power, Cadence, Speed/Pace, Elevation, Stroke Rate and the
-other recorded metric lines. It supports both one-second and every-other-second sampling without dots or fabricated
-intermediate measurements. Longer intervals remain line breaks, including when the chart grid omitted the empty
-positions entirely. Missing, repeated or backward timestamps do not establish a connection.
+Event Details **Chart options → Line continuity** and **Settings → Charts → Event chart line continuity**
+share the account preference `settings.chartSettings.eventLineContinuity` (`mode`, `maxGapSeconds`).
+Settings uses **Save Changes**; Event Details saves immediately for the signed-in viewer, including while viewing
+someone else's shared activity. Missing or invalid preferences resolve to **Continuous**, without a migration.
 
-`buildEventRecordedLineValues` applies the same rule to packed worker buffers and legacy point arrays. It uses
-absolute sample timestamps on Duration, Time and Distance axes, never index spacing or distance differences. The
-buffer contains only original finite coordinates plus null separators; ECharts retains `connectNulls: false`, normal
-hover markers, zone colors and overlay styling. Grade-colored elevation segments use the same timestamp rule and
-retain the original grade-to-reading association. Each comparison activity retains its own gaps.
+- **Continuous** (default) connects available readings within each activity, including across missing data.
+  A connecting line does not establish that intermediate measurements exist.
+- **Detect gaps** uses the full metric's recorded timing, independently for each activity. Intervals up to two seconds
+  connect. Longer intervals connect only when exactly equal to the dominant interval in either neighboring window
+  of 16 intervals (excluding the interval being tested), with at least eight valid neighbors and 75% agreement.
+  Otherwise the line breaks. This conservative heuristic handles regular slower sampling, but cannot distinguish
+  lost readings from an identical genuine sampling pattern. It is an optional display choice, not validated missing-data attribution.
+- **Custom gap limit** connects readings at most the configured number of seconds apart. The input accepts whole
+  seconds from 1 to 86400, defaulting to 10 when first enabled. The limit measures time **between readings**.
+
+The shared `event-chart-line-continuity.helper` prepares display segment IDs once from the full metric before coordinate
+filtering. Worker snapshots carry the preference and return transferable segment buffers; synchronous builds use the
+same code. The panel cache key includes the preference. Zoom does not rerun cadence detection. Invalid or non-increasing
+sample timestamps break recorded-time connections. Distance coordinates omitted during projection cannot hide a
+pre-existing segment break. The segment buffer costs four bytes per chart-grid position and is never persisted.
+
+`buildEventRecordedLineValues` uses the prepared IDs for packed worker buffers; legacy point arrays cache equivalent
+IDs against immutable input references and the preference. It uses absolute sample timestamps on Duration, Time and
+Distance axes. Display buffers contain only original finite coordinates plus null separators. Grade-colored elevation,
+intensity-zone styling, overlays, and comparison activities retain the same connection decisions and original values.
+Each activity has its own series; preferences never connect separate activities.
 
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
-endpoints. This keeps a valid segment visible when zoomed between its samples, while null-separated gaps stay blank
+endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
 even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.
 Nearby-row matching uses the current native viewport, including before shared zoom state catches up. The vertical scale
-includes the recorded endpoints of segments crossing a viewport edge, following each series' connection policy. Readings
-across a real gap do not widen the scale. Context readings remain outside tooltip and selection-statistic results.
+includes recorded endpoints of segments crossing a viewport edge, following each series' connection policy. Context
+readings remain outside tooltip and selection-statistic results. A Continuous line crossing missing data adds no tooltip
+reading or range statistic there.
 
-Battery retains its intentional connection across sparse readings. Untimed route series explicitly use adjacent-row
-connections: distance/point-index coordinates are not elapsed time, and missing elevations still break route lines.
-Power's 3s display retains its complete-window requirement and adjacent-row gaps; its recorded whiskers do not add
-line context from offscreen raw readings. These policies also govern viewport scaling.
+Battery retains its sparse-reading display in Continuous and follows explicit Detect/Custom choices. Untimed route
+series keep adjacent-row connections: distance/point-index coordinates are not elapsed time, and missing elevations
+still break route lines. Power's 3s display retains its complete-window requirement and adjacent-row gaps; its recorded
+whiskers do not add line context from offscreen raw readings. These policies also govern viewport scaling.
 
-Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. Tooltips
-continue reading the original series and do not invent values at skipped positions. The two-second connection limit
-is a display policy, not a claim that a missing measurement was recorded.
+Both preference surfaces validate custom limits, disable pending edits, and provide semantic haptic feedback. Event
+Details rolls back failed saves and ignores late completions after account changes or destruction. Settings refreshes
+an untouched preference pair without discarding unrelated edits, preserves edited pairs, and omits untouched continuity
+fields from unrelated saves. Existing settings writes and authentication safeguards apply; no new backend endpoint,
+index, rules, migration, or reparse is required.
+
+Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. This is a
+frontend display preference with no MCP/Training contract impact. The chart never manufactures intermediate measurements.
 
 ### Dashboard Efficiency single-week display
 

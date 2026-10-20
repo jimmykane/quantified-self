@@ -805,6 +805,7 @@ describe('EventCardChartPanelComponent', () => {
       const base = component.panel!.series[0];
       const series = {
         ...base, id: 'test::hr', streamType,
+        lineContinuity: { mode: 'custom' as const, maxGapSeconds: 2 },
         zoneColorPieces: [
           { zone: 'Zone 1', color: '#0099ff', lt: 110 },
           { zone: 'Zone 2', color: '#00aa00', gte: 110, lt: 120 },
@@ -931,6 +932,7 @@ describe('EventCardChartPanelComponent', () => {
         { x: 0, y: 100, time: 0 }, { x: 2, y: 120, time: 2000 },
         { x: 6, y: 80, time: 6000 }, { x: 8, y: 100, time: 8000 },
       ].map(point => ({ ...point, x: x(point.x) })), { color: '#008800' });
+      hrPanel.series[0].lineContinuity = { mode: 'detect', maxGapSeconds: 10 };
       if (format === 'packed') {
         hrPanel.series = hrPanel.series.map(series => ({
           ...series,
@@ -998,6 +1000,70 @@ describe('EventCardChartPanelComponent', () => {
       }
     }
   );
+
+  it.each((['continuous', 'detect', 'custom'] as const).flatMap(mode =>
+    [false, true].flatMap(overlay => [XAxisTypes.Duration, XAxisTypes.Time, XAxisTypes.Distance].map(axis => ({ mode, overlay, axis })))))(
+    'renders the selected policy through zoom cycles with sparse sampling ($mode, overlay=$overlay, $axis)', ({ mode, overlay, axis }) => {
+      const x = (seconds: number) => axis === XAxisTypes.Time ? 1700000000000 + seconds * 1000
+        : axis === XAxisTypes.Distance ? 500 + seconds * 3 : seconds;
+      component.xAxisType = axis;
+      const points = Array.from({ length: 40 }, (_, index) => ({
+        x: x(index * 5), time: index * 5000, y: index >= 20 && index <= 23 ? null : 100 + index,
+      }));
+      const panel = buildTestPanel(DataHeartRate.type, points, { color: '#008800' });
+      // Leave the default absent for existing accounts.
+      if (mode !== 'continuous') panel.series[0].lineContinuity = { mode, maxGapSeconds: 10 };
+      if (overlay) component.overlayPanel = panel;
+      else component.panel = panel;
+      component.xDomain = { start: x(0), end: x(195) };
+      const before = JSON.stringify(panel);
+      const canvas = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const hostChart = vi.spyOn(component['chartHost'], 'getChart').mockReturnValue(rendered);
+      const hostOptions = vi.spyOn(component['chartHost'], 'setOption')
+        .mockImplementation(update => rendered.setOption(update, { lazyUpdate: false }));
+      const crossesViewport = () => {
+        const paths = (rendered.getZr().storage.getDisplayList() as any[])
+          .filter(item => item.type === 'ec-polyline' && item.style.stroke === '#008800');
+        expect(paths).toHaveLength(1);
+        const pixels = paths[0].shape.points;
+        const clip = paths[0].__clipPaths[0].getBoundingRect();
+        for (let i = 2; i < pixels.length; i += 2) {
+          if ([pixels[i - 2], pixels[i - 1], pixels[i], pixels[i + 1]].every(Number.isFinite)
+            && Math.max(pixels[i - 2], pixels[i]) >= clip.x
+            && Math.min(pixels[i - 2], pixels[i]) <= clip.x + clip.width) return true;
+        }
+        return false;
+      };
+      try {
+        rendered.setOption(component['buildOption']());
+        for (let cycle = 0; cycle < 2; cycle++) {
+          for (const [start, end, connected] of [[0, 195, true], [86, 89, true], [98, 115, mode === 'continuous']] as const) {
+            rendered.dispatchAction({ type: 'dataZoom', startValue: x(start), endValue: x(end) });
+            component['applyCanonicalAxisScales']();
+            expect(crossesViewport()).toBe(connected);
+          }
+          component['updateRangeStats']({ start: x(98), end: x(115) });
+          expect(component.rangeStats).toEqual([]);
+          expect(component['resolveTooltipPointsAtX'](x(105)).filter(point => point.series.id === panel.series[0].id)).toEqual([]);
+        }
+        expect(JSON.stringify(panel)).toBe(before);
+      } finally {
+        hostChart.mockRestore(); hostOptions.mockRestore(); rendered.dispose(); canvas.mockRestore();
+      }
+    },
+  );
+
+  it('applies a custom gap limit to sparse Battery readings', () => {
+    component.panel = buildTestPanel('Battery Charge', [
+      { x: 0, time: 0, y: 90 }, { x: 10, time: 10_000, y: 89 }, { x: 40, time: 40_000, y: 88 },
+    ]);
+    component.panel.series[0].lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
+    const option = component['buildOption']();
+    const line = (option.series as LineSeriesOption[])[0];
+    expect(line.connectNulls).toBe(false);
+    expect(Array.from(line.data as unknown as Float64Array)).toEqual([0, 90, 10, 89, 40, NaN, 40, 88]);
+  });
 
   it('keeps native clipping when overlays are added and removed', async () => {
     await renderComponent();
@@ -1089,11 +1155,7 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.connectNulls).toBe(true);
-    expect(option?.series?.[0]?.data).toEqual([
-      [0, 40],
-      [1, null],
-      [2, 41],
-    ]);
+    expect(option?.series?.[0]?.data).toEqual([[0, 40], [1, null], [2, 41]]);
   });
 
   it('renders an overlay panel on a secondary y-axis with solid no-fill series', async () => {
@@ -1981,7 +2043,7 @@ describe('EventCardChartPanelComponent', () => {
           inverse: false,
           interval: 5,
           min: 35,
-          max: 90, // Readings across a real gap do not widen the shared viewport scale.
+          max: 100, // Readings across a real gap do not widen the shared viewport scale.
         }
       },
       {
@@ -2350,6 +2412,7 @@ describe('EventCardChartPanelComponent', () => {
       .map((y, x) => ({ x, y, time: x * 1000 }));
     component.panel = buildTestPanel(DataAltitude.type, points);
     const series = component.panel!.series[0];
+    series.lineContinuity = { mode: 'custom', maxGapSeconds: 2 };
     if (route) series.lineGapPolicy = 'adjacent';
     series.gradeColorValues = Float64Array.from(points.map(() => 4));
     component.colorAltitudeByGrade = true;

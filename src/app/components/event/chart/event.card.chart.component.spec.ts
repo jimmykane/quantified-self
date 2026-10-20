@@ -207,6 +207,73 @@ describe('EventCardChartComponent', () => {
     component.event = { ...component.event, getActivities: () => [activity] };
   }
 
+  it('defaults to Continuous, follows saved continuity silently and rebuilds for a mode change', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity()).toEqual({ mode: 'continuous', maxGapSeconds: 10 });
+    vi.mocked(eventDataHelper.buildEventChartPanels).mockClear();
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'detect', maxGapSeconds: 10 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity().mode).toBe('detect');
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenCalledWith(expect.objectContaining({
+      lineContinuity: { mode: 'detect', maxGapSeconds: 10 },
+    }));
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+  });
+
+  it('saves continuity for the signed-in viewer once and blocks overlapping/no-op writes', async () => {
+    component.targetUserID = 'event-owner';
+    let finish!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const pending = component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 20 });
+    expect(component.lineContinuity()).toEqual({ mode: 'custom', maxGapSeconds: 20 });
+    expect(component.isSavingLineContinuity()).toBe(true);
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 20 });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith(
+      { eventLineContinuity: { mode: 'custom', maxGapSeconds: 20 } }, { force: true, expectedUserID: 'u1' },
+    );
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finish(); await pending;
+    await component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 20 });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('rolls continuity back after a failed save and allows retry', async () => {
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('Offline'));
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    expect(component.lineContinuity().mode).toBe('continuous');
+    expect(component.isSavingLineContinuity()).toBe(false);
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockSnackBar.open).toHaveBeenCalledOnce();
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    expect(component.lineContinuity().mode).toBe('detect');
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it.each(['sign-out', 'switch', 'destroy'] as const)('ignores a late continuity save after %s', async action => {
+    let reject!: (error: Error) => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }));
+    const pending = component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    if (action === 'destroy') fixture.destroy();
+    else authUserSubject.next(action === 'sign-out' ? null : { uid: 'u2' } as User);
+    reject(new Error('Offline')); await pending;
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+    if (action !== 'destroy') expect(component.lineContinuity().mode).toBe('continuous');
+  });
+
+  it('ignores continuity edits without authentication', async () => {
+    authUserSubject.next(null);
+    await component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 60 });
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
   it('defaults zone colors on and silently follows saved preferences', async () => {
     setZoneActivity();
     fixture.detectChanges();

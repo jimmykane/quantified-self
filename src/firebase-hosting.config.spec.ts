@@ -350,7 +350,7 @@ describe('Firebase Hosting configuration', () => {
     // bounded background Training rebuilds during bulk imports/reparse,
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
-    // Includes two-second activity-chart connections, preserved gaps and single-week Efficiency display.
+    // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

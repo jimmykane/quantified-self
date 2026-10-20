@@ -75,6 +75,7 @@
     "src/app/helpers/echarts-registrations.helper.spec.ts",
     "src/app/helpers/echarts-tooltip-interaction.helper.spec.ts",
     "src/app/helpers/echarts-tooltip-position.helper.spec.ts",
+    "src/app/helpers/event-chart-line-continuity.helper.spec.ts",
     "src/app/helpers/event-chart-overlay.helper.spec.ts",
     "src/app/helpers/event-chart-pan-range.helper.spec.ts",
     "src/app/helpers/event-chart-pinch-zoom.helper.spec.ts",

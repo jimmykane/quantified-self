@@ -61,7 +61,7 @@ function worker() {
   let receive: (event: { data: EventChartPanelWorkerRequest }) => void;
   const messages: Array<{ response: EventChartPanelWorkerResponse; transferables: Transferable[] }> = [];
   runInNewContext(workerCode, {
-    Float64Array, ArrayBuffer, Date,
+    Float64Array, Uint32Array, ArrayBuffer, Date,
     addEventListener: (name: string, callback: typeof receive) => {
       expect(name).toBe('message'); receive = callback;
     },
@@ -95,7 +95,25 @@ describe('compiled event chart worker', () => {
     expect(response.panels).toStrictEqual(structuredClone(expected));
     expect(transferables.length).toBeGreaterThan(0);
     expect(new Set(transferables).size).toBe(transferables.length);
+    expect(transferables).toHaveLength(expected.flatMap(panel => panel.series).reduce((count, series) =>
+      count + [series.lineValues, series.timeValues, series.gradeColorValues, series.lineSegmentIds]
+        .filter(values => values?.byteLength > 0).length, 0));
     expect(transferables.every(buffer => buffer instanceof ArrayBuffer && buffer.byteLength === 0)).toBe(true);
+  });
+
+  it.each(['continuous', 'detect', 'custom'] as const)('transfers the saved %s policy and display segment IDs', mode => {
+    const input = snapshot(false, false, XAxisTypes.Duration);
+    input.lineContinuity = { mode, maxGapSeconds: 1 };
+    const instance = worker();
+    instance.send({ requestID: 17, input });
+    const response = instance.messages[0].response;
+    if ('error' in response) throw new Error(response.error);
+    expect(response.panels).toStrictEqual(structuredClone(buildEventChartPanelsFromSnapshot(input)));
+    for (const panel of response.panels) for (const series of panel.series) {
+      expect(series.lineContinuity).toEqual(input.lineContinuity);
+      expect(series.lineSegmentIds).toBeInstanceOf(Uint32Array);
+      expect(series.lineSegmentIds.length).toBe(series.pointCount);
+    }
   });
 
   it('preserves the error envelope and handles the next request', () => {

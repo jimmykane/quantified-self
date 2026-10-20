@@ -420,6 +420,86 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
+    it('defaults continuity to Continuous, validates Custom only, and keeps hydration silent', async () => {
+        await renderSettings();
+        component.activeSection = 'charts';
+        fixture.detectChanges();
+        const form = component.userSettingsFormGroup;
+        expect(form.get('eventLineContinuityMode').value).toBe('continuous');
+        expect(fixture.nativeElement.textContent).toContain('Event chart line continuity');
+        expect(fixture.nativeElement.querySelector('[formControlName="eventLineGapSeconds"]')).toBeNull();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        form.get('eventLineContinuityMode').setValue('custom');
+        component.onLineContinuityChange();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('[formControlName="eventLineGapSeconds"]')).toBeTruthy();
+        expect(fixture.nativeElement.textContent).toContain('Maximum gap (seconds)');
+        for (const value of [null, 0, -1, 1.5, 86401]) {
+            form.get('eventLineGapSeconds').setValue(value);
+            expect(form.valid).toBe(false);
+        }
+        form.get('eventLineContinuityMode').setValue('detect');
+        component.onLineContinuityChange();
+        expect(form.valid).toBe(true);
+        expect(form.get('eventLineGapSeconds').value).toBe(10);
+        component.onLineContinuityChange();
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('saves a changed continuity pair, locks pending edits and retains the choice after a failure', async () => {
+        await createSettings();
+        const mode = component.userSettingsFormGroup.get('eventLineContinuityMode');
+        const limit = component.userSettingsFormGroup.get('eventLineGapSeconds');
+        mode.setValue('custom'); mode.markAsDirty();
+        limit.setValue(20); limit.markAsDirty();
+        let reject!: (reason: Error) => void;
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties)
+            .mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+        const pending = component.onSubmit(new Event('submit'));
+        expect(mode.disabled).toBe(true);
+        expect(limit.disabled).toBe(true);
+        expect(update.mock.calls[0][1].settings.chartSettings).toMatchObject({
+            eventLineContinuity: { mode: 'custom', maxGapSeconds: 20 },
+        });
+        reject(new Error('Offline'));
+        await pending;
+        expect(mode.enabled && limit.enabled).toBe(true);
+        expect(mode.value).toBe('custom');
+        expect(limit.value).toBe(20);
+        expect(mode.dirty).toBe(true);
+        expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
+        expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    });
+
+    it('refreshes the pristine continuity pair and omits it from an unrelated save', async () => {
+        await createSettings();
+        const form = component.userSettingsFormGroup;
+        form.get('displayName').setValue('New name'); form.get('displayName').markAsDirty();
+        component.user = { ...component.user, settings: { ...component.user.settings, chartSettings: {
+            ...component.user.settings.chartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 30 },
+        } } } as any;
+        component.ngOnChanges();
+        expect(form.get('eventLineContinuityMode').value).toBe('custom');
+        expect(form.get('eventLineGapSeconds').value).toBe(30);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockResolvedValue([]);
+        await component.onSubmit(new Event('submit'));
+        expect(update.mock.calls[0][1].settings.chartSettings).not.toHaveProperty('eventLineContinuity');
+    });
+
+    it('preserves both continuity fields when either one has local edits', async () => {
+        await createSettings();
+        const form = component.userSettingsFormGroup;
+        form.get('eventLineContinuityMode').setValue('custom');
+        form.get('eventLineContinuityMode').markAsDirty();
+        component.user = { ...component.user, settings: { ...component.user.settings, chartSettings: {
+            ...component.user.settings.chartSettings, eventLineContinuity: { mode: 'detect', maxGapSeconds: 90 },
+        } } } as any;
+        component.ngOnChanges();
+        expect(form.get('eventLineContinuityMode').value).toBe('custom');
+        expect(form.get('eventLineGapSeconds').value).toBe(10);
+    });
+
     it('should create', async () => {
         await renderSettings();
         expect(component).toBeTruthy();

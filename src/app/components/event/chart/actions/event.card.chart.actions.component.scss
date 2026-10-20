@@ -130,6 +130,16 @@ section.container {
   height: 18px;
 }
 
+.chart-options-menu__continuity {
+  display: grid;
+  gap: 8px;
+  padding: 8px 16px 12px;
+  min-width: 0;
+  mat-form-field { width: 100%; min-width: 0; }
+  p { margin: 0; font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); }
+  [role='alert'] { color: var(--mat-sys-error); }
+}
+
 @include xsmall {
   section.container {
     justify-content: flex-end;

@@ -175,6 +175,7 @@ describe('event-echarts-yaxis.helper', () => {
     ['legacy', 0.1, 500], ['packed', 0.1, 500], // Distance
   ] as const)('includes only connected HR boundary endpoints without changing samples (%s, scale=%s, offset=%s)', (format, scale, offset) => {
     const panel = buildPanel(DataHeartRate.type, [100, NaN, 120, NaN, NaN, NaN, 80, NaN, 100]);
+    panel.series[0].lineContinuity = { mode: 'custom', maxGapSeconds: 2 };
     const x = (value: number) => offset + value * scale;
     panel.series[0].points.forEach(point => {
       point.time = point.x * 1000;
@@ -205,6 +206,7 @@ describe('event-echarts-yaxis.helper', () => {
 
   it.each([2001, 0, -1000, NaN, Infinity])('excludes boundary readings across an invalid HR interval (%s)', time => {
     const panel = buildPanel(DataHeartRate.type, [100, 999]);
+    panel.series[0].lineContinuity = { mode: 'custom', maxGapSeconds: 2 };
     panel.series[0].points[1].time = time;
     const config = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
     expect(config.min).toBeLessThanOrEqual(100);
