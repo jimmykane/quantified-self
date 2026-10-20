@@ -1,4 +1,6 @@
 .table-container {
+  --lap-selection-column-width: 48px;
+  --lap-index-column-width: 48px;
   overflow: auto;
   width: 100%;
   max-width: 100%;
@@ -11,28 +13,23 @@
 }
 
 .lap-index-cell {
-  flex: 0 0 88px;
-  width: 88px;
-  max-width: 88px;
+  box-sizing: border-box;
+  flex: 0 0 var(--lap-index-column-width);
+  width: var(--lap-index-column-width);
+  max-width: var(--lap-index-column-width);
+  padding-inline: 8px;
 }
 
 /* Cross-leg context needs a readable label while retaining the table's shared horizontal scroll. */
-.lap-context-table .lap-index-cell {
-  flex-basis: 128px;
-  width: 128px;
-  max-width: 128px;
-}
-
-.lap-context-table .lap-index-label {
-  white-space: normal;
-  overflow-wrap: anywhere;
+.lap-context-table {
+  --lap-index-column-width: 128px;
 }
 
 .lap-selection-cell {
-  flex: 0 0 48px;
+  flex: 0 0 var(--lap-selection-column-width);
   justify-content: center;
-  width: 48px;
-  max-width: 48px;
+  width: var(--lap-selection-column-width);
+  max-width: var(--lap-selection-column-width);
 }
 
 .lap-length-toggle-cell {
@@ -55,6 +52,9 @@
 .lap-index-label {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .table-container .lap-rest-row mat-cell,
@@ -230,15 +230,18 @@
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }
 
+.lap-average-row .lap-average-label,
 .lap-selected-summary-row .lap-selected-summary-label {
-  flex: 0 0 136px;
+  box-sizing: border-box;
+  flex: 0 0 calc(var(--lap-selection-column-width) + var(--lap-index-column-width));
   justify-content: flex-start;
-  max-width: 136px;
+  max-width: calc(var(--lap-selection-column-width) + var(--lap-index-column-width));
   padding-inline: 8px;
   white-space: normal;
-  width: 136px;
+  width: calc(var(--lap-selection-column-width) + var(--lap-index-column-width));
 }
 
+.lap-average-index-spacer,
 .lap-selected-summary-index-spacer {
   display: none;
 }

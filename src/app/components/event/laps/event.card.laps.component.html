@@ -208,11 +208,15 @@
           </mat-header-cell>
           <mat-cell *matCellDef="let row" [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
+            [class.lap-average-label]="row.isLapAverage && column === 'selection'"
+            [class.lap-average-index-spacer]="row.isLapAverage && column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
             [class.lap-length-toggle-cell]="column === 'lengths'"
             [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-average-cell]="row.isLapAverage" [matTooltip]="row.metricNotes?.[column] || ''">
-            @if (column === 'selection' && !row.isLapAverage) {
+            @if (column === 'selection' && row.isLapAverage) {
+            {{ row['#'] }}
+            } @else if (column === 'selection' && !row.isLapAverage) {
             <mat-checkbox [checked]="row.isSelected" [indeterminate]="row.isPartiallySelected || false"
               (change)="toggleLapSelection(lapTable, row)"
               [aria-label]="(row.members ? 'Select laps ' : 'Select lap ') + row['#']">
@@ -225,13 +229,13 @@
               <mat-icon>{{ row.lengthsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
             </button>
             }
-            } @else if (column === '#') {
+            } @else if (column === '#' && !row.isLapAverage) {
             <span class="lap-index-label">{{ row[column] }}
               @if (row.isRest) { <span class="mat-label-small">Rest</span> }
               @if (row.timingExplanation) { <mat-icon tabindex="0" aria-hidden="false" [matTooltip]="row.timingExplanation" [attr.aria-label]="row.timingExplanation">info</mat-icon> }
               @if (row.contextLabel) { <span class="mat-label-small">{{ row.contextLabel }}</span> }
             </span>
-            } @else if (column !== 'selection') {
+            } @else if (column !== 'selection' && column !== '#') {
             {{ row[column] }}
             }
           </mat-cell>

@@ -1114,6 +1114,30 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(cycling, LapTypes.Manual)?.data[0].isLapAverage).toBe(true);
     });
 
+    it('keeps persistent and selected summary labels across the two pinned identifier columns', () => {
+        const activity = createActivity([300, 330].map(pace => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+        } as unknown as LapInterface)));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const summary = fixture.nativeElement.querySelector('.lap-average-row') as HTMLElement;
+        expect(summary.querySelector('.lap-average-label')?.textContent?.trim()).toBe('Summary');
+        expect(summary.querySelector('.lap-average-index-spacer')?.textContent?.trim()).toBe('');
+        expect(summary.querySelector('.lap-average-index-spacer .lap-index-label')).toBeNull();
+        expect(summary.querySelector('mat-checkbox')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('input[aria-label^="Select lap "]')).toHaveLength(2);
+
+        fixture.nativeElement.querySelector('input[aria-label="Select lap 1"]').click();
+        fixture.detectChanges();
+        const footer = fixture.nativeElement.querySelector('.lap-selected-summary-row:not([hidden])') as HTMLElement;
+        expect(footer.querySelector('.lap-selected-summary-label')?.textContent).toContain('Selected summary · 1');
+        expect(footer.querySelector('.lap-selected-summary-index-spacer')?.textContent?.trim()).toBe('');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+    });
+
     it('shows unit-aware metric averages directly below the table header', () => {
         const activity = createActivity([300, 330].map((pace) => ({
             ...createRenderableLap(LapTypes.Manual),
@@ -1821,6 +1845,20 @@ describe('EventCardLapsComponent', () => {
 });
 
 describe('EventCardLapsComponent source contracts', () => {
+    it('uses a compact number column and keeps summary widths tied to the pinned columns', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
+            'utf8',
+        );
+        expect(styles).toContain('--lap-index-column-width: 48px;');
+        expect(styles).toContain('--lap-selection-column-width: 48px;');
+        expect(styles).toMatch(/\.lap-context-table\s*\{\s*--lap-index-column-width: 128px;/);
+        expect(styles).toContain('calc(var(--lap-selection-column-width) + var(--lap-index-column-width))');
+        expect(styles).toContain('.lap-average-row .lap-average-label,');
+        expect(styles).toContain('.lap-average-index-spacer,');
+        expect(styles).not.toContain('136px');
+    });
+
     it('should keep the metric search field within the lap column dialog', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),

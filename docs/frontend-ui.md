@@ -281,6 +281,11 @@ before rest-block grouping, not the number of collapsed display rows. Column ava
 session-only Max HR cannot advertise a column in a single-lap table without its own recorded peak. Temporary selection
 summaries remain available, including when one lap is selected. Changing the visible lap set recomputes this presentation.
 
+Ordinary lap numbers use a 48px pinned column with 8px inline cell padding instead of the former 88px column. The
+independent selection column keeps its 48px checkbox target. Persistent and selected summary labels span those two
+columns, with their combined width derived from the same local CSS variables so metric columns remain aligned.
+Cross-leg context tables retain a 128px number/context column; rest ranges and context labels wrap rather than clip.
+
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,
 including empty lists, retain precedence. The display-only `DataNormalizedSwolf` extends Sports Lib's numeric data
 class. Stroke, total strokes and normalized SWOLF choices are limited to swimming in both the chooser and the
