@@ -245,7 +245,7 @@ export type AppUserProfileReadState =
   | { status: 'initializing' }
   | { status: 'signed-out' }
   | { status: 'loading'; uid: string }
-  | { status: 'recovering'; uid: string; attempt: number; code: string | null }
+  | { status: 'recovering'; uid: string; attempt: number; code: string | null; appCheckFailure?: AppCheckFailureDetails }
   | { status: 'ready'; uid: string; profileExists: boolean }
   | { status: 'error'; uid: string; code: string | null; appCheckFailure?: AppCheckFailureDetails };
 
@@ -603,9 +603,15 @@ export class AppUserService implements OnDestroy {
           }
 
           const code = this.getErrorCode(error);
-          const retryDelayMs = Math.min(
-            AppUserService.transientReadRetryDelayMs * Math.pow(2, retryCount - 1),
-            AppUserService.transientReadRetryMaxDelayMs
+          const appCheckFailure = appCheckFailureDetails(error);
+          const retryDelayMs = Math.max(
+            Math.min(
+              AppUserService.transientReadRetryDelayMs * Math.pow(2, retryCount - 1),
+              AppUserService.transientReadRetryMaxDelayMs
+            ),
+            // SDK duration strings round to the nearest second; add one second
+            // so the retry cannot land just before the actual cooldown expires.
+            appCheckFailure?.cooldown ? (appCheckFailure.retryAfterSeconds + 1) * 1000 : 0,
           );
 
           this.markIncompleteProfileRead(firebaseUser.uid);
@@ -614,6 +620,7 @@ export class AppUserService implements OnDestroy {
             uid: firebaseUser.uid,
             attempt: retryCount,
             code,
+            ...(appCheckFailure ? { appCheckFailure } : {}),
           });
           this.profileReadGeneration += 1;
           this.logger.warn('[AppUserService] Retrying authoritative user profile read.', {

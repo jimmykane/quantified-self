@@ -24,7 +24,7 @@
           }
           <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-retry"
             (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
-            {{ isProfileRecoveryInProgress ? 'Retrying…' : profileVerificationNeedsReload() ? 'Reload page' : 'Retry' }}
+            {{ isProfileRecoveryInProgress ? (profileVerificationNeedsReload() ? 'Reloading…' : 'Retrying…') : profileVerificationNeedsReload() ? 'Reload page' : 'Retry' }}
           </button>
           @if (profileVerificationNeedsReload()) {
           <a mat-button routerLink="/help" fragment="troubleshooting" appHapticTap>Browser verification help</a>

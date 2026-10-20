@@ -2,13 +2,16 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import { LoggerService } from './logger.service';
+import { Logger as FirebaseLogger } from '@firebase/logger';
+import { appCheckBeforeBreadcrumb } from '../helpers/app-check-console-diagnostics.helper';
 
-const sdk = vi.hoisted(() => ({ onTokenChanged: vi.fn(), onLog: vi.fn(), unsubscribe: vi.fn() }));
+const sdk = vi.hoisted(() => ({ onTokenChanged: vi.fn(), unsubscribe: vi.fn() }));
 vi.mock('app/firebase/app-check', () => ({ onTokenChanged: sdk.onTokenChanged }));
-vi.mock('firebase/app', () => ({ onLog: sdk.onLog }));
 
 describe('AppCheckDiagnosticsService', () => {
   const logger = { captureMessage: vi.fn() };
+  const unrelatedSDKLogger = new FirebaseLogger('app-check-review-sentinel');
+  unrelatedSDKLogger.setLogLevel('silent');
   let service: AppCheckDiagnosticsService;
   let next: (result: { token: string }) => void;
   let error: (failure: unknown) => void;
@@ -18,7 +21,10 @@ describe('AppCheckDiagnosticsService', () => {
     sdk.onTokenChanged.mockImplementation((_app, onNext, onError) => {
       next = onNext; error = onError; return sdk.unsubscribe;
     });
-    sdk.onLog.mockImplementation(handler => { log = handler; });
+    log = entry => appCheckBeforeBreadcrumb(
+      { category: 'console', level: entry.level === 'warn' ? 'warning' : entry.level },
+      { input: [`[2026-10-20T10:00:00.000Z]  ${entry.type}:`, entry.message] },
+    );
     TestBed.configureTestingModule({ providers: [{ provide: LoggerService, useValue: logger }] });
     service = TestBed.inject(AppCheckDiagnosticsService);
     service.observeInitialRejections();
@@ -65,8 +71,9 @@ describe('AppCheckDiagnosticsService', () => {
     expect(sdk.onTokenChanged).toHaveBeenCalledTimes(1);
     TestBed.resetTestingModule();
     expect(sdk.unsubscribe).toHaveBeenCalledTimes(1);
-    expect(sdk.onLog).toHaveBeenCalledTimes(2);
-    expect(sdk.onLog).toHaveBeenLastCalledWith(null);
+    log({ type: '@firebase/app-check', level: 'warn',
+      message: 'AppCheck: 403 error. Attempts allowed again after 01d:00m:00s (appCheck/initial-throttle).' });
+    expect(logger.captureMessage).not.toHaveBeenCalled();
   });
 
   it('captures an initial refresh rejection even when the SDK keeps its cached token usable', () => {
@@ -78,7 +85,7 @@ describe('AppCheckDiagnosticsService', () => {
     next({ token: 'cached-private-token' });
     error({ code: 'appCheck/throttled', customData: { httpStatus: 403 } });
     expect(logger.captureMessage).toHaveBeenCalledTimes(1);
-    expect(logger.captureMessage.mock.calls[0][1].contexts.appCheck.source).toBe('sdk-log');
+    expect(logger.captureMessage.mock.calls[0][1].contexts.appCheck.source).toBe('console-breadcrumb');
     expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
   });
 
@@ -93,5 +100,12 @@ describe('AppCheckDiagnosticsService', () => {
   it('does not throw if reporting fails', () => {
     logger.captureMessage.mockImplementation(() => { throw new Error('reporting unavailable'); });
     expect(() => error({ code: 'appCheck/initial-throttle' })).not.toThrow();
+  });
+
+  it('does not format disabled debug logs from unrelated Firebase services', () => {
+    const toJSON = vi.fn(() => 'private-document-data');
+    unrelatedSDKLogger.debug({ toJSON });
+    expect(toJSON).not.toHaveBeenCalled();
+    expect(logger.captureMessage).not.toHaveBeenCalled();
   });
 });

@@ -346,7 +346,7 @@ describe('Firebase Hosting configuration', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
     // measurement-first Heart rate choices, compact history, source comparison, visible coverage and recording details,
-    // and bounded background Training rebuilds during bulk imports/reparse.
+    // bounded background Training rebuilds during bulk imports/reparse, and browser verification recovery with bounded temporary-error retries.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -395,10 +395,6 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
-  });
-
-  it('dates the browser verification recovery guidance in the public help sitemap entry', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
   });
 
   it('keeps client-rendered routes out of the sitemap and noindexed at the hosting layer', () => {

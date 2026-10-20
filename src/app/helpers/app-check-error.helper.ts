@@ -24,19 +24,24 @@ export function appCheckFailureDetails(error: unknown): AppCheckFailureDetails |
   const httpStatus = Number.isInteger(numericStatus) && numericStatus >= 400 && numericStatus <= 599
     ? numericStatus : null;
   const cooldown = knownCode === 'initial-throttle' || knownCode === 'throttled';
+  const retryAfterSeconds = cooldown ? retryDurationSeconds(value.customData?.time) : null;
+  const temporaryStatus = httpStatus === 408 || httpStatus === 429 || httpStatus >= 500;
   return {
     code: `appCheck/${knownCode}`,
     httpStatus,
-    retryAfterSeconds: cooldown ? retryDurationSeconds(value.customData?.time) : null,
+    retryAfterSeconds,
     cooldown,
     retryable: knownCode === 'fetch-network-error'
       || (knownCode === 'fetch-status-error'
-        && (httpStatus === null || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)),
+        && (httpStatus === null || temporaryStatus))
+      // The SDK also wraps temporary server failures in throttle errors. Permit
+      // bounded recovery only when its remaining wait is known and short.
+      || (cooldown && temporaryStatus && retryAfterSeconds !== null && retryAfterSeconds <= 10),
   };
 }
 
 // Firebase's public token observer omits refresh errors while a cached token is
-// still usable. Its public log callback does receive this SDK-defined warning.
+// still usable. Its console output still contains this SDK-defined warning.
 // Parse the exact initial-throttle grammar only; never forward the log itself.
 export function initialAppCheckRejectionFromLog(message: unknown): AppCheckFailureDetails | null {
   if (typeof message !== 'string') return null;

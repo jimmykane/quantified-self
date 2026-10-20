@@ -459,12 +459,17 @@ change to Training planning semantics or MCP read/write contracts, scopes, proje
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
 server snapshots; permission and transient App Check network/server failures refresh both credentials with bounded
-retry/backoff. App Check `initial-throttle`/`throttled`, direct exchange 4xx rejections other than 408/429,
+retry/backoff. For App Check `initial-throttle`/`throttled` with HTTP 408/429/5xx, a validated remaining SDK wait of
+at most ten seconds may use that same retry budget. The delay is at least the SDK duration plus one second to cover
+its rounding, as well as the normal retry backoff. Recovering states retain the safe failure details for correct UI
+guidance. Rejected HTTP 403/404 checks, unknown/long SDK waits, other direct exchange 4xx rejections,
 reCAPTCHA failures and configuration failures stop automatic profile retries immediately. A forced refresh cannot
 clear the SDK's cooldown. The recovery panel explains browser verification separately and offers **Reload page**
 for these failures, with regular-window, trusted-network and script-blocking checks. Reloading starts a new check
 but does not guarantee acceptance. It never signs out, clears storage or writes account data; transient network
-failures and ordinary profile errors retain **Retry**.
+failures and ordinary profile errors retain **Retry**. A requested page reload shows **Reloading…** and prevents
+repeated clicks/duplicate haptics. A five-second UI-only fallback re-enables the action if navigation was cancelled;
+it never requests a token or reloads automatically, and component destruction cancels it.
 The recovery panel on `/login` explains that the user is still signed in. Its Retry action restarts the profile stream
 and refreshes credentials without signing out, clearing persistence, or writing account data. Actual Auth sign-out or
 an account switch cancels the old profile load and ends its recovery attempt.
@@ -488,11 +493,14 @@ The fallback does not clear or repair the broader SDK cache. An already complete
 without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
 beta, and production builds; only the App Check debug provider is development-specific.
 
-App Check initialization registers the public Firebase `onLog` callback before starting verification, and the public
-`onTokenChanged` error observer before downstream Auth/Firestore consumers. The log callback accepts only the
-App Check warning's exact initial-throttle grammar; unrelated Firebase logs and arbitrary arguments are ignored.
+Sentry's existing `beforeBreadcrumb` hook inspects already emitted console warnings. App Check initialization
+subscribes to sanitized initial rejections before starting verification, and registers the public `onTokenChanged`
+error observer before downstream Auth/Firestore consumers. The hook accepts only the SDK console prefix and the
+warning's exact initial-throttle grammar; unrelated logs and arbitrary arguments are ignored without formatting.
 This also captures initial refresh rejections when the SDK retains a still-valid cached token and its public token
-observer omits the error. Console logging and SDK log levels stay unchanged. `AppCheckReadinessService` also reports explicit token-request failures and invalidates memoized readiness
+observer omits the error. No global Firebase user log handler is installed: that API formats even disabled debug
+payloads before filtering, which can add work to unrelated Firestore/Auth operations. Console logging and SDK log
+levels stay unchanged. `AppCheckReadinessService` also reports explicit token-request failures and invalidates memoized readiness
 after a background failure. The single `App Check verification failed` Sentry message uses fixed phase/code labels,
 a bounded HTTP status, a validated SDK retry duration (up to one day), source, online hint and document visibility.
 It never copies raw error messages/stacks, SDK custom data, response bodies, URLs, identifiers or tokens. Existing

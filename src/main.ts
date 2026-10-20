@@ -9,6 +9,7 @@ import * as Sentry from '@sentry/angular';
 import { registerAppLocale } from './app/shared/adapters/date-locale.config';
 import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
+import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
 
 redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
@@ -20,6 +21,7 @@ if (!environment.localhost) {
     environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
     release: environment.appVersion,
     debug: false,
+    beforeBreadcrumb: appCheckBeforeBreadcrumb,
     integrations: [
       Sentry.browserTracingIntegration(),
     ],

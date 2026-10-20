@@ -1,7 +1,7 @@
 import { DestroyRef, Injectable, inject } from '@angular/core';
-import { onLog } from 'firebase/app';
 import { FirebaseAppCheckType, onTokenChanged } from 'app/firebase/app-check';
-import { AppCheckFailureDetails, appCheckFailureDetails, initialAppCheckRejectionFromLog } from '../helpers/app-check-error.helper';
+import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
+import { observeInitialAppCheckRejections } from '../helpers/app-check-console-diagnostics.helper';
 import { LoggerService } from './logger.service';
 
 @Injectable({ providedIn: 'root' })
@@ -17,14 +17,8 @@ export class AppCheckDiagnosticsService {
   observeInitialRejections(): void {
     if (this.observingLogs) return;
     this.observingLogs = true;
-    // This is the app's sole Firebase user log callback. Console logging and SDK
-    // log levels stay unchanged; other Firebase services and arbitrary args are ignored.
-    onLog(entry => {
-      if (entry.type !== '@firebase/app-check' || entry.level !== 'warn') return;
-      const details = initialAppCheckRejectionFromLog(entry.message);
-      if (details) this.reportDetails(details, 'sdk-log');
-    }, { level: 'warn' });
-    this.destroyRef.onDestroy(() => onLog(null));
+    const unsubscribe = observeInitialAppCheckRejections(details => this.reportDetails(details, 'console-breadcrumb'));
+    this.destroyRef.onDestroy(unsubscribe);
   }
 
   monitor(appCheck: FirebaseAppCheckType): void {
@@ -49,7 +43,7 @@ export class AppCheckDiagnosticsService {
     this.reportDetails(details, source);
   }
 
-  private reportDetails(details: AppCheckFailureDetails, source: 'sdk-log' | 'token-observer' | 'token-request'): void {
+  private reportDetails(details: AppCheckFailureDetails, source: 'console-breadcrumb' | 'token-observer' | 'token-request'): void {
     this.failureRevision += 1;
     // One report per failure kind until a verified token arrives. A cooldown following
     // an initial rejection is the same incident, even across many concurrent consumers.

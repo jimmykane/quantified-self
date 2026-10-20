@@ -12,10 +12,19 @@ describe('appCheckFailureDetails', () => {
       expect(initialAppCheckRejectionFromLog(invalid)).toBeNull();
     }
   });
-  it.each(['initial-throttle', 'throttled'])('never fast-retries %s, including short SDK cooldowns', code => {
-    for (const httpStatus of [403, 404, 429, 500]) {
+  it.each(['initial-throttle', 'throttled'])('never fast-retries a rejected %s, including short SDK cooldowns', code => {
+    for (const httpStatus of [403, 404]) {
       expect(appCheckFailureDetails({ code: `appCheck/${code}`, customData: { httpStatus, time: '00m:02s' } }))
         .toEqual({ code: `appCheck/${code}`, httpStatus, retryAfterSeconds: 2, cooldown: true, retryable: false });
+    }
+  });
+
+  it.each(['initial-throttle', 'throttled'])('allows a bounded wait for temporary %s failures', code => {
+    for (const httpStatus of [408, 429, 500, 503]) {
+      expect(appCheckFailureDetails({ code: `appCheck/${code}`, customData: { httpStatus, time: '00m:02s' } })?.retryable).toBe(true);
+      for (const time of [undefined, 'private-value', '00m:11s', '01d:00m:00s']) {
+        expect(appCheckFailureDetails({ code: `appCheck/${code}`, customData: { httpStatus, time } })?.retryable).toBe(false);
+      }
     }
   });
 

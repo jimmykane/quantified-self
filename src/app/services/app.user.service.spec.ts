@@ -791,6 +791,39 @@ describe('AppUserService', () => {
             appCheckFailure: appCheckFailureDetails({ code: 'appCheck/fetch-status-error', customData: { httpStatus: 403 } }) });
     });
 
+    it.each([429, 503])('waits through a temporary SDK cooldown before retrying HTTP %s', async httpStatus => {
+        vi.useFakeTimers();
+        try {
+            const failure = { code: 'appCheck/initial-throttle', customData: { httpStatus, time: '00m:02s' } };
+            mockAppCheck.getToken.mockRejectedValueOnce(failure);
+            service = TestBed.inject(AppUserService);
+            await vi.advanceTimersByTimeAsync(2999);
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
+            expect(service.profileReadState()).toEqual({ status: 'recovering', uid: 'u1', attempt: 1,
+                code: failure.code, appCheckFailure: appCheckFailureDetails(failure) });
+            expect(docData).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(2);
+            expect(service.profileReadState().status).toBe('ready');
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
+    });
+
+    it('bounds repeated temporary SDK cooldowns with the existing retry budget', async () => {
+        vi.useFakeTimers();
+        try {
+            const failure = { code: 'appCheck/throttled', customData: { httpStatus: 503, time: '00m:02s' } };
+            mockAppCheck.getToken.mockRejectedValue(failure);
+            service = TestBed.inject(AppUserService);
+            await vi.runAllTimersAsync();
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(5);
+            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: failure.code,
+                appCheckFailure: appCheckFailureDetails(failure) });
+            expect(docData).not.toHaveBeenCalled();
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
+    });
+
     it('should restart a failed profile stream with refreshed credentials and coalesce manual retries', async () => {
         (docData as any).mockReturnValue(throwError(() => Object.assign(new Error('failed'), { code: 'internal' })));
         service = TestBed.inject(AppUserService);

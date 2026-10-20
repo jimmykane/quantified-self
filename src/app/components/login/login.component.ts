@@ -33,6 +33,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
+  private profileReloadResetTimeout: ReturnType<typeof setTimeout> | undefined;
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
@@ -40,8 +41,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   private readonly windowService = inject(AppWindowService);
   readonly profileVerificationFailure = computed(() => {
     const state = this.userService.profileReadState();
-    if (state.status === 'error') return state.appCheckFailure ?? appCheckFailureDetails({ code: state.code });
-    return state.status === 'recovering' ? appCheckFailureDetails({ code: state.code }) : null;
+    return state.status === 'error' || state.status === 'recovering'
+      ? state.appCheckFailure ?? appCheckFailureDetails({ code: state.code }) : null;
   });
   readonly profileVerificationNeedsReload = computed(() => {
     const failure = this.profileVerificationFailure();
@@ -450,11 +451,20 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isProfileRecoveryInProgress = true;
     this.isLoading = true;
     this.haptics.selection();
+    let pageReloadRequested = false;
     try {
       if (this.profileVerificationNeedsReload()) {
         // A new page starts a fresh browser check. A same-page forced token refresh
         // cannot bypass the SDK's cooldown. Reloading does not guarantee acceptance.
         this.windowService.windowRef.location.reload();
+        pageReloadRequested = true;
+        // A cancelled beforeunload prompt leaves this document alive. Bound the
+        // pending state without making another token request or automatic reload.
+        this.profileReloadResetTimeout = setTimeout(() => {
+          this.isLoading = false;
+          this.isProfileRecoveryInProgress = false;
+          this.profileReloadResetTimeout = undefined;
+        }, 5000);
         return;
       }
       if (await this.userService.retryProfileRead()) {
@@ -469,8 +479,10 @@ export class LoginComponent implements OnInit, OnDestroy {
         duration: 5000,
       });
     } finally {
-      this.isLoading = false;
-      this.isProfileRecoveryInProgress = false;
+      if (!pageReloadRequested) {
+        this.isLoading = false;
+        this.isProfileRecoveryInProgress = false;
+      }
     }
   }
 
@@ -556,6 +568,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.profileReloadResetTimeout !== undefined) clearTimeout(this.profileReloadResetTimeout);
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();
     }
