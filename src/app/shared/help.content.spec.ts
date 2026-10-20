@@ -1701,6 +1701,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Missing stroke data and rest-only laps stay blank');
   });
 
+  it('explains the compact single-activity jump table and multi-activity tabs', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain("A single activity's jump table appears directly below **Jumps**, without an extra activity tab");
+    expect(content).toContain('When multiple selected activities contain jumps, use the activity tabs');
+    expect(content).toContain('Only columns with available data are shown');
+  });
+
   it('should document sport-specific event lap table columns', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

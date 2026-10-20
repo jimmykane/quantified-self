@@ -732,7 +732,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 ### Event jump tables
 
 - Event details now include a **Jumps** table when selected activities contain jump events.
-- The jump table appears in activity tabs and only shows columns with available data.
+- A single activity's jump table appears directly below **Jumps**, without an extra activity tab. When multiple selected activities contain jumps, use the activity tabs to switch between them. Only columns with available data are shown.
 - Jump metrics use your preferred units from **Settings** when unit conversion is supported.
 
 ### Event lap tables

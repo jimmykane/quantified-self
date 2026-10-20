@@ -1,3 +1,14 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.jump-activity-label {
+  margin: 0 0 8px;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
 .table-container {
   overflow: auto;
   width: 100%;

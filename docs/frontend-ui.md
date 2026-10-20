@@ -317,6 +317,12 @@ Activity details use the workspace shell's inline gutters once. The primary summ
 activity selector, statistics, map, charts, and lap/jump/swim sections align to the same content edges without extra
 section-wide side insets. Section headings omit redundant top padding and retain an 8px gap below. Material controls,
 table cells, chart axes, overlays, and fullscreen/export frames keep their internal spacing.
+The Jumps divider reuses the performance-chart divider's 16px top and 8px bottom margins in addition to the section
+stack's existing gap, so the heading is separated from the preceding lap table or chart. No divider is rendered when
+no selected activity has jumps. A single jump-bearing activity renders its table directly, matching Laps and Swim
+Lengths; mixed selections with only one jump-bearing activity retain its source label as compact secondary text.
+Multiple jump-bearing activities retain the existing Material tabs. Table sorting, units and horizontal
+scrolling are unchanged, without adding a card or extra inline padding.
 The shared summary's `--summary-primary-info-padding-inline` and section header's `--event-section-header-padding`
 hooks are set only by activity details; saved-route summaries and headers retain their default spacing.
 At tablet widths, activity details set `--summary-primary-info-metrics-order` to keep summary actions beside the

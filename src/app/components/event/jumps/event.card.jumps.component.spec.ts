@@ -1,4 +1,5 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import {
@@ -53,7 +54,7 @@ describe('EventCardJumpsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [EventCardJumpsComponent],
-      imports: [MatTableModule, MatSortModule, MatTabsModule],
+      imports: [CommonModule, MatTableModule, MatSortModule, MatTabsModule],
       providers: [
         { provide: BreakpointObserver, useValue: { observe: () => of({ matches: false, breakpoints: {} }) } },
       ],
@@ -70,7 +71,7 @@ describe('EventCardJumpsComponent', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders tabs only for selected activities that contain jump events', () => {
+  it('renders one jump activity directly without a redundant activity tab', () => {
     const jumpActivity = createActivity('activity-1', 'Running', [createJumpEvent(90)]);
     const noJumpActivity = createActivity('activity-2', 'Cycling', []);
 
@@ -79,7 +80,30 @@ describe('EventCardJumpsComponent', () => {
     fixture.detectChanges();
 
     expect(component.activitiesWithJumps).toEqual([jumpActivity]);
-    expect(fixture.nativeElement.querySelectorAll('[role="tab"]')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('table')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('table')?.getAttribute('aria-label')).toBe('Running jumps');
+    expect(fixture.nativeElement.querySelector('.jump-activity-label')?.textContent?.trim()).toBe('Running');
+  });
+
+  it('keeps activity tabs when multiple selected activities contain jumps', () => {
+    const running = createActivity('running', 'Running', [createJumpEvent(90)]);
+    const cycling = createActivity('cycling', 'Cycling', [createJumpEvent(120)]);
+    const noJumps = createActivity('empty', 'Hiking', []);
+    component.selectedActivities = [running, noJumps, cycling];
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    expect(component.activitiesWithJumps).toEqual([running, cycling]);
+    const tabs = [...fixture.nativeElement.querySelectorAll('[role="tab"]')] as HTMLElement[];
+    expect(tabs.map(tab => tab.textContent?.trim())).toEqual(['Running 1', 'Cycling 2']);
+
+    component.selectedActivities = [cycling];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelector('table')?.getAttribute('aria-label')).toBe('Cycling jumps');
+    expect(fixture.nativeElement.querySelector('.jump-activity-label')).toBeNull();
   });
 
   it('keeps stable jump activity view keys when activity instances are rebuilt', () => {
@@ -222,6 +246,9 @@ describe('EventCardJumpsComponent', () => {
 
     expect(component.activitiesWithJumps).toEqual([]);
     expect(component.getDataSource(jumpActivity)).toBeUndefined();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('table')).toBeNull();
   });
 
   it('formats unit-based jump values using converted user unit preferences', () => {

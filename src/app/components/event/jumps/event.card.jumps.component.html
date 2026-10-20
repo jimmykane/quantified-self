@@ -1,8 +1,22 @@
 @if (activitiesWithJumps.length > 0) {
 <app-event-section-header icon="monitoring" title="Jumps"></app-event-section-header>
+@if (jumpActivityViews.length === 1) {
+@if (selectedActivities.length > 1) {
+<p class="jump-activity-label mat-body-small">{{ jumpActivityViews[0].label }}</p>
+}
+<ng-container *ngTemplateOutlet="jumpRowsTable; context: { $implicit: jumpActivityViews[0] }"></ng-container>
+} @else {
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
   @for (view of jumpActivityViews; track view.key) {
   <mat-tab [label]="view.label">
+    <ng-container *ngTemplateOutlet="jumpRowsTable; context: { $implicit: view }"></ng-container>
+  </mat-tab>
+  }
+</mat-tab-group>
+}
+}
+
+<ng-template #jumpRowsTable let-view>
     @if (view.dataSource) {
     <section class="table-container">
       <table mat-table class="jump-table" [dataSource]="view.dataSource" matSort matSortDisableClear
@@ -25,7 +39,4 @@
       </table>
     </section>
     }
-  </mat-tab>
-  }
-</mat-tab-group>
-}
+</ng-template>
