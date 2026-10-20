@@ -334,7 +334,7 @@ describe('EventCardChartPanelComponent', () => {
     setPowerPanel();
     fixture.componentRef.setInput('selectedRange', { start: 0, end: 6 });
     await renderComponent();
-    expect(component.powerDisplayMode()).toBe('raw');
+    expect(component.powerView()).toBe('raw');
     expect(fixture.nativeElement.querySelector('mat-button-toggle[value="raw"] button').getAttribute('aria-checked')).toBe('true');
     expect(getFullPowerOption().series).toHaveLength(1);
     expect(hapticsMock.selection).not.toHaveBeenCalled();
@@ -344,7 +344,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.nativeElement.querySelector('mat-button-toggle[value="3s"] button').click();
     await renderComponent();
     const option = getFullPowerOption();
-    expect(component.powerDisplayMode()).toBe('3s');
+    expect(component.powerView()).toBe('3s');
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect([...option.series[0].data].slice(0, 6)).toEqual([0, NaN, 1, NaN, 2, 596 / 3]);
     expect(option.series).toHaveLength(2);
@@ -355,9 +355,9 @@ describe('EventCardChartPanelComponent', () => {
     expect(component.panel).toEqual(source);
     expect(component.rangeStats).toEqual(stats);
 
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
-    component.onPowerDisplayChange('raw');
+    component.setPowerView('raw');
     await renderComponent();
     expect(getFullPowerOption().series).toHaveLength(1);
     expect(getFullPowerOption().series[0].data).toEqual(source!.series[0].points!.map(p => [p.x, p.y]));
@@ -371,7 +371,7 @@ describe('EventCardChartPanelComponent', () => {
       { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
     fixture.componentRef.setInput('overlayPanel', buildTestPanel(DataHeartRate.type, [120, 130]));
     await renderComponent();
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     await renderComponent();
     const option = getFullPowerOption();
     expect(option.series.map(series => series.type)).toEqual(['line', 'custom', 'line', 'custom', 'line']);
@@ -387,7 +387,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(eChartsLoaderMock.setOption.mock.calls.at(-1)![2].replaceMerge).toBeUndefined();
     expect(component.panel).toEqual({ ...primary, series: [...primary.series,
       { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
-    expect(component.powerDisplayMode()).toBe('3s');
+    expect(component.powerView()).toBe('3s');
   });
 
   it('keeps recorded minimum and maximum while a zoomed 3s average includes samples before the visible range', async () => {
@@ -395,7 +395,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.componentRef.setInput('selectedRange', { start: 3, end: 5 });
     await renderComponent();
     const recordedStats = structuredClone(component.rangeStats);
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     await renderComponent();
     chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 5 }] });
     component['applyCanonicalAxisScales']();
@@ -417,7 +417,7 @@ describe('EventCardChartPanelComponent', () => {
     const applyFull = () => rendered.setOption(getFullPowerOption(), { notMerge: false, replaceMerge: ['series', 'xAxis', 'yAxis', 'dataZoom'], lazyUpdate: false });
     try {
       applyFull();
-      component.onPowerDisplayChange('3s');
+      component.setPowerView('3s');
       await renderComponent();
       applyFull();
       expect(rendered.getOption().series).toEqual(expect.arrayContaining([
@@ -430,7 +430,7 @@ describe('EventCardChartPanelComponent', () => {
       rendered.setOption(eChartsLoaderMock.setOption.mock.calls.at(-1)![1], { notMerge: false, lazyUpdate: false });
       expect(rendered.getOption().series).toHaveLength(2);
       expect(rendered.getOption().series[0]).toMatchObject({ id: 'a1::Power', type: 'line' });
-      component.onPowerDisplayChange('raw');
+      component.setPowerView('raw');
       await renderComponent();
       applyFull();
       expect(rendered.getOption().series).toHaveLength(1);
@@ -449,7 +449,7 @@ describe('EventCardChartPanelComponent', () => {
     ] };
     fixture.componentRef.setInput('panel', { ...base, series: [colored, { ...colored, id: 'second::Power', activityID: 'second' }] });
     await renderComponent();
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     await renderComponent();
     expect(getFullPowerOption().visualMap.map(map => map.seriesIndex)).toEqual([0, 2]);
   });
@@ -459,7 +459,7 @@ describe('EventCardChartPanelComponent', () => {
     fixture.componentRef.setInput('userUnitSettings', { ...getDefaultUserUnitSettings(), distanceUnits });
     fixture.componentRef.setInput('xAxisType', XAxisTypes.Distance);
     await renderComponent();
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     await renderComponent();
     const html = getFullPowerOption().tooltip.formatter([{ value: [2, 300] }]);
     const average = DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 300);
@@ -472,19 +472,19 @@ describe('EventCardChartPanelComponent', () => {
   it('silently resets Raw for another activity, keeps 3s across axis changes and hides controls for unsupported metrics or short streams', async () => {
     setPowerPanel();
     await renderComponent();
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     await renderComponent();
     fixture.componentRef.setInput('xAxisType', XAxisTypes.Time);
     await renderComponent();
-    expect(component.powerDisplayMode()).toBe('3s');
+    expect(component.powerView()).toBe('3s');
     fixture.componentRef.setInput('panel', { ...component.panel!, series: component.panel!.series.map(s => ({ ...s, id: 'new-ride::Power' })) });
     await renderComponent();
-    expect(component.powerDisplayMode()).toBe('raw');
+    expect(component.powerView()).toBe('raw');
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     setPowerPanel([100, 200]);
     await renderComponent();
     expect(fixture.nativeElement.querySelector('.event-chart-panel__power-view')).toBeNull();
-    component.onPowerDisplayChange('3s');
+    component.setPowerView('3s');
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('panel', buildTestPanel(DataHeartRate.type, [100, 200, 300]));
     await renderComponent();

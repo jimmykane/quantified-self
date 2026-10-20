@@ -3,6 +3,7 @@ import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { createHash, randomUUID } from 'crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
+import { cleanupAge, cleanupObservation, cleanupPage, cleanupProvider } from './cleanup-monitoring';
 import {
   buildOperationalCleanupQueries,
   getExplicitFirebaseUidAssociation,
@@ -199,6 +200,8 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
       if (task.queryIndex === queries.length) transaction.delete(ref); // Leaf task, no descendants.
       else transaction.update(ref, { queryIndex: task.queryIndex, cursor: task.cursor, nextAttemptAt: Date.now() });
     });
+    cleanupObservation('operational', cleanupProvider(task.config.serviceName),
+      task.queryIndex === queries.length ? 'completed' : 'deferred', 'operational');
     logger.info('[ExplicitDisconnectCleanup] Cleanup page completed.', {
       serviceName: task.config.serviceName, examinedCount: PAGE_SIZE - remaining,
       completed: task.queryIndex === queries.length,
@@ -206,15 +209,22 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
   } catch (error) {
     // A replaced lifecycle retires only this operation's task. Transient errors
     // retain the page cursor and lease delay, so the scheduler retries it forever.
-    await db.runTransaction(async transaction => {
+    const retained = await db.runTransaction(async transaction => {
       const [snapshot, root, deletion] = await Promise.all([
         transaction.get(ref), transaction.get(getServiceTokenRootDocumentRef(task.userID, task.config.serviceName)),
         getUserDeletionGuardStateInTransaction(db, transaction, task.userID),
       ]);
-      if (snapshot.data()?.lease !== lease) return;
+      if (snapshot.data()?.lease !== lease) return false;
       // Account deletion does not supersede the remaining cleanup obligation.
-      if (!deletion.shouldSkip && !sameLifecycle(root, task)) transaction.delete(ref); // Leaf task.
+      if (!deletion.shouldSkip && !sameLifecycle(root, task)) {
+        transaction.delete(ref); // Leaf task.
+        return false;
+      }
+      return true;
     });
+    cleanupObservation('operational', cleanupProvider(task.config.serviceName), !retained ? 'superseded'
+      : error instanceof CleanupSuperseded ? 'deferred' : 'retry', 'operational',
+    retained && !(error instanceof CleanupSuperseded) ? cleanupAge(task.cutoffAt) : undefined);
     logger.warn('[ExplicitDisconnectCleanup] Page deferred or superseded.', {
       serviceName: task.config.serviceName,
       reason: error instanceof CleanupSuperseded ? 'lifecycle_or_document_changed' : 'cleanup_retry',
@@ -225,9 +235,13 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
 export async function retryServiceDisconnectCleanup(): Promise<void> {
   const page = await admin.firestore().collection(SERVICE_DISCONNECT_CLEANUP_COLLECTION)
     .where('nextAttemptAt', '<=', Date.now()).orderBy('nextAttemptAt').limit(10).get();
+  cleanupPage('operational', 'all', page.docs.length, 10);
   await Promise.all(page.docs.map(async doc => {
     try { await processServiceDisconnectCleanup(doc.ref); }
-    catch { logger.error('[ExplicitDisconnectCleanup] Could not claim or checkpoint cleanup.'); }
+    catch {
+      cleanupObservation('operational', 'all', 'failed', 'operational');
+      logger.error('[ExplicitDisconnectCleanup] Could not claim or checkpoint cleanup.');
+    }
   }));
 }
 

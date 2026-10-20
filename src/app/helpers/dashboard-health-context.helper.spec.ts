@@ -23,6 +23,34 @@ function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardH
   return {window,health:{result,limitReached:null,sourceRecordCount:records.length,sampleChunkCount:0,samplePointCount:0,serializedBytes:0,hasMatchingSourceRecords:!!records.length,hasSampleBackedMetric:false,providers:['GarminAPI'],sampleBackedProviders:[]},history:null,activities:null,sessions:[],errors:[]};
 }
 describe('dashboard Health semantics',()=>{
+  it('keeps a pinned Heart rate account across resolutions without substituting another account', () => {
+    const data = evidence('heart_rate', ['first', 'second']);
+    const makeEntries = (variant: string, derived: boolean) => {
+      for (const observation of data.health!.result.observations) {
+        observation.entry = { ...observation.entry, semanticVariant: variant, aggregation: 'average',
+          origin: derived ? 'quantified_self_derived' : 'recorded', recordingMethod: derived ? 'quantified_self_calculated' : 'device' };
+      }
+    };
+    makeEntries('activity_interval_average', false);
+    const raw = buildDashboardHealthContext(data, { metric: 'heart_rate', range: '30d' });
+    const key = raw.sources[1].key;
+    const account = buildDashboardHealthContext(data, { metric: 'heart_rate', range: '30d', sourceKey: key }).selected!.model.series.sourceSelectionKey;
+    makeEntries('qs_daily_interval_mean', true);
+    const settings = { metric: 'heart_rate' as const, range: '1y' as const, sourceKey: key };
+    const daily = buildDashboardHealthContext(data, settings);
+    expect(daily.hasData).toBe(true); expect(daily.missingSource).toBe(false);
+    expect(daily.selected?.model.series.sourceSelectionKey).toBe(account);
+    expect(daily.selected?.model.series.semanticVariant).toBe('qs_daily_interval_mean');
+    expect(settings.sourceKey).toBe(key);
+    makeEntries('activity_interval_average', false);
+    const detailed = buildDashboardHealthContext(data, { ...settings, range: '30d', sourceKey: daily.selectedKey! });
+    expect(detailed.selectedKey).toBe(key);
+    expect(detailed.selected?.model.series.sourceSelectionKey).toBe(account);
+    makeEntries('qs_daily_interval_mean', true);
+    data.health!.result.observations = data.health!.result.observations.slice(0, 1);
+    const missing = buildDashboardHealthContext(data, settings);
+    expect(missing.hasData).toBe(false); expect(missing.selectedKey).toBe(key);
+  });
   it('restores an opaque Sleep preference and retains it as unavailable instead of switching accounts', () => {
     const data = evidence('sleep_duration', []);
     const base = { userID: 'owner', sleepDate: '2026-09-14', startTimeMs: Date.parse('2026-09-13T23:00:00Z'),
@@ -276,9 +304,13 @@ describe('dashboard Health semantics',()=>{
       const view = buildDashboardHealthContext(data, { metric, range: '30d' });
       expect(view.hasData).toBe(true); expect(view.availability.state).toBe('ready');
       expect(view.sources).toHaveLength(1);
-      const expectedReading = metric === 'heart_rate' ? 'Average sleep HR'
-        : metric === 'blood_oxygen_saturation' ? 'Maximum sleep SpO₂' : 'Sleep';
-      expect(view.sources[0].shortLabel).toContain(expectedReading);
+      const expectedReading = {
+        heart_rate: 'Average sleep HR',
+        resting_heart_rate: 'Sleep resting HR',
+        blood_oxygen_saturation: 'Maximum sleep SpO₂',
+        respiration_rate: 'Average sleep breathing rate',
+      }[metric];
+      expect(view.sources[0].shortLabel).toBe(`Suunto · ${expectedReading}`);
       expect(view.selected?.model.series.provider).toBe('SuuntoApp');
       expect(view.notices).toContain('Health readings could not be loaded. Try again.');
     });

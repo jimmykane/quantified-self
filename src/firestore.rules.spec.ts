@@ -138,13 +138,17 @@ describe('Firestore Security Rules', () => {
             await seed();
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc(path).set({ ...await edit(), updatedAt: new Date(),
-                    legs: { leg: { activityId: 'leg', policy: { method: 'HR', included: true } } } });
+                    legs: { leg: { activityId: 'leg', policy: { method: 'HR', included: true },
+                        evaluations: { automatic: { method: 'HR', score: 70, hrAlgorithm: 'THRESHOLD', estimated: true } } } } });
             });
             const owner = testEnv.authenticatedContext('owner').firestore();
             const { serverTimestamp } = await import('firebase/firestore');
             await assertFails(owner.doc(path).update({ 'legs.leg.policy.method': 'MET', revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(owner.doc(path).update({ 'legs.leg.evaluations.automatic.hrAlgorithm': 'BANISTER', revision: 2, updatedAt: serverTimestamp() }));
             await assertSucceeds(owner.doc(path).update({ controls: {}, editedLegKey: null, revision: 2, updatedAt: serverTimestamp() }));
-            expect((await owner.doc(path).get()).data()?.legs.leg.policy.method).toBe('HR');
+            const saved = (await owner.doc(path).get()).data()?.legs.leg;
+            expect(saved.policy.method).toBe('HR');
+            expect(saved.evaluations.automatic).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD', estimated: true });
         });
         it('requires saved leg keys after reparse and protects frozen legacy identities', async () => {
             await seed();

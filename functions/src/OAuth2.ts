@@ -8,6 +8,7 @@ import * as admin from 'firebase-admin';
 import { stageTrainingDeliveryServiceDisconnect } from './training-plans/delivery/marker';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { cleanupObservation, cleanupPage, cleanupProvider, observeRemoteCleanup } from './cleanup-monitoring';
 import {
   Auth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
@@ -1152,6 +1153,7 @@ export async function deauthorizeServiceForUser(
           }),
         },
       );
+      observeRemoteCleanup(serviceName, outcome, 'disconnect', 'explicit');
       logDisconnectLifecycle('info', {
         lifecycleEvent: 'disconnect_cleanup_completed',
         serviceName,
@@ -1168,6 +1170,8 @@ export async function deauthorizeServiceForUser(
       });
       return { ok: true as const, outcome };
     } catch (error) {
+      cleanupObservation('disconnect', cleanupProvider(serviceName),
+        isOAuthFlowContextMismatchError(error) ? 'superseded' : 'failed', 'explicit');
       logDisconnectLifecycle('error', {
         lifecycleEvent: 'disconnect_cleanup_failed',
         serviceName,
@@ -1207,7 +1211,10 @@ export async function deauthorizeServiceForUser(
       durationMs: Date.now() - disconnectOperation.startedAtMs,
       finalizationStatus,
     });
+    cleanupObservation('disconnect', cleanupProvider(serviceName),
+      finalizationStatus === 'stale' ? 'superseded' : 'completed', 'explicit');
   } catch (error) {
+    cleanupObservation('disconnect', cleanupProvider(serviceName), 'failed', 'explicit');
     logDisconnectLifecycle('error', {
       lifecycleEvent: 'disconnect_finalization_failed',
       serviceName,
@@ -1286,6 +1293,7 @@ export async function retryInterruptedExplicitDisconnects(): Promise<void> {
         page = await query.get();
       }
       const root = page.docs[0];
+      cleanupPage('explicit', cleanupProvider(serviceName), page.docs.length, 1);
       if (!root) return;
       // Checkpoint before provider work so abrupt termination cannot pin the
       // scan to a deleted user or an otherwise unrecoverable first root.
@@ -1303,6 +1311,7 @@ export async function retryInterruptedExplicitDisconnects(): Promise<void> {
         });
       }
     } catch {
+      cleanupObservation('recovery', cleanupProvider(serviceName), 'failed', 'explicit');
       logger.error('[OAuthDisconnect] Could not scan or checkpoint interrupted disconnects.', { serviceName });
     }
   }));

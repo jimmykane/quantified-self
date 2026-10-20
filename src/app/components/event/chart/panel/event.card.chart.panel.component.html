@@ -3,7 +3,7 @@
   @if (panel) {
   <header class="event-chart-panel__header">
     <div class="event-chart-panel__heading">
-      <div class="event-chart-panel__title-row" [class.event-chart-panel__title-row--power]="!previewMode && supportsPowerSmoothing">
+      <div class="event-chart-panel__title-row" [class.event-chart-panel__title-row--power]="!previewMode && canSmoothPower">
         <div class="event-chart-panel__title">
           <h3>{{ panel?.displayName }}</h3>
           @if (panel?.unit) {
@@ -11,10 +11,10 @@
           }
         </div>
 
-        @if (!previewMode && supportsPowerSmoothing) {
+        @if (!previewMode && canSmoothPower) {
         <mat-button-toggle-group class="event-chart-panel__power-view"
           aria-label="Power chart view" [hideSingleSelectionIndicator]="true"
-          [value]="powerDisplayMode()" (change)="onPowerDisplayChange($event.value)">
+          [value]="powerView()" (change)="setPowerView($event.value)">
           <mat-button-toggle value="raw">Raw</mat-button-toggle>
           <mat-button-toggle value="3s">3s</mat-button-toggle>
         </mat-button-toggle-group>

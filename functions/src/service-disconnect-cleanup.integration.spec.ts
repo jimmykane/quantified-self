@@ -323,6 +323,9 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     await newWorkout.set({ userName: newAccount, firebaseUserID: uid, processed: false });
     await processServiceDisconnectCleanup(cleanup);
     expect((await cleanup.get()).exists).toBe(false); // reconnect retires the old cleanup
+    expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({
+      flow: 'operational', outcome: 'superseded',
+    }));
     expect((await sleepRefs[0].get()).exists).toBe(true);
     expect((await workout.get()).exists).toBe(true);
 
@@ -440,15 +443,26 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     await db.recursiveDelete(db.doc(`users/${uid}`));
     expect((await ref.get()).exists).toBe(true);
     vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(new Error('retry cleanup'));
+    vi.mocked(logger.info).mockClear();
     await cleanupServiceDisconnectTasksForUser(uid);
     expect((await ref.get()).exists).toBe(true);
     expect((await work.get()).exists).toBe(true);
+    expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({
+      flow: 'operational', provider: 'SuuntoApp', outcome: 'retry', ageMs: expect.any(Number),
+    }));
     await ref.update({ nextAttemptAt: 0 });
     await retryServiceDisconnectCleanup();
     expect((await nested.get()).exists).toBe(false);
     expect((await work.get()).exists).toBe(false);
     expect((await ref.get()).exists).toBe(false);
     expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+    expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({
+      flow: 'operational', outcome: 'completed',
+    }));
+    const observations = vi.mocked(logger.info).mock.calls.filter(call => call[0] === '[CleanupHealth]');
+    expect(JSON.stringify(observations)).not.toContain(uid);
+    expect(JSON.stringify(observations)).not.toContain(providerID);
+    expect((await db.doc(`userDeletionTombstones/${uid}`).get()).exists).toBe(true);
   });
 
   it('retains deleted-account cleanup until remaining credentials are removed', async () => {

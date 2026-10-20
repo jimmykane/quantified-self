@@ -27,6 +27,7 @@ export const EMULATOR_SUITES = {
     'src/admin/handlers/training-delivery-queue.stats.emulator.spec.ts',
   ],
   'mcp-data': [
+    'src/reparse/monitoring.emulator.spec.ts',
     'src/derived-metrics/monitoring.emulator.spec.ts',
     'src/email/monitoring.emulator.spec.ts',
     'src/connection-history/monitoring.emulator.spec.ts',

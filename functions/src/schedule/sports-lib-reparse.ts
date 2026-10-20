@@ -1,5 +1,7 @@
 import { hasUnchangedNonActivitySources, isNonActivitySkipReason } from '../reparse/non-activity-sources';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { monitorReparseAttempt, monitorReparseEnqueue } from '../reparse/monitoring';
+import { beforeReparseScan, observeReparseQueue } from '../reparse/monitoring-probe';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -233,12 +235,7 @@ function calculateEnqueueDelaySeconds(
     return clampNumber(scaled, 1, enqueueSpreadSeconds);
 }
 
-export const scheduleSportsLibReparseScan = onSchedule({
-    region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
-    schedule: 'every 10 minutes',
-    memory: '512MiB',
-    timeoutSeconds: 300,
-}, async () => {
+async function scanSportsLibReparse(): Promise<void> {
     const db = admin.firestore();
     const checkpointRef = db.doc(SPORTS_LIB_REPARSE_CHECKPOINT_PATH);
     const checkpointSnapshot = await checkpointRef.get();
@@ -449,14 +446,14 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 const enqueueTask = routingDecision.processingTier === 'heavy'
                     ? enqueueSportsLibReparseHeavyTask
                     : enqueueSportsLibReparseTask;
-                const taskCreated = sourceRetryGeneration
-                    ? await enqueueTask(jobId, {
+                const taskCreated = await monitorReparseEnqueue(routingDecision.processingTier, () => sourceRetryGeneration
+                    ? enqueueTask(jobId, {
                         taskNameSuffix: `source-${sourceRetryGeneration}`,
                         ...(enqueueDelaySeconds > 1 ? { scheduleDelaySeconds: enqueueDelaySeconds } : {}),
                     })
                     : enqueueDelaySeconds > 1
-                        ? await enqueueTask(jobId, enqueueDelaySeconds)
-                        : await enqueueTask(jobId);
+                        ? enqueueTask(jobId, enqueueDelaySeconds)
+                        : enqueueTask(jobId));
                 if (taskCreated) {
                     enqueuedCount++;
                 } else {
@@ -782,4 +779,17 @@ export const scheduleSportsLibReparseScan = onSchedule({
         nextCursorProcessingDocPath: passCompleted ? null : lastProcessingDocPath,
         nextCursorProcessingVersionCode: passCompleted ? null : lastProcessingVersionCode,
     });
-});
+}
+
+export const scheduleSportsLibReparseScan = onSchedule({
+    region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
+    schedule: 'every 10 minutes',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+}, async event => beforeReparseScan(
+    () => monitorReparseAttempt('normal', 'scan_attempt', scanSportsLibReparse),
+    () => observeReparseQueue(admin.firestore(), {
+        collection: SPORTS_LIB_REPARSE_JOBS_COLLECTION, target: resolveTargetSportsLibVersion(),
+        terminal: isSportsLibReparseTerminalFailureMessage, hasSource: data => extractSourceFiles(data).length > 0,
+    }), ['normal', 'heavy'], event.scheduleTime,
+));

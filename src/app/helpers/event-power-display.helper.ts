@@ -18,30 +18,31 @@ export function buildEventPowerDisplay(series: TrackChartPanelSeries): EventPowe
   const count = getEventChartSeriesPointCount(series);
   const lineValues = new Float64Array(count * 2).fill(Number.NaN);
   let hasAverage = false;
+  let previousTime = Number.NaN;
+  const readings: number[] = [];
   for (let index = 0; index < count; index++) {
-    lineValues[index * 2] = getEventChartSeriesX(series, index);
-    if (index < 2) continue;
-    const a = getEventChartSeriesY(series, index - 2);
-    const b = getEventChartSeriesY(series, index - 1);
-    const c = getEventChartSeriesY(series, index);
-    if (a === null || b === null || c === null
-      || !Number.isFinite(getEventChartSeriesX(series, index - 2))
-      || !Number.isFinite(getEventChartSeriesX(series, index - 1))
-      || !Number.isFinite(lineValues[index * 2])
-      || getEventChartSeriesTime(series, index) - getEventChartSeriesTime(series, index - 1) !== 1000
-      || getEventChartSeriesTime(series, index - 1) - getEventChartSeriesTime(series, index - 2) !== 1000) continue;
-    lineValues[index * 2 + 1] = (a + b + c) / 3;
-    hasAverage = true;
+    const x = getEventChartSeriesX(series, index);
+    const value = getEventChartSeriesY(series, index);
+    const time = getEventChartSeriesTime(series, index);
+    lineValues[index * 2] = x;
+    if (time - previousTime !== 1000) readings.length = 0;
+    previousTime = time;
+    if (value === null || !Number.isFinite(x) || !Number.isFinite(time)) {
+      readings.length = 0;
+      continue;
+    }
+    readings.push(value);
+    if (readings.length > 3) readings.shift();
+    if (readings.length === 3) {
+      lineValues[index * 2 + 1] = (readings[0] + readings[1] + readings[2]) / 3;
+      hasAverage = true;
+    }
   }
   return { lineValues, hasAverage };
 }
 
-export interface EventPowerWhisker {
-  index: number;
-  x: number;
-  raw: number;
-  average: number | null;
-}
+/** ECharts coordinates; an unavailable average anchors the cap at the recorded value. */
+export type EventPowerWhisker = [x: number, recorded: number, anchor: number];
 
 /** Keep both recorded extrema in each visible interval, at their original positions.
  * Split interrupted recordings so a whisker never implies a bridge across missing data. */
@@ -61,7 +62,7 @@ export function buildEventPowerWhiskers(
   let bucket = -1;
   const flush = () => {
     if (maximum) result.push(maximum);
-    if (minimum && minimum.index !== maximum?.index) result.push(minimum);
+    if (minimum && minimum !== maximum) result.push(minimum);
     minimum = maximum = null;
   };
   for (let index = 0; index < count; index++) {
@@ -74,12 +75,12 @@ export function buildEventPowerWhiskers(
       bucket = -1;
       continue;
     }
-    const nextBucket = Math.min(buckets - 1, Math.max(0, Math.floor((x - range.start) / span * buckets)));
+    const nextBucket = Math.min(buckets - 1, Math.floor((x - range.start) / span * buckets));
     if (nextBucket !== bucket || time - previousTime !== 1000) flush();
     const average = projection.lineValues[index * 2 + 1];
-    const point = { index, x, raw, average: Number.isFinite(average) ? average : null };
-    if (!minimum || raw < minimum.raw) minimum = point;
-    if (!maximum || raw > maximum.raw) maximum = point;
+    const point: EventPowerWhisker = [x, raw, Number.isFinite(average) ? average : raw];
+    if (!minimum || raw < minimum[1]) minimum = point;
+    if (!maximum || raw > maximum[1]) maximum = point;
     bucket = nextBucket;
     previousTime = time;
   }
@@ -93,16 +94,16 @@ export function buildEventPowerWhiskerOption(id: string, points: EventPowerWhisk
     clip: true, silent: true, animation: false, z: 1,
     tooltip: { show: false },
     encode: { x: 0, y: [1, 2], tooltip: [] },
-    data: points.map(point => [point.x, point.raw, point.average ?? point.raw]),
+    data: points,
     renderItem: (_params, api) => {
-      const raw = api.coord([Number(api.value(0)), Number(api.value(1))]);
-      const average = api.coord([Number(api.value(0)), Number(api.value(2))]);
-      if (![...raw, ...average].every(Number.isFinite)) return;
-      const style = { stroke: color, lineWidth: 1, opacity: 0.55 };
-      return { type: 'group', children: [
-        { type: 'line', shape: { x1: raw[0], x2: raw[0], y1: average[1], y2: raw[1] }, style },
-        { type: 'line', shape: { x1: raw[0] - 2, x2: raw[0] + 2, y1: raw[1], y2: raw[1] }, style },
-      ] };
+      const raw = api.coord([api.value(0) as number, api.value(1) as number]);
+      const anchor = api.coord([api.value(0) as number, api.value(2) as number]);
+      if (![...raw, ...anchor].every(Number.isFinite)) return;
+      return {
+        type: 'polyline',
+        shape: { points: [[raw[0], anchor[1]], raw, [raw[0] - 2, raw[1]], [raw[0] + 2, raw[1]]] },
+        style: { stroke: color, fill: 'none', lineWidth: 1, opacity: 0.55 },
+      };
     },
   };
 }

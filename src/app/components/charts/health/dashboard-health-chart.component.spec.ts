@@ -321,6 +321,33 @@ describe('independent dashboard Health views',()=>{
     expect(streams[0].observed).toBe(false);
   });
 
+  it('uses shared real thumbnail evidence when a saved detailed source resolves to its daily average', () => {
+    const fixture = create('heart_rate'), component = fixture.componentInstance;
+    const data = result('heart_rate', component.window().endDate), window = data.window;
+    const record: HealthSourceRecord = { schemaVersion: 1, id: 'daily', userID: 'owner', kind: 'daily_summary',
+      calendarDate: window.endDate, startTimeMs: window.endTimeMs - 3600000, endTimeMs: window.endTimeMs,
+      source: { provider: 'SuuntoApp', accountKey: 'account', sourceRecordType: 'daily', sourceRecordKey: 'daily',
+        revision: { order: 1, token: '1', digest: '1' }, receivedAtMs: window.endTimeMs },
+      metricIds: ['heart_rate'], metrics: [{ kind: 'value', metricId: 'heart_rate', valueType: 'number', aggregation: 'average',
+        semanticVariant: 'qs_daily_interval_mean', origin: 'quantified_self_derived', recordingMethod: 'quantified_self_calculated',
+        quality: { status: 'valid' }, normalizationStatus: 'canonical', native: { metric: 'HR', value: 65, unit: 'bpm' },
+        canonical: { value: 65, unit: 'bpm' } }], coverage: { status: 'unknown' }, sampleChunkIds: [], createdAtMs: 0, updatedAtMs: 0 };
+    data.health = { result: projectLoadedHealthRange([record], [], { startDate: window.startDate, endDate: window.endDate,
+      metricIds: ['heart_rate'] }, { sourceRecordsComplete: true, samplesComplete: true }), limitReached: null,
+      sourceRecordCount: 1, sampleChunkCount: 0, samplePointCount: 0, serializedBytes: 0, hasMatchingSourceRecords: true,
+      hasSampleBackedMetric: false, providers: ['SuuntoApp'], sampleBackedProviders: [] };
+    const context = buildDashboardHealthContext(data, { metric: 'heart_rate', range: '30d' });
+    const sourceKey = context.selected!.model.series.alternateResolutionKey!;
+    fixture.componentRef.setInput('settings', { metric: 'heart_rate', range: '30d', sourceKey });
+    fixture.componentRef.setInput('preview', true); fixture.componentRef.setInput('thumbnail', true);
+    fixture.componentRef.setInput('thumbnailContext', { uid: 'owner', context }); fixture.detectChanges();
+    expect(component.displayContext()).toBe(context); expect(component.showingExample()).toBe(false);
+    expect(component.displayContext()?.selected?.latestValueText).toBe('65 bpm');
+    fixture.componentRef.setInput('settings', { metric: 'heart_rate', range: '30d', sourceKey: 'unrelated' }); fixture.detectChanges();
+    expect(component.displayContext()).not.toBe(context);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('ignores unavailable source selections without haptic feedback or settings changes', () => {
     const fixture = create(); const component = fixture.componentInstance;
     streams[0].next(result());
@@ -524,7 +551,7 @@ describe('dashboard chart source interactions', () => {
     expect(host.querySelector('.health-evidence-text')?.textContent).toContain('No trend inferred');
     fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
     expect(host.querySelector('.health-thumbnail-source')?.textContent).toContain('Suunto');
-    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('Minimum heart rate');
+    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('Minimum sleep HR');
     expect(host.querySelector('.health-thumbnail-value')?.textContent).toBe('57 bpm');
     expect(watch).toHaveBeenCalledOnce();
     expect(haptics.selection).not.toHaveBeenCalled();

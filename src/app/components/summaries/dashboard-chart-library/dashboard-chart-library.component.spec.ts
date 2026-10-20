@@ -170,8 +170,7 @@ describe('responsive chart picker interactions', () => {
     const row = document.querySelector<HTMLButtonElement>('button[data-preset-id="health:heart_rate"]')!;
     const description = document.getElementById(row.getAttribute('aria-describedby')!);
     expect(description?.textContent).toContain('Suunto');
-    expect(description?.textContent).toContain('Minimum heart rate');
-    expect(description?.textContent).toContain('Sleep session');
+    expect(description?.textContent).toContain('Minimum sleep HR');
     expect(description?.textContent).toContain('No trend inferred');
     expect(description?.closest('[aria-hidden="true"]')).toBeNull();
     expect(haptics.selection).not.toHaveBeenCalled();

@@ -1583,6 +1583,26 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 ## 10. Admin and operational coverage
 
+Account cleanup and disconnect recovery monitoring (#836) is deployed and enabled in
+the independent `tools/cleanup-monitoring/` bundle: nine fixed-label metrics, seven policies
+and the **QS Account Cleanup & Disconnect Recovery** dashboard. It reuses existing
+30-minute recovery page reads and committed lifecycle outcomes, with no extra Firestore
+reads/writes, index, collection, observer Function or schedule. Local completion, Auth
+handler ACK, remote-unconfirmed revocation and independently unfinished extension cleanup
+are not interchangeable. Completed deletion tombstones are not backlog, and bounded-page
+deferrals/stale generations do not count as failures. A dedicated first-observation email
+policy covers failed/unconfirmed partner revocation for all four providers, even if local
+credentials are subsequently removed; it does not claim the partner is definitely active
+or change retry/token-retention behavior. Existing #655 Training cleanup alerts
+remain unchanged. Help, provider behavior, deletion fences, recursion and MCP/Assistant
+contracts are unchanged. The owner approved deployment and activation on 19 October
+2026; twelve existing Functions are ACTIVE and all 29 chart/condition queries passed
+live readback. The natural 11:07 UTC recovery run acknowledged with all thirteen
+uncapped idle pages, and positive post-correction Monitoring heartbeat/page series
+were verified at 11:08–11:09 UTC. No destructive QA or test mail was needed; this
+completes #836's approved operational verification, not actual deletion/revocation
+proof. See [the cleanup monitoring runbook](account-cleanup-monitoring.md).
+
 Email/marketing monitoring (#835) is implemented locally through the existing Firestore `mail` outbox and Trigger Email
 extension, separately from fitness-provider queues. New mail initializes supported PENDING metadata in its original
 write, without another collection, observer Function, scheduler, send or retry. The existing marketing dispatcher
@@ -1929,6 +1949,45 @@ Failed late staging writes rearm retired cleanup after save or metadata errors, 
 Saved recording review distinguishes known ineligibility from temporary read failures. Missing/invalid originals remain exclusions; unavailable reads pause preparation and retain the private criteria, cursor and reviewed rows for continuation. This command creates no provider work. Monitoring is **unchanged**: delivery queues, backlog/worker outcomes, retry/lease policy and fixed telemetry labels are unaffected. MCP and Training contracts are unchanged.
 
 Stopping closes retry authority for provider-confirmed processing failures and releases their private temporary files/quota while preserving the failed result and operation identifiers. Finished retryable batches retain the Stop control, including after Pro lapse. Active/uncertain operations retain their sources; saved archive files are never deleted. Cleanup failures remain resumable through the existing Stop cursor and operation trigger. A later confirmed failure after Stop completes releases its source through the existing retry-enabled delivery projection; open failures keep their retry source. Monitoring is **unchanged**: native admission/projection-trigger error/latency diagnostics and the existing hourly cleanup failure/heartbeat fallback cover these release paths, with no new scheduler, queue outcome, worker retry policy or telemetry label. MCP and Training contracts are unaffected.
+
+### Original-file reprocessing monitoring (#834)
+
+Original-file reprocessing monitoring is independently tracked in [#834](https://github.com/jimmykane/quantified-self/issues/834)
+and the [reprocessing monitoring runbook](reparse-monitoring.md). It uses existing normal/heavy/route workers
+and ten-minute scanners with bounded read-only job observations only on the hourly scheduled tick;
+empty queues need one query per collection and progress is read only for eligible outstanding tiers.
+There is no new scheduler, provider call, queue state, reparse, admission cap, retention,
+retry or MCP contract change. Fixed-label telemetry separates accepted task
+admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
+review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
+five existing Function updates and dashboard/metrics/policies were deployed/activated with owner approval
+on 19 October 2026. Natural heartbeat and representative normal-tier completion/duration
+evidence are verified. A native scanner-timeout coverage gap was found when an
+HTTP 504/DEADLINE_EXCEEDED request later logged an application ACK, escaping the existing
+structured-only discovery-failure policy. A narrow correction adds native Cloud Run
+5xx request counts for the two exact scanner services to that same policy and dashboard,
+retaining three errors per scanner in an hour and preserving the structured condition.
+It adds no log metric, Function, Firestore work or runtime/retry tuning. The owner-approved
+correction was applied and verified at 12:28–12:32 UTC on 19 October 2026: ten owned
+metrics, seven enabled policies/eight conditions, all 28 chart/condition queries, stable
+resource IDs and unchanged unrelated monitoring/channel configuration. #834's monitoring
+acceptance criteria are complete; no further Functions deployment was needed. The earlier
+504 and explicitly unavailable samples remain recorded as such, not successful/healthy
+runs. Exact scope, native-metric limitations and verification are in the runbook.
+Future production changes still require separate approval; #543 owns the heavy backlog cap.
+
+A subsequent observation-health email exposed hourly checks starved behind long discovery
+passes. The follow-up runs the existing five-second-bounded check before discovery
+in both scanners, retaining the hourly cadence, read caps, deletion/privacy fences and
+all alert thresholds. With separate owner approval, only the two scanner Functions were
+deployed and independently verified ACTIVE at 13:51 UTC on 19 October 2026, preserving
+resource/schedule/queue controls and all monitoring. Read-only verification at 17:13–17:14
+Helsinki confirmed natural route and normal/heavy samples at 17:06 and 17:08 respectively:
+zero eligible sampled pending work, zero unknowns, no truncation or stall, positive sample
+series, whole-attempt ACKs and native HTTP 200 for both invocations. The older unavailable
+observations remain in the historical three-hour warning window; no CLOSED email is claimed.
+No monitoring bundle, index, Rule, worker, provider behavior or MCP contract changes.
+See the runbook's starvation follow-up for exact revisions, bounds and limitations.
 
 ### Suunto EnergySense parser support
 

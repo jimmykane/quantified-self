@@ -421,7 +421,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `22.0.0`; the provider-sport expansion is verified against its candidate build before package adoption
+- Installed `@sports-alliance/sports-lib`: `23.1.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -5855,9 +5855,10 @@ state.
 
 Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
 available. Each result records its score (including valid zero), actual method, imported/calculated provenance,
-estimate flag and missing-input/fallback reasons. Walking, Nordic Walking, Hiking and Trekking use imported TSS →
-calibrated HR → calorie MET → unavailable; calculated power and running pace are ineligible. Other sports retain
-their existing Automatic order with corrected HR eligibility. A preferred HR/MET calculation falls back through the
+estimate flag and missing-input/fallback reasons. In the adopted 23.1.0 release, Walking, Indoor Walking, Nordic
+Walking, Speed Walking, Hiking and Trekking use imported TSS → eligible power with independent FTP → calibrated
+HR → calorie MET → unavailable. Running pace remains ineligible. Other sports retain their existing Automatic order
+with corrected HR eligibility. A preferred HR/MET calculation falls back through the
 eligible Automatic order. Valid nonnegative file-imported TSS wins regardless of preference; previous calculated
 TSS is never treated as imported on recalculation.
 
@@ -5876,11 +5877,46 @@ classification. Correcting persisted GPX attribution or TCX classification needs
 normal summary refresh. Existing strict identity matching protects policies/controls; ambiguous matches still require
 review. No bulk rewrite, automatic scan, new storage operation or provider request is introduced.
 
-HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
+Banister HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
 threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
 `zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
-setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
+setting. Observed peak HR and guessed threshold ratios are ineligible calibration. QS supplies no athlete
 settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
+
+Sports Lib 23.1.0 adds the threshold-HR fallback for every sport already eligible for calculated TSS (262 of the
+284 canonical types), including walking/hiking, pool/open-water swimming and strength training. The existing 22
+calculated-load exclusions remain unchanged. A valid explicit, unambiguous threshold is required when resting or
+maximum HR is missing. Full valid calibration still selects Banister. Imported scores and eligible power retain
+Automatic priority. Complete rejected calibration cannot use the fallback.
+Only this threshold candidate treats numeric zero FIT rest/max settings as unused; threshold zero, conflicting
+selected settings, ambiguous session references and malformed values remain rejected. No athlete settings, zone-derived
+thresholds or observed-peak maximums are supplied by QS. Unmapped source thresholds remain unavailable.
+
+The fallback uses the sports-lib threshold bands over the same observed timer-active intervals, with no extrapolation
+outside observations or through invalid readings. It is explicitly estimated and is not interchangeable with normalized
+Banister. Exact threshold enters the 100 TSS/hour band; immediately below threshold remains in the 80 TSS/hour band. For a
+threshold of 165 bpm, one observed active hour at 100/164/165/166 bpm produces 40/80/100/100 TSS respectively.
+Other band boundaries retain their existing inclusivity. The low-intensity floor also applies to walking/recovery
+activities and can produce higher load than Banister or MET. The library calculation guide owns the complete rate table.
+
+Version-1 private evaluations can add `hrAlgorithm: 'BANISTER' | 'THRESHOLD'`; the threshold result also carries
+`threshold-hr-fallback` and `estimated: true`. The editor labels these **HR · Banister** and **HR · Threshold (estimate)**.
+Older evaluations keep the existing HR label without guessing an algorithm. The shared effective-load resolver carries
+this optional value only for the selected calculated HR result, never an override, imported score, exclusion or
+multi-result total. Compact private load summaries preserve it through their existing lifecycle. There are no new
+query paths, queues, triggers or scheduled rebuilds. Refreshed evaluations and changed summaries use the existing
+metadata/cache writes and invalidation flow; reparsing history still incurs that normal refresh work.
+
+Root and Functions now pin the same published sports-lib 23.1.0 package in both manifests and lockfiles.
+The runtime reparse target resolves from that installed version; version mismatch checks remain strict.
+Historical candidates require the normal approved
+original-file reparse lifecycle and derived refresh; a Training rebuild alone cannot recover file calibration.
+Strict leg matching, latest controls, immutable applied policies, source reservations, retries and deletion guards
+remain in force. Activity JSON, recorded-TSS metric names, public MCP schemas and evaluation version stay compatible.
+MCP impact is limited to reading the resulting modeled score: the algorithm and fallback reason remain private,
+and focused Training-impact tests validate the frozen public schema. Planning reads, mutations, scopes, consent,
+provider delivery, plugin content and registered contract snapshots are unchanged. No deployment or reparse campaign
+is enabled by these PRs, and saved routes need no reparse for this calculation change.
 
 Sports Lib 21.6.6 removes explicit timer pauses from HR integration across eligible sports, including gaps spanning
 a pause, and excludes HR readings inside pauses. A reading exactly at a stop may close the preceding active interval.
@@ -6044,7 +6080,7 @@ while missing or conflicting timing does not invent pauses. These in-memory corr
 
 MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
 10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
-not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
+not invent mass, subtract resting calories, use reference-MET tables, or replace it with a linear calorie score.
 
 Settings keeps Training load in the Preferences disclosure group. Its sport-policy editor initializes on first
 expansion, then remains mounted while collapsed so drafts and the existing policy subscription survive section
@@ -6462,7 +6498,7 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.0.0 with FIT Parser 6.2.2 and matching package integrity.
+Root and Functions now pin published Sports Lib 23.1.0 with FIT Parser 6.2.2 and matching package integrity.
 Both consumers recognize the expanded 284-type catalog. The earlier 22.0.0 integration and its historical verification
 remain recorded here; package adoption does not deploy either consumer or start a production reparse.
 
@@ -7609,7 +7645,8 @@ Cloud Tasks API.
 Source definitions live in `tools/derived-metrics-monitoring/`. They prepare **14 versioned log metrics**, the
 **QS Derived Metrics** dashboard (20 charts plus interpretation guidance), and **six policies with eight conditions**.
 They do not calculate a new athlete metric, change Training formulas or optimize recomputation (#760).
-Implementation and offline/emulator verification are separate from the deployment, activation and live evidence
+Implementation and offline/emulator verification are separate from production activation. The approved deployment
+and alert activation were completed on 19 October 2026; remaining post-activation natural telemetry evidence is
 still tracked by [#831](https://github.com/jimmykane/quantified-self/issues/831).
 
 The existing workers retain their resource/retry settings: ingress is Gen 2, 512 MiB/120 seconds; calculation is
@@ -7641,8 +7678,13 @@ There is no periodic derived-metrics dispatcher from which to observe a stranded
 recover, write or delete anything. Its observation deadline is five seconds; this bounds waiting, not cancellation
 of an already-started Firestore RPC. No further work or late healthy samples follow a deadline.
 
-One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`,
-and fetches at most 21 projected records (20 candidates plus lookahead). Each candidate has one read-only transaction
+One collection-group query selects coordinator `entryType` and queued/processing/failed states, orders by `updatedAtMs`
+then `generation`, and fetches at most 21 projected records (20 candidates plus lookahead). `generation` is an existing
+coordinator-only field: using it as an ordered index suffix excludes snapshots from this composite index without adding
+fields, documents, writes or a migration. It only breaks equal-update-time ties; oldest-update priority is unchanged.
+This is a one-way schema dependency, not an execution dependency: normal calculations never call or wait for the observer.
+Keep `generation` on coordinators and off snapshots; real-writer regressions protect that invariant.
+Each candidate has one read-only transaction
 over its current coordinator, owner existence and deletion tombstone, with a field mask limited to entry/status,
 generation, dirty/processing kind lists, pending timestamps, optional build deadline and tombstone expiry. User profile fields, payloads, raw errors,
 recorded activities and athlete settings are not fetched. Exact owner paths, rollout eligibility, active deletion,
@@ -7663,15 +7705,23 @@ Three fixed state groups emit every run, including idle/unavailable runs. Positi
 ages are **lower bounds**, not a global backlog or exact oldest generation. A saturated or unknown prefix without
 a proven positive result withholds zero/age fields. A positive result remains visible even with partial coverage.
 The dashboard exposes saturation independently. The bounded oldest-update prefix can hide later accounts, and
-coalesced updates can reorder candidates. Legacy documents missing indexed predicates/order fields are not included;
-native queue charts, failure logs and privately authorized diagnosis remain necessary. Do not interpret a zero as
-a full historical audit or remove the cap by scanning all users.
+coalesced updates can reorder candidates. Legacy or malformed documents missing indexed predicates/order fields,
+including `generation`, are not included and cannot contribute unknown counts. A present but invalid generation is
+still sampled as unknown. Native queue charts, failure logs and privately authorized diagnosis remain necessary.
+Do not interpret a zero as a full historical audit or remove the cap by scanning all users.
 
-The new collection-group composite index is `derivedMetrics: entryType ASC, status ASC, updatedAtMs ASC`.
+The collection-group composite index is `derivedMetrics: entryType ASC, status ASC, updatedAtMs ASC, generation ASC`.
+Firestore excludes documents missing any indexed field; the coordinator `entryType` filter alone is not a partial index.
+Snapshot building/ready/failure writes must not add `generation`, even as null, or those snapshots acquire index entries.
 Deploy it and wait for READY before enabling the observer; a missing index reports unavailable rather than zero.
+This replaces the original three-field declaration locally, not any live index. If an older broad index already exists
+in an environment, removing it needs separate exact-scope deletion approval; leaving it deployed retains its overhead.
 No Rules, TTL, personal monitoring document or new task queue is required. At the cap, a run requests at most 21
 query documents plus 60 transaction documents, before SDK retries and index-query billing. There are 96 scheduled
-runs/day; idle queries still have minimum read charges. Logs include three state samples/run plus task/per-kind commit
+runs/day; idle queries still have minimum read charges. The additional ordered field can affect index-entry read billing;
+verify the final query with production Query Explain after separately approved index deployment rather than claiming
+that fewer stored entries guarantee lower total read charges or measured write latency.
+Logs include three state samples/run plus task/per-kind commit
 observations. Scheduler, Functions, reads, log ingestion, metric series and alerting can incur charges; volume and
 pricing determine cost, so the bounded design is not a free-service or fixed-price promise.
 
@@ -7743,12 +7793,50 @@ Verification uses `npm run test:derived-metrics-monitoring`, focused Functions d
 `npm run test:functions-emulators -- mcp-data`, workflow/emulator guards, Functions build/entrypoint/secret checks,
 the cold-import benchmark, frontend TypeScript and existing derived/MCP output-contract regressions. Real demo
 Firestore cases cover idle, cap, malformed metadata, retry grace, changing generations, owner/deletion fences,
-ready versus requeued/settled, stale claims and transaction retries. Offline provisioning fixtures preserve all
+ready versus requeued/settled, stale claims and transaction retries. Sparse-index regressions verify exact query/index
+ordering, generation-less exclusion, malformed-present generations and the field-presence invariant across real
+coordinator and building/failed/ready snapshot writes. Emulators verify query and writer semantics, not composite-index
+enforcement or production performance; index READY and the live query plan remain part of #831's release verification.
+Offline provisioning fixtures preserve all
 seven other bundles and reject ownership/schema/channel/inventory conflicts before writes.
 Help's Training update/Retry and MCP preparing-state guidance was reviewed; user behavior is unchanged, so no Help
 edit is required. **MCP impact: no wire impact**—no tool, exposed metric, schema, scope, consent, projection,
 proposal, mutation, Assistant permission, provider action or plugin change. Operational kind extraction preserves
 the complete existing public re-export API and values; no snapshot migration or derived schema bump is needed.
+
+#### Production activation evidence — 19 October 2026
+
+The owner separately approved the deployment and alert activation from local `develop` at `b1da64780`:
+
+- The coordinator-only index `CICAgLiK4oIK` reached READY at 06:47 UTC. No earlier broad derived-metrics composite
+  existed and no index was deleted. Production Query Explain used the four-field index: the idle query scanned zero
+  documents/index entries and incurred one minimum query read. This is one idle observation, not a general cost or
+  latency guarantee.
+- All seven Functions were independently ACTIVE on Node.js 22/Gen 2 in `europe-west2` by 06:54:09 UTC:
+  `observeDerivedMetricsHealth`, `processDerivedMetricsIngressTask`, `processDerivedMetricsTask`, `ensureDerivedMetrics`,
+  `setTrainingBuildBenchmark`, `mcpApi` and `assistantChat`. Existing resource settings were preserved; the observer
+  was verified at 512 MiB, 60 seconds, max one instance, with no secrets and an enabled `*/15 * * * *` UTC job.
+  Firestore Rules were released at 06:57:24 UTC with source identical to `develop`; all 220 Rules tests passed.
+- The bundle created 14 log metrics, the **QS Derived Metrics** dashboard
+  (`projects/242713487388/dashboards/35fb5741-8f8c-4f71-8f6b-1c883c6da5fe`), and six enabled policies with eight
+  conditions. The policies route to the existing enabled Alerts email channel
+  `projects/quantified-self-io/notificationChannels/7874469028377828627`, with opened/closed notification prompts.
+  Reuse #655's same-channel email-delivery proof; no new test email was sent.
+- Readback at 07:04:55 UTC matched the source definitions and accepted all 28 chart/condition queries. Six queries had
+  series; 22 were valid but empty, which is not proof of healthy processing. Serial reapplication preserved the dashboard,
+  all six policy IDs and all eight condition IDs, without duplicates. Fingerprints of the eight unrelated dashboards,
+  49 unrelated policies, 92 unrelated log metrics and all four notification channels were unchanged.
+- **Natural heartbeat initialization remains pending.** The queue-sample log metric was created at 07:00:14 UTC, after
+  the first natural run: Scheduler attempted at 07:00:00 UTC and the observer emitted all three valid idle samples at
+  07:00:01 UTC, with zero pending/unknown samples and no truncation. Those earlier logs do not initialize a newly created
+  log metric. Bounded readback at 07:03:46 UTC found no post-creation observation or heartbeat series. The next natural
+  run is 07:15 UTC (10:15 Helsinki), followed by metric-ingestion delay. Keep #831 open until positive
+  post-creation series exist for queued, processing and failed, and record natural admission/publication/settlement
+  where traffic exists. Do not interpret absence as an initialized missing-heartbeat policy or fabricate samples.
+
+Monitoring coverage is **activated; natural telemetry verification pending**. No processing was invoked manually,
+no provider upload/replay or fault injection was performed, and no notification channel, unrelated configuration,
+schedule, retry policy, product gate or data record was changed by activation.
 
 ### Training delivery queue monitoring
 

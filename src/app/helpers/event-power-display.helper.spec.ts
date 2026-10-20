@@ -37,15 +37,24 @@ describe('event power display', () => {
     expect([...source.lineValues]).toEqual([0, 0, 10, 300, 40, 600, 90, 900]);
   });
 
+  it('does not average across a missing packed distance position', () => {
+    const source = { ...series([]), pointCount: 7,
+      lineValues: new Float64Array([0, 1, 1, 2, NaN, 900, 3, 6, 4, 9, 5, 12, 6, 15]),
+      timeValues: new Float64Array([0, 1000, 2000, 3000, 4000, 5000, 6000]),
+    };
+    const display = buildEventPowerDisplay(source);
+    expect([...display.lineValues].filter((_, index) => index % 2 === 1)).toEqual([NaN, NaN, NaN, NaN, NaN, 9, 12]);
+  });
+
   it('keeps actual recorded peaks and coasting dips at their source positions at phone and desktop widths', () => {
     const source = series([100, 100, 396, 200, 0, 100, 110]);
     const before = structuredClone(source);
     const display = buildEventPowerDisplay(source);
     for (const width of [7, 70, 320, 1200]) {
       const whiskers = buildEventPowerWhiskers(source, display, { start: 0, end: 6 }, width);
-      expect(whiskers).toContainEqual({ index: 2, x: 2, raw: 396, average: 596 / 3 });
-      expect(whiskers).toContainEqual({ index: 4, x: 4, raw: 0, average: 596 / 3 });
-      expect(whiskers.every(point => source.points![point.index].x === point.x && source.points![point.index].y === point.raw)).toBe(true);
+      expect(whiskers).toContainEqual([2, 396, 596 / 3]);
+      expect(whiskers).toContainEqual([4, 0, 596 / 3]);
+      expect(whiskers.every(point => source.points!.some(original => original.x === point[0] && original.y === point[1]))).toBe(true);
     }
     expect(source).toEqual(before);
   });
@@ -54,34 +63,34 @@ describe('event power display', () => {
     const source = series([500, null, 40, 40, 40, 0], undefined, [0, 0, 10, 10, 20, 30]);
     const display = buildEventPowerDisplay(source);
     const whiskers = buildEventPowerWhiskers(source, display, { start: 0, end: 30 }, 7);
-    expect(whiskers).toContainEqual({ index: 0, x: 0, raw: 500, average: null });
-    expect(whiskers).toContainEqual({ index: 2, x: 10, raw: 40, average: null });
-    expect(whiskers.some(point => point.raw === 0)).toBe(true);
-    expect(buildEventPowerWhiskers(source, display, { start: 10, end: 20 }, 7).some(point => point.raw === 500)).toBe(false);
+    expect(whiskers).toContainEqual([0, 500, 500]);
+    expect(whiskers).toContainEqual([10, 40, 40]);
+    expect(whiskers.some(point => point[1] === 0)).toBe(true);
+    expect(buildEventPowerWhiskers(source, display, { start: 10, end: 20 }, 7).some(point => point[1] === 500)).toBe(false);
   });
 
   it('keeps both raw extrema even when an earlier effort keeps the 3s average above the zoomed raw range', () => {
     const source = series([900, 900, 900, 500, 490, 480]);
     const display = buildEventPowerDisplay(source);
     const whiskers = buildEventPowerWhiskers(source, display, { start: 3, end: 5 }, 7);
-    expect(whiskers).toContainEqual({ index: 3, x: 3, raw: 500, average: 2300 / 3 });
-    expect(whiskers).toContainEqual({ index: 5, x: 5, raw: 480, average: 490 });
+    expect(whiskers).toContainEqual([3, 500, 2300 / 3]);
+    expect(whiskers).toContainEqual([5, 480, 490]);
   });
 
   it('keeps extrema from packed worker samples without changing the original buffers', () => {
     const source = { ...series([]), lineValues: new Float64Array([0, 100, 10, 396, 40, 0]), timeValues: new Float64Array([0, 1000, 2000]), pointCount: 3 };
     const before = [...source.lineValues];
     const whiskers = buildEventPowerWhiskers(source, buildEventPowerDisplay(source), { start: 0, end: 40 }, 7);
-    expect(whiskers.map(point => point.raw)).toEqual([396, 0]);
+    expect(whiskers.map(point => point[1])).toEqual([396, 0]);
     expect([...source.lineValues]).toEqual(before);
   });
 
-  it('renders silent clipped whiskers with recorded-value caps when a complete average is unavailable', () => {
-    const option = buildEventPowerWhiskerOption('ride', [{ index: 0, x: 10, raw: 396, average: null }], '#123456');
-    expect(option).toMatchObject({ type: 'custom', silent: true, clip: true, tooltip: { show: false }, data: [[10, 396, 396]] });
+  it.each([200, 396])('renders the recorded cap and exact anchor %s in silent clipped whiskers', anchor => {
+    const option = buildEventPowerWhiskerOption('ride', [[10, 396, anchor]], '#123456');
+    expect(option).toMatchObject({ type: 'custom', silent: true, clip: true, tooltip: { show: false }, data: [[10, 396, anchor]] });
     const render = option.renderItem!;
-    const rendered = render({} as Parameters<typeof render>[0], { value: (i: number) => [10, 396, 396][i], coord: (point: number[]) => point } as unknown as Parameters<typeof render>[1]) as { children: Array<{ shape: unknown }> };
-    expect(rendered.children[0].shape).toEqual({ x1: 10, x2: 10, y1: 396, y2: 396 });
-    expect(rendered.children[1].shape).toEqual({ x1: 8, x2: 12, y1: 396, y2: 396 });
+    const rendered = render({} as Parameters<typeof render>[0], { value: (i: number) => [10, 396, anchor][i], coord: (point: number[]) => point } as unknown as Parameters<typeof render>[1]) as { type: string; shape: { points: number[][] } };
+    expect(rendered.type).toBe('polyline');
+    expect(rendered.shape.points).toEqual([[10, anchor], [10, 396], [8, 396], [12, 396]]);
   });
 });

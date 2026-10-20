@@ -23,21 +23,21 @@ export function heartRateSemanticLabel(semanticVariant: string, aggregation?: st
     return kind ? `Health Snapshot ${kind} · Short measurement session` : null;
   }
   const labels: Record<string, string> = {
-    daily_minimum: 'Daily minimum · Provider reported · Recorded monitoring period',
-    daily_maximum: 'Daily maximum · Provider reported · Recorded monitoring period',
-    rolling_7_day_average: '7-day average · Provider reported',
-    daily_15_second: 'Heart rate throughout the day · 15-second samples',
-    activity_interval_average: 'Heart rate throughout the day · Interval averages',
-    activity_interval_minimum: 'Heart rate throughout the day · Interval minimums',
-    activity_interval_maximum: 'Heart rate throughout the day · Interval maximums',
-    qs_daily_interval_mean: 'Daily average of interval readings · Calculated by QS',
-    qs_daily_interval_low: 'Daily lowest interval average · Calculated by QS',
-    qs_daily_interval_high: 'Daily highest interval average · Calculated by QS',
-    qs_daily_interval_minimum_low: 'Daily lowest recorded interval minimum · Calculated by QS',
-    qs_daily_interval_maximum_high: 'Daily highest recorded interval maximum · Calculated by QS',
-    qs_daily_sample_mean: 'Daily average of recorded samples · Calculated by QS',
-    qs_daily_sample_low: 'Daily lowest recorded sample · Calculated by QS',
-    qs_daily_sample_high: 'Daily highest recorded sample · Calculated by QS',
+    daily_minimum: 'Daily minimum · Recorded during the day',
+    daily_maximum: 'Daily maximum · Recorded during the day',
+    rolling_7_day_average: '7-day average',
+    daily_15_second: 'Heart rate throughout the day',
+    activity_interval_average: 'Heart rate throughout the day',
+    activity_interval_minimum: 'Lowest HR per recording period',
+    activity_interval_maximum: 'Highest HR per recording period',
+    qs_daily_interval_mean: 'Daily average from recorded HR · Calculated by QS',
+    qs_daily_interval_low: 'Daily lowest recorded average HR · Calculated by QS',
+    qs_daily_interval_high: 'Daily highest recorded average HR · Calculated by QS',
+    qs_daily_interval_minimum_low: 'Daily lowest recorded HR · Calculated by QS',
+    qs_daily_interval_maximum_high: 'Daily highest recorded HR · Calculated by QS',
+    qs_daily_sample_mean: 'Daily average from recorded HR · Calculated by QS',
+    qs_daily_sample_low: 'Daily lowest recorded HR · Calculated by QS',
+    qs_daily_sample_high: 'Daily highest recorded HR · Calculated by QS',
   };
   return labels[semanticVariant] || null;
 }

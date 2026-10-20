@@ -38,7 +38,7 @@ describe('recent history option', () => {
   it('offers provider-specific maximums and emits an accessible range choice', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); const changed = vi.fn();
     fixture.componentInstance.rangeChange.subscribe(changed); fixture.detectChanges();
-    expect(fixture.componentInstance.rangeOptions().at(-1)?.label).toBe('Maximum available (5 years)');
+    expect(fixture.componentInstance.rangeOptions().at(-1)?.label).toBe('Maximum available (up to 5 years)');
     fixture.componentInstance.changeRange('maximum');
     expect(changed).toHaveBeenCalledWith('maximum');
     fixture.componentRef.setInput('service', ServiceNames.COROSAPI); fixture.detectChanges();
@@ -47,6 +47,21 @@ describe('recent history option', () => {
     ]);
     fixture.componentRef.setInput('service', ServiceNames.WahooAPI); fixture.detectChanges();
     expect(fixture.componentInstance.rangeOptions().at(-1)?.label).toBe('All available history');
+  });
+  it('qualifies Garmin maximum availability without changing the selection or other providers', async () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent);
+    fixture.componentRef.setInput('range', 'maximum'); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Maximum available (up to 5 years)');
+    expect(fixture.nativeElement.textContent).toContain('History availability varies by data type and Garmin account.');
+    expect(fixture.componentInstance.range()).toBe('maximum');
+    expect(fixture.componentInstance.rangeOptions().at(-1)?.value).toBe('maximum');
+    for (const service of [ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI]) {
+      fixture.componentRef.setInput('service', service); fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).not.toContain('Garmin account');
+      expect(fixture.componentInstance.range()).toBe('maximum');
+    }
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('emits a choice once and preserves it while pending', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); const changed = vi.fn();
@@ -155,7 +170,7 @@ describe('recent history status', () => {
     expect(history.firstSleepDate).toHaveBeenCalledExactlyOnceWith('owner', 'GarminAPI', expect.any(AbortSignal));
     expect(history.firstHealthDate).toHaveBeenCalledExactlyOnceWith('owner', 'GarminAPI', expect.any(AbortSignal));
     const copy = fixture.nativeElement.textContent;
-    expect(copy).toContain('Requested range: Maximum available (5 years)');
+    expect(copy).toContain('Requested range: Maximum available (up to 5 years)');
     expect(copy).toContain('first stored date Sep 12, 2026');
     expect(copy).toContain('not confirmed data coverage');
     expect(copy).toContain('not a guarantee for the current account or for Health metrics');

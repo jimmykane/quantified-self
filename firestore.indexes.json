@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "derivedMetrics", "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "entryType", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAtMs", "order": "ASCENDING" }]
+      "fields": [{ "fieldPath": "entryType", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAtMs", "order": "ASCENDING" }, { "fieldPath": "generation", "order": "ASCENDING" }]
     },
     {
       "collectionGroup": "sleepSessions",
@@ -1201,6 +1201,41 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "sportsLibReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetSportsLibVersion", "order": "ASCENDING" },
+        { "fieldPath": "processingTier", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibRouteReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetSportsLibVersion", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibRouteReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
     },
     {
       "collectionGroup": "subscriptions",

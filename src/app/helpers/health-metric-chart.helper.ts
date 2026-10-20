@@ -1,6 +1,6 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
-import { healthChartReadingLabel } from './chart-source.helper';
+import { healthChartReadingLabel, healthChartSourceChoice } from './chart-source.helper';
 import { addComparisonDays, comparisonDateCarrier, type NoteComparisonWindow } from './timeline-note-comparison.helper';
 import type { EChartsType } from 'echarts/core';
 import {
@@ -71,6 +71,7 @@ export interface HealthChartSeriesModel {
   plotKind: HealthWorkspaceSeries['chartKind'];
   readingLabel: string;
   recordedDateText: string | null;
+  latestText: string;
   evidenceText: string;
   twoReadingComparisonText: string | null;
   data: HealthChartDatum[];
@@ -138,6 +139,25 @@ export function healthHrvChartStatusDescription(
   status: HealthHrvPersonalRangeStatus | null | undefined,
 ): string | null {
   return status ? `${status.label}. ${status.detailText}.` : null;
+}
+
+/** Display existing nightly range results; never calculate a baseline from another reading type. */
+export function buildHealthHrvReadingSummary(model: HealthChartSeriesModel, status: HealthHrvPersonalRangeStatus | null,
+  units: UserUnitSettingsInterface | null = null) {
+  const series = model.series;
+  if (series.metricId !== HEALTH_METRIC_IDS.HeartRateVariability || series.nativeOnly
+    || !(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS as readonly string[]).includes(series.semanticVariant)) return null;
+  const average = status?.currentAverage;
+  const hasAverage = typeof average === 'number' && Number.isFinite(average);
+  const format = (value: number) => formatHealthValue(series.metricId, value, series.unit, false, units);
+  return {
+    headlineLabel: hasAverage ? '7-day average' : 'Latest night',
+    headlineText: hasAverage ? format(average) : model.latestText,
+    latestText: hasAverage ? model.latestText : null,
+    statusLabel: status?.label === 'Building personal range' ? 'Learning your range' : status?.label || 'Personal range unavailable',
+    progressText: status && !hasAverage ? status.detailText : null,
+    rangeText: status?.normalRange ? `${format(status.normalRange.min)}–${format(status.normalRange.max)}` : null,
+  };
 }
 
 const MAX_DISPLAY_POINTS = 600;
@@ -798,6 +818,7 @@ function buildSeriesModel(
     plotKind,
     readingLabel: healthChartReadingLabel(series),
     recordedDateText,
+    latestText,
     evidenceText,
     twoReadingComparisonText,
     data: buildChartData(displayedPoints, plotKind, gapThreshold),
@@ -815,7 +836,7 @@ function buildSeriesModel(
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
     displayUnit,
-    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}.${twoReadingComparisonText ? ` ${twoReadingComparisonText}.` : ''} Values are not combined with other sources.`,
+    ariaLabel: `${healthChartSourceChoice(series).label}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}.${twoReadingComparisonText ? ` ${twoReadingComparisonText}.` : ''} Values are not combined with other sources.`,
   };
 }
 

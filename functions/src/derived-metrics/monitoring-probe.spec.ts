@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metric-kinds';
 import * as logger from 'firebase-functions/logger';
-import { derivedMetricsPendingAge, observeDerivedMetricsQueue, DERIVED_METRICS_PROBE_TIMEOUT_MS } from './monitoring-probe';
+import { derivedMetricsPendingAge, observeDerivedMetricsQueue, DERIVED_METRICS_PROBE_FIELDS,
+    DERIVED_METRICS_PROBE_LIMIT, DERIVED_METRICS_PROBE_TIMEOUT_MS } from './monitoring-probe';
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn() }));
 
 const now = 1_800_000_000_000;
@@ -59,6 +60,23 @@ describe('derived generation-only observation timing', () => {
         const toString = vi.fn(() => DERIVED_METRIC_KINDS.Form);
         expect(derivedMetricsPendingAge({ ...row(), status, [field]: [{ toString }] }, now)).toBe('unknown');
         expect(toString).not.toHaveBeenCalled();
+    });
+    it('uses generation only as a sparse-index tie breaker while preserving the masked bounded oldest-update query', async () => {
+        const query = { where: vi.fn().mockReturnThis(), orderBy: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ docs: [], size: 0 }) };
+        const collectionGroup = vi.fn(() => query);
+        const runTransaction = vi.fn();
+        await observeDerivedMetricsQueue({ collectionGroup, runTransaction } as unknown as FirebaseFirestore.Firestore, now);
+        expect(collectionGroup).toHaveBeenCalledExactlyOnceWith('derivedMetrics');
+        expect(query.where.mock.calls).toEqual([
+            ['entryType', '==', 'coordinator'], ['status', 'in', ['queued', 'processing', 'failed']],
+        ]);
+        expect(query.orderBy.mock.calls).toEqual([['updatedAtMs'], ['generation']]);
+        expect(query.select).toHaveBeenCalledExactlyOnceWith(...DERIVED_METRICS_PROBE_FIELDS);
+        expect(query.limit).toHaveBeenCalledExactlyOnceWith(DERIVED_METRICS_PROBE_LIMIT + 1);
+        expect(query.get).toHaveBeenCalledOnce();
+        expect(runTransaction).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledTimes(3);
     });
     it('bounds a stalled query and suppresses a late healthy result', async () => {
         vi.useFakeTimers();

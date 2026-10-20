@@ -119,6 +119,27 @@ describe('MCP Training impact service', () => {
     expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
     expect(JSON.stringify(result)).not.toMatch(/missing-swim-threshold|missing-hr-calibration|evaluations|policy|activity-1|event-1/);
   });
+  it('projects threshold HR load through the frozen public schema without exposing private calibration diagnostics', async () => {
+    const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 70 }]) });
+    const evaluation = { preference: 'AUTOMATIC', method: 'HR', score: 70, estimated: true,
+      provenance: 'calculated', hrAlgorithm: 'THRESHOLD', reasons: ['threshold-hr-fallback'] };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: {}, legs: { run: {
+        activityId: 'activity-1', policy: defaultAppliedTrainingLoadPolicy('Running'), recordedTss: 42,
+        identity: { startMs: DAY_ONE, endMs: DAY_ONE + 3600000, type: 'Running', duration: 3600, distance: null },
+        evaluations: { version: 1, automatic: evaluation, hr: { ...evaluation, preference: 'HR' },
+          met: { ...evaluation, preference: 'MET', method: 'MET', score: 9 } },
+      } },
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(result).toMatchObject({ status: 'ready', contribution: { trainingStressScore: 70 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('threshold-hr-fallback');
+    const keys = (value: unknown): string[] => value && typeof value === 'object'
+      ? Object.entries(value).flatMap(([key, child]) => [key, ...keys(child)]) : [];
+    expect(keys(result)).not.toEqual(expect.arrayContaining(['hrAlgorithm']));
+    expect(keys(result)).not.toEqual(expect.arrayContaining(['evaluations']));
+  });
   it.each(['parent', 'leg', 'unrecognized'])('reports a stale %s as updating even when no usable score is cached', async stalePart => {
     const loadReads = reads();
     const leg: TrainingLoadLeg = { activityId: stalePart === 'unrecognized' ? 'replacement' : 'activity-1',

@@ -11,7 +11,7 @@ import { AppDataColors } from '../services/color/app.data.colors';
 import { AppColors } from '../services/color/app.colors';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
-import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
+import { buildHealthChartModels, buildHealthMetricEChartsOption, buildHealthHrvReadingSummary } from './health-metric-chart.helper';
 import { HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { noteComparisonWindow, comparisonDateCarrier } from './timeline-note-comparison.helper';
@@ -119,6 +119,7 @@ describe('Health metric chart helpers', () => {
       const dates = points.map(point => getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
         .format(Date.parse(`${point.calendarDate}T12:00:00Z`)));
       expect(model.twoReadingComparisonText).toBe(`Recorded change: −${formatHealthValue(HEALTH_METRIC_IDS.BodyWeight, 1, 'kilogram', false, unitSettings)} · ${dates[0]} → ${dates[1]}`);
+      expect(model.latestText).toBe(unitSettings ? '156.5 lb' : '71.0 kg');
       expect(model.plotKind).toBe('point'); expect(model.evidenceText).toContain('No trend inferred');
       expect(model.ariaLabel).toContain(model.twoReadingComparisonText!);
     }
@@ -1024,5 +1025,32 @@ describe('Health metric chart helpers', () => {
 
     expect(model.ariaLabel).toContain('1 reading recorded');
     expect(model.ariaLabel).not.toContain('1 readings.');
+  });
+});
+
+describe('nightly HRV reading summary', () => {
+  const makeModel = (overrides: Partial<HealthWorkspaceSeries> = {}) => buildHealthChartModels([series({
+    metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd', unit: 'millisecond',
+    points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 45, qualityCode: null }], ...overrides,
+  })], 0, 1)[0];
+  const ready = { tone: 'positive' as const, label: 'Within personal range', detailText: 'existing range',
+    observationDayCount: 30, requiredObservationDayCount: 14, currentAverage: 42,
+    normalRange: { min: 35, max: 48 }, pointStatuses: [] };
+  it('keeps the existing weekly average, latest night and range distinct with Sports Lib formatting', () => {
+    expect(buildHealthHrvReadingSummary(makeModel(), ready, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })))
+      .toMatchObject({ headlineLabel: '7-day average', headlineText: '42 ms', latestText: '45 ms', rangeText: '35 ms–48 ms' });
+  });
+  it('shows the latest recorded night while the range is learning or unavailable', () => {
+    expect(buildHealthHrvReadingSummary(makeModel(), { ...ready, label: 'Building personal range', tone: 'neutral',
+      detailText: '6/14 nights', observationDayCount: 6, currentAverage: null, normalRange: null }))
+      .toMatchObject({ headlineLabel: 'Latest night', headlineText: '45 ms', latestText: null,
+        statusLabel: 'Learning your range', progressText: '6/14 nights', rangeText: null });
+    expect(buildHealthHrvReadingSummary(makeModel(), null)?.statusLabel).toBe('Personal range unavailable');
+  });
+  it('does not reuse a nightly baseline for spot checks, within-night statistics, unknown or native values', () => {
+    for (const variant of ['health_snapshot_rmssd', 'health_snapshot_sdrr', 'overnight_5_minute_rmssd',
+      'overnight_5_minute_high_rmssd', 'future_hrv'])
+      expect(buildHealthHrvReadingSummary(makeModel({ semanticVariant: variant }), ready)).toBeNull();
+    expect(buildHealthHrvReadingSummary(makeModel({ nativeOnly: true }), ready)).toBeNull();
   });
 });
