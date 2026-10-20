@@ -556,8 +556,10 @@ extra padding is needed.
 Event Details Heart Rate panels and overlays draw an isolated finite reading as a dot when neither neighbouring
 chart position is drawable. This keeps intermittent samples visible (for example, every-other-second pool HR)
 without connecting across nulls, interpolating values or adding a sampling-gap cutoff. Connected readings retain
-their line-only style; the ECharts symbol callback returns `none` for them to avoid allocating unnecessary symbols.
-The same rule uses packed worker buffers and legacy point arrays and retains recorded indices when zooming.
+their line-only style and normal hover markers. Native ECharts `markPoint` dots are silent and carry no extra tooltip
+or statistic. They use the series or zone color and overlay opacity. The same rule uses packed worker buffers and
+legacy point arrays, recalculating dots with the existing axis refresh after zoom so a newly isolated reading remains
+visible. Empty zoom windows clear the dots; nulls and recorded coordinates remain unchanged.
 Original streams, chart coordinates, statistics, Training load and MCP responses are unchanged. Other metrics retain
 their existing rendering rules, including Battery's explicit connection across missing values.
 

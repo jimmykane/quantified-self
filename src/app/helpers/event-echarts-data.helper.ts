@@ -808,10 +808,28 @@ export function getEventChartSeriesY(series: EventChartPanelSeries, index: numbe
 }
 
 /** A recorded point with no drawable neighbour needs a symbol: a line alone cannot show it. */
-export function isEventChartSeriesIsolatedPoint(series: EventChartPanelSeries, index: number): boolean {
-  const isDrawable = (pointIndex: number) => Number.isFinite(getEventChartSeriesX(series, pointIndex))
-    && getEventChartSeriesY(series, pointIndex) !== null;
+export function isEventChartSeriesIsolatedPoint(
+  series: EventChartPanelSeries, index: number, visibleRange?: EventChartRange
+): boolean {
+  const isDrawable = (pointIndex: number) => {
+    const x = getEventChartSeriesX(series, pointIndex);
+    return Number.isFinite(x) && getEventChartSeriesY(series, pointIndex) !== null
+      && (!visibleRange || (x >= visibleRange.start && x <= visibleRange.end));
+  };
   return isDrawable(index) && !isDrawable(index - 1) && !isDrawable(index + 1);
+}
+
+export function getEventChartSeriesIsolatedPoints(
+  series: EventChartPanelSeries, visibleRange: EventChartRange
+): EventChartPoint[] {
+  const points: EventChartPoint[] = [];
+  const count = getEventChartSeriesPointCount(series);
+  for (let index = 0; index < count; index++) {
+    if (isEventChartSeriesIsolatedPoint(series, index, visibleRange)) {
+      points.push(getEventChartSeriesPoint(series, index)!);
+    }
+  }
+  return points;
 }
 
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {

@@ -42,6 +42,7 @@ import {
   createEventChartPanelBuildSnapshot,
   eventChartSeriesToPoints,
   isEventChartSeriesIsolatedPoint,
+  getEventChartSeriesIsolatedPoints,
   normalizeEventLapType,
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
@@ -88,6 +89,10 @@ describe('event-echarts-data.helper', () => {
         .toEqual([true, false, true, false, false, false, false, false, false, true]);
       expect(isEventChartSeriesIsolatedPoint(series, -1)).toBe(false);
       expect(isEventChartSeriesIsolatedPoint(series, points.length)).toBe(false);
+      expect(getEventChartSeriesIsolatedPoints(series, { start: 0, end: 9 })).toEqual([points[0], points[2], points[9]]);
+      expect(getEventChartSeriesIsolatedPoints(series, { start: 5.5, end: 6.5 })).toEqual([points[6]]);
+      expect(getEventChartSeriesIsolatedPoints(series, { start: 3, end: 5 })).toEqual([]);
+      expect(getEventChartSeriesIsolatedPoints(series, { start: 6, end: 7 })).toEqual([]);
       expect(series).toEqual(before);
     });
 

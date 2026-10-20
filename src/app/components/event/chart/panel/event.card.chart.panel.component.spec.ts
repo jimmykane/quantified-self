@@ -318,7 +318,8 @@ describe('EventCardChartPanelComponent', () => {
   }
 
   function getRenderedOption(): any {
-    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
+    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) =>
+      option?.series?.some(series => series.type === 'line'))?.[1] as any;
   }
 
   function setPowerPanel(values = [100, 100, 396, 200, 0, 100, 110]): void {
@@ -383,8 +384,11 @@ describe('EventCardChartPanelComponent', () => {
     fixture.componentRef.setInput('sharedZoomRange', { start: 3, end: 6 });
     component['applyCanonicalAxisScales']();
     const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
-    expect(update.series.map(series => series.id)).toEqual(['power-whiskers::a1::Power', 'power-whiskers::second::Power']);
-    expect(update.series.every(series => series.data.every(point => point[0] >= 3 && point[0] <= 6))).toBe(true);
+    expect(update.series.map(series => series.id)).toEqual([
+      'power-whiskers::a1::Power', 'power-whiskers::second::Power', `overlay::a1::${DataHeartRate.type}`,
+    ]);
+    expect(update.series.slice(0, 2).every(series => series.data.every(point => point[0] >= 3 && point[0] <= 6))).toBe(true);
+    expect(update.series[2].markPoint.data).toEqual([]);
     expect(eChartsLoaderMock.setOption.mock.calls.at(-1)![2].replaceMerge).toBeUndefined();
     expect(component.panel).toEqual({ ...primary, series: [...primary.series,
       { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
@@ -781,6 +785,11 @@ describe('EventCardChartPanelComponent', () => {
       const base = component.panel!.series[0];
       const series = {
         ...base, id: 'test::hr', streamType: DataHeartRate.type,
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 110 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 110, lt: 120 },
+          { zone: 'Zone 3', color: '#ffaa00', gte: 120 },
+        ],
         points: format === 'legacy' ? points : undefined,
         ...(format === 'packed' ? {
           lineValues: Float64Array.from(points.flatMap(p => [p.x, p.y ?? NaN])),
@@ -808,32 +817,55 @@ describe('EventCardChartPanelComponent', () => {
       const lines = option.series as LineSeriesOption[];
       const seriesIndex = overlay ? 1 : 0;
       const line = lines[seriesIndex];
-      expect(line).toMatchObject({ showSymbol: true, showAllSymbol: true, connectNulls: false });
+      expect(line).toMatchObject({
+        showSymbol: false, connectNulls: false,
+        markPoint: { silent: true, label: { show: false }, tooltip: { show: false } },
+      });
       expect(line.data).toEqual(format === 'packed' ? series.lineValues : points.map(p => [p.x, p.y]));
       if (overlay) expect(lines[0].showSymbol).toBe(false);
 
       const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
       const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const hostChart = vi.spyOn(component['chartHost'], 'getChart').mockReturnValue(rendered);
+      const hostOptions = vi.spyOn(component['chartHost'], 'setOption')
+        .mockImplementation(update => rendered.setOption(update, { lazyUpdate: false }));
       try {
         rendered.setOption(option);
         const model = (rendered as unknown as {
           getModel(): { getSeriesByIndex(index: number): { getData(): {
             count(): number;
-            getItemGraphicEl(index: number): unknown;
+            getItemGraphicEl(index: number): { getSymbolType(): string } | undefined;
             getRawIndex(index: number): number;
           } } };
         }).getModel();
-        const visibleSymbols = (seriesIndex: number) => {
-          const data = model.getSeriesByIndex(seriesIndex).getData();
-          return Array.from({ length: data.count() }, (_, index) => index)
-            .filter(index => !!data.getItemGraphicEl(index)).map(index => data.getRawIndex(index));
+        const drawnDots = () => {
+          const svg = new DOMParser().parseFromString(rendered.renderToSVGString(), 'image/svg+xml');
+          return [...svg.querySelectorAll(`path[ecmeta_series_index="${seriesIndex}"][ecmeta_silent="true"]`)];
         };
-        expect(visibleSymbols(seriesIndex)).toEqual([0, 2, 9]);
-        // DataZoom filters indices; the callback must still refer to the original recorded points.
-        rendered.dispatchAction({ type: 'dataZoom', startValue: 1, endValue: 8 });
-        expect(visibleSymbols(seriesIndex)).toEqual([2]);
+        const zoom = (startValue: number, endValue: number) => {
+          rendered.dispatchAction({ type: 'dataZoom', startValue, endValue });
+          component['applyCanonicalAxisScales']();
+          return hostOptions.mock.calls.at(-1)![0] as { series: LineSeriesOption[] };
+        };
+        expect(drawnDots()).toHaveLength(3);
+        expect(drawnDots().map(dot => dot.getAttribute('fill')))
+          .toEqual(Array(3).fill(overlay ? series.color : '#00aa00'));
+        rendered.dispatchAction({ type: 'highlight', seriesIndex, dataIndex: 6 });
+        expect(model.getSeriesByIndex(seriesIndex).getData().getItemGraphicEl(6)?.getSymbolType()).toBe('emptyCircle');
+        rendered.dispatchAction({ type: 'downplay', seriesIndex, dataIndex: 6 });
+        zoom(1, 8);
+        expect(drawnDots()).toHaveLength(1);
+        const singletonUpdate = zoom(5.5, 6.5);
+        expect(drawnDots()).toHaveLength(1);
+        expect(singletonUpdate.series[0].markPoint?.data?.[0]).toMatchObject({ coord: [6, 115] });
+        zoom(3, 5);
+        expect(drawnDots()).toHaveLength(0);
+        zoom(0, 9);
+        expect(drawnDots()).toHaveLength(3);
         expect(snapshot()).toEqual(before);
       } finally {
+        hostChart.mockRestore();
+        hostOptions.mockRestore();
         rendered.dispose();
         canvasContext.mockRestore();
       }
@@ -1930,7 +1962,8 @@ describe('EventCardChartPanelComponent', () => {
     const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
     const applyLastUpdate = () => {
-      const update = eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series?.length);
+      const update = eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) =>
+        option?.series?.some(series => series.type === 'line'));
       rendered.setOption(update![1], { ...update![2], lazyUpdate: false });
     };
     try {
