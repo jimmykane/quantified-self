@@ -3768,6 +3768,79 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('Altitude:');
   });
 
+  it.each([
+    ['legacy', false], ['packed', false], ['legacy', true], ['packed', true],
+  ] as const)('omits offscreen tooltip rows at both zoom edges without changing samples (%s, HR overlay=%s)', async (format, hrOverlay) => {
+    component.xAxisType = XAxisTypes.Distance;
+    component.xDomain = { start: 0, end: 1000 };
+    const hrPanel = buildTestPanel(DataHeartRate.type, [
+      { x: 500, y: 110, time: 0 }, { x: 600, y: 120, time: 2000 },
+    ]);
+    const powerPanel = buildTestPanel(DataPower.type, [
+      { x: 500.2, y: 200, time: 0 }, { x: 599.8, y: 210, time: 2000 },
+    ]);
+    if (format === 'packed') {
+      for (const panel of [hrPanel, powerPanel]) {
+        panel.series = panel.series.map(series => ({
+          ...series,
+          lineValues: Float64Array.from(series.points.flatMap(point => [point.x, point.y])),
+          timeValues: Float64Array.from(series.points.map(point => point.time)),
+          pointCount: series.points.length,
+          points: undefined,
+        }));
+      }
+    }
+    component.panel = hrOverlay ? powerPanel : hrPanel;
+    component.overlayPanel = hrOverlay ? hrPanel : powerPanel;
+    const snapshot = () => [component.panel!, component.overlayPanel!].map(panel => ({
+      ...panel,
+      series: panel.series.map(series => ({
+        ...series,
+        lineValues: series.lineValues && Array.from(series.lineValues),
+        timeValues: series.timeValues && Array.from(series.timeValues),
+      })),
+    }));
+    const before = structuredClone(snapshot());
+    await renderComponent();
+
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500.1, endValue: 599.9 }] });
+    for (const x of [500.2, 599.8]) {
+      const tooltip = component['formatTooltip']([{ value: [x, 200] }]);
+      expect(tooltip).toContain(`${DataPower.type}:`);
+      expect(tooltip).not.toContain(`${DataHeartRate.type}:`);
+    }
+
+    // Points exactly on the viewport boundary are visible; zooming out restores them.
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500, endValue: 600 }] });
+    for (const x of [500.2, 599.8]) {
+      const tooltip = component['formatTooltip']([{ value: [x, 200] }]);
+      expect(tooltip).toContain(`${DataPower.type}:`);
+      expect(tooltip).toContain(`${DataHeartRate.type}:`);
+    }
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('uses the current native zoom for tooltip proximity before the shared zoom catches up', async () => {
+    component.xAxisType = XAxisTypes.Distance;
+    component.xDomain = { start: 0, end: 1000 };
+    component.panel = buildTestPanel(DataPower.type, [
+      { x: 500, y: 200 }, { x: 600, y: 210 },
+    ]);
+    component.overlayPanel = buildTestPanel(DataHeartRate.type, [
+      { x: 501.5, y: 110 }, { x: 599, y: 120 },
+    ]);
+    await renderComponent();
+    // Both readings are inside the viewport, but 1.5 m is far apart at this zoom.
+    component.sharedZoomRange = { start: 500, end: 600 };
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500, endValue: 510 }] });
+    const tooltip = component['formatTooltip']([{ value: [500, 200] }]);
+    expect(tooltip).toContain(`${DataPower.type}:`);
+    expect(tooltip).not.toContain(`${DataHeartRate.type}:`);
+
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500, endValue: 600 }] });
+    expect(component['formatTooltip']([{ value: [500, 200] }])).toContain(`${DataHeartRate.type}:`);
+  });
+
   it('skips synced tooltip rows whose series value is null', async () => {
     component.showActivityNamesInTooltip = true;
     await renderComponent();

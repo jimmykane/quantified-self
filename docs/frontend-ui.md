@@ -564,8 +564,9 @@ buffer contains only original finite coordinates plus null separators; ECharts r
 hover markers, zone colors, overlay styling and zoom. HR panels (including HR overlays) retain line endpoints for
 native viewport clipping instead of filtering away offscreen endpoints. This keeps a valid segment visible when
 zoomed between its samples, while null-separated gaps stay blank even when neither boundary is in view. Tooltip
-headers outside the visible range are suppressed. Panels without HR retain their existing zoom filtering; removing
-an HR overlay restores it. No gap-dependent marker updates or synthetic measurements are needed on zoom.
+headers and individual rows outside the visible range are suppressed. Nearby-row matching uses the current native
+viewport, including before shared zoom state catches up. Panels without HR retain their existing zoom filtering;
+removing an HR overlay restores it. No gap-dependent marker updates or synthetic measurements are needed on zoom.
 
 Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. Tooltips
 continue reading the original series and do not invent values at the skipped positions. The two-second connection

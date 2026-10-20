@@ -1920,7 +1920,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
     );
     const tooltipLines: string[] = [];
-    const resolvedPoints = this.resolveTooltipPointsAtX(xValue);
+    const resolvedPoints = this.resolveTooltipPointsAtX(xValue, visibleRange);
     const hasOverlay = !!this.getActiveOverlayPanel();
     for (let index = 0; index < resolvedPoints.length; index += 1) {
       const resolvedPoint = resolvedPoints[index];
@@ -2033,12 +2033,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || (ArrayBuffer.isView(value) && typeof (value as unknown as ArrayLike<unknown>).length === 'number');
   }
 
-  private resolveTooltipPointsAtX(xValue: number): TooltipResolvedPoint[] {
+  private resolveTooltipPointsAtX(
+    xValue: number,
+    visibleRange = this.getVisibleXAxisRange()
+  ): TooltipResolvedPoint[] {
     if (!this.panel) {
       return [];
     }
 
-    const pixelTolerance = this.getTooltipMaxXDistance();
+    const pixelTolerance = this.getTooltipMaxXDistance(visibleRange);
     const panels = [
       this.panel,
       this.getActiveOverlayPanel(),
@@ -2051,6 +2054,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         const series = panel.series[seriesIndex];
         const nearestPoint = this.findNearestTooltipPoint(series, xValue);
         if (!nearestPoint || typeof nearestPoint.point.y !== 'number' || !Number.isFinite(nearestPoint.point.y)) {
+          continue;
+        }
+        // Line clipping retains context points, including in overlays/comparisons.
+        // They may draw a segment through the view but are not visible readings.
+        if (nearestPoint.point.x < visibleRange.start || nearestPoint.point.x > visibleRange.end) {
           continue;
         }
 
@@ -2071,11 +2079,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return resolvedPoints;
   }
 
-  private getTooltipMaxXDistance(): number {
-    const domain = this.getActiveDomain();
-    const visibleRange = this.sharedZoomRange
-      ? clampEventRange(this.sharedZoomRange, domain.start, domain.end) || domain
-      : domain;
+  private getTooltipMaxXDistance(visibleRange: EventChartRange): number {
     const span = Math.max(0, visibleRange.end - visibleRange.start);
     if (!Number.isFinite(span) || span <= 0) {
       return 0;
