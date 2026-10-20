@@ -807,29 +807,35 @@ export function getEventChartSeriesY(series: EventChartPanelSeries, index: numbe
   return Number.isFinite(value) ? value : null;
 }
 
-/** A recorded point with no drawable neighbour needs a symbol: a line alone cannot show it. */
-export function isEventChartSeriesIsolatedPoint(
-  series: EventChartPanelSeries, index: number, visibleRange?: EventChartRange
-): boolean {
-  const isDrawable = (pointIndex: number) => {
-    const x = getEventChartSeriesX(series, pointIndex);
-    return Number.isFinite(x) && getEventChartSeriesY(series, pointIndex) !== null
-      && (!visibleRange || (x >= visibleRange.start && x <= visibleRange.end));
-  };
-  return isDrawable(index) && !isDrawable(index - 1) && !isDrawable(index + 1);
-}
-
-export function getEventChartSeriesIsolatedPoints(
-  series: EventChartPanelSeries, visibleRange: EventChartRange
-): EventChartPoint[] {
-  const points: EventChartPoint[] = [];
+/** Display-only HR line: join recorded 1/2-second samples, never manufacture a measurement. */
+export function buildEventHeartRateLineValues(series: EventChartPanelSeries): Float64Array {
   const count = getEventChartSeriesPointCount(series);
+  // Each recorded point can need a preceding null separator for a timestamp gap.
+  const values = new Float64Array(count * 4);
+  let offset = 0;
+  let previousTime = Number.NaN;
   for (let index = 0; index < count; index++) {
-    if (isEventChartSeriesIsolatedPoint(series, index, visibleRange)) {
-      points.push(getEventChartSeriesPoint(series, index)!);
+    const x = getEventChartSeriesX(series, index);
+    if (!Number.isFinite(x)) {
+      previousTime = Number.NaN;
+      continue;
     }
+    const y = getEventChartSeriesY(series, index);
+    if (y === null) continue;
+
+    const time = getEventChartSeriesTime(series, index);
+    const elapsedMs = time - previousTime;
+    // Use absolute sample times, including on the Distance axis. Do not bridge
+    // longer gaps just because their empty rows were omitted by the chart grid.
+    if (offset && !(Number.isFinite(elapsedMs) && elapsedMs > 0 && elapsedMs <= 2000)) {
+      values[offset++] = x;
+      values[offset++] = Number.NaN;
+    }
+    values[offset++] = x;
+    values[offset++] = y;
+    previousTime = time;
   }
-  return points;
+  return values.slice(0, offset);
 }
 
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {

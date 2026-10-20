@@ -44,7 +44,7 @@ import {
   getEventChartSeriesPointCount,
   getEventChartSeriesPackedLineValues,
   getEventChartSeriesX,
-  getEventChartSeriesIsolatedPoints,
+  buildEventHeartRateLineValues,
 } from '../../../../helpers/event-echarts-data.helper';
 import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
@@ -913,7 +913,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         yAxisIndex: 0,
         smooth: false,
         showSymbol: false,
-        markPoint: this.buildHeartRateMarkPoints(series, visibleRange),
         symbolSize: 5,
         connectNulls: connectAcrossMissingValues,
         progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
@@ -961,8 +960,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       seriesOptions.push(...this.buildOverlaySeriesOptions(
         overlayPanel,
         seriesStrokeWidth,
-        shareOverlayYAxis ? 0 : 1,
-        visibleRange
+        shareOverlayYAxis ? 0 : 1
       ));
     }
 
@@ -1205,8 +1203,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private buildOverlaySeriesOptions(
     overlayPanel: EventChartPanelModel,
     primaryStrokeWidth: number,
-    yAxisIndex = 1,
-    visibleRange = this.getVisibleXAxisRange()
+    yAxisIndex = 1
   ): ChartLineSeriesOption[] {
     const overlayStrokeWidth = this.resolveOverlayStrokeWidth(primaryStrokeWidth);
     return overlayPanel.series.map((series) => ({
@@ -1216,7 +1213,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       yAxisIndex,
       smooth: false,
       showSymbol: false,
-      markPoint: this.buildHeartRateMarkPoints(series, visibleRange, true),
       symbolSize: 5,
       connectNulls: this.isBatteryStreamType(series.streamType),
       progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
@@ -2334,19 +2330,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const seriesUpdates: Array<ChartLineSeriesOption | CustomSeriesOption> = this.powerIs3s
       ? this.panel.series.map(series => this.powerWhiskers(series, visibleRange))
       : [];
-    for (const series of this.panel.series) {
-      if (series.streamType === DataHeartRate.type) {
-        seriesUpdates.push({ id: series.id, markPoint: this.buildHeartRateMarkPoints(series, visibleRange) });
-      }
-    }
-    for (const series of overlayPanel?.series || []) {
-      if (series.streamType === DataHeartRate.type) {
-        seriesUpdates.push({
-          id: `overlay::${series.id}`,
-          markPoint: this.buildHeartRateMarkPoints(series, visibleRange, true),
-        });
-      }
-    }
     this.chartHost.setOption({
       ...(scaleOptions ? { xAxis: scaleOptions } : {}),
       yAxis: yAxisUpdate,
@@ -2990,6 +2973,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private getSeriesLineData(series: EventChartPanelSeries): ChartLineSeriesOption['data'] {
+    if (series.streamType === DataHeartRate.type) {
+      return buildEventHeartRateLineValues(series) as unknown as ChartLineSeriesOption['data'];
+    }
+
     const packedLineValues = getEventChartSeriesPackedLineValues(series);
     if (packedLineValues) {
       return packedLineValues as unknown as ChartLineSeriesOption['data'];
@@ -2999,32 +2986,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       point.x,
       typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : null,
     ]) as ChartLineSeriesOption['data'];
-  }
-
-  private buildHeartRateMarkPoints(
-    series: EventChartPanelSeries, visibleRange: EventChartRange, overlay = false
-  ): ChartLineSeriesOption['markPoint'] {
-    if (series.streamType !== DataHeartRate.type) return undefined;
-
-    // Native point markers leave the line's hover symbols and null breaks intact.
-    // Recalculate for the visible range: zoom can leave a formerly connected reading on its own.
-    return {
-      silent: true,
-      animation: false,
-      symbol: 'circle',
-      symbolSize: 5,
-      label: { show: false },
-      emphasis: { disabled: true, label: { show: false } },
-      tooltip: { show: false },
-      data: getEventChartSeriesIsolatedPoints(series, visibleRange).map(point => ({
-        name: '',
-        coord: [point.x, point.y],
-        itemStyle: {
-          color: overlay ? series.color : this.resolveSeriesPointColor(series, point.y),
-          opacity: overlay && !series.lineStyle ? OVERLAY_LINE_OPACITY : 1,
-        },
-      })),
-    };
   }
 
   private requestFrame(callback: () => void): number {

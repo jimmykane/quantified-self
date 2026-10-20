@@ -553,15 +553,20 @@ extra padding is needed.
 
 ### Event heart-rate gaps
 
-Event Details Heart Rate panels and overlays draw an isolated finite reading as a dot when neither neighbouring
-chart position is drawable. This keeps intermittent samples visible (for example, every-other-second pool HR)
-without connecting across nulls, interpolating values or adding a sampling-gap cutoff. Connected readings retain
-their line-only style and normal hover markers. Native ECharts `markPoint` dots are silent and carry no extra tooltip
-or statistic. They use the series or zone color and overlay opacity. The same rule uses packed worker buffers and
-legacy point arrays, recalculating dots with the existing axis refresh after zoom so a newly isolated reading remains
-visible. Empty zoom windows clear the dots; nulls and recorded coordinates remain unchanged.
-Original streams, chart coordinates, statistics, Training load and MCP responses are unchanged. Other metrics retain
-their existing rendering rules, including Battery's explicit connection across missing values.
+Event Details Heart Rate panels and overlays use a separate display buffer connecting consecutive recorded readings
+up to two seconds apart. This supports both one-second and every-other-second sampling without dots or fabricated
+intermediate measurements. Longer intervals remain line breaks, including when the chart grid omitted the empty
+positions entirely. Missing, repeated or backward timestamps do not establish a connection.
+
+`buildEventHeartRateLineValues` applies the same rule to packed worker buffers and legacy point arrays. It uses
+absolute sample timestamps on Duration, Time and Distance axes, never index spacing or distance differences. The
+buffer contains only original finite coordinates plus null separators; ECharts retains `connectNulls: false`, normal
+hover markers, zone colors, overlay styling and zoom. No gap-dependent marker updates are needed on zoom.
+
+Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. Tooltips
+continue reading the original series and do not invent values at the skipped positions. The two-second connection
+limit is a display policy, not a claim that a missing measurement was recorded. Other metrics retain their existing
+rendering rules, including Battery's explicit connection across missing values.
 
 ### Event Power display views
 

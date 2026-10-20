@@ -41,8 +41,7 @@ import {
   buildEventChartPanelsFromSnapshot,
   createEventChartPanelBuildSnapshot,
   eventChartSeriesToPoints,
-  isEventChartSeriesIsolatedPoint,
-  getEventChartSeriesIsolatedPoints,
+  buildEventHeartRateLineValues,
   normalizeEventLapType,
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
@@ -70,45 +69,63 @@ describe('event-echarts-data.helper', () => {
     vi.restoreAllMocks();
   });
 
-  describe('isolated recorded points', () => {
-    it.each(['legacy', 'packed'] as const)('identifies only visible singletons without changing %s data', format => {
-      const points = [118, null, 117, null, null, null, 115, 114, null, 0]
-        .map((y, x) => ({ x, y, time: x * 1000 }));
-      const series: EventChartPanelSeries = {
-        id: 'test', activityID: 'test', activityName: 'Test', color: '#ff0000',
+  describe('heart-rate display lines', () => {
+    function hrSeries(points: Array<{ x: number; y: number | null; time: number }>, format: 'legacy' | 'packed'): EventChartPanelSeries {
+      return {
+        id: 'hr', activityID: 'test', activityName: 'Test', color: '#ff0000',
         streamType: DataHeartRate.type, displayName: DataHeartRate.type, unit: '',
         ...(format === 'legacy' ? { points } : {
           lineValues: Float64Array.from(points.flatMap(p => [p.x, p.y ?? NaN])),
-          timeValues: Float64Array.from(points.map(p => p.time)),
-          pointCount: points.length,
+          timeValues: Float64Array.from(points.map(p => p.time)), pointCount: points.length,
         }),
       };
-      const before = structuredClone(series);
+    }
 
-      expect(points.map((_, i) => isEventChartSeriesIsolatedPoint(series, i)))
-        .toEqual([true, false, true, false, false, false, false, false, false, true]);
-      expect(isEventChartSeriesIsolatedPoint(series, -1)).toBe(false);
-      expect(isEventChartSeriesIsolatedPoint(series, points.length)).toBe(false);
-      expect(getEventChartSeriesIsolatedPoints(series, { start: 0, end: 9 })).toEqual([points[0], points[2], points[9]]);
-      expect(getEventChartSeriesIsolatedPoints(series, { start: 5.5, end: 6.5 })).toEqual([points[6]]);
-      expect(getEventChartSeriesIsolatedPoints(series, { start: 3, end: 5 })).toEqual([]);
-      expect(getEventChartSeriesIsolatedPoints(series, { start: 6, end: 7 })).toEqual([]);
+    it.each(['legacy', 'packed'] as const)('connects 1/2-second readings but preserves longer gaps without changing %s data', format => {
+      const points = [null, 118, 119, null, 117, null, 116, null, null, 115, 114, null]
+        .map((y, x) => ({ x, y, time: x * 1000 }));
+      const series = hrSeries(points, format);
+      const before = structuredClone(series);
+      expect(Array.from(buildEventHeartRateLineValues(series)))
+        .toEqual([1, 118, 2, 119, 4, 117, 6, 116, 9, NaN, 9, 115, 10, 114]);
       expect(series).toEqual(before);
     });
 
-    it('handles single readings, empty series and non-finite coordinates', () => {
-      const series: EventChartPanelSeries = {
-        id: 'test', activityID: 'test', activityName: 'Test', color: '#ff0000',
-        streamType: DataHeartRate.type, displayName: DataHeartRate.type, unit: '',
-        points: [{ x: 0, y: 118, time: 0 }],
-      };
-      expect(isEventChartSeriesIsolatedPoint(series, 0)).toBe(true);
-      expect(isEventChartSeriesIsolatedPoint({ ...series, points: [] }, 0)).toBe(false);
-      for (const point of [{ x: NaN, y: 118, time: 1000 }, { x: 1, y: NaN, time: 1000 }]) {
-        const invalidNeighbour = { ...series, points: [...series.points!, point] };
-        expect(isEventChartSeriesIsolatedPoint(invalidNeighbour, 0)).toBe(true);
-        expect(isEventChartSeriesIsolatedPoint(invalidNeighbour, 1)).toBe(false);
-      }
+    it.each(['legacy', 'packed'] as const)('detects gaps even without explicit empty rows (%s)', format => {
+      const series = hrSeries([
+        { x: 0, y: 100, time: 0 }, { x: 2, y: 101, time: 2000 },
+        { x: 5, y: 102, time: 5000 }, { x: 6, y: 103, time: 6000 },
+        { x: 40, y: 104, time: 40000 }, { x: 42, y: 105, time: 42000 },
+      ], format);
+      expect(Array.from(buildEventHeartRateLineValues(series)))
+        .toEqual([0, 100, 2, 101, 5, NaN, 5, 102, 6, 103, 40, NaN, 40, 104, 42, 105]);
+    });
+
+    it.each(['legacy', 'packed'] as const)('uses elapsed timestamps, not distance spacing, and retains zero (%s)', format => {
+      const series = hrSeries([
+        { x: 0, y: 100, time: 0 }, { x: 500, y: 101, time: 2000 },
+        { x: 500, y: 102, time: 4000 }, { x: 501, y: 103, time: 10000 },
+        { x: 501, y: 0, time: 11000 },
+      ], format);
+      expect(Array.from(buildEventHeartRateLineValues(series)))
+        .toEqual([0, 100, 500, 101, 500, 102, 501, NaN, 501, 103, 501, 0]);
+    });
+
+    it.each([2001, 0, -1000, NaN, Infinity])('does not connect uncertain or interrupted timestamps (%s)', time => {
+      const series = hrSeries([
+        { x: 0, y: 100, time: 0 }, { x: 1, y: 101, time },
+        { x: 2, y: 102, time: 1000 },
+      ], 'legacy');
+      const line = Array.from(buildEventHeartRateLineValues(series));
+      expect(line.slice(0, 6)).toEqual([0, 100, 1, NaN, 1, 101]);
+      if (!Number.isFinite(time) || time >= 1000) expect(line.slice(6)).toEqual([2, NaN, 2, 102]);
+    });
+
+    it('handles empty and single readings without inventing a neighbour', () => {
+      expect(buildEventHeartRateLineValues(hrSeries([], 'legacy'))).toHaveLength(0);
+      expect(buildEventHeartRateLineValues(hrSeries([{ x: 0, y: null, time: 0 }], 'packed'))).toHaveLength(0);
+      expect(Array.from(buildEventHeartRateLineValues(hrSeries([{ x: 0, y: 118, time: 0 }], 'packed'))))
+        .toEqual([0, 118]);
     });
   });
 
