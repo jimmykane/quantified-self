@@ -2580,3 +2580,12 @@ it('explains explicit family shortcuts and the climbing default display rule', (
     expect(section?.content).toContain(phrase);
   }
 });
+
+describe('nightly HRV history help', () => {
+  it('explains the primary view, secondary measurements and QS attribution', () => {
+    const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**HRV history** opens one **Overnight HRV** source', '**Latest night**',
+      '**60-day personal range**', '**Learning your range**', 'Spot check: overall variation',
+      'These are different measurements with separate histories', 'accounts and baselines separate']) expect(health).toContain(phrase);
+  });
+});

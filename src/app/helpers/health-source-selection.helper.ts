@@ -47,6 +47,7 @@ export function selectDefaultHealthSourceKey(candidates: readonly HealthSourceSe
   ranked.sort((left, right) => Number(right.useful) - Number(left.useful)
     || Number(!!left.candidate.semanticVariant?.startsWith('nap_')) - Number(!!right.candidate.semanticVariant?.startsWith('nap_'))
     || Number(!!left.candidate.nativeOnly) - Number(!!right.candidate.nativeOnly)
+    || hrvPriority(left.candidate) - hrvPriority(right.candidate)
     || right.latest.calendarDate.localeCompare(left.latest.calendarDate)
     || heartRatePriority(left.candidate) - heartRatePriority(right.candidate)
     || right.latest.timestampMs - left.latest.timestampMs
@@ -58,4 +59,11 @@ function heartRatePriority(candidate: HealthSourceSelectionCandidate): number {
   if (candidate.metricId !== HEALTH_METRIC_IDS.HeartRate) return 0;
   return DAYTIME_HEART_RATE_VARIANTS.has(candidate.semanticVariant || '') ? 0
     : /^(qs_)?sleep_session_average_heart_rate$/.test(candidate.semanticVariant || '') ? 1 : 2;
+}
+
+function hrvPriority(candidate: HealthSourceSelectionCandidate): number {
+  if (candidate.metricId !== HEALTH_METRIC_IDS.HeartRateVariability) return 0;
+  return ['overnight_rmssd', 'overnight_average'].includes(candidate.semanticVariant || '') ? 0
+    : candidate.semanticVariant === 'sleep_overnight_hrv' ? 1
+      : candidate.semanticVariant === 'sleep_session_average_hrv' ? 2 : 3;
 }

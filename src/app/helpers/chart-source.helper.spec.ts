@@ -4,6 +4,24 @@ import { healthChartSourceChoice } from './chart-source.helper';
 describe('compact chart source attribution', () => {
   const series = { id: 'stable-key', sourceLabel: 'Suunto · Account 2', aggregation: 'average', nativeOnly: false,
     semanticVariant: 'sleep_session_average_hrv', semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated' };
+  it('leads HRV with overnight averages and names secondary recordings without equating their statistics', () => {
+    const choice = (semanticVariant: string, nativeOnly = false) => healthChartSourceChoice({ ...series,
+      metricId: 'heart_rate_variability', semanticVariant, nativeOnly });
+    for (const variant of ['overnight_rmssd', 'overnight_average', 'sleep_overnight_hrv']) {
+      expect(choice(variant)).toMatchObject({ readingKey: 'hrv-overnight', readingLabel: 'Overnight HRV', secondaryMeasurement: false });
+    }
+    const secondary = ['sleep_session_average_hrv', 'overnight_5_minute_rmssd', 'overnight_5_minute_high_rmssd',
+      'health_snapshot_rmssd', 'health_snapshot_sdrr', 'activity_interval'];
+    expect(new Set(secondary.map(variant => choice(variant).readingKey)).size).toBe(secondary.length);
+    for (const variant of secondary) expect(choice(variant).secondaryMeasurement).toBe(true);
+    expect(choice('sleep_session_average_hrv').readingLabel).toBe('Average sleep HRV');
+    expect(choice('overnight_5_minute_high_rmssd').readingLabel).toBe('Highest five-minute HRV');
+    expect(choice('health_snapshot_rmssd').readingDescription).toContain('short');
+    expect(choice('health_snapshot_sdrr').readingDescription).toContain('different');
+    expect(choice('overnight_rmssd', true).readingKey).not.toBe('hrv-overnight');
+    expect(choice('future_hrv').readingKey).not.toBe('hrv-overnight');
+    expect(choice('overnight_rmssd').key).toBe(series.id);
+  });
   it('groups comparable daytime readings while separating rolling, sleep and nap measurements', () => {
     const choice = (semanticVariant: string) => healthChartSourceChoice({ ...series, metricId: 'heart_rate', semanticVariant });
     expect(choice('daily_15_second').readingKey).toBe('daytime');

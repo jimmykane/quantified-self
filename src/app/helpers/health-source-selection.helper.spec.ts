@@ -7,6 +7,16 @@ function candidate(key: string, metricId: HealthMetricId, value: number | string
 }
 
 describe('automatic Health source selection', () => {
+  it('starts HRV with a dedicated overnight average while retaining saved secondary or missing choices', () => {
+    const overnight = { ...candidate('night', 'heart_rate_variability', 45, '2026-09-13'), semanticVariant: 'overnight_rmssd' };
+    const sleep = { ...candidate('sleep', 'heart_rate_variability', 44), semanticVariant: 'sleep_session_average_hrv' };
+    const spot = { ...candidate('spot', 'heart_rate_variability', 60, '2026-09-15'), semanticVariant: 'health_snapshot_rmssd' };
+    expect(resolveHealthSourceKey([spot, sleep, overnight], null)).toBe('night');
+    expect(resolveHealthSourceKey([spot, sleep], null)).toBe('sleep');
+    expect(resolveHealthSourceKey([overnight, spot], 'spot')).toBe('spot');
+    expect(resolveHealthSourceKey([overnight, spot], 'missing')).toBe('missing');
+    expect(selectDefaultHealthSourceKey([{ ...overnight, nativeOnly: true }, spot])).toBe('spot');
+  });
   it('resolves only an exact resolution counterpart and keeps missing or ambiguous saved pins unavailable', () => {
     const daily = { ...candidate('daily', 'heart_rate', 65), semanticVariant: 'qs_daily_interval_mean', alternateResolutionKey: 'daytime' };
     expect(resolveHealthSourceKey([daily], 'daytime')).toBe('daily');
