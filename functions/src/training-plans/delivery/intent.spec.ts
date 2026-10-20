@@ -25,12 +25,17 @@ const base: DeliveryContext = {
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
-  it('reassesses unsupported Weight Training, requires mapping approval and retains existing sync consent', () => {
+  it.each([
+    [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
+    [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
+    [ActivityTypes['LES MILLS BODYPUMP'], 'Strength Training'], [ActivityTypes.VirtualRowing, 'Indoor Rowing'],
+    [ActivityTypes.Kettlebell, null], [ActivityTypes.Calisthenics, null],
+  ] as const)('reassesses unsupported %s with the approved profile and existing consent', (sport, fallback) => {
     const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
     const context: DeliveryContext = { ...base,
       transport: new SuuntoGuideTransport(request, 'Quantified Self'),
       setting: { ...base.setting!, provider: 'suunto' },
-      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.WeightTraining } },
+      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport } },
     };
     // The previous mapper hashed the complete workout when it rejected this sport.
     const previousDigest = hashTrainingScheduleRequestPayload({ mappingVersion: 'suunto-guides-v13',
@@ -39,15 +44,19 @@ describe('delivery intent', () => {
       desired: 'preserve', desiredDigest: previousDigest, acceptedDigest: null } as DeliveryLedgerV1;
     const before = structuredClone(context.setting);
     const reviewed = resolveDeliveryIntent(context, previous);
-    expect(reviewed).toMatchObject({ desired: 'preserve', status: 'approval_required', approvalDigest: reviewed.digest });
     expect(reviewed.digest).not.toBe(previous.desiredDigest);
-    expect(reviewed.issues).toContainEqual(expect.stringContaining('Weight Training using its Strength Training profile'));
+    if (fallback) {
+      expect(reviewed).toMatchObject({ desired: 'preserve', status: 'approval_required', approvalDigest: reviewed.digest });
+      expect(reviewed.issues).toContainEqual(expect.stringContaining(`${sport} using its ${fallback} profile`));
+    } else {
+      expect(reviewed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null, issues: [] });
+    }
     expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: reviewed.digest } }, previous))
       .toMatchObject({ desired: 'present', status: 'pending', digest: reviewed.digest, approvalDigest: null });
     expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
     expect(resolveDeliveryIntent({ ...context, hasPro: false }, previous).status).toBe('paused_pro');
     expect(context.setting).toEqual(before);
-    expect(context.workout!.structure.sport).toBe(ActivityTypes.WeightTraining);
+    expect(context.workout!.structure.sport).toBe(sport);
     expect(request).not.toHaveBeenCalled();
   });
 

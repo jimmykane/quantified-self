@@ -604,11 +604,14 @@ describe('help.content', () => {
     expect(content).toContain('can remain target-free');
   });
 
-  it('explains the Suunto Weight Training mapping and the scope of unsupported delivery badges', () => {
+  it('explains the approved Suunto strength/rowing profiles and the scope of unsupported delivery badges', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    expect(content).toContain('**Weight Training** interval recipes can be sent to Suunto');
+    for (const sport of ['Weight Training', 'Core Training', 'LES MILLS CORE', 'LES MILLS GRIT Strength', 'LES MILLS BODYPUMP',
+      'Virtual Rowing', 'Kettlebell', 'Calisthenics']) expect(content).toContain(`**${sport}**`);
     expect(content).toContain('**Gym / Strength Training** profile');
-    expect(content).toContain('asks you to review this profile mapping before sending');
+    expect(content).toContain('asks you to review these profile mappings before sending');
+    expect(content).toContain('**Kettlebell** and **Calisthenics** use their own Suunto profiles');
+    expect(content).toContain('do not add sport choices to the manual interval editor or enable delivery to other services');
     expect(content).toContain('describes planned-workout delivery, not whether the service can record that sport or heart rate');
   });
 

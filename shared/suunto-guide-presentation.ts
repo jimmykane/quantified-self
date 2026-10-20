@@ -16,7 +16,7 @@ export function suuntoGuideWatchTextV1(value: string): string {
 
 export function suuntoGuideLiveReadingsV1(sport: ActivityTypes): SuuntoGuideLiveReadingTypeV1[] {
   sport = plannedWorkoutSportAliasV1('suunto', sport);
-  if (sport === ActivityTypes.StrengthTraining) return ['heartRate'];
+  if ([ActivityTypes.StrengthTraining, ActivityTypes.Kettlebell, ActivityTypes.Calisthenics].includes(sport)) return ['heartRate'];
   if ([ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling,
     ActivityTypes.EBiking, ActivityTypes.Handcycle].includes(sport)) return ['power', 'heartRate', 'speed'];
   return ['pace', 'heartRate'];

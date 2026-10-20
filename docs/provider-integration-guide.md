@@ -352,17 +352,28 @@ is disclosed through the existing mapping review and bound to the authored conte
 Changed or unsupported recipes retain an existing provider copy until a supported replacement is approved.
 The 21 previously verified Wahoo profiles keep their payload behavior; walking aliases retain timed, untargeted
 steps. COROS walking aliases remain unsupported and COROS delivery stays disabled. Classic/Skate Skiing and
-AMRAP/EMOM/Tabata/BODYPUMP have no approved outbound mapping. Recorded-activity uploads use their independent
+AMRAP/EMOM/Tabata have no approved outbound mapping. Recorded-activity uploads use their independent
 mapping contract; this planning table does not widen that contract.
 
-`Weight Training` has a **Suunto-only** planning alias to the existing `Strength Training` / Gym (`23`) Guide
-profile, matching Suunto's [published activity catalog](https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf).
+`Weight Training`, `Core Training`, `LES MILLS CORE`, `LES MILLS GRIT Strength` and `LES MILLS BODYPUMP` have
+**Suunto-only** planning aliases to the existing `Strength Training` / Gym (`23`) Guide profile.
+`Virtual Rowing` uses `Indoor Rowing` (`57`). `Kettlebell` (`63`) and `Calisthenics` (`104`) use their own native
+recommendation profiles with HR-only default live readings, from Suunto's
+[published activity catalog](https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf).
+The [Guide contract](https://apizone.suunto.com/suuntoplus-guide-description) uses those IDs as activity recommendations;
+they do not establish device availability or account-side delivery proof.
 The original recipe sport survives reads and JSON round trips. This is the generic interval mapper, not the
-exercise-aware strength companion: existing ending/target validation and explicit mapping-loss approval apply.
-Garmin, COROS and Wahoo do not inherit this alias or bypass their strength-companion requirements.
-The catalog audit found all 45 manual interval-editor sports already covered by Suunto; Kettlebell, Calisthenics,
-Core Training, LES MILLS CORE, LES MILLS GRIT Strength and BODYPUMP still need separate delivery-profile decisions.
-Recorded-sport availability is independent of planned-workout delivery support.
+exercise-aware strength companion: existing ending/target validation applies, and profile substitutions require
+explicit mapping-loss approval. Native Kettlebell/Calisthenics do not introduce a profile loss. These profiles do not
+gain repetition endings, external-load tracking or new manual-editor choices. Garmin, COROS and Wahoo do not inherit
+these aliases or bypass their strength-companion requirements.
+The catalog audit checked all 283 recipe-valid sports across all four assessors and serializers (1,132 pairs): no
+advertised mapping disagreed with serialization for a timed, untargeted recipe. All 45 interval-editor sports have
+Suunto, Garmin and Wahoo mappings; COROS retains its nine documented unsupported editor sports and stays disabled.
+Suunto now maps 54 catalog sports; its other 229 names remain unsupported for generic planned-workout delivery.
+That is a support boundary, not 229 import bugs: native activity recording alone never establishes workout delivery.
+Remaining profile decisions include yoga/pilates, flexibility, conditioning, elliptical exercise and other provider
+Virtual Rowing aliases. No additional classifications were inferred from activity groups.
 
 Monitoring coverage decision for this alias extension: **unchanged**. The existing Training monitoring bundle
 (`tools/training-monitoring/definitions.mjs`) already selects Garmin, Wahoo and Suunto delivery outcome/failure

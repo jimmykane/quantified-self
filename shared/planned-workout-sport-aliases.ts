@@ -45,6 +45,11 @@ export const PLANNED_WORKOUT_SPORT_ALIASES_V1: ReadonlyArray<{
   // require their exercise-aware strength contract; this alias does not grant it.
   { sport: ActivityTypes.WeightTraining, suunto: ActivityTypes.StrengthTraining,
     garmin: null, coros: null, wahoo: null },
+  ...[ActivityTypes.CoreTraining, ActivityTypes.LesMillsCore, ActivityTypes.LesMillsGritStrength,
+    Refined.LesMillsBODYPUMP].map(sport => ({ sport, suunto: ActivityTypes.StrengthTraining,
+    garmin: null, coros: null, wahoo: null })),
+  { sport: ActivityTypes.VirtualRowing, suunto: ActivityTypes.IndoorRowing,
+    garmin: null, coros: null, wahoo: null },
 ];
 
 export function plannedWorkoutSportAliasV1(provider: PlannedWorkoutSportAliasProvider, sport: ActivityTypes): ActivityTypes {

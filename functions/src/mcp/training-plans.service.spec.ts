@@ -58,9 +58,14 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
-  it('keeps Weight Training in recipe reads and discloses its Suunto-only Gym fallback in compatibility', async () => {
+  it.each([
+    [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
+    [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
+    [ActivityTypes['LES MILLS BODYPUMP'], 'Strength Training'], [ActivityTypes.VirtualRowing, 'Indoor Rowing'],
+    [ActivityTypes.Kettlebell, null], [ActivityTypes.Calisthenics, null],
+  ] as const)('keeps %s in recipe reads and reports its Suunto-only profile accurately', async (sport, fallback) => {
     const f = fixture();
-    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.WeightTraining, nodes: [
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [
       { kind: 'step', id: 'lift', purpose: 'work', ending: { kind: 'time', seconds: 600 },
         targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] },
     ] };
@@ -73,10 +78,10 @@ describe('Training plan MCP reads', () => {
     const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
       'assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'coros', 'wahoo'] }));
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
-      ['suunto', 'degraded'], ['garmin', 'unsupported'], ['coros', 'unsupported'], ['wahoo', 'unsupported'],
+      ['suunto', fallback ? 'degraded' : 'exact'], ['garmin', 'unsupported'], ['coros', 'unsupported'], ['wahoo', 'unsupported'],
     ]);
-    expect(compatibility.assessments[0].issues).toContainEqual({ severity: 'degraded', code: 'sport_profile_degraded',
-      field: '$.sport', message: 'Suunto receives Weight Training using its Strength Training profile; QS keeps the authored sport.' });
+    expect(compatibility.assessments[0].issues).toEqual(fallback ? [{ severity: 'degraded', code: 'sport_profile_degraded',
+      field: '$.sport', message: `Suunto receives ${sport} using its ${fallback} profile; QS keeps the authored sport.` }] : []);
     expect(JSON.stringify(compatibility)).not.toMatch(/digest|destinationKey|activityIds|account-a|strengthDetails/);
     expect(f.structures.w1).toEqual(recipe);
     await expect(f.run('assess_planned_workout_compatibility', { workoutRef }, [])).rejects.toThrow();
