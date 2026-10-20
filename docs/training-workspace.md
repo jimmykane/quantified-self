@@ -7904,6 +7904,19 @@ user-visible delivery projections or provider actions.
 
 ### Training delivery production monitoring
 
+Connection and entitlement lifecycle triggers emit `[TrainingDeliveryLifecycle]` diagnostics: a SHA-256 hash of the
+CloudEvent ID (stable across redelivery), fixed trigger/stage labels, transaction-attempt count and elapsed times.
+DEBUG checkpoints precede runtime setup, the transaction, deletion-guard reads, delivery-state reads and commit;
+INFO completion is emitted only after the transaction resolves, with the committed staging/skip outcome. WARN failure
+includes only an allowlisted Firestore/gRPC code and rethrows the original error. No UID, document path, connection
+payload, provider identity or raw exception is logged. The last checkpoint can locate a hard timeout, but its absence
+of completion does not prove that a commit failed or that a later retry recovered. Correlate the event hash and later
+completion logs; `reconciliation_staged` means only that reconciliation was staged, not that a workout was delivered.
+Stage times measure wall-clock waits, not individual RPC duration; the commit wait can include SDK retry backoff.
+Monitoring coverage: **unchanged**—the separate log prefix does not match the existing Training delivery metrics.
+These diagnostics do not change reads/writes, retry/timeout/resource options, queue lifecycle, metrics or alerts.
+MCP/read projections, consent and user-facing behavior are unchanged; no Help or MCP contract change is needed.
+
 Production activation and email-delivery verification were completed on 6 October 2026 under #655. Repository
 definitions live in `tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture
 or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
