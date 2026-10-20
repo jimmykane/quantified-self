@@ -4,6 +4,7 @@ import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
+import { createFirebaseCustomToken } from './bootstrap';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
@@ -540,7 +541,7 @@ export async function createFirebaseAccount(serviceUserID: string) {
     }
   }
   // Create a Firebase custom auth token.
-  const token = await admin.auth().createCustomToken(uid);
+  const token = await createFirebaseCustomToken(uid);
   logger.info('Created Custom token for UID "', uid, '" Token:', token);
   return token;
 }

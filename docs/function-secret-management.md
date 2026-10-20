@@ -113,11 +113,12 @@ Deployed Functions use keyless Application Default Credentials. Auth, Firestore,
 
 The default browser configuration keeps hosted Firebase Auth and sends callable requests to the Functions emulator. Admin impersonation and restoration therefore need signed custom tokens that hosted Auth accepts.
 
-When `FUNCTIONS_EMULATOR=true` and `FIREBASE_AUTH_EMULATOR_HOST` is unset, the Admin bootstrap can sign locally using a service-account JSON file:
+When `FUNCTIONS_EMULATOR=true` and `FIREBASE_AUTH_EMULATOR_HOST` is unset, custom-token creation can sign locally using a service-account JSON file. The default Admin app always retains ADC and explicitly selects the emulator's `GCLOUD_PROJECT`; loading a local signing key never changes the identity used for user lookups, Firestore, Storage, or other backend operations.
 
-1. An explicit `GOOGLE_APPLICATION_CREDENTIALS` path takes precedence. Service-account keys use local signing; other ADC types retain normal SDK handling. An explicit path never falls back to another identity.
-2. Without that variable, the bootstrap checks the existing Git-ignored `quantified-self-io-firebase-adminsdk.json` one directory above the emulator's `functions/` working directory.
-3. Without a local key, initialization retains ADC. Hosted custom-token signing then requires a separately configured signing identity; a user ADC login alone does not provide a local signing key.
+1. A service-account key at an explicit `GOOGLE_APPLICATION_CREDENTIALS` path takes precedence. An unavailable or malformed explicit file fails signing without silently switching keys. Impersonated and external-account ADC retain their normal SDK signer.
+2. Without that variable, or when it contains user ADC (`authorized_user`, including credentials injected by Firebase CLI), the signer checks the existing Git-ignored `quantified-self-io-firebase-adminsdk.json` one directory above the emulator's `functions/` working directory. User ADC remains on the default app.
+3. A local key's `project_id` must match the default Admin app's selected project. A mismatch fails token creation before activating the signing credential or changing the default app. The matching key initializes a separate, cached Admin app used only for token signing.
+4. Without a local key, token creation uses the default Admin SDK signer. Hosted custom-token signing then requires a separately configured signing identity; a user ADC login alone does not provide a local signing key.
 
 From the repository root, an existing root-level key needs only:
 
@@ -133,7 +134,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.jso
   firebase emulators:start --only functions
 ```
 
-Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup is skipped in deployed runtimes and whenever the Auth emulator is configured. Both entering impersonation and restoring the original admin reuse the same signer; admin authorization and impersonation claims are unchanged.
+Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup happens only during custom-token creation and is skipped in deployed runtimes and whenever the Auth emulator is configured. Entering impersonation, restoring the original admin, and the existing provider custom-token helper reuse this signer; admin authorization and impersonation claims are unchanged. A wrong or malformed signing key cannot prevent unrelated Functions from starting.
 
 ### Local script environment precedence
 

@@ -105,7 +105,7 @@ For the default browser configuration, which keeps hosted Auth, Firestore, and S
 firebase emulators:start --only functions
 ```
 
-Admin impersonation in this mode signs tokens with an existing, Git-ignored `quantified-self-io-firebase-adminsdk.json` at the repository root, outside `functions/`. Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS` to an external service-account JSON file before starting the emulator. See [Functions-only emulation with hosted Auth](docs/function-secret-management.md#functions-only-emulation-with-hosted-auth) for credential precedence and isolation.
+Admin impersonation in this mode signs tokens with an existing, Git-ignored `quantified-self-io-firebase-adminsdk.json` at the repository root, outside `functions/`. The key must match the emulator's project and is used only for custom-token signing; the default Admin app keeps ADC. Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS` to an external service-account JSON file before starting the emulator. See [Functions-only emulation with hosted Auth](docs/function-secret-management.md#functions-only-emulation-with-hosted-auth) for credential precedence and isolation.
 
 ### 5. Start Angular
 
