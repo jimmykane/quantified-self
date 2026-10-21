@@ -226,6 +226,7 @@ describe('EventActionsComponent', () => {
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
     it('applies committed ascent without replacing hydrated activities or reading a cached snapshot', async () => {
+        const changed = vi.spyOn(component.ascentChanged, 'emit');
         component.user = { uid: 'test-user' } as any;
         const activity = { getID: () => 'hike', addStat: vi.fn(), removeStat: vi.fn() };
         Object.assign(component.event, { getActivities: () => [activity], addStat: vi.fn(), clearActivities: vi.fn(), addActivities: vi.fn() });
@@ -241,8 +242,10 @@ describe('EventActionsComponent', () => {
         expect(activity.addStat.mock.calls[0][0].getValue()).toBe(75);
         expect(activity).toHaveProperty('ascentCorrection', { value: 75, sourceValue: 100 });
         expect((component.event.addStat as any).mock.calls[0][0].getValue()).toBe(275);
+        expect(changed).toHaveBeenCalledExactlyOnceWith(component.event);
     });
     it.each(['other', 'event-123'])('ignores an ascent result after the component receives another event instance: %s', async eventId => {
+        const changed = vi.spyOn(component.ascentChanged, 'emit');
         component.user = { uid: 'test-user' } as any;
         const closed = new Subject<unknown>();
         mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
@@ -255,6 +258,7 @@ describe('EventActionsComponent', () => {
         expect(nextEvent.clearActivities).not.toHaveBeenCalled();
         expect(nextEvent.addStat).not.toHaveBeenCalled();
         expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+        expect(changed).not.toHaveBeenCalled();
     });
     it('opens only one ascent editor when requested twice during lazy loading', async () => {
         component.user = { uid: 'test-user' } as any;

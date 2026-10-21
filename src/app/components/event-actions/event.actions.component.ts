@@ -68,6 +68,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         this.ascentEditorOpen = false;
         if (!saved || !isCurrent()) return;
         applySavedActivityAscent(event, saved);
+        this.ascentChanged.emit(event);
         this.changeDetectorRef.markForCheck();
       });
     } catch (error) {
@@ -90,6 +91,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() showDownloadOriginal = false;
   @Input() navigateAfterDelete = true;
   @Output() eventDeleted = new EventEmitter<string>();
+  @Output() ascentChanged = new EventEmitter<EventInterface>();
 
   public isReprocessing = false;
   public isSharing = false;

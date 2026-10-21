@@ -68,6 +68,30 @@ describe('ActivityAscentEditorComponent', () => {
     expect(ref.close).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('Reload');
   });
+  it('keeps the selected activity when reloading a multi-activity recording', async () => {
+    const second = { ...row, id: 'walk', label: 'Activity 2 · Walking', value: 100 };
+    load.mockResolvedValue([row, second]);
+    const fixture = await render(), component = fixture.componentInstance;
+    component.select('walk'); component.edit(150);
+    load.mockResolvedValueOnce([row, { ...second, value: 110 }]);
+    await component.load(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.selectedId()).toBe('walk');
+    expect(fixture.nativeElement.querySelector('input').value).toBe('110');
+    expect(component.canSave()).toBe(false);
+  });
+  it('disables stale saves if a reload fails, then restores the selected activity on retry', async () => {
+    const second = { ...row, id: 'walk', label: 'Activity 2 · Walking', value: 100 };
+    load.mockResolvedValue([row, second]);
+    const component = (await render()).componentInstance;
+    component.select('walk'); component.edit(150);
+    load.mockRejectedValueOnce(new Error('Offline'));
+    await component.load();
+    expect(component.error()).toBe('Offline');
+    expect(component.canSave()).toBe(false);
+    await component.save(); expect(save).not.toHaveBeenCalled();
+    await component.load();
+    expect(component.selectedId()).toBe('walk'); expect(component.value()).toBe(100);
+  });
   it('does not submit twice or report success after the owner changes during a save', async () => {
     let finish!: () => void;
     save.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));

@@ -187,7 +187,7 @@
               @if (user) {
               <app-event-actions [user]="user" [event]="$any(row.Event)"
                 [showDownloadOriginal]="true" [navigateAfterDelete]="false"
-                (eventDeleted)="removeDeletedEvent($event)"></app-event-actions>
+                (eventDeleted)="removeDeletedEvent($event)" (ascentChanged)="refreshSavedAscent($event)"></app-event-actions>
               }
             </span>
             }

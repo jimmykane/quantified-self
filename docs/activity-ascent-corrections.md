@@ -17,6 +17,8 @@ source fingerprints, and the current correction. It reads at most 100 activities
 metadata, and recomputes parent ascent from non-Diving activities.
 The app receives those committed canonical values and patches ascent in place on the same recording instance.
 It keeps hydrated activities/streams and ignores results after navigation, an account change, or view destruction.
+Cached table rows refresh after the saved-ascent notification while retaining selection. Reloading the editor
+keeps the selected activity and clears stale edit data until a fresh read succeeds.
 
 Saved load evaluations, policies, and controls are retained. Their server-owned source fingerprints and
 cache are updated in that same transaction so unchanged load remains available after an ascent-only edit.

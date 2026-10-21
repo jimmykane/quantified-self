@@ -56,11 +56,14 @@ export class ActivityAscentEditorComponent implements OnInit {
   ngOnInit(): void { void this.load(); }
   async load(): Promise<void> {
     const generation = ++this.generation;
+    const selectedId = this.selectedId();
+    this.rows.set([]); this.value.set(null); this.reset.set(false);
     this.loading.set(true); this.error.set('');
     try {
       const rows = await this.service.load(this.data.user.uid, this.data.eventId);
       if (this.destroyRef.destroyed || generation !== this.generation) return;
-      this.rows.set(rows); this.selectedId.set(rows[0]?.id ?? ''); this.value.set(rows[0]?.value ?? null); this.reset.set(false);
+      const selected = rows.find(row => row.id === selectedId) ?? rows[0];
+      this.rows.set(rows); this.selectedId.set(selected?.id ?? ''); this.value.set(selected?.value ?? null);
     } catch (error) {
       if (!this.destroyRef.destroyed && generation === this.generation)
         this.error.set(error instanceof Error ? error.message : 'Could not load ascent.');
