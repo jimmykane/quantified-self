@@ -27,6 +27,18 @@ beforeEach(() => { vi.clearAllMocks(); mocks.meta = {}; mocks.healthEnabled.mock
   mocks.activity.mockResolvedValue({ successCount: 2, failureCount: 0 }); mocks.garminActivity.mockResolvedValue(undefined); mocks.wahoo.mockResolvedValue({ successCount: 2 });
   for (const fn of [mocks.suunto, mocks.coros, mocks.garmin]) fn.mockResolvedValue({ queued: 1, sleepQueued: 1, healthQueued: 1 }); });
 describe('shared history adapter contracts', () => {
+  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps adjacent manual %s windows contiguous through the entire selected end day', async service => {
+    const job = run(service);
+    job.rangePreset = 'custom'; job.startMs = Date.parse('2026-01-01T00:00:00Z'); job.endMs = Date.parse('2026-02-02T23:59:59.999Z');
+    const step = job.steps[0]; step.nextStartMs = job.startMs;
+    const first = await executeHistoryOperation(job, step, execution);
+    expect(mocks.activity).toHaveBeenLastCalledWith('owner', service, new Date(job.startMs), new Date('2026-01-30T23:59:59.999Z'), expect.objectContaining({ maxItems: 100 }));
+    expect(first.nextStartMs).toBe(Date.parse('2026-01-31T00:00:00Z'));
+    step.nextStartMs = first.nextStartMs;
+    const last = await executeHistoryOperation(job, step, execution);
+    expect(mocks.activity).toHaveBeenLastCalledWith('owner', service, new Date(first.nextStartMs), new Date(job.endMs), expect.objectContaining({ maxItems: 100 }));
+    expect(last.nextStartMs).toBe(job.endMs + 1);
+  });
   it('requires explicit support (or an empty unsupported declaration) for every service and version', () => {
     for (const service of Object.values(ServiceNames)) {
       expect(HISTORY_ADAPTERS[service]).toBeDefined();

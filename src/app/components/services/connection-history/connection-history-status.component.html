@@ -8,7 +8,7 @@
   @if (isAllAvailableRange()) {
   <p>All available history through {{ history.endMs | date:'mediumDate':'UTC' }} (UTC)</p>
   } @else {
-  <p>{{ history.startMs | date:'mediumDate':'UTC' }} – {{ history.endMs | date:'mediumDate':'UTC' }} (UTC)</p>
+  <p>{{ history.startMs | date:'mediumDate':rangeTimezone() }} – {{ history.endMs | date:'mediumDate':rangeTimezone() }}@if (rangeTimezone()) { (UTC) }</p>
   }
   <p class="history-explanation">This is the range requested, not confirmed data coverage. Providers may supply less history, with different limits for activities, Sleep and each Health metric. Submitted requests and processed items do not guarantee a reading on every day.</p>
   @for (step of steps(); track step.id) {

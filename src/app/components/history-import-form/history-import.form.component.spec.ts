@@ -174,6 +174,113 @@ describe('HistoryImportFormComponent', () => {
                 : component.onSleepBackfill(new Event('click'));
         }
 
+        it('retains background acceptance across reopen and unlocks only after live completion', async () => {
+            await reopen();
+            const history = { runId: 'manual-run', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
+                active: true, canRetry: false, steps: [{ id: 'activities', resources: ['activities'], status: 'queued', count: 0 }] };
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ historyImport: history });
+            await submit('activity');
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History import in progress');
+            expect(fixture.nativeElement.textContent).not.toContain('0 activities scheduled');
+            expect(component.formGroup.disabled).toBe(true);
+            await reopen();
+            await submit('activity');
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+            expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History import in progress');
+            fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { ...history, active: false,
+                steps: [{ ...history.steps[0], status: 'processed' }] } });
+            fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('Your selected history has been processed.');
+            expect(component.formGroup.enabled).toBe(true);
+            expect(component.isHistoryImportPending()).toBe(false);
+            expect(haptics.success).toHaveBeenCalledTimes(1); // Acceptance only; background updates are silent.
+        });
+
+        it('shows the next allowed import after background completion while the cooldown is active', async () => {
+            await reopen();
+            fixture.componentRef.setInput('userMetaForService', { didLastHistoryImport: Date.now(),
+                processedActivitiesFromLastHistoryImportCount: 100,
+                connectionHistoryImport: { runId: 'finished-manual', rangePreset: 'custom', active: false,
+                    updatedAtMs: Date.now(), steps: [{ id: 'activities', status: 'processed', count: 100 }] } });
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History import finished');
+            expect(fixture.nativeElement.textContent).toContain('New import available on');
+            expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
+            expect(component.formGroup.disabled).toBe(true);
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps live %s counts when background acceptance arrives after the metadata update', async provider => {
+            await reopen(provider);
+            const history = { runId: 'manual-run', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
+                active: true, canRetry: false, steps: [{ id: 'activities', resources: ['activities'], status: 'queued', count: 0 }] };
+            let resolve!: (result: unknown) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise(yes => resolve = yes));
+            // Existing parent consumers interpret this event as a completed legacy
+            // scan and replace the displayed cooldown count with response stats.
+            const legacyScanResult = vi.fn(() => fixture.componentRef.setInput('userMetaForService', {
+                ...component.userMetaForService, didLastHistoryImport: Date.now(), processedActivitiesFromLastHistoryImportCount: 0,
+            }));
+            component.importInitiated.subscribe(legacyScanResult);
+            const submission = submit('activity');
+            const importStartedAt = Date.now() - 1000;
+            fixture.componentRef.setInput('userMetaForService', { didLastHistoryImport: importStartedAt,
+                processedActivitiesFromLastHistoryImportCount: 100,
+                connectionHistoryImport: { ...history, active: false, steps: [{ ...history.steps[0], status: 'processed', count: 100 }] } });
+            fixture.detectChanges();
+            resolve({ historyImport: history }); await submission; fixture.detectChanges();
+            expect(legacyScanResult).not.toHaveBeenCalled();
+            expect(component.userMetaForService).toMatchObject({ didLastHistoryImport: importStartedAt, processedActivitiesFromLastHistoryImportCount: 100 });
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('New import available on');
+        });
+
+        it('restores background failures from metadata and directs the owner to the existing retry control', async () => {
+            await reopen();
+            fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'failed-manual', rangePreset: 'custom',
+                active: false, canRetry: true, updatedAtMs: Date.now(), steps: [{ id: 'activities', status: 'failed', count: 12 }] } });
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History import needs attention');
+            expect(fixture.nativeElement.textContent).toContain('retry options');
+            expect(fixture.nativeElement.textContent).not.toContain('has been processed');
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+        it('blocks a new manual request while an automatic coordinator is active even without a manual lease', async () => {
+            await reopen();
+            fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'automatic', rangePreset: '30_days', active: true } });
+            fixture.detectChanges();
+            await submit('activity');
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('Import already running');
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.GarminAPI, ServiceNames.WahooAPI])('does not apply the new coordinator lock to legacy %s manual imports', async provider => {
+            await reopen(provider);
+            fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'automatic', rangePreset: '30_days', active: true } });
+            fixture.detectChanges();
+            expect(component.isActivityHistoryImportRunning()).toBe(false);
+            expect(component.formGroup.enabled).toBe(true);
+            const emit = vi.spyOn(component.importInitiated, 'emit');
+            await submit('activity');
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+            expect(emit).toHaveBeenCalledTimes(1);
+        });
+
+        it('discards an old optimistic background receipt after reconnecting the same account', async () => {
+            await reopen();
+            fixture.componentRef.setInput('userMetaForService', { connectionStateGeneration: 'old' }); fixture.detectChanges();
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ historyImport: {
+                runId: 'old-run', rangePreset: 'custom', active: true, steps: [], updatedAtMs: Date.now(),
+            } });
+            await submit('activity');
+            fixture.componentRef.setInput('userMetaForService', { connectionStateGeneration: 'new' }); fixture.detectChanges();
+            expect(component.backgroundActivityImport()).toBeNull();
+            expect(component.isHistoryImportPending()).toBe(false);
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
         it.each([false, true])('refreshes history eligibility when the same account changes from Pro=%s', async initiallyPro => {
             const user$ = new Subject<any>();
             mockAuthService.user$ = user$;

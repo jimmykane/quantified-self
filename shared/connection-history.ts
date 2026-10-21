@@ -3,6 +3,8 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 export type HistoryResource = 'activities' | 'sleep' | 'health' | 'routes';
 export const CONNECTION_HISTORY_DEFAULT_RANGE = '30_days' as const;
 export type ConnectionHistoryRangePreset = '30_days' | '60_days' | '90_days' | '1_year' | '2_years' | 'maximum';
+/** Custom dates belong to manual imports, never to OAuth range selection. */
+export type HistoryImportRange = ConnectionHistoryRangePreset | 'custom';
 export interface ConnectionHistoryRangeOption {
   value: ConnectionHistoryRangePreset;
   label: string;
@@ -48,7 +50,8 @@ export const CONNECTION_HISTORY_RANGE_OPTIONS = {
 export function historyRangeOptions(service: ServiceNames): readonly ConnectionHistoryRangeOption[] {
   return CONNECTION_HISTORY_RANGE_OPTIONS[service] ?? [];
 }
-export function historyRangeLabel(service: ServiceNames, preset: ConnectionHistoryRangePreset): string {
+export function historyRangeLabel(service: ServiceNames, preset: HistoryImportRange): string {
+  if (preset === 'custom') return 'Selected dates';
   return historyRangeOptions(service).find(option => option.value === preset)?.label ?? preset;
 }
 export type ConnectionHistoryStatus = 'queued' | 'requesting' | 'retrying' | 'requested' | 'processed' | 'skipped' | 'failed';
@@ -62,7 +65,7 @@ export interface ConnectionHistoryStepStatus {
 }
 export interface ConnectionHistoryStatusProjection {
   runId: string;
-  rangePreset: ConnectionHistoryRangePreset;
+  rangePreset: HistoryImportRange;
   startMs: number;
   endMs: number;
   updatedAtMs: number;

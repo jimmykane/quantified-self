@@ -287,6 +287,9 @@ export const retryConnectionHistoryImport = onCall({ region, cors: ALLOWED_CORS_
     // their cooldown after this run finished, so validate before restoring children.
     const metaRef = db.doc(`users/${run.userID}/meta/${run.serviceName}`);
     const meta = (await tx.get(metaRef)).data();
+    if (meta?.connectionHistoryImport?.active && meta.connectionHistoryImport.runId !== run.id) {
+      throw new HttpsError('already-exists', 'Another history import is running. Wait for it to finish before retrying.');
+    }
     const retriesActivities = failed.some(step => step.capability.cooldownGroup === 'activities');
     const sleepRef = failed.some(step => step.capability.cooldownGroup === 'sleep')
       ? db.doc(`users/${run.userID}/sleepSyncState/${historySleepProvider(run.serviceName)}`) : null;
@@ -317,7 +320,9 @@ export const retryConnectionHistoryImport = onCall({ region, cors: ALLOWED_CORS_
       if (!data || data.connectionHistoryRunId !== run.id || data.originalCollection !== child.ref.parent.id) {
         throw new HttpsError('failed-precondition', 'Some history is no longer available to retry. Use History Import or reconnect.');
       }
-      const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME ? null : false, queueRevision: randomUUID(), dateCreated: Date.now(), expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS) };
+      // Every canonical history queue uses null for an unissued task; false
+      // would leave restored activity rows outside the dispatcher's query.
+      const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: null, queueRevision: randomUUID(), dateCreated: Date.now(), expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS) };
       for (const field of ['error', 'failedAt', 'context', 'originalCollection', 'processingOwner', 'processingRevision', 'processingLeaseExpiresAt']) delete restored[field as keyof typeof restored];
       if (child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME) {
         for (const field of ['resultStatus', 'skippedReason', 'processedAt']) delete restored[field as keyof typeof restored];
