@@ -102,7 +102,8 @@ export function isWahooUntargetedWorkoutSportV1(sport: ActivityTypes): boolean {
   return wahooWorkoutSportProfileV1(sport)?.untargetedTimeOnly === true;
 }
 
-/** Exact time only; repeat counts are total passes. Never infer duration from distance or reps. */
+/** Historical floating-point total retained for existing delivery digests and recovery.
+ * Repeat counts are total passes. Never infer duration from distance or reps. */
 export function wahooDurationSeconds(structure: WorkoutStructureV1): number | null {
   let total = 0;
   for (const node of structure.nodes) {
@@ -114,10 +115,38 @@ export function wahooDurationSeconds(structure: WorkoutStructureV1): number | nu
   return Number.isFinite(total) && total > 0 ? total : null;
 }
 
+/** Sum the stored decimal values exactly. Binary arithmetic residue must neither
+ * reject a whole minute nor conceal a genuinely fractional authored duration. */
+export function wahooWholeMinutes(structure: WorkoutStructureV1): number | null {
+  let total = 0n;
+  let scale = 1n;
+  for (const node of structure.nodes) {
+    const passes = node.kind === 'step' ? 1 : node.count;
+    if (!Number.isSafeInteger(passes) || passes < 1) return null;
+    for (const step of node.kind === 'step' ? [node] : node.steps) {
+      if (step.ending.kind !== 'time' || !Number.isFinite(step.ending.seconds) || step.ending.seconds <= 0) return null;
+      const [coefficient, exponent = '0'] = String(step.ending.seconds).split('e');
+      const [whole, fraction = ''] = coefficient.split('.');
+      const places = fraction.length - Number(exponent);
+      const stepScale = 10n ** BigInt(Math.max(places, 0));
+      const value = BigInt(whole + fraction) * 10n ** BigInt(Math.max(-places, 0)) * BigInt(passes);
+      if (stepScale > scale) {
+        total *= stepScale / scale;
+        scale = stepScale;
+      }
+      total += value * (scale / stepScale);
+    }
+  }
+  const minuteScale = scale * 60n;
+  if (total <= 0n || total % minuteScale !== 0n) return null;
+  const minutes = total / minuteScale;
+  return minutes <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(minutes) : null;
+}
+
 /** The dated Workout API rejects fractional minutes (including numeric JSON values).
  * The Plan file still retains exact seconds; never round the authored prescription. */
 export const WAHOO_WHOLE_MINUTE_ISSUE = 'Wahoo requires a whole-minute total duration for its dated Workout record. Adjust the authored steps to a whole-minute total before sending; QS keeps the exact prescription and does not round it.';
 export function wahooHasFractionalMinutes(structure: WorkoutStructureV1): boolean {
   const seconds = wahooDurationSeconds(structure);
-  return seconds !== null && !Number.isSafeInteger(seconds / 60);
+  return seconds !== null && wahooWholeMinutes(structure) === null;
 }

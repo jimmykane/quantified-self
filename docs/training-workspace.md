@@ -1220,6 +1220,15 @@ prescription, and may inspect an older fractional-minute attempt so its retained
 This exception permits no new create or update; current delivery compatibility remains mandatory for creates and
 updates. Compatibility reads disclose this scheduling limit using the
 existing issue contract. This restriction applies to all Wahoo planned-workout sports, not just strength.
+The whole-minute check sums stored decimal seconds and repeat counts exactly. For example, 10.2 + 21.9 + 27.9
+seconds is one minute, despite binary addition producing 59.99999999999999; it sends `minutes=1` with the authored
+Plan seconds unchanged. No tolerance, rounding or padding admits a truly fractional total, including a tiny fraction
+above or below a minute. The historical floating-point total remains frozen in delivery digests. Only recovery of
+the same validated attempt also accepts its historical minutes representation; normal writes require the exact
+whole-minute value. Existing recipe/compatibility reads expose this correction through the same issue contract;
+no MCP schema, metadata, scope, consent, provider action or bundled workflow changes. Help's whole-minute restriction
+remains accurate. Monitoring coverage is unchanged: this arithmetic correction retains the existing Wahoo worker,
+queue, lease, retry, outcome and telemetry lifecycle.
 Virtual Rowing shares the rowing display rule: prescribed distances stay metric, and pace targets, profile
 bounds/axes, summaries, MCP display steps and the Suunto app preview use 500 m splits under metric or imperial
 preferences. Canonical distance and speed values remain unchanged. This display classification does not add a

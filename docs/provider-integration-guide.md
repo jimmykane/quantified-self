@@ -549,7 +549,9 @@ complete matching exercise companions on Garmin/COROS/Wahoo, preserve their sour
 and reuse existing exercise, consent and serializer restrictions; COROS delivery stays disabled.
 Direct API tests verified all 21 approved Wahoo source names through Plan/file/Workout/association readback and cleanup.
 Wahoo rejects fractional minutes on dated Workouts, so new delivery requires an exact whole-minute total; QS does
-not round or pad the prescription. Read-only compatibility explains the same restriction. This is Cloud evidence,
+not round or pad the prescription. Stored decimal seconds and repeat counts are summed exactly for this decision,
+so floating-point residue cannot reject a valid whole minute or conceal a real fraction. Historical digests remain
+unchanged; only validated recovery accepts the old minutes representation. Read-only compatibility explains the same restriction. This is Cloud evidence,
 not proof of local app/watch playback. Existing OAuth, consent, queue, revision and monitoring boundaries remain unchanged. See the detailed evidence
 and limitations in [Training](training-workspace.md).
 

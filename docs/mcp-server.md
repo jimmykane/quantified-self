@@ -527,6 +527,9 @@ companion-bearing source sports before issuing a proposal, and reject strength-l
 exercise data. Legacy interval aliases remain supported without companions. New cardio/mobility substitutions use existing
 mapping issue codes. Wahoo compatibility additionally reports `scheduling_duration_unavailable` when the exact total
 is not a whole number of minutes: live API probes rejected fractional minutes. Neither read nor preview rounds steps.
+The whole-minute decision uses exact stored decimal arithmetic, including repeats; binary addition residue is not
+a fractional prescription. Tiny genuine fractions remain unsupported. This changes compatibility values through the
+existing issue contract, with no metadata, schema, scope, consent or provider-action change.
 Existing owner/grant/revision-bound confirmation applies to updates and sport-profile losses.
 
 Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in

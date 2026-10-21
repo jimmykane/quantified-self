@@ -1,4 +1,4 @@
-import { wahooHasFractionalMinutes, WAHOO_WHOLE_MINUTE_ISSUE, wahooDurationSeconds, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
+import { wahooHasFractionalMinutes, WAHOO_WHOLE_MINUTE_ISSUE, wahooDurationSeconds, wahooWholeMinutes, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
@@ -54,15 +54,16 @@ export function wahooPlanBody(workout: ScheduledWorkoutV1, destination: string, 
     'plan[filename]': 'plan.json', 'plan[provider_updated_at]': new Date(workout.updatedAtMs).toISOString(),
     ...(create ? { 'plan[external_id]': wahooIdentities(destination, workout.id, generation).externalId } : {}) }).toString();
 }
-/** Exact historical payload construction is also used for recovery. New sends
- * must pass assessWahooDelivery, including the whole-minute API requirement. */
+/** New sends use exact decimal whole minutes. Genuine fractional totals retain
+ * their historical representation for recovery and still fail new-send admission. */
 export function wahooWorkoutFields(workout: ScheduledWorkoutV1, destination: string, zone: string, planId: string) {
   const seconds = wahooDurationSeconds(workout.structure);
   if (seconds === null) throw new TrainingDeliveryTransportError('terminal');
   const profile = wahooWorkoutSportProfileV1(workout.structure.sport);
   if (!profile) throw new TrainingDeliveryTransportError('terminal');
   return { name: workout.title, workout_token: wahooIdentities(destination, workout.id).workoutToken,
-    workout_type_id: profile.workoutType, starts: wahooStarts(workout.localDate, zone), minutes: seconds / 60, plan_id: planId };
+    workout_type_id: profile.workoutType, starts: wahooStarts(workout.localDate, zone),
+    minutes: wahooWholeMinutes(workout.structure) ?? seconds / 60, plan_id: planId };
 }
 export function wahooWorkoutBody(workout: ScheduledWorkoutV1, destination: string, zone: string, planId: string): string {
   return new URLSearchParams(Object.entries(wahooWorkoutFields(workout, destination, zone, planId))

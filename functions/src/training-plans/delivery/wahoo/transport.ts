@@ -8,7 +8,7 @@ import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryChe
   type WahooTrainingContractCheck } from '../contracts';
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { WahooTrainingHttpError, wahooId, wahooObject, type WahooTrainingClient, type WahooTrainingRequest } from './http';
-import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
+import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooDurationSeconds, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
 import { wahooArtifactGeneration, wahooPlanGeneration } from './identity';
 
 export const WAHOO_INSPECTION_POLICY: InspectionPolicy = {
@@ -242,10 +242,14 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || numeric(value.workout_type_location_id) !== profile.location || typeof value.provider_updated_at !== 'string'
       || Math.trunc(providerUpdatedAt / 1000) !== Math.trunc(workout.updatedAtMs / 1000)) uncertain();
   }
-  private matchesWorkout(value: Value, operation: DeliveryOperation): boolean {
+  private matchesWorkout(value: Value, operation: DeliveryOperation, recovering = false): boolean {
     const expected = wahooWorkoutFields(operation.workout!, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);
+    // Recovery may observe the frozen floating-point minutes from an older
+    // digest-bound attempt. New writes/readback require the exact decimal total.
+    const minutesMatch = numeric(value.minutes) === expected.minutes || (recovering
+      && numeric(value.minutes) === wahooDurationSeconds(operation.workout!.structure)! / 60);
     return value.name === expected.name && value.workout_token === expected.workout_token
-      && numeric(value.workout_type_id) === expected.workout_type_id && numeric(value.minutes) === expected.minutes
+      && numeric(value.workout_type_id) === expected.workout_type_id && minutesMatch
       && Date.parse(String(value.starts)) === Date.parse(expected.starts)
       && associationMatches(value, expected.plan_id);
   }
@@ -448,7 +452,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       const value = await this.inspectWorkout(operation, checkpoint, guard, true);
       if (!this.canRemove(operation.artifact!, trainingDeliveryLocalDate(this.now(), operation.timeZone))) return { kind: 'resume' };
       const plan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
-      if (!plan || !this.matchesWorkout(value, operation) || !await this.association(artifact, guard)) return { kind: 'uncertain' };
+      if (!plan || !this.matchesWorkout(value, operation, true) || !await this.association(artifact, guard)) return { kind: 'uncertain' };
       this.confirmPlan(plan, operation);
       const accepted = { ...operation.artifact!, localDate: operation.workout!.localDate, timeZone: operation.timeZone,
         ids: { ...artifact.ids, association: `${id}:${artifact.ids.plan}` } };

@@ -207,6 +207,35 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(plan.intervals[1].intervals[0].targets).toEqual([{ type: 'rpe', low: 1, high: 10 }]);
     expect(plan.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
   });
+  it.each([
+    { seconds: [10.2, 21.9, 27.9], repeats: 1, digest: '582ba03e3869592904bd142d1270a1293b4159790370f3f3e4791b4c6a87201d' },
+    { seconds: [1.1, 18.9], repeats: 3, digest: null },
+    { seconds: [1e-7, 59.9999999], repeats: 1, digest: null },
+  ])('admits exact decimal whole-minute recipes without changing their steps: $seconds x $repeats', ({ seconds, repeats, digest }) => {
+    const workout = wahooFixtureWorkout();
+    const steps = seconds.map((value, index) => ({ kind: 'step' as const, id: `step-${index}`, purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: value }, targets: [] }));
+    workout.structure.nodes = repeats === 1 ? steps : [{ kind: 'repeat', id: 'round', count: repeats, steps }];
+    const before = structuredClone(workout);
+    const assessment = assessWahooDelivery(workout, 'destination', 'UTC');
+    expect(assessment.level).toBe('exact');
+    // Frozen pre-fix identity continues to bind older attempts to this recipe.
+    if (digest) expect(assessment.digest).toBe(digest);
+    expect(new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123')).get('workout[minutes]')).toBe('1');
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const plan = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    const intervals = repeats === 1 ? plan.intervals : plan.intervals[0].intervals;
+    expect(intervals.map((interval: { exit_trigger_value: number }) => interval.exit_trigger_value)).toEqual(seconds);
+    expect(workout).toEqual(before);
+  });
+  it.each([[59.99999999999999], [60.00000000000001], [60, 1e-12], [60, 1e-20], [60, Number.MIN_VALUE]])(
+    'does not round a genuine decimal fractional-minute total with step seconds %j', (...seconds) => {
+    const workout = wahooFixtureWorkout();
+    workout.structure.nodes = seconds.map((value, index) => ({ kind: 'step', id: `work-${index}`, purpose: 'work',
+      ending: { kind: 'time', seconds: value }, targets: [] }));
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'unsupported',
+      issues: [expect.stringContaining('whole-minute total')] });
+  });
   it.each(['distance', 'kilojoules'] as const)('does not estimate duration from %s endings', ending => {
     const workout = wahooFixtureWorkout();
     workout.structure.nodes[0] = { kind: 'step', id: 'run', purpose: 'work', targets: [],

@@ -1,5 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { wahooIdentities, wahooPlanBody } from './mapping';
+import { wahooDurationSeconds, wahooIdentities, wahooPlanBody } from './mapping';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
@@ -67,6 +67,53 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
       ending: { kind: 'distance', meters: 1000 }, targets: [] }] };
     op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
     await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  const decimalMinuteWorkout = () => {
+    next({ structure: { version: 1, sport: ActivityTypes.Running, nodes: [10.2, 21.9, 27.9].map((seconds, index) => ({
+      kind: 'step', id: `work-${index}`, purpose: 'work', ending: { kind: 'time', seconds }, targets: [],
+    })) } });
+  };
+  it('delivers an exact decimal minute as integer minutes and verifies its readback', async () => {
+    decimalMinuteWorkout();
+    const artifact = (await execute())!;
+    expect(server.workouts.get(artifact.ids.workout)?.minutes).toBe(1);
+    expect(server.calls.filter(call => call.path === '/v1/workouts' && call.method === 'POST')).toHaveLength(1);
+  });
+  it('accepts historical floating-point minutes only when recovering the same uncertain attempt', async () => {
+    decimalMinuteWorkout();
+    const legacyMinutes = wahooDurationSeconds(op.workout!.structure)! / 60;
+    expect(legacyMinutes).not.toBe(1);
+    server.afterHandle = async request => {
+      if (request.method === 'POST' && request.path === '/v1/workouts') {
+        [...server.workouts.values()][0].minutes = legacyMinutes;
+        throw new WahooTrainingHttpError('uncertain', false);
+      }
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    server.afterHandle = null;
+    const writes = server.calls.filter(call => call.method !== 'GET').length;
+    expect(await recover()).toMatchObject({ kind: 'accepted' });
+    expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    expect(server.workouts.size).toBe(1);
+    op.digest = 'different-prescription';
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+  });
+  it('does not accept a historical floating-point total as readback of a new write', async () => {
+    decimalMinuteWorkout();
+    server.afterHandle = async request => {
+      if (request.method === 'POST' && request.path === '/v1/workouts') {
+        [...server.workouts.values()][0].minutes = wahooDurationSeconds(op.workout!.structure)! / 60;
+      }
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+  });
+  it.each([1e-12, 1e-20])('refuses new writes when a genuine %s-second fraction follows a minute', async fraction => {
+    next({ structure: { version: 1, sport: ActivityTypes.Running, nodes: [60, fraction].map((seconds, index) => ({
+      kind: 'step', id: `work-${index}`, purpose: 'work', ending: { kind: 'time', seconds }, targets: [],
+    })) } });
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
     expect(server.calls).toHaveLength(0);
   });
 
