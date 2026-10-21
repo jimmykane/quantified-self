@@ -466,7 +466,14 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     || (/\b(?:plan|quality runs|wednesdays|workouts|sessions)\b/u.test(question)
       && /\b(?:hr|heart[-\s]?rate)\b/u.test(question) && /\b(?:zones?|targets?|ranges?)\b/u.test(question));
   const changesWorkoutRecords = /\b(?:move|copy|duplicate|delete|skip|archive|rename|shift)\s+(?:(?:my|the|this|that|all|every|each|one|two|three|four|first|last|existing|old|planned|standalone|quality|easy|future|\d+)\s+){0,4}(?:workouts?|runs?|rides?|sessions?|plans?)\b/u.test(question);
-  const strengthRecipeContext = /\b(?:strength|gym|resistance|weight\s+training|kettlebells?|calisthenics|core\s+training|les\s+mills\s+(?:core|grit\s+strength|bodypump))\b/u.test(question);
+  // A named strength sport must describe the workout, rather than merely
+  // appear in a note for another sport. Remove alias names before checking
+  // legacy strength words so GRIT Strength does not bypass that distinction.
+  const strengthAliases = /\b(?:weight\s+training|kettlebells?|calisthenics|core\s+training|les\s+mills\s+(?:core|grit\s+strength|bodypump))\b/gu;
+  const namedStrengthWorkout = new RegExp(`${strengthAliases.source}["'“”‘’]?\\s+(?:workouts?|sessions?)\\b`, 'u').test(question)
+    || new RegExp(`\\b(?:workouts?|sessions?)\\s+(?:named|called|for)\\s+["'“”‘’]?${strengthAliases.source}`, 'u').test(question);
+  const strengthRecipeContext = namedStrengthWorkout
+    || /\b(?:strength|gym|resistance)\b/u.test(question.replace(strengthAliases, ''));
   if (authorsWorkout && recipeBatch && !strengthRecipeContext
     && !changesWorkoutRecords) {
     return 'preview_planned_workout_v3_changes';
@@ -1491,6 +1498,7 @@ export function createAssistantRuntime(
           ? preferredTrainingPreview
           : preferredTrainingPreview === 'preview_garmin_workout_replacement'
             || preferredTrainingPreview === 'preview_planned_workout_v3_changes'
+            || preferredTrainingPreview === 'preview_strength_workout_change'
             ? undefined // Never substitute an unsafe legacy writer or Send/Retry for missing capability.
           : preferredTrainingPreview === 'preview_training_deletion'
             ? modelToolDefinitions.find(tool => tool.name === 'preview_training_changes')?.name

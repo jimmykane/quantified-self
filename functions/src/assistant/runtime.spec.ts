@@ -6,9 +6,16 @@ import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-r
 describe('Training phase preview routing', () => {
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('offers complete strength editing for %s without changing provider or lifecycle routes', sport => {
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my ${sport} workout.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Edit the sets in my "${sport}" workout.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Edit the sets in my workout for ${sport}.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Send my ${sport} workout to Wahoo.`)).toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool(`Delete my ${sport} workout.`)).toBe('preview_training_deletion');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(sport);
+  });
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('keeps incidental %s notes on the requested Running editor', sport => {
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout with a note about ${sport}.`)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool(`Update the pace target in my Running workout; keep the note about ${sport}.`)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool(`Update the pace targets across my Running workouts; keep the note about ${sport}.`)).toBe('preview_planned_workout_v3_changes');
   });
   it.each([
     'Update HR ranges across my plan, preserving warm-ups and early Lap.',
@@ -584,6 +591,26 @@ describe('Training preview model-tool selection', () => {
       timeZone: 'Europe/Helsinki', history: reply ? [{ role: 'user', text: request },
         { role: 'assistant', text: 'Which new HR ranges should I use?' }] : [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
     expect(previews).toEqual(available ? ['preview_planned_workout_v3_changes'] : []);
+  });
+
+  it.each([false, true])('never substitutes a generic editor for missing complete strength capability (available=%s)', async available => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_planned_workout_v3_change'] as const)
+      .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    if (available) session.tools.push({ name: 'preview_strength_workout_change', title: 'Strength preview',
+      description: 'Complete exercises', inputSchema: { type: 'object' } });
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name);
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the complete exercise prescription before preparing an edit; use QS Edit if unavailable.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Edit the sets in my Kettlebell workout.', timeZone: 'Europe/Helsinki', history: [],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(previews).toEqual(available ? ['preview_strength_workout_change'] : []);
   });
 
   it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {

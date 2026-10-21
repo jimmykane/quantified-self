@@ -1464,7 +1464,11 @@ an unavailable read must not be treated as proof of a legacy interval-only worko
 the authored sport; the unchanged strict strength-create schema still creates Strength Training, so other new strength
 names use the app editor. Named strength recipe edits select the existing complete-strength preview; provider/lifecycle
 requests retain their existing routes, and write guidance remains gated on the advertised preview after the successful
-current-schedule read. No tools, schemas, scopes, consent, read fields, mutation kinds or provider actions are added.
+current-schedule read. The seven alias names must describe the requested workout to select the strength editor;
+incidental mentions in another sport's notes do not change its editor. If the complete-strength preview is missing,
+the Assistant withholds other Training previews rather than substituting a summary-only writer. This private routing
+repair preserves the public contract and existing guidance, so it needs no additional metadata digest or plugin refresh.
+No tools, schemas, scopes, consent, read fields, mutation kinds or provider actions are added.
 The pending metadata digest records a developer refresh; deployed-server update, registered-app rescan and bundle
 refresh remain separate release steps. Local bundle validation/sync uses only a temporary profile with a fixture app ID.
 

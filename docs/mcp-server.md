@@ -510,6 +510,9 @@ require the existing strength-details read; its unavailability cannot prove that
 when the full prescription cannot be read. The existing strength preview preserves an alias on updates, while new
 creates still use Strength Training; other new strength names use the app editor. The Assistant selects the full-strength
 preview for named strength edits, preserving provider/lifecycle routing and the current-revision/advertised-tool gate.
+Alias mentions in another sport's notes retain that sport's normal editor. A missing complete-strength preview never
+falls back to a generic Training writer. These first-party routing guards change no public tool metadata, schemas,
+scopes, grants, confirmation or delivery behavior and do not require an additional contract or plugin refresh.
 This metadata-only clarification retains all registered shapes, scopes, grants and native/app approval rules; its digest
 is included in the pending developer-refresh record. Server deployment, registered-app rescan and bundled-plugin refresh
 remain separate. Local bundle sync/validation uses a temporary profile and fixture app ID. Legacy generic aliases
