@@ -281,6 +281,10 @@ They run real simultaneous transactions and verify one committed run, the losing
 and the matching reservation/projection. The budget covers Firestore lock waits and SDK backoff; its rollback and
 account-deletion cases retain the ordinary timeout.
 
+Concurrent provider fan-out tests bind recipient-specific mock outcomes to recipient IDs. Canonical queue-ID hashing
+can complete out of order, so the Suunto route tests cover either failed recipient and both binding orders while
+checking the failed and successful canonical IDs separately.
+
 ### Automatically balanced delivery shards
 
 Delivery became the longest job in [run 37891665905](https://github.com/jimmykane/quantified-self/actions/runs/37891665905):
