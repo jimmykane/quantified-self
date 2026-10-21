@@ -599,15 +599,25 @@ coordinate filtering. Normal sparse coordinates can connect; Detect/Custom prese
 Continuous can span missing data without inventing a distance, tooltip reading or statistic at those missing rows.
 
 The Distance metric itself keeps those sparse values on Time/Duration axes and uses the same continuity setting.
-Its metric tick labels include Sports Lib's value-dependent m/Km unit, with no fixed metre heading; Stryd Distance
-and GNSS Distance use the same rule. The user's distance preference selects one canonical/unit-variant panel per
-distance metric, including when all recorded metrics are enabled. Miles retain their fixed unit heading. Unit conversion preserves nulls and real zero;
-range statistics use only recorded points, and zoom/overlays do not manufacture intermediate measurements.
-Saved Distance and GNSS Distance overlay keys and targets resolve to the currently available unit variant without
-writing settings on read. Exact saved keys take precedence; a user change replaces obsolete aliases for that distance source, including when selecting
-No overlay. This prevents a removed overlay from reappearing after a unit change. GNSS Distance remains a separate
-metric from recorded Distance, including when one overlays the other. Stryd Distance and sustainable distance also
-remain separate; aliases cannot create a self-overlay.
+Chart unit selection covers every registered Sports Lib conversion family, including pace, effort/grade-adjusted pace,
+swim pace, speed, vertical speed, depth and sustainable distance. It removes unselected base-unit duplicates while
+retaining each deliberately selected unit panel. Recorded metrics can convert units even when their sport does not
+calculate that metric. Headers, ticks, tooltips and range statistics use the same Sports Lib display and user settings;
+Weight, for example, displays pounds consistently while its source values remain kilograms.
+
+Canonical distance subclasses use Sports Lib's value-dependent m/Km tick labels without a fixed metre heading.
+Distinct sources such as Stryd Distance, Step Length and Jump Distance retain their own panel identity and canonical
+values, with conversion at display time: Sports Lib's shared generic miles/feet identifiers cannot merge them into
+recorded Distance or one another. Unique unit variants, including GNSS Distance, retain their selected unit panel.
+Conversion preserves nulls and real zero; range statistics use only recorded points, and zoom/overlays do not
+manufacture intermediate measurements.
+
+Saved overlay keys and targets resolve to the current unit variant without writing settings on read. Exact saved
+choices take precedence; alias migration requires a single available variant, so multiple selected units cannot
+silently choose an overlay for each other. Explicit edits remove obsolete aliases but preserve settings for other
+currently available unit panels. GNSS Distance, recorded Distance, Stryd and sustainable distance remain distinct
+sources. Exact self-overlays are rejected, while two deliberately displayed unit variants can overlay each other
+on their own axes.
 
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank

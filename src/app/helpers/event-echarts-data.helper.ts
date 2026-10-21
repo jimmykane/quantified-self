@@ -1,3 +1,4 @@
+import { getEventChartUnitTypes, retainEventChartSourceValues, createMissingEventChartUnitStreams, getEventChartUnitSource } from './event-chart-units.helper';
 import { getRejectedSwimTiming, resolveSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
 import { buildEventLineSegments, resolveEventLineContinuity, type EventLineContinuitySettings } from './event-chart-line-continuity.helper';
 import {
@@ -12,7 +13,6 @@ import {
   DataDistance,
   DataDuration,
   DataGPSAltitude,
-  DataGNSSDistance,
   DataGrade,
   DataHeartRate,
   DataHeartRateAvg,
@@ -28,9 +28,6 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataDescent,
-  DataDepth,
-  DataDiveAscentRate,
-  DataNextStopDepth,
   DataSpeed,
   DataStrokeRateAvg,
   DataStrydDistance,
@@ -55,8 +52,8 @@ import {
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
-import { getEnduranceMetricLabel, SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
-import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { getEnduranceMetricLabel } from '@shared/endurance-metrics';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
 import { getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters } from './event-swim-distance-display.helper';
@@ -339,7 +336,9 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       );
       // Metric distance uses Sports Lib's value-dependent m/Km display. Its axis
       // includes the unit on each tick, so a fixed '(m)' heading would be misleading.
-      const unit = hasEventChartValueDependentUnit(stream.type) ? '' : streamDataClass.unit || '';
+      const unit = hasEventChartValueDependentUnit(stream.type) ? ''
+        : resolveUnitAwareDisplayFromValue(stream.type, 0, input.userUnitSettings, { preferredType: stream.type })?.unit
+          ?? streamDataClass.unit ?? '';
 
       if (!panelsMap.has(stream.type)) {
         panelsMap.set(stream.type, {
@@ -500,13 +499,7 @@ function buildEventChartSnapshotStreamTypeSet(
 }
 
 function getUnitBaseDataTypes(dataType: string): string[] {
-  const unitGroups = (DynamicDataLoader as unknown as {
-    dataTypeUnitGroups?: Record<string, Record<string, unknown>>;
-  }).dataTypeUnitGroups || {};
-  const baseTypes = Object.entries(unitGroups)
-    .filter(([baseType, unitGroup]) => baseType === dataType || Object.prototype.hasOwnProperty.call(unitGroup, dataType))
-    .map(([baseType]) => baseType);
-  return baseTypes.length > 0 ? baseTypes : [dataType];
+  return [getEventChartUnitSource(dataType)];
 }
 
 function getDerivedStreamDependencyTypes(dataType: string): string[] {
@@ -1227,29 +1220,8 @@ function getFilteredStreams(input: {
     : resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType]);
   const allowedDataTypeSet = allowedDataTypes ? new Set(allowedDataTypes) : null;
 
-  const shouldRemoveSpeed = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataSpeed.type, input.userUnitSettings)
-    .indexOf(DataSpeed.type) === -1;
-  const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, input.userUnitSettings)
-    .indexOf(DataGradeAdjustedSpeed.type) === -1;
-  const shouldRemoveDistance = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDistance.type, input.userUnitSettings)
-    .indexOf(DataDistance.type) === -1;
-  const shouldRemoveDepth = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDepth.type, input.userUnitSettings)
-    .indexOf(DataDepth.type) === -1;
-  const shouldRemoveNextStopDepth = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataNextStopDepth.type, input.userUnitSettings)
-    .indexOf(DataNextStopDepth.type) === -1;
-  const shouldRemoveDiveAscentRate = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDiveAscentRate.type, input.userUnitSettings)
-    .indexOf(DataDiveAscentRate.type) === -1;
-
-  const recordedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-    input.streams.map((stream) => stream.type),
-    input.userUnitSettings,
-    { includeDerivedTypes: !input.showAllData }
+  const recordedUnitTypes = getEventChartUnitTypes(
+    input.streams.map(stream => stream.type), input.userUnitSettings, !input.showAllData,
   );
   const configuredTypes = input.showAllData
     ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType])
@@ -1257,18 +1229,20 @@ function getFilteredStreams(input: {
   const whitelistedUnitTypes = [...new Set([...recordedUnitTypes, ...configuredTypes])];
   const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
 
-  const mergedStreams = ActivityUtilities
+  const generatedStreams = ActivityUtilities
     .createUnitStreamsFromStreams(
-      input.streams,
+      input.streams.filter(stream => !retainEventChartSourceValues(stream.type)),
       input.activityType,
       whitelistedUnitTypes,
       {
         includeDerivedTypes: !input.showAllData || configuredTypes.length > 0,
         includeUnitVariants: true,
       }
-    )
-    .concat(input.streams);
-
+    );
+  // Sports Lib's derived-metric path can omit unit variants of the original stream (e.g. grade-adjusted speed).
+  const mergedStreams = generatedStreams.concat(
+    createMissingEventChartUnitStreams(input.streams, generatedStreams, whitelistedUnitTypes), input.streams,
+  );
   const deduplicated = dedupeByType(mergedStreams);
 
   return deduplicated
@@ -1285,28 +1259,10 @@ function getFilteredStreams(input: {
         return false;
       }
 
-      switch (stream.type) {
-        case DataGNSSDistance.type:
-        case SUSTAINABLE_DISTANCE_TYPE:
-          return DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings).includes(stream.type);
-        case DataDistance.type:
-          return !shouldRemoveDistance;
-        case DataDepth.type:
-          return !shouldRemoveDepth;
-        case DataNextStopDepth.type:
-          return !shouldRemoveNextStopDepth;
-        case DataDiveAscentRate.type:
-          return !shouldRemoveDiveAscentRate;
-        case DataSpeed.type:
-          return !shouldRemoveSpeed;
-        case DataGradeAdjustedSpeed.type:
-          return !shouldRemoveGradeAdjustedSpeed;
-        case DataLatitudeDegrees.type:
-        case DataLongitudeDegrees.type:
-          return false;
-        default:
-          return true;
-      }
+      if (stream.type === DataLatitudeDegrees.type || stream.type === DataLongitudeDegrees.type) return false;
+      return retainEventChartSourceValues(stream.type)
+        || (DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings) ?? [stream.type])
+          .includes(stream.type);
     })
     .sort((left, right) => left.type.localeCompare(right.type));
 }
@@ -1508,9 +1464,7 @@ export function resolveEventChartConfiguredDataTypes(
     const logicalDataTypes = dataType === DataPace.type && usesSwimPace
       ? [DataPace.type, DataSwimPace.type]
       : [dataType];
-    const resolvedTypes = DynamicDataLoader
-      .getUnitBasedDataTypesFromDataTypes(logicalDataTypes, userUnitSettings, { includeDerivedTypes: true })
-      .concat(logicalDataTypes);
+    const resolvedTypes = getEventChartUnitTypes(logicalDataTypes, userUnitSettings, true).concat(logicalDataTypes);
 
     resolvedTypes.forEach((resolvedType) => {
       if (!resolvedType || resolvedDataTypes.includes(resolvedType)) {

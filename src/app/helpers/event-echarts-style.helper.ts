@@ -11,6 +11,7 @@ import {
   DataDepth,
   DataDepthFeet,
   DataDistance,
+  DynamicDataLoader,
   DataDuration,
   DataEPOC,
   DataEffortPaceAvg,
@@ -25,7 +26,6 @@ import {
   DataEnergy,
   DataEVPE,
   DataGPSAltitude,
-  DataGNSSDistance,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedPaceMax,
   DataGradeAdjustedPaceMin,
@@ -86,15 +86,16 @@ import {
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/metrics';
-import { SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
 import { isInverseMetric } from '@shared/metric-semantics';
 import { AppColors } from '../services/color/app.colors';
 import { AppDataColors } from '../services/color/app.data.colors';
 
-/** These canonical metre streams switch between m and Km as the displayed value changes. */
+/** All canonical distance subclasses inherit value-dependent m/Km formatting; fixed-unit variants override it. */
 export function hasEventChartValueDependentUnit(streamType: string): boolean {
-  return streamType === DataDistance.type || streamType === DataStrydDistance.type || streamType === DataGNSSDistance.type
-    || streamType === SUSTAINABLE_DISTANCE_TYPE;
+  try {
+    return DynamicDataLoader.getDataClassFromDataType(streamType).prototype.getDisplayUnit
+      === DataDistance.prototype.getDisplayUnit;
+  } catch { return false; }
 }
 
 const ALTITUDE_GROUP = new Set<string>([

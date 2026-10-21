@@ -704,13 +704,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     };
 
     const primaryKey = getEventChartOverlaySelectionKey(primary);
-    // A user edit replaces obsolete unit aliases too, so No overlay cannot revive them later.
+    const availableTypes = new Set(this.allChartPanels.map(panel => panel.dataType));
+    // Remove obsolete aliases, while preserving other unit panels explicitly displayed together.
     Object.keys(nextOverlayMap).forEach(key => {
-      if (key !== primary && getEventChartOverlaySelectionKey(key) === primaryKey) {
+      if (key !== primary && !availableTypes.has(key) && getEventChartOverlaySelectionKey(key) === primaryKey) {
         delete nextOverlayMap[key];
       }
     });
-    if (overlay && getEventChartOverlaySelectionKey(overlay) !== primaryKey) {
+    if (overlay && overlay !== primary && (getEventChartOverlaySelectionKey(overlay) !== primaryKey || availableTypes.has(overlay))) {
       nextOverlayMap[primary] = overlay;
     } else {
       delete nextOverlayMap[primary];
@@ -1108,12 +1109,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return this.chartPanels.map((panel) => {
       const overlayOptions = this.buildOverlayOptions(panel);
       const primaryKey = getEventChartOverlaySelectionKey(panel.dataType);
-      const selectedOverlayDataType = overlayMap[panel.dataType] ?? overlayMap[primaryKey]
-        ?? savedOverlays.find(([key]) => getEventChartOverlaySelectionKey(key) === primaryKey)?.[1];
+      const primaryVariants = this.allChartPanels.filter(available => getEventChartOverlaySelectionKey(available.dataType) === primaryKey);
+      const selectedOverlayDataType = overlayMap[panel.dataType] ?? (primaryVariants.length === 1
+        ? overlayMap[primaryKey] ?? savedOverlays.find(([key]) => getEventChartOverlaySelectionKey(key) === primaryKey)?.[1]
+        : undefined);
+      const overlayVariants = selectedOverlayDataType ? this.allChartPanels.filter(available =>
+        getEventChartOverlaySelectionKey(available.dataType) === getEventChartOverlaySelectionKey(selectedOverlayDataType)) : [];
       const candidate = selectedOverlayDataType
-        ? panelByDataType.get(selectedOverlayDataType)
-          ?? this.allChartPanels.find(available => getEventChartOverlaySelectionKey(available.dataType)
-            === getEventChartOverlaySelectionKey(selectedOverlayDataType))
+        ? panelByDataType.get(selectedOverlayDataType) ?? (overlayVariants.length === 1 ? overlayVariants[0] : null)
         : null;
       const overlayPanel = candidate && candidate.dataType !== panel.dataType ? candidate : null;
 

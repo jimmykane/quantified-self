@@ -1168,6 +1168,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       showSplitLine: boolean;
     }
   ): Record<string, unknown> {
+    const includeTickUnit = hasEventChartValueDependentUnit(panel.dataType);
     return {
       type: 'value',
       position: options.position,
@@ -1197,7 +1198,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: options.axisLabelFontSize,
         margin: this.isMobile ? 8 : 10,
-        formatter: (value: number) => this.formatDataValue(panel.dataType, value, hasEventChartValueDependentUnit(panel.dataType))
+        formatter: (value: number) => this.formatDataValue(panel.dataType, value, includeTickUnit)
       }
     };
   }
@@ -2540,6 +2541,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       range,
       xAxisType: this.xAxisType,
       gainAndLossThreshold: this.gainAndLossThreshold,
+      userUnitSettings: this.userUnitSettings,
     });
     const overlayPanel = this.getActiveOverlayPanel();
 
@@ -2553,6 +2555,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       range,
       xAxisType: this.xAxisType,
       gainAndLossThreshold: this.gainAndLossThreshold,
+      userUnitSettings: this.userUnitSettings,
     });
 
     this.rangeStats = this.mergeRangeStatsByActivity([
@@ -2675,6 +2678,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const unitAwareDisplay = this.userUnitSettings
         ? resolveUnitAwareDisplayFromValue(streamType, value, this.userUnitSettings, {
           stripRepeatedUnit: true,
+          preferredType: streamType,
         })
         : null;
       if (unitAwareDisplay) {

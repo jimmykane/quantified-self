@@ -1956,6 +1956,10 @@ describe('EventCardChartComponent', () => {
     { saved: DataDistanceMiles.type, rendered: DataDistance.type },
     { saved: DataGNSSDistance.type, rendered: DataGNSSDistanceMiles.type },
     { saved: DataGNSSDistanceMiles.type, rendered: DataGNSSDistance.type },
+    { saved: 'Speed in kilometers per hour', rendered: 'Speed in miles per hour' },
+    { saved: 'Pace', rendered: 'Pace in minutes per mile' },
+    { saved: 'Depth', rendered: 'Depth in feet' },
+    { saved: 'Estimated Sustainable Distance', rendered: 'Estimated Sustainable Distance in miles' },
   ])('restores saved $saved visibility and overlays on $rendered without writing settings', async ({ saved, rendered }) => {
     const overlays = { [saved]: DataHeartRate.type, [DataPower.type]: saved };
     chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
@@ -2025,6 +2029,45 @@ describe('EventCardChartComponent', () => {
     expect(component.chartPanelViews).toHaveLength(1);
     expect(component.chartPanelViews[0].panel.dataType).toBe(renderedPrimary);
     expect(component.chartPanelViews[0].overlayPanel?.dataType).toBe(renderedOverlay);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
+  it('preserves independent overlays for multiple displayed speed units', async () => {
+    const metric = 'Speed';
+    const imperial = 'Speed in miles per hour';
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: {
+      [metric]: DataHeartRate.type, [imperial]: DataPower.type,
+    } });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys: [metric] });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(metric), chartPanel(imperial), chartPanel(DataHeartRate.type), chartPanel(DataPower.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews.map(view => view.selectedOverlayDataType)).toEqual([DataHeartRate.type, DataPower.type]);
+    component.onPanelOverlayDataTypeChange(metric, null);
+    await flushOverlayPersistQueue();
+    expect(component.chartPanelViews.map(view => view.selectedOverlayDataType)).toEqual([null, DataPower.type]);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenLastCalledWith({
+      eventChartOverlayDataTypeByPrimary: { [imperial]: DataPower.type },
+    }, { force: true });
+    // Two deliberately displayed units are distinct panels, so they can overlay one another.
+    component.onPanelOverlayDataTypeChange(metric, imperial);
+    await flushOverlayPersistQueue();
+    expect(component.chartPanelViews.map(view => view.selectedOverlayDataType)).toEqual([imperial, DataPower.type]);
+  });
+
+  it('does not guess between multiple current unit variants for an obsolete saved overlay', async () => {
+    const old = 'Speed in kilometers per hour';
+    const overlays = { [old]: DataHeartRate.type, [DataPower.type]: old };
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys: ['Speed', DataPower.type] });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel('Speed'), chartPanel('Speed in miles per hour'), chartPanel(DataHeartRate.type), chartPanel(DataPower.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews).toHaveLength(3);
+    expect(component.chartPanelViews.every(view => view.overlayPanel === null)).toBe(true);
     expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
     expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
   });

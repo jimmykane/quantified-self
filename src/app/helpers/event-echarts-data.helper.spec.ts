@@ -1,4 +1,4 @@
-import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { getDefaultUserUnitSettings, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityUtilities,
@@ -30,7 +30,9 @@ import {
   LapTypes,
   PaceUnits,
   SpeedUnits,
+  Stream,
   SwimPaceUnits,
+  VerticalSpeedUnits,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import { createNominalYardPoolFixture } from './event-swim-distance-display.test-fixtures';
@@ -353,6 +355,161 @@ describe('event-echarts-data.helper', () => {
       expect(activity.toJSON()).toEqual(before);
     },
   );
+
+  it.each(Object.keys(DynamicDataLoader.dataTypeUnitGroups).flatMap(type =>
+    [false, true].flatMap(imperial => [false, true].map(showAllData => ({ type, imperial, showAllData })))
+  ))('preserves source values and selected panels for $type (imperial=$imperial, all=$showAllData)', ({ type, imperial, showAllData }) => {
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, laps: [], events: [], intensityZones: [], streams: { [type]: [1, null, 2] },
+    });
+    activity.setID('unit-family'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+    const settings = normalizeUserUnitSettings(imperial ? {
+      distanceUnits: DistanceUnits.Miles, speedUnits: [SpeedUnits.MilesPerHour],
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+      verticalSpeedUnits: [VerticalSpeedUnits.FeetPerMinute],
+    } : getDefaultUserUnitSettings());
+    // These different sources share generic miles/feet IDs in Sports Lib. They must retain their identity.
+    const retainedSources = ['Jump Distance', 'Minimum Jump Distance', 'Maximum Jump Distance', 'Average Jump Distance',
+      'Wheelchair Push Distance', 'Auto Lap Distance', 'Average Stroke Distance', 'Average Stride Length',
+      'Step Length', 'Distance Target', 'Distance (Stryd)'];
+    const expectedTypes = retainedSources.includes(type) ? [type]
+      : DynamicDataLoader.getUnitBasedDataTypesFromDataType(type, settings);
+    const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+      showAllData, dataTypesToUse: [type], userUnitSettings: settings,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any };
+    const before = structuredClone(activity.toJSON());
+    const panels = buildEventChartPanels(input);
+    for (const expectedType of expectedTypes) {
+      const matches = panels.filter(panel => panel.dataType === expectedType);
+      expect(matches).toHaveLength(1);
+      const convert = DynamicDataLoader.dataTypeUnitGroups[type]?.[expectedType];
+      const values = [1, null, 2].map(value => value === null ? null : convert ? convert(value) : value);
+      expect(eventChartSeriesToPoints(matches[0].series[0]).map(point => point.y)).toEqual(values);
+    }
+    if (!expectedTypes.includes(type)) expect(panels.some(panel => panel.dataType === type)).toBe(false);
+    if (retainedSources.includes(type)) expect(panels.map(panel => panel.dataType)).toEqual([type]);
+    expect(buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))).toEqual(panels);
+    expect(activity.toJSON()).toEqual(before);
+  });
+
+  it.each([
+    ['Speed', 'Speed in miles per hour'], ['Pace', 'Pace in minutes per mile'],
+    ['Distance', 'Distance in miles'], ['GNSS Distance', 'GNSS Distance in miles'],
+  ].flatMap(([type, variant]) => [false, true].map(showAllData => ({ type, variant, showAllData }))))(
+    'does not restore an unselected recorded unit variant for $type (all=$showAllData)', ({ type, variant, showAllData }) => {
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+        powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+        stats: {}, laps: [], events: [], intensityZones: [], streams: { [type]: [1, null, 2], [variant]: [3, null, 4] },
+      });
+      activity.setID('existing-variants'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+      const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+        showAllData, dataTypesToUse: [type], userUnitSettings: getDefaultUserUnitSettings(),
+        eventColorService: { getActivityColor: () => '#ff0000' } as any };
+      const before = structuredClone(activity.toJSON());
+      const panels = buildEventChartPanels(input);
+      expect(panels.some(panel => panel.dataType === variant)).toBe(false);
+      expect(panels.length).toBeGreaterThan(0);
+      expect(buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))).toEqual(panels);
+      expect(activity.toJSON()).toEqual(before);
+    },
+  );
+
+  it('keeps all explicitly selected speed units with their own numeric values and range statistics', () => {
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, laps: [], events: [], intensityZones: [], streams: { Speed: [1, null, 2] },
+    });
+    activity.setID('multiple-units'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+    const settings = normalizeUserUnitSettings({ speedUnits: [SpeedUnits.MilesPerHour, SpeedUnits.MetersPerSecond] });
+    const panels = buildEventChartPanels({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, showAllData: true, dataTypesToUse: [], userUnitSettings: settings,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any });
+    expect(panels.map(panel => panel.dataType).sort()).toEqual([...settings.speedUnits].sort());
+    const canonical = panels.find(panel => panel.dataType === DataSpeed.type)!;
+    const display = new DataSpeed(2);
+    expect(canonical.unit).toBe(display.getDisplayUnit());
+    expect(eventChartSeriesToPoints(canonical.series[0]).map(point => point.y)).toEqual([1, null, 2]);
+    expect(computeEventPanelRangeStats({ panel: canonical, range: { start: 0, end: 2 },
+      xAxisType: XAxisTypes.Duration, gainAndLossThreshold: 1, userUnitSettings: settings })[0].max)
+      .toEqual({ value: display.getDisplayValue(), unit: display.getDisplayUnit() });
+  });
+
+  it.each(['Pace', 'Effort Pace', 'Grade Adjusted Pace', 'Swim Pace', 'Vertical Speed'].flatMap(type =>
+    [ActivityTypes.Running, ActivityTypes.Swimming].flatMap(sport => [false, true].map(showAllData => ({ type, sport, showAllData })))
+  ))('respects selected units for $type without an extra base panel (all=$showAllData, sport=$sport)', ({ type, sport, showAllData }) => {
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: sport,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, laps: [], events: [], intensityZones: [], streams: { [type]: [1, null, 2] },
+    });
+    activity.setID('units'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+    const settings = { ...getDefaultUserUnitSettings(), paceUnits: [PaceUnits.MinutesPerMile],
+      gradeAdjustedPaceUnits: ['Grade Adjusted Pace in minutes per mile'],
+      swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard], verticalSpeedUnits: ['Vertical speed in feet per minute'] } as any;
+    const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+      showAllData, dataTypesToUse: [type], userUnitSettings: settings,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any };
+    const before = structuredClone(activity.toJSON());
+    const panels = buildEventChartPanels(input);
+    expect(panels.map(panel => panel.dataType)).toEqual(DynamicDataLoader.getUnitBasedDataTypesFromDataType(type, settings));
+    expect(buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))).toEqual(panels);
+    expect(eventChartSeriesToPoints(panels[0].series[0])[1].y).toBeNull();
+    expect(activity.toJSON()).toEqual(before);
+  });
+
+  it.each([false, true])('keeps distance sources distinct in miles (all=%s)', showAllData => {
+    const sources = { Distance: [0, null, 1609], 'Distance (Stryd)': [0, null, 3218],
+      'Step Length': [1, null, 2], 'Jump Distance': [10, null, 20] };
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, laps: [], events: [], intensityZones: [], streams: { ...sources },
+    });
+    activity.setID('distinct-units'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+    const before = structuredClone(activity.toJSON());
+    const settings = { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles };
+    const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+      showAllData, dataTypesToUse: Object.keys(sources), userUnitSettings: settings,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any };
+    const panels = buildEventChartPanels(input);
+    expect(panels).toHaveLength(4);
+    expect(panels.find(panel => panel.dataType === DataDistanceMiles.type)?.series[0].lineValues[5]).toBe(1);
+    for (const type of ['Distance (Stryd)', 'Step Length', 'Jump Distance']) {
+      const panel = panels.find(panel => panel.dataType === type)!;
+      expect(panel).toBeDefined();
+      expect(eventChartSeriesToPoints(panel.series[0]).map(point => point.y)).toEqual(sources[type]);
+      expect(panel.unit).toBe('');
+      const stats = computeEventPanelRangeStats({ panel, range: { start: 0, end: 2 },
+        xAxisType: XAxisTypes.Duration, gainAndLossThreshold: 1, userUnitSettings: settings });
+      const display = DynamicDataLoader.getUnitBasedDataFromDataInstance(
+        DynamicDataLoader.getDataInstanceFromDataType(type, sources[type][2]), settings)[0];
+      expect(stats[0].max).toEqual({ value: String(display.getDisplayValue()), unit: display.getDisplayUnit() });
+    }
+    expect(buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))).toEqual(panels);
+    expect(activity.toJSON()).toEqual(before);
+  });
+
+  it('labels Weight in pounds consistently across its header and range statistics', () => {
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, laps: [], events: [], intensityZones: [], streams: { Weight: [70, null, 80] },
+    });
+    activity.setID('weight'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+    const settings = { ...getDefaultUserUnitSettings(), weightUnits: 'lb' } as any;
+    const panel = buildEventChartPanels({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, showAllData: false, dataTypesToUse: ['Weight'], userUnitSettings: settings,
+      eventColorService: { getActivityColor: () => '#ff0000' } as any })[0];
+    expect(panel.unit).toBe('lb');
+    expect(eventChartSeriesToPoints(panel.series[0]).map(point => point.y)).toEqual([70, null, 80]);
+    const stats = computeEventPanelRangeStats({ panel, range: { start: 0, end: 2 },
+      xAxisType: XAxisTypes.Duration, gainAndLossThreshold: 1, userUnitSettings: settings });
+    expect(stats[0].avg).toEqual({ value: '165.3', unit: 'lb' });
+  });
 
   it('uses value-dependent units for the Stryd distance panel too', () => {
     const activity = EventImporterJSON.getActivityFromJSON({
