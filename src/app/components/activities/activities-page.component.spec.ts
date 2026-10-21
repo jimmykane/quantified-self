@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { By } from '@angular/platform-browser';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
@@ -13,9 +14,19 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService, type EventQueryCursor, type GetEventsPageResult } from '../../services/app.event.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppUserService } from '../../services/app.user.service';
+import { AppEventMergeService } from '../../services/app.event-merge.service';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppFileService } from '../../services/app.file.service';
+import { AppOriginalFileDownloadService } from '../../services/app.original-file-download.service';
+import { AppProcessingService } from '../../services/app.processing.service';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { EventTagService } from '../../services/event-tag.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventTableModule } from '../../modules/event-table.module';
-import type { EventTableEventsChange } from '../event-table/event.table.component';
+import { EventTableComponent, type EventTableEventsChange } from '../event-table/event.table.component';
 import { ActivitiesPageComponent } from './activities-page.component';
 
 @Component({ selector: 'app-event-table', standalone: true, template: '<ng-content select="[event-table-filters]"></ng-content><ng-content select="[event-table-active-filters]"></ng-content>' })
@@ -41,18 +52,21 @@ const records = [event('a', ['endurance']), event('b', ['ENDURANCE'], true), eve
 const cursor = { id: 'last-page-doc' } as EventQueryCursor;
 const page = (events = records.map(record => ({ ...record })), hasMore = true): GetEventsPageResult => ({ events, hasMore, source: 'server', firstCursor: cursor, lastCursor: cursor });
 
-async function setup(tag = '') {
+async function setup(tag = '', realTable = false) {
   const owner = { uid: 'owner' };
-  const user$ = new BehaviorSubject(new User('owner') as AppUserInterface);
+  const user = new User('owner') as AppUserInterface;
+  if (realTable) user.settings = AppUserUtilities.fillMissingAppSettings(user);
+  const user$ = new BehaviorSubject(user);
   const authState$ = new BehaviorSubject(owner);
   const auth = { user$, authState$, currentUser: owner };
   const params$ = new BehaviorSubject(convertToParamMap(tag ? { tag } : {}));
   const events = { getEventsPageOnceByWithMeta: vi.fn().mockReturnValue(of(page())) };
   const catalog = { listAllTags: vi.fn().mockResolvedValue(['Endurance', 'Race day', 'Recovery']) };
   const haptics = { selection: vi.fn(), error: vi.fn() };
+  const userService = { updateUserProperties: vi.fn().mockResolvedValue(undefined) };
   const router = { navigate: vi.fn().mockResolvedValue(true) };
-  await TestBed.configureTestingModule({
-    imports: [ActivitiesPageComponent, NoopAnimationsModule],
+  TestBed.configureTestingModule({
+    imports: [ActivitiesPageComponent, NoopAnimationsModule, ...(realTable ? [MatIconTestingModule] : [])],
     providers: [
       { provide: AppAuthService, useValue: auth },
       { provide: AppEventService, useValue: events },
@@ -60,11 +74,19 @@ async function setup(tag = '') {
       { provide: AppHapticsService, useValue: haptics },
       { provide: ActivatedRoute, useValue: { queryParamMap: params$ } },
       { provide: Router, useValue: router },
-      { provide: LoggerService, useValue: { warn: vi.fn() } },
+      { provide: LoggerService, useValue: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } },
+      ...(realTable ? [
+        { provide: AppUserService, useValue: userService },
+        ...[AppEventMergeService, AppEventColorService, AppFileService, AppOriginalFileDownloadService,
+          AppProcessingService, AppBenchmarkFlowService, AppAnalyticsService, EventTagService]
+          .map(provide => ({ provide, useValue: {} })),
+      ] : []),
     ],
-  }).overrideComponent(ActivitiesPageComponent, { remove: { imports: [EventTableModule] }, add: { imports: [EventTableStub] } }).compileComponents();
+  });
+  if (!realTable) TestBed.overrideComponent(ActivitiesPageComponent, { remove: { imports: [EventTableModule] }, add: { imports: [EventTableStub] } });
+  await TestBed.compileComponents();
   const fixture = TestBed.createComponent(ActivitiesPageComponent);
-  return { fixture, component: fixture.componentInstance, auth, user$, authState$, params$, events, catalog, haptics, router };
+  return { fixture, component: fixture.componentInstance, auth, user$, authState$, params$, events, catalog, haptics, router, userService };
 }
 async function render(context: Awaited<ReturnType<typeof setup>>) {
   context.fixture.detectChanges();
@@ -73,6 +95,29 @@ async function render(context: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe('ActivitiesPageComponent', () => {
+  it('projects filters into the real events table and retains shared search when chips change', async () => {
+    const context = await setup('', true);
+    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([], false)));
+    await render(context);
+    const table = context.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    const toolbar = context.fixture.nativeElement.querySelector('.table-toolbar') as HTMLElement;
+    expect(toolbar.querySelectorAll('.activity-explorer-filters mat-select')).toHaveLength(3);
+    expect(toolbar.querySelector('input[aria-label="Search activities"]')).toBeTruthy();
+    expect(context.fixture.nativeElement.querySelector('app-event-table-actions')).toBeTruthy();
+    expect(context.haptics.selection).not.toHaveBeenCalled();
+    table.search('Endurance');
+    context.component.selectTag('Endurance');
+    await render(context);
+    expect(table.searchTerm).toBe('Endurance');
+    expect(toolbar.querySelector('.activity-active-filters')).toBeTruthy();
+    (toolbar.querySelector('[aria-label="Remove tag filter"]') as HTMLButtonElement).click();
+    await render(context);
+    expect(context.component.selectedTag()).toBe('');
+    expect(table.searchTerm).toBe('Endurance');
+    expect(context.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(context.userService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
   it('loads bounded owner history, labels partial counts, and binds the existing events table', async () => {
     const context = await setup();
     await render(context);
@@ -186,6 +231,89 @@ describe('ActivitiesPageComponent', () => {
     expect(context.component.events()).toHaveLength(3);
     await context.component.loadOlderActivities();
     expect(context.events.getEventsPageOnceByWithMeta.mock.calls[1][5].startAfterCursor).toBe(cursor);
+  });
+
+  it('hydrates legacy sport links into the canonical selector and keeps equivalent choices silent', async () => {
+    const context = await setup();
+    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([
+      { ...event('run', []), getActivityTypesAsArray: () => ['Run'] },
+      { ...event('running', []), getActivityTypesAsArray: () => ['Running'] },
+      { ...event('ride', []), getActivityTypesAsArray: () => ['Ride'] },
+    ], false)));
+    context.params$.next(convertToParamMap({ sport: 'Run' }));
+    await render(context);
+    expect(context.component.selectedSport()).toBe('Running');
+    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['run', 'running']);
+    expect(context.fixture.nativeElement.querySelector('mat-select[aria-label="Sport"]').textContent).toContain('Running');
+    context.component.selectSport('run');
+    expect(context.haptics.selection).not.toHaveBeenCalled();
+    context.component.selectSport('Ride');
+    expect(context.component.selectedSport()).toBe('Cycling');
+    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['ride']);
+    expect(context.router.navigate.mock.calls[0][1].queryParams).toMatchObject({ sport: 'Cycling' });
+    expect(context.haptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it('advances the seven-day window at midnight without refetching or feedback and cleans up its clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date(2026, 9, 21, 23, 59, 30));
+    const context = await setup();
+    try {
+      context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([
+        { ...event('oldest', []), startDate: new Date(2026, 9, 15, 12) },
+        { ...event('recent', []), startDate: new Date(2026, 9, 21, 12) },
+        { ...event('next-day', []), startDate: new Date(2026, 9, 22, 12) },
+      ], false)));
+      context.params$.next(convertToParamMap({ period: 'week' }));
+      await render(context);
+      const refresh = vi.spyOn(context.component, 'refreshLocalDay');
+      expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['oldest', 'recent']);
+      await vi.advanceTimersByTimeAsync(60_000);
+      context.fixture.detectChanges();
+      expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['recent', 'next-day']);
+      expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
+      expect(context.haptics.selection).not.toHaveBeenCalled();
+      expect(context.router.navigate).not.toHaveBeenCalled();
+      expect(refresh).toHaveBeenCalledOnce();
+      context.fixture.destroy();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(refresh).toHaveBeenCalledOnce();
+    } finally {
+      context.fixture.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes the seven-day window immediately on focus and returning from a hidden tab', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date(2026, 9, 21, 23, 59, 30));
+    const context = await setup();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    try {
+      context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([
+        { ...event('oldest', []), startDate: new Date(2026, 9, 15, 12) },
+        { ...event('recent', []), startDate: new Date(2026, 9, 21, 12) },
+      ], false)));
+      context.params$.next(convertToParamMap({ period: 'week' }));
+      await render(context);
+      expect(context.component.filteredEvents()).toHaveLength(2);
+      visibility.mockReturnValue('hidden');
+      vi.setSystemTime(new Date(2026, 9, 22, 0, 0, 1));
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(context.component.filteredEvents()).toHaveLength(2);
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['recent']);
+      vi.setSystemTime(new Date(2026, 9, 28, 0, 0, 1));
+      window.dispatchEvent(new Event('focus'));
+      expect(context.component.filteredEvents()).toHaveLength(0);
+      expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
+      expect(context.haptics.selection).not.toHaveBeenCalled();
+    } finally {
+      context.fixture.destroy();
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('appends older pages, de-duplicates records, and only then reports complete empty membership', async () => {

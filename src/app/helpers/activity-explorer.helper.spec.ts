@@ -42,4 +42,20 @@ describe('Activity explorer loaded-history filters', () => {
     expect(activityExplorerSports(records, 'Rowing')).toEqual(['Cycling', 'Rowing', 'Running', 'Swimming']);
     expect(activityExplorerSports([], 'Rowing')).toEqual(['Rowing']);
   });
+
+  it('matches legacy sport aliases using the same canonical names as the table', () => {
+    const records = [event([], ['Run']), event([], ['Running']), event([], ['Ride']), event([], ['Cycling']), event([], ['trail_running'])];
+    expect(activityExplorerSports(records, 'run')).toEqual(['Cycling', 'Running', 'Trail Running']);
+    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Running' }, now)).toEqual(records.slice(0, 2));
+    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Ride' }, now)).toEqual(records.slice(2, 4));
+    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'TrailRunning' }, now)).toEqual([records[4]]);
+    expect(records[0].getActivityTypesAsArray()).toEqual(['Run']);
+  });
+
+  it('preserves unrecognized recorded sports and keeps exact canonical sports distinct', () => {
+    const records = [event([], ['Custom sport']), event([], ['GravelCycling']), event([], ['Cycling'])];
+    expect(activityExplorerSports(records)).toEqual(['Custom sport', 'Cycling', 'Gravel Cycling']);
+    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Gravel Cycling' }, now)).toEqual([records[1]]);
+    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Custom sport' }, now)).toEqual([records[0]]);
+  });
 });

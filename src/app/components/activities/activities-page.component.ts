@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnInit, afterNextRender, computed, inject, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, combineLatest, firstValueFrom, of } from 'rxjs';
@@ -8,7 +9,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
 import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
-import { activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
+import { activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerSport, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { EventTableModule } from '../../modules/event-table.module';
@@ -40,6 +41,8 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly document = inject(DOCUMENT);
+  private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
   private owner: FirebaseUserType | null = null;
   private generation = 0;
   private cursor: EventQueryCursor | null = null;
@@ -70,7 +73,12 @@ export class ActivitiesPageComponent implements OnInit {
   readonly filterContext = computed(() => JSON.stringify(this.filters()));
   readonly hasFilters = computed(() => !!this.selectedTag() || this.untagged() || !!this.selectedSport() || this.period() !== 'all');
   // A fresh owner input also refreshes the shared table's unit-aware row cache.
-  readonly filteredEvents = computed(() => this.user() ? filterActivityExplorerEvents(this.events(), this.filters()) : []);
+  readonly filteredEvents = computed(() => {
+    if (!this.user()) return [];
+    const filters = this.filters();
+    const now = filters.period === 'week' ? new Date(this.localDayStartMs()) : undefined;
+    return filterActivityExplorerEvents(this.events(), filters, now);
+  });
   readonly complete = computed(() => this.historyLoaded() && !this.hasMore() && !this.historyError());
   readonly emptyMessage = computed(() => this.complete()
     ? this.selectedSport() || this.period() !== 'all' ? 'No activities match these filters'
@@ -80,13 +88,32 @@ export class ActivitiesPageComponent implements OnInit {
     ? this.hasFilters() ? 'Clear a filter to see more activities.' : 'Import an activity to get started.'
     : 'Load older activities to look further back in your history.');
 
+  constructor() {
+    afterNextRender(() => {
+      this.refreshLocalDay();
+      const clock = globalThis.setInterval(() => this.refreshLocalDay(), 60_000);
+      this.destroyRef.onDestroy(() => globalThis.clearInterval(clock));
+    });
+  }
+
+  @HostListener('window:focus')
+  refreshLocalDay(): void {
+    this.localDayStartMs.set(new Date().setHours(0, 0, 0, 0));
+  }
+
+  @HostListener('document:visibilitychange')
+  refreshVisibleLocalDay(): void {
+    if (this.document.visibilityState === 'visible') this.refreshLocalDay();
+  }
+
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => { this.generation += 1; this.pendingPageChanges = null; });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+      this.refreshLocalDay();
       const tag = normalizeEventTagSuggestions([params.get('tag')])[0] || '';
       this.selectedTag.set(tag);
       this.untagged.set(!tag && params.get('untagged') === '1');
-      this.selectedSport.set((params.get('sport') || '').trim().slice(0, 100));
+      this.selectedSport.set(normalizeActivityExplorerSport((params.get('sport') || '').trim().slice(0, 100)));
       this.period.set(params.get('period') === 'week' ? 'week' : 'all');
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
@@ -116,8 +143,9 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   selectSport(sport: string): void {
-    if (sport === this.selectedSport()) return;
-    this.selectedSport.set(sport);
+    const next = normalizeActivityExplorerSport(sport);
+    if (next === this.selectedSport()) return;
+    this.selectedSport.set(next);
     this.filtersChanged();
   }
 
@@ -137,6 +165,7 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   private filtersChanged(): void {
+    this.refreshLocalDay();
     this.haptics.selection();
     void this.router.navigate([], {
       relativeTo: this.route,
@@ -156,6 +185,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   refresh(): void {
     if (!this.user() || this.loading() || this.catalogLoading()) return;
+    this.refreshLocalDay();
     this.haptics.selection();
     this.resetHistory();
     void this.loadCatalog(true);

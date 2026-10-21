@@ -1,5 +1,6 @@
 import type { EventTagsContainer } from '@shared/event-tags';
 import { getEventTags } from '@shared/event-tags';
+import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import { filterEventsByTag } from './event-tag-library.helper';
 
 export type ActivityExplorerPeriod = 'all' | 'week';
@@ -16,8 +17,13 @@ export interface ActivityExplorerFilters {
   period: ActivityExplorerPeriod;
 }
 
+export function normalizeActivityExplorerSport(value: string): string {
+  return resolveCompatibleActivityType(value) || value.trim();
+}
+
 export function activityExplorerSports(events: readonly ActivityExplorerEvent[], selected = ''): string[] {
-  return [...new Set([...events.flatMap(event => event.getActivityTypesAsArray()), selected].filter(Boolean))]
+  return [...new Set([...events.flatMap(event => event.getActivityTypesAsArray()), selected]
+    .map(normalizeActivityExplorerSport).filter(Boolean))]
     .sort((first, second) => first.localeCompare(second));
 }
 
@@ -31,9 +37,10 @@ export function filterActivityExplorerEvents<T extends ActivityExplorerEvent>(
   const end = new Date(now);
   end.setHours(0, 0, 0, 0);
   end.setDate(end.getDate() + 1);
+  const sport = normalizeActivityExplorerSport(filters.sport);
   return filterEventsByTag(events, filters.tag).filter(event => (
     (!filters.untagged || getEventTags(event).length === 0)
-    && (!filters.sport || event.getActivityTypesAsArray().includes(filters.sport))
+    && (!sport || event.getActivityTypesAsArray().some(type => normalizeActivityExplorerSport(type) === sport))
     && (filters.period === 'all' || (
       event.startDate instanceof Date
       && event.startDate >= start && event.startDate < end
