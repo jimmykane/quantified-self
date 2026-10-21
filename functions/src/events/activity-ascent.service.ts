@@ -26,7 +26,7 @@ export function validateActivityAscentEdit(eventId: string, input: unknown): Act
     || !documentId(data.activityId) || !(data.ascent === null || validActivityAscent(data.ascent))
     || typeof data.expectedSourceFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(data.expectedSourceFingerprint)
     || !(data.expectedCorrection === null || readAscentCorrection(data.expectedCorrection))) {
-    throw new HttpsError('invalid-argument', 'Enter a valid ascent correction and reload the activity before saving.');
+    throw new HttpsError('invalid-argument', 'Enter a valid elevation correction and reload the activity before saving.');
   }
   return data as ActivityAscentEdit;
 }

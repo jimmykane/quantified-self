@@ -76,7 +76,7 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
     const recovering = metadata?.sourceWritePending || parent.data()?.benchmarkSourceWritePending;
     const activeIds = recovering ? [...new Set(Object.values(metadata?.legs ?? metadata?.legacyLegs ?? {})
       .flatMap(leg => leg.activityId ? [leg.activityId] : []))] : [];
-    if (activeIds.length > 100) throw new Error('Ascent correction matching supports at most 100 activities.');
+    if (activeIds.length > 100) throw new Error('Elevation correction matching supports at most 100 activities.');
     if (activeIds.length) {
       // An interrupted reparse can leave both old and new IDs. The server-owned leg snapshot
       // identifies the active source; partial copies must not make its correction ambiguous.
@@ -84,14 +84,14 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
       const sourceDocs = children.map(child => {
         const data = child.data();
         if (!data || data.eventID !== event.getID())
-          throw new Error('Cannot find the saved source activities for ascent correction recovery.');
+          throw new Error('Cannot find the saved source activities for elevation correction recovery.');
         return { id: child.id, data: () => data };
       });
       apply = prepareAscentCarryover(event, sourceDocs);
     } else {
       const children = await transaction.get(db.collection(`users/${uid}/activities`)
         .where('eventID', '==', event.getID()).limit(101));
-      if (children.size > 100) throw new Error('Ascent correction matching supports at most 100 activities.');
+      if (children.size > 100) throw new Error('Elevation correction matching supports at most 100 activities.');
       apply = prepareAscentCarryover(event, children.docs);
     }
   });
