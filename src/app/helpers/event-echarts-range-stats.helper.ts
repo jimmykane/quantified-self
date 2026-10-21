@@ -1,8 +1,10 @@
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import {
   DataAltitude,
   DataGPSAltitude,
   DataStrydAltitude,
   DynamicDataLoader,
+  type UserUnitSettingsInterface,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
@@ -32,6 +34,7 @@ export interface ComputeEventPanelRangeStatsInput {
   range: EventChartRange | null;
   xAxisType: XAxisTypes;
   gainAndLossThreshold: number;
+  userUnitSettings?: UserUnitSettingsInterface | null;
 }
 
 export function computeEventPanelRangeStats(input: ComputeEventPanelRangeStatsInput): EventPanelRangeStat[] {
@@ -59,20 +62,20 @@ export function computeEventPanelRangeStats(input: ComputeEventPanelRangeStatsIn
       activityID: series.activityID,
       activityName: series.activityName,
       color: series.color,
-      min: formatDataTypeValue(series.streamType, aggregates.min),
-      avg: formatDataTypeValue(series.streamType, aggregates.sum / aggregates.count),
-      max: formatDataTypeValue(series.streamType, aggregates.max),
+      min: formatDataTypeValue(series.streamType, aggregates.min, input.userUnitSettings),
+      avg: formatDataTypeValue(series.streamType, aggregates.sum / aggregates.count, input.userUnitSettings),
+      max: formatDataTypeValue(series.streamType, aggregates.max, input.userUnitSettings),
       entries: [],
     };
 
     if (aggregates.gain !== undefined && aggregates.loss !== undefined) {
       stat.gain = formatDataTypeValue(
         series.streamType,
-        aggregates.gain
+        aggregates.gain, input.userUnitSettings
       );
       stat.loss = formatDataTypeValue(
         series.streamType,
-        aggregates.loss
+        aggregates.loss, input.userUnitSettings
       );
     }
 
@@ -178,7 +181,7 @@ function supportsSlope(streamType: string): boolean {
   return supportsGainLoss(streamType);
 }
 
-function formatDataTypeValue(streamType: string, value: unknown): { value: string; unit: string } {
+function formatDataTypeValue(streamType: string, value: unknown, settings?: UserUnitSettingsInterface | null): { value: string; unit: string } {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) {
     return {
@@ -189,17 +192,18 @@ function formatDataTypeValue(streamType: string, value: unknown): { value: strin
 
   try {
     const dataInstance = DynamicDataLoader.getDataInstanceFromDataType(streamType, numericValue);
-    const displayValue = sanitizeDisplayValue(dataInstance.getDisplayValue?.());
+    const display = settings ? resolveUnitAwareDisplayStat(dataInstance, settings, { preferredType: streamType }) : null;
+    const displayValue = sanitizeDisplayValue(display?.value ?? dataInstance.getDisplayValue?.());
     if (!displayValue) {
       return {
         value: `${numericValue.toFixed(2)}`,
-        unit: `${dataInstance.getDisplayUnit?.() ?? ''}`,
+        unit: display?.unit ?? `${dataInstance.getDisplayUnit?.() ?? ''}`,
       };
     }
 
     return {
       value: displayValue,
-      unit: `${dataInstance.getDisplayUnit?.() ?? ''}`,
+      unit: display?.unit ?? `${dataInstance.getDisplayUnit?.() ?? ''}`,
     };
   } catch {
     return {

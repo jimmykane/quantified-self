@@ -421,7 +421,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `23.1.0` in both app and Functions
+- Installed `@sports-alliance/sports-lib`: `23.4.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -6147,7 +6147,8 @@ multi-result total. Compact private load summaries preserve it through their exi
 query paths, queues, triggers or scheduled rebuilds. Refreshed evaluations and changed summaries use the existing
 metadata/cache writes and invalidation flow; reparsing history still incurs that normal refresh work.
 
-Root and Functions now pin the same published sports-lib 23.1.0 package in both manifests and lockfiles.
+Root and Functions adopted the same published sports-lib 23.1.0 package for that threshold-HR update; the current
+23.4.0 pins retain those HR rules.
 The runtime reparse target resolves from that installed version; version mismatch checks remain strict.
 Historical candidates require the normal approved
 original-file reparse lifecycle and derived refresh; a Training rebuild alone cannot recover file calibration.
@@ -6743,9 +6744,27 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.1.0 with FIT Parser 6.2.2 and matching package integrity.
+Root and Functions now pin published Sports Lib 23.4.0 with matching package integrity. The direct Functions FIT Parser
+pin remains 6.2.2; Sports Lib retains its own compatible parser dependency.
 Both consumers recognize the expanded 284-type catalog. The earlier 22.0.0 integration and its historical verification
 remain recorded here; package adoption does not deploy either consumer or start a production reparse.
+
+#### Sports Lib 23.4.0 sparse distance adoption
+
+Missing Distance readings remain null; recorded zeros and repeated distances remain observations. Library-derived
+speed and grade-adjusted calculations use supported intervals rather than treating carried-forward distance as
+measured stops. Consequently calculated pace load and durability evidence can change when the original is parsed.
+Imported scores retain precedence, and HR/power/MET formulas, policy snapshots and user controls are unchanged.
+
+Event Details hydrates streams from retained originals without writing them to Firestore. Opening a chart therefore
+needs no historical reparse. Saved summaries and private Training evaluations change only on new imports or through
+the existing authorized source-backed reparse, including strict leg matching, reservations, retries, deletion fences
+and normal derived invalidation. Training builders continue to consume saved summaries; no global schema bump,
+new data-upgrade path or automatic backfill is introduced. Saved routes need no reparse for this distance correction.
+
+MCP impact review: selected chart/sample projections retain null gaps and their existing numeric fields. Optional
+library interval-support metadata is not exposed. No catalog, scope, consent, registered schema, planning/delivery
+capability or plugin change is needed. See the reparse runbook for the existing operational boundary.
 
 #### Earlier published dependency verification
 

@@ -76,6 +76,37 @@ export function canSelectEventChartDistanceXAxis(activities: ActivityInterface[]
     || !activityHasFiniteDistanceData(activity));
 }
 
+/** Match a distance cursor to a recorded pair without coercing or filling missing readings. */
+export function resolveEventDistanceCursorSeconds(
+  distanceValues: unknown,
+  timeValues: unknown,
+  targetDistance: number,
+): number | null {
+  if (!Number.isFinite(targetDistance) || !Array.isArray(distanceValues) || !Array.isArray(timeValues)) {
+    return null;
+  }
+
+  let closestSeconds: number | null = null;
+  let smallestDelta = Number.POSITIVE_INFINITY;
+  const length = Math.min(distanceValues.length, timeValues.length);
+  for (let index = 0; index < length; index += 1) {
+    const distance = distanceValues[index];
+    const seconds = timeValues[index];
+    if (typeof distance !== 'number' || !Number.isFinite(distance)
+      || typeof seconds !== 'number' || !Number.isFinite(seconds)) {
+      continue;
+    }
+
+    const delta = Math.abs(targetDistance - distance);
+    if (delta < smallestDelta) {
+      smallestDelta = delta;
+      closestSeconds = seconds;
+    }
+  }
+
+  return closestSeconds;
+}
+
 export function formatEventXAxisValue(value: number, axisType: XAxisTypes, options?: EventXAxisFormatOptions): string {
   if (!Number.isFinite(value)) {
     return '';

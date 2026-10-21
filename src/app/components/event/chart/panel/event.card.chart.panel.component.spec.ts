@@ -15,11 +15,16 @@ import {
   ChartCursorBehaviours,
   DataDepth,
   DataDistance,
+  DataGNSSDistance,
+  DataGNSSDistanceMiles,
+  DataStrydDistance,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
   DataStamina,
   DistanceUnits,
+  WeightUnits,
+  SpeedUnits,
   DynamicDataLoader,
   LapTypes,
   XAxisTypes,
@@ -699,9 +704,9 @@ describe('EventCardChartPanelComponent', () => {
   );
 
   it.each([
-    [DistanceUnits.Kilometers, '10.00'],
-    [DistanceUnits.Miles, '6.22'],
-  ] as const)('formats preview axis values for %s without repeating the unit', async (distanceUnits, expected) => {
+    [DistanceUnits.Kilometers, '10.00Km'],
+    [DistanceUnits.Miles, '6.22mi'],
+  ] as const)('labels preview Distance ticks with their actual %s unit', async (distanceUnits, expected) => {
     component.previewMode = true;
     component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
     component.panel = buildTestPanel(DataDistance.type, [0, 10000]);
@@ -711,6 +716,62 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.yAxis?.axisLabel?.formatter(10000)).toBe(expected);
+  });
+
+  it.each([DataDistance.type, DataStrydDistance.type, DataGNSSDistance.type, 'Step Length', 'Jump Distance'].flatMap(type =>
+    [false, true].map(overlay => ({ type, overlay }))))(
+    'labels $type ticks on the primary or overlay axis (overlay=$overlay)', async ({ type, overlay }) => {
+      const panel = buildTestPanel(type, [0, 800, 1000, 10000]);
+      if (overlay) component.overlayPanel = panel;
+      else component.panel = panel;
+      await renderComponent();
+      const axes = getRenderedOption()?.yAxis;
+      const axis = overlay ? axes[1] : axes;
+      expect(axis.axisLabel.formatter(0)).toBe('0.0m');
+      expect(axis.axisLabel.formatter(800)).toBe('800.0m');
+      expect(axis.axisLabel.formatter(1000)).toBe('1.00Km');
+      expect(axis.axisLabel.formatter(10000)).toBe('10.00Km');
+    },
+  );
+
+  it.each([false, true])('keeps Weight axes, tooltips and range statistics in pounds (overlay=%s)', async overlay => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), weightUnits: WeightUnits.Pounds };
+    const panel = buildTestPanel('Weight', [70, 80], { unit: 'lb' });
+    const before = structuredClone(panel);
+    if (overlay) component.overlayPanel = panel;
+    else component.panel = panel;
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect((overlay ? axes[1] : axes).axisLabel.formatter(70)).toBe('154.3');
+    expect(component['formatDataValue']('Weight', 70)).toBe('154.3lb');
+    component['updateRangeStats']({ start: 0, end: 10 });
+    expect(component.rangeStats.flatMap(stat => stat.entries).some(entry => entry.value === '165.3lb')).toBe(true);
+    expect(panel).toEqual(before);
+  });
+
+  it('keeps each selected speed unit on its own axis and tooltip', async () => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), speedUnits: [SpeedUnits.MilesPerHour, SpeedUnits.MetersPerSecond] };
+    component.panel = buildTestPanel('Speed', [1, 2], { unit: 'm/s' });
+    component.overlayPanel = buildTestPanel(SpeedUnits.MilesPerHour, [2.237, 4.474], { unit: 'mph' });
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect(axes).toHaveLength(2);
+    expect(axes[0].axisLabel.formatter(2)).toBe('2.00');
+    expect(axes[1].axisLabel.formatter(4.474)).toBe('4.47');
+    expect(component['formatDataValue']('Speed', 2)).toBe('2.00m/s');
+    expect(component['formatDataValue'](SpeedUnits.MilesPerHour, 4.474)).toBe('4.47mph');
+  });
+
+  it.each([false, true])('labels imperial GNSS Distance without converting it twice (overlay=%s)', async overlay => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles };
+    const panel = buildTestPanel(DataGNSSDistanceMiles.type, [0, 6.22]);
+    panel.unit = 'mi';
+    if (overlay) component.overlayPanel = panel;
+    else component.panel = panel;
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect((overlay ? axes[1] : axes).axisLabel.formatter(6.22)).toBe('6.22');
+    expect(component['formatDataValue'](DataGNSSDistanceMiles.type, 6.22)).toBe('6.22mi');
   });
 
   it.each([
@@ -796,7 +857,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.axisLabel?.formatter(100)).toBe('100');
   });
 
-  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type].flatMap(streamType =>
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type, DataDistance.type].flatMap(streamType =>
     (['legacy', 'packed'] as const).flatMap(format => [false, true].map(overlay => ({ streamType, format, overlay })))))(
     'connects two-second recorded readings with real line breaks, no dots and unchanged data ($streamType, $format, overlay=$overlay)',
     async ({ streamType, format, overlay }) => {
@@ -921,7 +982,7 @@ describe('EventCardChartPanelComponent', () => {
     }
   );
 
-  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type].flatMap(streamType =>
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type, DataDistance.type].flatMap(streamType =>
     (['legacy', 'packed'] as const).flatMap(format => [false, true].flatMap(overlay => [XAxisTypes.Duration, XAxisTypes.Time, XAxisTypes.Distance].map(axis => ({ streamType, format, overlay, axis }))))))(
     'keeps connected recorded segments inside the vertical scale through zoom cycles ($streamType, $format, overlay=$overlay, $axis)',
     ({ streamType, format, overlay, axis }) => {

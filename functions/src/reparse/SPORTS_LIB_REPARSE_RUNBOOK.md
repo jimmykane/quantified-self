@@ -7,6 +7,24 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.4.0 sparse distance adoption
+
+Root and Functions install the same published 23.4.0 artifact. Missing Distance samples remain null, while real zero
+and repeated observations remain valid. Supported intervals govern library-derived speed and grade-adjusted
+calculations; do not add distance filling or interpolation in QS. Recorded source summaries and imported TSS keep
+their existing precedence. Calculated summaries, pace load or durability evidence can change on fresh parsing.
+
+Opening Event Details already hydrates original-file streams and needs no persistence rewrite for this correction.
+To update historical saved summaries/evaluations, use the existing separately authorized source-backed reparse and
+normal derived invalidation. Preserve source totals, latest controls/policies, strict identity matching, source-write
+reservations, retry/deletion guards and stream-stripping sanitizers. There is no new migration path, derived schema,
+saved-route correction, queue or monitoring change. Optional stream interval-support metadata stays outside Firestore
+activity documents and MCP projections.
+
+The strict runtime target follows the installed version. Package adoption does not enable a scanner or start work;
+an already enabled scanner will discover eligible older versions after a separately approved deployment. Review its
+existing runtime settings before rollout. No deployment or production reparse is part of this PR.
+
 ### Sports Lib 23.1.0 threshold-HR calculation update
 
 Root and Functions pin published sports-lib 23.1.0 with matching lockfile integrity. The runtime target follows that

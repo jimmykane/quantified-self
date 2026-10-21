@@ -580,6 +580,50 @@ Distance axes. Display buffers contain only original finite coordinates plus nul
 intensity-zone styling, overlays, and comparison activities retain the same connection decisions and original values.
 Each activity has its own series; preferences never connect separate activities.
 
+Distance-axis hover-to-map synchronization selects the nearest finite distance/time pair at its original stream
+index. Missing readings, invalid values and unpaired timestamps do not become zero or shift later samples; genuine
+zeros and repeated distances remain valid, with the first recorded pair winning a tie. No usable pair means no map
+cursor update. This read-only lookup preserves the source streams and works with both dense and sparse Distance
+streams, including the existing Stryd fallback. Chart availability, x coordinates, lap markers and the map cursor
+use Stryd only when the primary Distance stream has no finite readings (including empty/all-null streams).
+A recorded zero keeps the primary source eligible. Individual holes in a usable primary stream are never filled
+from Stryd; the source streams and their summaries remain unchanged.
+
+The app and Functions both install Sports Lib 23.4.0. Original-file chart hydration retains missing Distance
+readings as null instead of carrying the last distance through unrelated sensor timestamps. Real zero and repeated
+recorded distances remain valid. Distance-axis charts omit rows without an observed x coordinate; time-axis charts can
+still show their other sensor readings. The map cursor uses the aligned finite pairs above. Opening a chart does not
+rewrite recorded summaries; historical saved statistics change only through the existing original-file reparse action.
+Distance-axis lines apply the selected continuity mode to both the metric and distance recording intervals before
+coordinate filtering. Normal sparse coordinates can connect; Detect/Custom preserve breaks in either source stream.
+Continuous can span missing data without inventing a distance, tooltip reading or statistic at those missing rows.
+
+The Distance metric itself keeps those sparse values on Time/Duration axes and uses the same continuity setting.
+Chart unit selection covers every registered Sports Lib conversion family, including pace, effort/grade-adjusted pace,
+swim pace, speed, vertical speed, depth and sustainable distance. It removes unselected base-unit duplicates while
+retaining each deliberately selected unit panel. Recorded metrics can convert units even when their sport does not
+calculate that metric. Headers, ticks, tooltips and range statistics use the same Sports Lib display and user settings;
+Weight, for example, displays pounds consistently while its source values remain kilograms.
+
+Canonical distance subclasses use Sports Lib's value-dependent m/Km tick labels without a fixed metre heading.
+Distinct sources such as Stryd Distance, Step Length and Jump Distance retain their own panel identity and canonical
+values, with conversion at display time: Sports Lib's shared generic miles/feet identifiers cannot merge them into
+recorded Distance or one another. Unique unit variants, including GNSS Distance, retain their selected unit panel.
+Duplicate raw stream selection happens before unit conversion, so each unit uses the same selected source. Empty
+stream placeholders cannot block conversion from valid recorded samples. Recorded pace, swim pace and grade-adjusted
+pace are converted before deriving missing metrics from speed; changing units must not replace recorded pace values
+or fill their gaps. Existing converted streams with finite readings, including zero, retain their own gaps. Conversion
+preserves nulls and real zero; range statistics use only recorded points, and zoom/overlays do not manufacture
+intermediate measurements.
+
+Saved overlay keys and targets resolve to the current unit variant without writing settings on read. Exact saved
+choices take precedence, even when their target is unavailable. Alias migration requires a single available variant
+and agreement among inherited choices; multiple units or conflicting older preferences cannot silently choose an
+overlay. Reading an event never deletes or rewrites these preferences. Explicit edits remove obsolete aliases but
+preserve settings for other currently available unit panels. GNSS Distance, recorded Distance, Stryd and sustainable
+distance remain distinct sources. Exact self-overlays are rejected, while two deliberately displayed unit variants
+can overlay each other on their own axes.
+
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
 even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.
@@ -684,7 +728,8 @@ Production service-worker and public
 startup/prerender checks pass, as does beta's service-worker check. All 722 targeted app assertions pass, including
 the existing App Check recovery tests. Functions compilation and the MCP compatibility check also pass. Package
 verification covers ESM/CommonJS identity, TypeScript resolution and every emitted metrics-worker chunk. Both the
-app and Functions pin 23.3.0 with registry URLs and the verified release integrity in their lockfiles.
+app and Functions pinned 23.3.0 for that verification. Their current 23.4.0 pins retain registry URLs and matching
+release integrity in both lockfiles.
 
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.

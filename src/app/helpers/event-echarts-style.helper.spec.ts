@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { AppDataColors } from '../services/color/app.data.colors';
 import {
+  hasEventChartValueDependentUnit,
   isEventPaceStreamType,
   resolveMetricColorGroupKey,
   resolveEventColorGroupKey,
@@ -20,6 +21,18 @@ import {
 } from './event-echarts-style.helper';
 
 describe('event-echarts-style.helper', () => {
+  it.each(['Distance', 'GNSS Distance', 'Distance (Stryd)', 'Step Length', 'Jump Distance', 'Auto Lap Distance',
+    'Estimated Sustainable Distance', 'Minimum Estimated Sustainable Distance'])(
+    'identifies value-dependent distance labels for %s', type => {
+      expect(hasEventChartValueDependentUnit(type)).toBe(true);
+    },
+  );
+  it.each(['Distance in miles', 'Distance in feet', 'GNSS Distance in miles', 'Depth', 'Weight', 'Swim Distance', 'Unknown'])(
+    'keeps fixed-unit labels for %s', type => {
+      expect(hasEventChartValueDependentUnit(type)).toBe(false);
+    },
+  );
+
   it('maps stream types to legacy color groups', () => {
     expect(resolveEventColorGroupKey(DataPowerRight.type)).toBe('Power');
     expect(resolveEventColorGroupKey(DataPowerBalanceRight.type)).toBe('Power Balance');
