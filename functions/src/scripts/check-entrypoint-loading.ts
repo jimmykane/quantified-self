@@ -131,7 +131,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   maxInstances?: number;
   cpu?: number;
 }>> = {
-  processSportsLibReparseTask: { memoryMb: 1024, timeoutSeconds: 1800, trigger: 'task', cpu: 2, concurrency: 1 },
+  processSportsLibReparseTask: { memoryMb: 1024, timeoutSeconds: 1800, trigger: 'task', cpu: 1, concurrency: 1 },
   processSportsLibReparseHeavyTask: { memoryMb: 8192, timeoutSeconds: 960, trigger: 'task', cpu: 4, concurrency: 1,
     maxInstances: 1, maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
   processSportsLibRouteReparseTask: { memoryMb: 4096, timeoutSeconds: 1800, trigger: 'task', cpu: 2, concurrency: 1 },
