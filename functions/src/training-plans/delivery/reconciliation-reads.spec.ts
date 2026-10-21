@@ -1,7 +1,7 @@
 import { Firestore, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
+import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { DeliveryRuntime } from './contracts';
 import { ReconciliationReads } from './reconciliation-reads';
@@ -12,10 +12,10 @@ describe('reconciliation transaction reads', () => {
   const db = new Firestore({ projectId: 'demo-training-delivery-cache' });
   afterAll(() => db.terminate());
   const fixture = () => {
-    const get = vi.fn(async (_reference: DocumentReference) => ({ exists: false, data: () => undefined, get: () => undefined }));
+    const get = vi.fn(async (reference: DocumentReference) => ({ ref: reference, exists: false, data: () => undefined, get: () => undefined }));
     const tx = { get } as unknown as Transaction;
-    const connection = vi.fn(async (_tx: Transaction, _uid: string, _provider: PlannedWorkoutProviderId) => (
-      { state: 'connected' as const, destinationKey: 'fixture-account', generation: 'one', epoch: 0 }));
+    const connection = vi.fn<DeliveryRuntime['connection']>().mockResolvedValue(
+      { state: 'connected', destinationKey: 'fixture-account', generation: 'one', epoch: 0 });
     const runtime: DeliveryRuntime = { db, now: () => 1, hasPro: async () => true, connection, transport: () => null };
     return { tx, get, runtime, connection };
   };
