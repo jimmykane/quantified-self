@@ -2366,6 +2366,11 @@ describe('sleep queue', () => {
             reason: 'unsupported_stress_code', valueType: 'number', numericValue: 0,
             valueDisposition: 'included', sampleOffsetSeconds: 180,
         },
+        {
+            summaryType: 'skinTemp', summaryIndex: 0, field: 'durationInSeconds',
+            reason: 'negative_duration', valueType: 'number', numericValue: -16_920,
+            valueDisposition: 'included', sampleOffsetSeconds: null,
+        },
     ] as const)('logs only safe diagnostics and records a lifecycle-guarded Health failure before DLQ (%#)', async diagnostic => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
         hoisted.tokenRootGet.mockResolvedValue({
@@ -2403,8 +2408,8 @@ describe('sleep queue', () => {
             providerUserId: 'garmin-user-1',
             retryCount: 0,
             type: 'garmin_ping',
-            garminSummaryType: 'bodyComps',
-            callbackURL: 'https://apis.garmin.com/wellness-api/rest/bodyComps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+            garminSummaryType: diagnostic?.summaryType ?? 'bodyComps',
+            callbackURL: `https://apis.garmin.com/wellness-api/rest/${diagnostic?.summaryType ?? 'bodyComps'}?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token`,
             ref: { update } as unknown as admin.firestore.DocumentReference,
         });
 

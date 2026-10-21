@@ -42,31 +42,31 @@ export class GarminHealthValidationError extends Error {
   public readonly name = 'GarminHealthValidationError';
   public readonly code = 'garmin_health_invalid_response';
 
-  constructor(message: string, public readonly diagnostic?: GarminStressValidationDiagnostic) {
+  constructor(message: string, public readonly diagnostic?: GarminHealthValidationDiagnostic) {
     super(message);
   }
 }
 
 // Internal error telemetry only: never retain raw strings, objects, or summaries.
-interface GarminStressValidationDiagnostic {
-  summaryType: 'dailies' | 'stressDetails';
+interface GarminHealthValidationDiagnostic {
+  summaryType: 'dailies' | 'stressDetails' | 'skinTemp';
   summaryIndex: number;
-  field: 'averageStressLevel' | 'timeOffsetStressLevelValues';
-  reason: 'invalid_type' | 'non_finite' | 'out_of_range' | 'not_integer' | 'unsupported_stress_code';
+  field: 'averageStressLevel' | 'timeOffsetStressLevelValues' | 'durationInSeconds';
+  reason: 'invalid_type' | 'non_finite' | 'out_of_range' | 'not_integer' | 'unsupported_stress_code' | 'negative_duration';
   valueType: string;
   numericValue: number | null;
   valueDisposition: 'included' | 'non_numeric' | 'non_finite' | 'outside_diagnostic_range';
   sampleOffsetSeconds: number | null;
 }
 
-function stressValidationDiagnostic(
-  summaryType: GarminStressValidationDiagnostic['summaryType'],
+function healthValidationDiagnostic(
+  summaryType: GarminHealthValidationDiagnostic['summaryType'],
   summaryIndex: number,
-  field: GarminStressValidationDiagnostic['field'],
-  reason: GarminStressValidationDiagnostic['reason'],
+  field: GarminHealthValidationDiagnostic['field'],
+  reason: GarminHealthValidationDiagnostic['reason'],
   value: unknown,
   sampleOffsetSeconds: number | null = null,
-): GarminStressValidationDiagnostic {
+): GarminHealthValidationDiagnostic {
   // This telemetry bound is independent of (and never changes) validation.
   const valueDisposition = typeof value !== 'number' ? 'non_numeric'
     : !Number.isFinite(value) ? 'non_finite'
@@ -269,18 +269,33 @@ function dailyCoverage(interval: ParsedInterval, sampleCount: number): HealthCov
 function parseInterval(
   value: unknown,
   field: string,
-  options: { calendarDateRequired?: boolean; offsetField?: string } = {},
+  options: { calendarDateRequired?: boolean; offsetField?: string; skinTemperatureSummaryIndex?: number } = {},
 ): ParsedInterval {
   const summary = asRecord(value, field);
   const summaryId = boundedString(summary.summaryId, `${field}.summaryId`);
   const startTimeMs = timestampMs(summary.startTimeInSeconds, `${field}.startTimeInSeconds`);
-  const durationSeconds = requiredNumber(
-    summary.durationInSeconds,
-    `${field}.durationInSeconds`,
-    0,
-    MAX_DURATION_SECONDS,
-    true,
-  );
+  let durationSeconds: number;
+  try {
+    durationSeconds = requiredNumber(
+      summary.durationInSeconds,
+      `${field}.durationInSeconds`,
+      0,
+      MAX_DURATION_SECONDS,
+      true,
+    );
+  } catch (error) {
+    if (!(error instanceof GarminHealthValidationError)
+      || options.skinTemperatureSummaryIndex === undefined) throw error;
+    const rejectedValue = summary.durationInSeconds;
+    const reason = typeof rejectedValue !== 'number' ? 'invalid_type'
+      : !Number.isFinite(rejectedValue) ? 'non_finite'
+        : rejectedValue < 0 ? 'negative_duration'
+          : rejectedValue > MAX_DURATION_SECONDS ? 'out_of_range'
+            : 'not_integer';
+    throw new GarminHealthValidationError(error.message, healthValidationDiagnostic(
+      'skinTemp', options.skinTemperatureSummaryIndex, 'durationInSeconds', reason, rejectedValue,
+    ));
+  }
   const offsetField = options.offsetField || 'startTimeOffsetInSeconds';
   const timezoneOffsetSeconds = optionalTimezoneOffsetSeconds(summary, offsetField);
   const calendarDate = summary.calendarDate === undefined || summary.calendarDate === null
@@ -668,7 +683,7 @@ function mapDaily(
       : !Number.isFinite(rejectedValue) ? 'non_finite'
         : rejectedValue < -2 || rejectedValue > 100 ? 'out_of_range'
           : 'not_integer';
-    throw new GarminHealthValidationError(error.message, stressValidationDiagnostic(
+    throw new GarminHealthValidationError(error.message, healthValidationDiagnostic(
       'dailies', index, 'averageStressLevel', reason, rejectedValue,
     ));
   }
@@ -832,7 +847,7 @@ function mapStressDetails(
   if (unsupportedStressPoint) {
     throw new GarminHealthValidationError(
       `${field}.timeOffsetStressLevelValues contains an unsupported stress code.`,
-      stressValidationDiagnostic(
+      healthValidationDiagnostic(
         'stressDetails', index, 'timeOffsetStressLevelValues', 'unsupported_stress_code',
         unsupportedStressPoint.value, unsupportedStressPoint.offsetSeconds,
       ),
@@ -1370,7 +1385,7 @@ function mapSkinTemperature(
   index: number,
 ): GarminHealthResult | null {
   const field = `skinTemp[${index}]`;
-  const interval = parseInterval(value, field, { calendarDateRequired: true });
+  const interval = parseInterval(value, field, { calendarDateRequired: true, skinTemperatureSummaryIndex: index });
   validateProviderUser(interval.summary, providerAccountId, field);
   const deviation = requiredNumber(interval.summary.avgDeviationCelsius, `${field}.avgDeviationCelsius`, -100, 100);
   const coverage = commonCoverage(interval.startTimeMs, interval.endTimeMs, interval.durationSeconds);
