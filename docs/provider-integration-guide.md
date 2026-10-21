@@ -1262,15 +1262,21 @@ Monitoring coverage decision: **covered/unchanged** after review of the #829 imp
 delivery, #833 route and #847 connection-history source bundles/runbooks. Their existing worker/dispatcher, committed
 retry/failure, new-DLQ/manual-review and unknown-observation filters cover the same paths. Short failure-rate alert
 windows and heartbeat/backlog thresholds are not extended; exhausted-DLQ alerts naturally occur later. Normal backoff
-remains excluded from actionable undispatched samples. No metric, dashboard, alert resource or production apply changes.
-Existing Help describes automatic retries without a fixed attempt/time promise and needs no frontend change.
-MCP/Assistant schemas, consent, projections and Training behavior are unchanged; no client refresh is required.
+remains excluded from actionable undispatched samples. No Cloud Monitoring metric, dashboard, alert resource or production
+apply changes. The admin Queue Monitor uses the same provider retry limit for pending/stuck counts, including source and
+Sleep-provider breakdowns. Its retry histogram adds a `10-19` bucket, with eight additional bounded aggregate count queries
+per stats request and no new index shape. The shared response key is optional so older backend responses still render;
+older clients ignore it until the admin chart is released. Existing Help describes automatic retries without a fixed
+attempt/time promise and needs no wording change. MCP/Assistant schemas, consent, projections and Training behavior are
+unchanged; no registered-app refresh is required.
 
 Release requires separate approval for the seven workers above plus the four recorded-import recovery dispatchers
 (`parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`, `parseCOROSAPIWorkoutQueue`, `parseWahooAPIWorkoutQueue`)
-so their query budget matches the workers. Read back each native queue's limit/backoff after deployment. Live tasks
-are not reset, and already deleted tasks or terminal failed records are not resurrected. Roll back the same endpoints
-to restore the previous limits; retained retries above the old limit may then become terminal on their next failure.
+so their query budget matches the workers, plus `getQueueStats` for correct admin counts. Release the frontend separately
+to display the new admin histogram bucket; this does not change sending or retry behavior. Read back each native queue's
+limit/backoff after deployment. Live tasks are not reset, and already deleted tasks or terminal failed records are not
+resurrected. Roll back the same endpoints to restore the previous limits; retained retries above the old limit may then
+become terminal on their next failure.
 
 ### Outbound activity delivery
 

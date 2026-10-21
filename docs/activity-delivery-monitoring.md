@@ -189,6 +189,8 @@ for scope, independent counters and rollout. Monitoring remains **covered/unchan
 windows, native queue charts and all alert thresholds stay as defined above, without waiting for exhaustion.
 Only the point at which retryable work exhausts its budget moves later. Accepted/uncertain upload identities,
 terminal classifications, Stop and the sending window remain protected; no automatic replay is added.
+The admin Queue Monitor now counts retries 10-19 as pending, rather than stuck, and includes a separate histogram
+bucket for them. This aligns the existing admin view with the budget; Cloud Monitoring policies remain unchanged.
 
 Coverage decision: **covered/unchanged**. The existing bundle's fixed route/mode filters include workspace sends.
 Suunto initialization-only failures now emit committed `retry` observations while the existing budget permits,

@@ -28,7 +28,7 @@ import {
     ConfirmationDialogComponent,
     ConfirmationDialogData,
 } from '../../confirmation-dialog/confirmation-dialog.component';
-import { validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
+import { QueueRetryHistogram, validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
 import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'training-delivery' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
@@ -233,13 +233,11 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         }
 
         const histogram = this.getActiveRetryHistogram();
-        const values = histogram
-            ? [
-                histogram['0-3'] ?? 0,
-                histogram['4-7'] ?? 0,
-                histogram['8-9'] ?? 0
-            ]
-            : [0, 0, 0];
+        const buckets: Array<keyof QueueRetryHistogram> = ['0-3', '4-7', '8-9'];
+        if (histogram?.['10-19'] !== undefined) {
+            buckets.push('10-19');
+        }
+        const values = buckets.map(bucket => histogram?.[bucket] ?? 0);
         const maxValue = Math.max(...values);
         this.hasRetryData = maxValue > 0;
 
@@ -268,7 +266,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             },
             xAxis: {
                 type: 'category',
-                data: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
+                data: buckets.map(bucket => `${bucket} Retries`),
                 axisLabel: { color: textColor },
                 axisLine: { lineStyle: { color: gridColor } },
                 axisTick: { alignWithLabel: true }
@@ -317,7 +315,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this.chartHost.scheduleResize();
     }
 
-    private getActiveRetryHistogram(): { '0-3': number; '4-7': number; '8-9': number } | null {
+    private getActiveRetryHistogram(): QueueRetryHistogram | null {
         if (this.queueView === 'activity-sync') {
             return this.stats?.activitySync?.advanced?.retryHistogram || null;
         }

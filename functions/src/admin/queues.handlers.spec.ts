@@ -164,6 +164,66 @@ describe('getQueueStats Cloud Function', () => {
         };
     });
 
+    it('counts provider retries 10-19 as pending and includes them in every retry histogram', async () => {
+        const fallback = mockCollection.getMockImplementation()!;
+        const ingestionCollections = ['garminAPIActivityQueue', 'suuntoAppWorkoutQueue', 'COROSAPIWorkoutQueue', 'wahooAPIWorkoutQueue'];
+        const providerCollections = [...ingestionCollections, 'activitySyncQueue', 'routeDeliverySyncQueue', 'routeSyncQueue', 'sleepSyncQueue'];
+        const boundaryRows = [0, 3, 4, 7, 8, 9, 10, 19, 20].map(retryCount => ({ processed: false, retryCount }));
+        const rows = [...boundaryRows, { processed: true, retryCount: 10, resultStatus: 'success' }];
+        type Filter = { field: string; op: string; value: unknown };
+        mockCollection.mockImplementation((name: string) => {
+            if (!providerCollections.includes(name)) return fallback(name);
+            let documents: Array<Record<string, unknown>> = rows;
+            if (name === 'sleepSyncQueue') {
+                documents = ['GarminAPI', 'SuuntoApp', 'COROSAPI'].flatMap(provider => rows.map(row => ({ ...row, provider })));
+            } else if (name === 'activitySyncQueue') {
+                documents = [
+                    { deliveryMode: 'historical', sourceServiceName: 'GarminAPI' },
+                    { deliveryMode: 'direct', sourceServiceName: 'GarminAPI' },
+                    { deliveryMode: 'direct', sourceServiceName: 'manualUpload' },
+                ].flatMap(source => rows.map(row => ({ ...row, ...source })));
+            }
+            const buildQuery = (filters: Filter[]) => ({
+                where: (field: string, op: string, value: unknown) => buildQuery([...filters, { field, op, value }]),
+                orderBy: () => buildQuery(filters),
+                limit: () => buildQuery(filters),
+                count: () => ({ get: async () => ({ data: () => ({ count: documents.filter(row => filters.every(filter => {
+                    const actual = row[filter.field];
+                    if (filter.op === '==') return actual === filter.value;
+                    if (typeof actual !== 'number' || typeof filter.value !== 'number') return false;
+                    if (filter.op === '<') return actual < filter.value;
+                    if (filter.op === '>=') return actual >= filter.value;
+                    if (filter.op === '>') return actual > filter.value;
+                    throw new Error(`Unexpected operator ${filter.op}`);
+                })).length }) }) }),
+                get: async () => ({ empty: true, docs: [] }),
+            });
+            return buildQuery([]);
+        });
+
+        const result = await getQueueStats(request);
+        expect(result.pending).toBe(32);
+        expect(result.stuck).toBe(4);
+        for (const provider of result.providers) {
+            expect(provider).toMatchObject({ pending: 8, succeeded: 1, stuck: 1 });
+        }
+        expect(result.advanced?.retryHistogram).toEqual({ '0-3': 8, '4-7': 8, '8-9': 8, '10-19': 8 });
+        for (const lane of [result.activitySync, result.sleepSync]) {
+            expect(lane).toMatchObject({ pending: 24, succeeded: 3, stuck: 3 });
+            expect(lane?.advanced?.retryHistogram).toEqual({ '0-3': 6, '4-7': 6, '8-9': 6, '10-19': 6 });
+        }
+        for (const lane of [result.routeSync, result.routeDeliverySync]) {
+            expect(lane).toMatchObject({ pending: 8, succeeded: 1, stuck: 1 });
+            expect(lane?.advanced?.retryHistogram).toEqual({ '0-3': 2, '4-7': 2, '8-9': 2, '10-19': 2 });
+        }
+        expect(result.activitySync?.breakdowns?.historical).toMatchObject({ pending: 8, stuck: 1 });
+        expect(result.activitySync?.breakdowns?.manualUploads).toMatchObject({ pending: 8, stuck: 1 });
+        expect(result.activitySync?.breakdowns?.directFiles).toMatchObject({ pending: 16, stuck: 2 });
+        for (const provider of result.sleepSync?.providers || []) {
+            expect(provider).toMatchObject({ pending: 8, succeeded: 1, stuck: 1 });
+        }
+    });
+
     it('counts retained finished history runs separately from pending and failed runs', async () => {
         const fallback = mockCollection.getMockImplementation()!;
         const nowMs = Date.now();
@@ -400,6 +460,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 5,
                     '4-7': 5,
                     '8-9': 5,
+                    '10-19': 5,
                 },
                 topErrors: expect.arrayContaining([
                     { error: 'Token expired', count: 1 },
@@ -469,6 +530,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 5,
                     '4-7': 5,
                     '8-9': 5,
+                    '10-19': 5,
                 },
                 topErrors: expect.arrayContaining([
                     { error: 'Token expired', count: 1 },
@@ -862,8 +924,8 @@ describe('getQueueStats Cloud Function', () => {
                     : { pending: 1, succeeded: 1, stuck: 0, manualReconciliationRequired: 0 };
                 if (has('resultStatus', '==', 'success')) return counts.succeeded;
                 if (has('resultStatus', '==', 'manual_reconciliation_required')) return counts.manualReconciliationRequired;
-                if (has('processed', '==', false) && has('retryCount', '>=', 10)) return counts.stuck;
-                if (has('processed', '==', false) && has('retryCount', '<', 10)) return counts.pending;
+                if (has('processed', '==', false) && has('retryCount', '>=', 20)) return counts.stuck;
+                if (has('processed', '==', false) && has('retryCount', '<', 20)) return counts.pending;
                 return 0;
             }
 
@@ -876,8 +938,11 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'manual_reconciliation_required')) {
                 return 6;
             }
-            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '>=', 20)) {
                 return 1;
+            }
+            if (has('retryCount', '>=', 10) && has('retryCount', '<', 20)) {
+                return 0;
             }
             if (has('processed', '==', false) && has('retryCount', '<', 4)) {
                 return 3;
@@ -888,7 +953,7 @@ describe('getQueueStats Cloud Function', () => {
             if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
                 return 0;
             }
-            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '<', 20)) {
                 return 4;
             }
 
@@ -995,6 +1060,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 3,
                     '4-7': 1,
                     '8-9': 0,
+                    '10-19': 0,
                 },
             }),
         }));
@@ -1014,8 +1080,11 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'skipped')) {
                 return 5;
             }
-            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '>=', 20)) {
                 return 1;
+            }
+            if (has('retryCount', '>=', 10) && has('retryCount', '<', 20)) {
+                return 0;
             }
             if (has('processed', '==', false) && has('retryCount', '<', 4)) {
                 return 4;
@@ -1026,7 +1095,7 @@ describe('getQueueStats Cloud Function', () => {
             if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
                 return 1;
             }
-            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '<', 20)) {
                 return 7;
             }
 
@@ -1124,6 +1193,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 4,
                     '4-7': 2,
                     '8-9': 1,
+                    '10-19': 0,
                 },
             }),
         }));
@@ -1146,8 +1216,11 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'manual_reconciliation_required')) {
                 return 4;
             }
-            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '>=', 20)) {
                 return 2;
+            }
+            if (has('retryCount', '>=', 10) && has('retryCount', '<', 20)) {
+                return 0;
             }
             if (has('processed', '==', false) && has('retryCount', '<', 4)) {
                 return 5;
@@ -1158,7 +1231,7 @@ describe('getQueueStats Cloud Function', () => {
             if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
                 return 1;
             }
-            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '<', 20)) {
                 return 8;
             }
 
@@ -1257,6 +1330,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 5,
                     '4-7': 2,
                     '8-9': 1,
+                    '10-19': 0,
                 },
             }),
         }));

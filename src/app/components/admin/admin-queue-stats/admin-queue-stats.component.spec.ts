@@ -664,7 +664,8 @@ describe('AdminQueueStatsComponent', () => {
                     retryHistogram: {
                         '0-3': 5,
                         '4-7': 3,
-                        '8-9': 2
+                        '8-9': 2,
+                        '10-19': 4
                     },
                     topErrors: []
                 },
@@ -689,7 +690,26 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls[0][1];
             expect(optionArg.backgroundColor).toBe('transparent');
-            expect(optionArg.series[0].data).toEqual([5, 3, 2]);
+            expect(optionArg.series[0].data).toEqual([5, 3, 2, 4]);
+            expect(optionArg.xAxis.data).toEqual(['0-3 Retries', '4-7 Retries', '8-9 Retries', '10-19 Retries']);
+        });
+
+        it('shows retry data when all pending jobs are in the 10-19 bucket', async () => {
+            component.stats = {
+                pending: 3, succeeded: 0, stuck: 0, providers: [], cloudTasks: { pending: 3 },
+                advanced: {
+                    throughput: 0, maxLagMs: 0, topErrors: [],
+                    retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0, '10-19': 3 },
+                },
+            };
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(component.hasRetryData).toBe(true);
+            expect(optionArg.series[0].data).toEqual([0, 0, 0, 3]);
         });
 
         it('should use activity sync retry histogram in activity-sync view', async () => {

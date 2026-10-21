@@ -6,6 +6,8 @@ export interface QueueRetryHistogram {
     '0-3': number;
     '4-7': number;
     '8-9': number;
+    /** Optional for compatibility with older deployed queue-stat responses. */
+    '10-19'?: number;
 }
 
 export interface QueueTopError {
