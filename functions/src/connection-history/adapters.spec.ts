@@ -27,6 +27,18 @@ beforeEach(() => { vi.clearAllMocks(); mocks.meta = {}; mocks.healthEnabled.mock
   mocks.activity.mockResolvedValue({ successCount: 2, failureCount: 0 }); mocks.garminActivity.mockResolvedValue(undefined); mocks.wahoo.mockResolvedValue({ successCount: 2 });
   for (const fn of [mocks.suunto, mocks.coros, mocks.garmin]) fn.mockResolvedValue({ queued: 1, sleepQueued: 1, healthQueued: 1 }); });
 describe('shared history adapter contracts', () => {
+  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps adjacent manual %s windows contiguous through the entire selected end day', async service => {
+    const job = run(service);
+    job.rangePreset = 'custom'; job.startMs = Date.parse('2026-01-01T00:00:00Z'); job.endMs = Date.parse('2026-02-02T23:59:59.999Z');
+    const step = job.steps[0]; step.nextStartMs = job.startMs;
+    const first = await executeHistoryOperation(job, step, execution);
+    expect(mocks.activity).toHaveBeenLastCalledWith('owner', service, new Date(job.startMs), new Date('2026-01-30T23:59:59.999Z'), expect.objectContaining({ maxItems: 100 }));
+    expect(first.nextStartMs).toBe(Date.parse('2026-01-31T00:00:00Z'));
+    step.nextStartMs = first.nextStartMs;
+    const last = await executeHistoryOperation(job, step, execution);
+    expect(mocks.activity).toHaveBeenLastCalledWith('owner', service, new Date(first.nextStartMs), new Date(job.endMs), expect.objectContaining({ maxItems: 100 }));
+    expect(last.nextStartMs).toBe(job.endMs + 1);
+  });
   it('requires explicit support (or an empty unsupported declaration) for every service and version', () => {
     for (const service of Object.values(ServiceNames)) {
       expect(HISTORY_ADAPTERS[service]).toBeDefined();
@@ -96,10 +108,17 @@ describe('shared history adapter contracts', () => {
     mocks.garmin.mockRejectedValueOnce(new HistoryUnavailableError('Unavailable Sleep range', job.endMs + 1000));
     await expect(executeHistoryOperation(job, step, execution)).rejects.toThrow('Unavailable Sleep range');
   });
-  it('resumes Wahoo one page at a time with cumulative counts and a fixed range', async () => {
+  it.each(['30_days', 'custom'] as const)('resumes Wahoo %s history one page at a time with cumulative counts and a fixed range', async rangePreset => {
     const job = run(ServiceNames.WahooAPI); job.steps[0].page = 3; job.steps[0].count = 100; mocks.wahoo.mockResolvedValue({ successCount: 50, nextPage: 4 });
+    job.rangePreset = rangePreset;
+    if (rangePreset === 'custom') {
+      job.startMs = Date.parse('2026-10-01T21:00:00.000Z'); job.endMs = Date.parse('2026-10-02T20:59:59.999Z');
+    }
     expect(await executeHistoryOperation(job, job.steps[0], execution)).toEqual({ count: 50, nextStartMs: job.startMs, nextPage: 4 });
     expect(mocks.wahoo).toHaveBeenCalledWith('owner', new Date(job.startMs), new Date(job.endMs), { execution, singlePage: true, page: 3, processedCountOffset: 100 });
+    mocks.wahoo.mockResolvedValueOnce({ successCount: 1 });
+    const completed = await executeHistoryOperation(job, job.steps[0], execution);
+    expect(completed.nextStartMs).toBeGreaterThan(job.endMs);
   });
   it.each([ServiceNames.SuuntoApp, ServiceNames.GarminAPI, ServiceNames.COROSAPI])('reuses Sleep/Health operations with explicit ranges and capability scope for %s', async service => {
     const job = run(service); const fn = service === ServiceNames.SuuntoApp ? mocks.suunto : service === ServiceNames.GarminAPI ? mocks.garmin : mocks.coros;

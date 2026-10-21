@@ -12,6 +12,7 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getActiveCOROSTokenSnapshot } from './account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import type { ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 import {
   addUTCCalendarDays,
   chunkCOROSInclusiveDateRange,
@@ -22,11 +23,13 @@ import {
 interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
+  background?: boolean;
 }
 
 interface HistoryToQueueResponse {
   result: string;
   stats?: HistoryImportResult;
+  historyImport?: ConnectionHistoryStatusProjection;
 }
 
 function toHistoryCallableError(error: unknown): functions.https.HttpsError {
@@ -94,6 +97,9 @@ export const addCOROSAPIHistoryToQueue = functions
 
     let startDate = parseCOROSCalendarDate(data?.startDate);
     const endDate = parseCOROSCalendarDate(data?.endDate);
+    if (data?.background !== undefined && typeof data.background !== 'boolean') {
+      throw new functions.https.HttpsError('invalid-argument', 'background must be a boolean.');
+    }
 
     if (!startDate || !endDate) {
       throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
@@ -125,6 +131,14 @@ export const addCOROSAPIHistoryToQueue = functions
     if (startDate < threeMonthsAgo) {
       logger.info(`Clamping COROS history start date from ${startDate} to ${threeMonthsAgo} for user ${userID}`);
       startDate = threeMonthsAgo;
+    }
+
+    if (data?.background === true) {
+      const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+      // COROS accepts inclusive calendar dates, including the entire end day.
+      const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate,
+        new Date(addUTCCalendarDays(endDate, 1).getTime() - 1));
+      if (historyImport) return { result: 'History import accepted', historyImport };
     }
 
     // First check last history import

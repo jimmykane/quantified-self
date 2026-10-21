@@ -2452,6 +2452,10 @@ describe('help.content', () => {
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Manual **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing');
+    expect(serviceConnectionsSection?.content).toContain('one page at a time');
+    expect(serviceConnectionsSection?.content).toContain('Acceptance means the request is saved, not that every activity has arrived');
+    expect(serviceConnectionsSection?.content).toContain('wait for queued activities before reporting completion');
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
     expect(serviceConnectionsSection?.content).toContain('Services shows **Import already running** and prevents another request');
     expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the import');

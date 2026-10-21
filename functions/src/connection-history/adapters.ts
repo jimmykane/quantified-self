@@ -53,8 +53,11 @@ export interface HistoryAdapter {
   downstream: 'activities' | 'sleep' | 'garmin-health' | 'routes';
 }
 function historyWindow(run: ConnectionHistoryRun, step: HistoryStep) {
-  const endMs = Math.min(run.endMs, step.nextStartMs + (step.windowDays ?? 30) * 86400000 - 1000);
-  return { endMs, nextStartMs: endMs + 1000 };
+  // Manual dates retain millisecond precision; adjacent windows must not lose
+  // the final second of a day. Existing automatic snapshots keep their cursor.
+  const resolutionMs = run.rangePreset === 'custom' ? 1 : 1000;
+  const endMs = Math.min(run.endMs, step.nextStartMs + (step.windowDays ?? 30) * 86400000 - resolutionMs);
+  return { endMs, nextStartMs: endMs + resolutionMs };
 }
 export function getHistoryAdapter(run: ConnectionHistoryRun, step: HistoryStep): HistoryAdapter {
   const adapter = HISTORY_ADAPTERS[run.serviceName]?.[step.id]?.[step.capability.version];

@@ -4,6 +4,23 @@
     Your request is in progress. Closing this dialog does not cancel it.
   </app-status-info>
 </div>
+} @else if (backgroundActivityImport(); as history) {
+<div class="status-container" role="status" aria-live="polite">
+  <app-status-info [type]="history.active ? 'pending' : backgroundImportNeedsAttention ? 'warning' : 'success'"
+    [title]="history.active ? 'History import in progress' : backgroundImportNeedsAttention ? 'History import needs attention' : 'History import finished'">
+    @if (history.active) {
+    Your selected history is importing in the background. You can close this dialog or leave the app.
+    } @else if (backgroundImportNeedsAttention) {
+    Some history could not be imported. Check History import in Connections for details and retry options.
+    } @else {
+    Your selected history has been processed.
+    }
+    <p>Check progress and retry failed imports under History import in Connections.</p>
+    @if (!history.active && !isAllowedToDoHistoryImport && nextImportAvailableDate) {
+    <p>New import available on {{ nextImportAvailableDate | date: 'medium' }}.</p>
+    }
+  </app-status-info>
+</div>
 } @else if (isActivityHistoryImportRunning()) {
 <div class="status-container" role="status">
   <app-status-info type="pending" title="Import already running">

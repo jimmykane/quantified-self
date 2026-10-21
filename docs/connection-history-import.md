@@ -100,6 +100,62 @@ Only server code reads runs, receipts, cursors, and leases. Client metadata cont
 
 ## Shared operations
 
+### Manual activity imports: Suunto, COROS and Wahoo
+
+Updated clients send `background: true` to the existing `addSuuntoAppHistoryToQueue`,
+`addCOROSAPIHistoryToQueue` and `addWahooAPIHistoryToQueue` callables. After the existing App Check, authentication, Pro and date validation,
+one transaction captures the current server-owned provider account, token/root credential generation and
+connection generation. It creates an activity-only run, reserves activity history and projects safe progress
+into the existing service metadata. It neither reconnects the account nor changes credentials. The existing
+Firestore trigger and recovery scheduler dispatch it; the callable makes no provider request on this path.
+
+The selected range is stored as `custom`, independently of the OAuth preset registry. Suunto and Wahoo retain the
+exact submitted timestamps and display the selected local dates; COROS retains its calendar-date validation/clamping and includes the entire end day.
+Manual window cursors advance by one millisecond, so adjacent windows do not omit the end of a day. Automatic
+snapshots retain their original cursor precision. Only the activity capability is selected: manual activity
+requests never add Sleep, Health or routes. The automatic-admission environment switch does not disable manual
+requests. No existing jobs are converted, reset or replayed.
+
+The shared coordinator admits at most 100 workouts per window, uses the existing 60-second Suunto/COROS history
+dispatch spread, waits for committed child outcomes and resumes with the same capacity, retry, deletion and
+connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed
+page cursor and the same exact selected range. Its deferred workout dispatch schedule is unchanged, not replaced
+by the Suunto/COROS spread. Workouts without FIT files or identified as third-party imports remain excluded.
+Acceptance is not processing completion. A long manual import can take multiple windows or pages;
+sharing the coordinator is not a promise that every large range completes faster than the old bulk scan.
+The foreground request is now limited to durable admission instead of provider scanning.
+
+An active coordinator (including an automatic run not yet holding an activity reservation), manual lease or
+reservation blocks another manual run. Cooldown remains server-authoritative and is rechecked transactionally.
+Retrying an older failed run cannot replace a newer active run's projection, even for a different resource.
+Restored children use `dispatchedToCloudTask: null`, matching all canonical dispatchers' unissued-task state.
+The UI follows the live projection after acceptance, keeps pending state across dialog reopening, and discards
+its optimistic receipt after a connection change. Progress and owner retry reuse the existing Connections panel.
+Background acceptance does not emit the legacy scan-result event or reset live import counts/cooldown metadata.
+The coordinator-active form lock applies to Suunto/COROS/Wahoo; Garmin retains its existing lease and
+contention-buffer behavior, with reservations still enforced by the server.
+
+Compatibility is deliberate: omitted/false `background` retains the old callable contract, and a new client can
+still read an old backend's stats response. Existing connections without account/generation metadata use the old
+manual path until a normal reconnect establishes that identity; admission never invents generations. Missing or
+mismatching tokens on a versioned connection fail closed. Garmin manual activity imports and all manual
+Sleep/Health/route imports remain on their existing paths.
+
+Monitoring: **covered/unchanged**, after reviewing `tools/connection-history-monitoring/definitions.mjs` and
+`tools/import-monitoring/definitions.mjs`. New runs use the same collection, workers, fixed provider labels,
+eligible-backlog probe, committed outcome metrics and failure alerts (#847/#829); no new queue, scheduler,
+probe, metric or alert apply is needed. No MCP/Assistant or Training contract changes.
+
+Release the compatible backend first: `addSuuntoAppHistoryToQueue`, `addCOROSAPIHistoryToQueue`,
+`processConnectionHistoryTask`, and `retryConnectionHistoryImport`. The Wahoo follow-up additionally needs
+`addWahooAPIHistoryToQueue`; once that shared coordinator/retry support is deployed, this is the only additional
+backend function required for Wahoo. Release the frontend afterward. No Rules, indexes,
+secrets or cloud queue configuration changes are needed. Deployment still requires separate approval.
+To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
+retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.
+
+### Existing provider operations
+
 | Provider | Shared operations used by manual and connection imports | Completion |
 | --- | --- | --- |
 | Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery can take hours or days |
@@ -107,7 +163,7 @@ Only server code reads runs, receipts, cursors, and leases. Client metadata cont
 | COROS | Activity history queue admission, combined daily Sleep/Health requests | Processed by existing ingestion workers |
 | Wahoo | Paginated eligible FIT-backed workout history | Processed by existing ingestion workers |
 
-Manual callables retain their request/response contracts and historical range defaults. Their implementations are shared server functions; the coordinator does not invoke HTTP callables or duplicate parsing/persistence pipelines. Reservations, permission checks, provider cutoffs, queue identities and canonical workers apply to both entrypoints. A multi-window manual activity import holds one reservation across all its windows. A scope already in cooldown is skipped with its next availability, without delaying it until that date. Other scopes continue.
+Manual callables retain their legacy request/response contracts and historical range defaults. Their implementations are shared server functions; the coordinator does not invoke HTTP callables or duplicate parsing/persistence pipelines. Reservations, permission checks, provider cutoffs, queue identities and canonical workers apply to both entrypoints. A multi-window legacy manual activity import holds one reservation across all its windows. In an automatic connection import, a scope already in cooldown is skipped with its next availability, without delaying it until that date. Other scopes continue.
 
 A manual activity-history request blocked by an active manual lease or automatic reservation returns `already-exists` (HTTP 409), not `internal` (HTTP 500). Suunto and Garmin preserve the shared reservation error at their callable boundary and log this expected contention at INFO; COROS and Wahoo already propagate it without an ERROR log. All four providers show **Import already running** in the shared form, retaining its existing short retry buffer and honoring live manual-lease expiry. This neither submits a second import nor reports the first as processed. Automatic reservations remain server-authoritative; their long expiry is not used as a browser lock deadline.
 
@@ -136,9 +192,9 @@ and child paths are registered. They reuse the guarded workout dispatcher with e
 dispatched, retrying, leased, parked and different-run/account/owner rows remain unchanged. Every started enqueue
 settles before checkpointing; failures retain durable undispatched children for the half-hour safety net, without
 resetting retries or repeating admission. A batch already waiting before deployment can still wait for that scan once.
-Manual bulk activity history and scheduled recovery retain the shared 15-minute task spread. Wahoo, Garmin,
+Legacy manual bulk activity history and scheduled recovery retain the shared 15-minute task spread. Wahoo, Garmin,
 worker concurrency and retry/backoff settings are unchanged. The coordinator still waits for all children in a window
-before admitting the next one; only newly dispatched automatic-history batches get the shorter spread. Existing tasks
+before admitting the next one; newly dispatched coordinator-owned activity batches get the shorter spread. Existing tasks
 are not rescheduled or replayed, and 60 seconds is a dispatch window, not a processing-completion guarantee.
 Reserved-name recovery still requires the exact explicit queue revision, including Suunto history; a superseded
 attempt cannot advance or dispatch a replacement. Fallback diagnostics are best effort and cannot interrupt the

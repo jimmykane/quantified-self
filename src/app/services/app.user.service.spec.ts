@@ -2564,7 +2564,8 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
                     startDate: '2023-01-01',
-                    endDate: '2023-01-31'
+                    endDate: '2023-01-31',
+                    background: true,
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2577,6 +2578,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
                     startDate: '2023-01-01',
                     endDate: '2023-01-02',
+                    background: true,
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2586,7 +2588,8 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addSuuntoAppHistoryToQueue', {
                     startDate: startDate.toISOString(),
-                    endDate: endDate.toISOString()
+                    endDate: endDate.toISOString(),
+                    background: true,
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2606,6 +2609,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addWahooAPIHistoryToQueue', {
                     startDate: startDate.toISOString(),
                     endDate: endDate.toISOString(),
+                    background: true,
                 }, { canExecute: expect.any(Function) });
             });
         });
