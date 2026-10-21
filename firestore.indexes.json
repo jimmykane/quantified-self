@@ -1785,6 +1785,7 @@
     }
   ],
   "fieldOverrides": [
+    {"collectionGroup": "events", "fieldPath": "stats", "indexes": []},
     {"collectionGroup": "events", "fieldPath": "stats.`Activity Types`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"arrayConfig": "CONTAINS", "queryScope": "COLLECTION"}]},
     {"collectionGroup": "events", "fieldPath": "stats.`Average Heart Rate`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
     {"collectionGroup": "events", "fieldPath": "stats.`Device Names`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"arrayConfig": "CONTAINS", "queryScope": "COLLECTION"}]},

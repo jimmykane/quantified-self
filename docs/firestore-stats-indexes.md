@@ -1,6 +1,6 @@
 # Firestore stats index allowlist
 
-Committed rollout stage: **prepare**.
+Committed rollout stage: **events-exempt**.
 
 `firestore.indexes.json` always declares the **current deployable stage**, pinned by
 `tools/firestore-stats-indexes.stage.json`. Preparation explicitly retains the 11 audited children and leaves automatic
