@@ -6766,6 +6766,47 @@ MCP impact review: selected chart/sample projections retain null gaps and their 
 library interval-support metadata is not exposed. No catalog, scope, consent, registered schema, planning/delivery
 capability or plugin change is needed. See the reparse runbook for the existing operational boundary.
 
+#### Pending Sports Lib power adoption
+
+Sports Lib [PR #164](https://github.com/sports-alliance/sports-lib/pull/164) changes missing FIT/TCX/GPX power to null,
+while retaining measured zero. This QS preparation is validated with its locally packed candidate; root and Functions
+remain pinned to published 23.4.0 until the library release exists. Do not merge this preparation as completed adoption:
+pin the same published artifact in both manifests and lockfiles, then repeat the focused checks and builds. The ordinary
+`functions/src/shared/power-adoption.spec.ts` regressions deliberately enforce the new behavior and fail with 23.4.0.
+
+The candidate adds approximately 2.9 kB of raw initial JavaScript versus published 23.4.0 in the same QS production
+build. Production and beta initial warning/error limits move together from 1460 to 1464 kB to accommodate that measured
+increase; the total-script error limit remains 13600 kB. Hosting configuration tests pin both limits. Repeat the release
+build and public-startup/service-worker guards with the final published artifact before merge.
+
+The library owns interval support, calculated average/work/NP/curves, power TSS eligibility, side watts, FIT balance
+decoding and multisport power aggregation. QS consumes those values without filling unknown watts or adding coverage
+markers. A measured zero remains a reading. Missing power contributes neither a fabricated zero to the observed mean
+nor evidence for a complete effort. Calculated work needs complete active coverage; supplied summaries retain priority.
+Computed power TSS needs at least 80% supported active-time coverage and complete NP windows; partial calculated results
+keep `estimated: true` through saved evaluations and the effective-load resolver. Supplied NP/imported TSS retain the
+library's existing precedence. Imported calibration remains file-only.
+
+Event Details source hydration and on-demand MCP reads receive corrected readings as soon as the new parser is adopted;
+no Firestore stream rewrite is needed. Raw/3s display and continuity choices remain display-only. Source/worker chart
+packing, range summaries and left/right charts retain nulls and zero independently of line continuity. A selected chart
+range summarizes its observed displayed samples; it does not replace a supplied or timer-weighted workout summary.
+
+Saved summaries, per-leg curves and private load evaluations remain historical until the existing authorized source-backed
+reparse refreshes them. A Training rebuild alone only sees saved evidence. Source rewrites retain dated policies, overrides,
+exclusions, strict leg matching, reservations, retries and deletion fences. Event/activity `stats` changes, including removal
+of now-unavailable work or curve points, already invalidate derived metrics through normal coordinated ingress. Repeated
+identical writes remain no-ops; there is no schema bump or global rebuild. Library-only multisport regeneration can correct
+parent averages from saved leg summaries, but QS uses its existing reparse lifecycle rather than a second migration path.
+Saved routes need no reparse for this power change. Review already-enabled activity and route scanners before deployment:
+their target follows the installed package version even though this PR changes no scanner configuration.
+
+MCP impact: canonical numeric names/units, selected chart/sample fields, catalog discovery, registered schemas, scopes,
+consent, planning reads/mutations and provider delivery are unchanged. Missing summaries remain absent; valid zero is
+available. Detailed samples keep aligned nulls; the chart projection keeps only measured points with their original offsets
+and reports missing counts. No coverage metadata is exposed, no plugin refresh is needed, and production reparse,
+deployment and Sports Lib publication remain separate approvals. The reparse runbook owns the adoption checklist.
+
 #### Earlier published dependency verification
 
 The earlier published Sports Lib 21.6.9 release incorporated

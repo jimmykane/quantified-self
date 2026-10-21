@@ -7,6 +7,34 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Pending power adoption (Sports Lib PR #164)
+
+This is a prepared consumer change, not a released dependency. Root and Functions still pin 23.4.0. Local validation
+uses a packed build of [Sports Lib PR #164](https://github.com/sports-alliance/sports-lib/pull/164); do not commit a
+temporary `file:` dependency, local tarball, guessed version or production configuration change.
+
+Before merge:
+
+1. Publish the approved library change through its separate release lifecycle.
+2. Install that exact published version with `npm install --save-exact @sports-alliance/sports-lib@<published-version>`
+   in both the root and Functions directories. Commit both manifests and lockfiles; verify matching integrity and
+   installed runtime versions. Preserve the independent direct FIT Parser pin.
+3. Run the power adoption, chart, Training load, reparse/worker, derived source and MCP contract tests; build Functions
+   and the production app. The new ordinary adoption regressions intentionally fail with old 23.4.0 semantics.
+4. Review scanner runtime settings before any separately approved deployment. An enabled scanner can enqueue eligible
+   older activities/routes when the installed version advances; disabling one requires its own explicit approval.
+
+Missing FIT/TCX/GPX watts remain null, while recorded zero remains coasting. The library calculates power summaries,
+efforts, work and load from supported active intervals; QS must not insert zeros or carry readings across gaps. New
+imports and on-demand source hydration use that behavior after adoption. Historical stored summaries, curves and load
+evaluations require the existing authorized source-backed reparse; a Training refresh cannot reconstruct source evidence.
+Reparse keeps imported scores, current controls, dated policies, strict leg identities, source reservations, retry and
+deletion guards. Sanitizers still strip all streams. Normal semantic source invalidation refreshes affected snapshots,
+including when a statistic becomes unavailable; there is no new schema, queue, scanner setting or bulk-write path.
+The power correction does not require saved-route reparse. See the
+[Training adoption contract](../../../docs/training-workspace.md#pending-sports-lib-power-adoption) for calculation and
+MCP compatibility. No deployment, production reparse or library release is performed by this preparation.
+
 ### Sports Lib 23.4.0 sparse distance adoption
 
 Root and Functions install the same published 23.4.0 artifact. Missing Distance samples remain null, while real zero
