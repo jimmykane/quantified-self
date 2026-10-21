@@ -1993,6 +1993,14 @@ on phones rather than being truncated in single-line list slots. Rows use compac
 long edit histories from taking over the page. Deleted workouts use the same surface-free Show/Hide Material-button
 pattern as Training recovery details, with controlled hidden content and haptic feedback, not a raised expansion panel.
 Failed history reads have an explicit Retry action.
+Deleted-workout rows reuse compact rows with the canonical sport icon, wrapping titles and localized scheduled dates;
+on phones their History and permanent-delete actions sit below the details instead of squeezing the text into ellipses.
+History focuses its labelled region and scrolls it below the visible app header as soon as the loading panel renders,
+so an off-screen result no longer appears to be a no-op. Closing history, changing scope/account or replacing its request
+invalidates pending focus; resolving a request and loading older revisions do not scroll the page again.
+MCP impact: no wire impact. This changes only native frontend layout/focus, not plan/workout read coverage, recipes,
+history/restore permissions, scopes, consent, mutations or provider actions. Existing Help's Deleted workouts and
+history/restore instructions remain accurate and were reviewed; no help-content change or MCP/plugin refresh is needed.
 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and

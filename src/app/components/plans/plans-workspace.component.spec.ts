@@ -3595,10 +3595,65 @@ describe('PlansWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.historyPanel()).toBeNull();
   });
-  it('keeps long revision histories bounded and deleted-workout details surface-free', async () => {
-    const deleted = { ...schedule.workouts[0], id: 'deleted', title: 'Deleted review run',
+
+  it.each(['plan', 'workout'] as const)('brings deleted %s history into view while it is loading', async kind => {
+    const deleted = { ...schedule.workouts[0], id: 'deleted-history', planId: kind === 'plan' ? 'active-plan' : null,
       lifecycle: 'deleted' as const, deletedAtMs: 1_789_000_000_000 };
     getDeletedWorkoutsPage.mockResolvedValue({ workouts: [deleted], nextCursor: null });
+    let resolveHistory!: (value: unknown) => void;
+    getHistory.mockReturnValue(new Promise(resolve => { resolveHistory = resolve; }));
+    const fixture = await renderPlans();
+    if (kind === 'workout') fixture.componentInstance.selectView('standalone');
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('button[aria-controls="deleted-workout-list"]').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    haptics.selection.mockClear();
+    const scrollIntoView = vi.fn();
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    try {
+      fixture.nativeElement.querySelector('.deleted-workout-actions button').click();
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      const panel = fixture.nativeElement.querySelector('#history-panel') as HTMLElement;
+      expect(panel.textContent).toContain('Loading history…');
+      expect(panel.getAttribute('role')).toBe('region');
+      expect(panel.getAttribute('aria-labelledby')).toBe('history-panel-title');
+      expect(document.activeElement).toBe(panel);
+      expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'start' });
+      expect(scrollIntoView.mock.instances[0]).toBe(panel);
+      expect(getHistory).toHaveBeenCalledWith({ scope: kind === 'plan'
+        ? { kind: 'plan', id: 'active-plan' } : { kind: 'workout', id: deleted.id }, limit: 50 });
+      expect(haptics.selection).toHaveBeenCalledOnce();
+      resolveHistory({ entries: [], nextBeforeRevision: null });
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(panel.textContent).toContain('No revisions are available.');
+      expect(scrollIntoView).toHaveBeenCalledOnce();
+      expect(mutate).not.toHaveBeenCalled();
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', descriptor);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  });
+
+  it('does not move focus to history after it is closed before rendering', async () => {
+    getHistory.mockResolvedValue({ entries: [], nextBeforeRevision: null });
+    const fixture = await renderPlans();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const pending = fixture.componentInstance.openHistory({ kind: 'plan', id: 'active-plan' });
+    fixture.componentInstance.closeHistory();
+    await pending; fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('#history-panel')).toBeNull();
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it('keeps long revision histories bounded and deleted-workout details surface-free', async () => {
+    const deleted = { ...schedule.workouts[0], id: 'deleted', title: 'Deleted review run with a long title that must remain readable on a narrow phone',
+      lifecycle: 'deleted' as const, deletedAtMs: 1_789_000_000_000 };
+    const swim = { ...deleted, id: 'deleted-swim', title: 'Pool swim · 10 × 100 m with 15-second rests', deletedAtMs: deleted.deletedAtMs - 1,
+      structure: { ...deleted.structure, sport: ActivityTypes.Swimming } };
+    const ride = { ...deleted, id: 'deleted-ride', title: 'Cycling recovery', deletedAtMs: deleted.deletedAtMs - 2,
+      structure: { ...deleted.structure, sport: ActivityTypes.Cycling } };
+    getDeletedWorkoutsPage.mockResolvedValue({ workouts: [deleted, swim, ride], nextCursor: null });
     const fixture = await renderPlans();
     fixture.componentInstance.historyPanel.set({ scope: { kind: 'plan', id: 'active-plan' }, status: 'ready',
       entries: Array.from({ length: 50 }, (_, index) => ({ revision: 50 - index, operationKind: 'update-workout',
@@ -3616,6 +3671,17 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Deleted review run');
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    const rows = fixture.debugElement.queryAll(By.css('.deleted-workout-row'));
+    expect(rows).toHaveLength(3);
+    expect(rows.map(row => row.query(By.css('app-activity-type-icon')).componentInstance.activityType))
+      .toEqual([deleted.structure.sport, ActivityTypes.Swimming, ActivityTypes.Cycling]);
+    expect(rows[0].nativeElement.querySelector('h3').textContent).toContain(deleted.title);
+    expect(rows[0].nativeElement.textContent).toContain('Sep 9, 2026');
+    expect(rows[0].nativeElement.querySelector('[matListItemTitle]')).toBeNull();
+    expect(rows[0].componentInstance.mobileActionFullWidth()).toBe(true);
+    expect(rows[0].nativeElement.querySelector('.deleted-workout-actions button').getAttribute('aria-describedby'))
+      .toBe('deleted-workout-deleted');
+    exportLibraryQa(fixture, 'deleted-workouts', '.deleted-workouts-panel');
     if (process.env.TRAINING_DELIVERY_QA_DIR) {
       const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
       const css = [
@@ -3654,11 +3720,11 @@ describe('PlansWorkspaceComponent', () => {
     expect(getDeletedWorkoutsPage).toHaveBeenNthCalledWith(2, user.uid, 'active-plan',
       { deletedAtMs: first.deletedAtMs, id: first.id });
     expect(fixture.nativeElement.textContent).toContain('Second deleted run');
-    expect([...fixture.nativeElement.querySelectorAll('#deleted-workout-list mat-list-item')]).toHaveLength(2);
+    expect([...fixture.nativeElement.querySelectorAll('.deleted-workout-row')]).toHaveLength(2);
     expect(fixture.nativeElement.textContent).not.toContain('Show more deleted workouts');
     const openHistory = vi.spyOn(fixture.componentInstance, 'openHistory').mockResolvedValue();
     const permanentDelete = vi.spyOn(fixture.componentInstance, 'permanentlyDeleteWorkout').mockResolvedValue();
-    const secondRow = fixture.nativeElement.querySelectorAll('#deleted-workout-list mat-list-item')[1] as HTMLElement;
+    const secondRow = fixture.nativeElement.querySelectorAll('.deleted-workout-row')[1] as HTMLElement;
     ([...secondRow.querySelectorAll('button')].find(button => button.textContent?.includes('History')) as HTMLButtonElement).click();
     (secondRow.querySelector('button[aria-label="Delete workout permanently"]') as HTMLButtonElement).click();
     expect(openHistory).toHaveBeenCalledWith({ kind: 'plan', id: 'active-plan' });
