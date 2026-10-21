@@ -24,6 +24,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     batch.set(meta, { connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: 'account' });
     await batch.commit(); return meta;
   }
+  // Real contention can trigger Firestore SDK backoff beyond the five-second unit-test default.
   it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('admits only one of two concurrent %s requests with its matching reservation and projection', async service => {
     const meta = await seed(service);
     const results = await Promise.allSettled([
@@ -37,7 +38,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     expect((await meta.get()).data()).toMatchObject({ connectionHistoryReservation: runs.docs[0].id,
       connectionHistoryImport: { runId: runs.docs[0].id, active: true, startMs: start.getTime(), endMs: end.getTime() } });
     expect(runs.docs[0].data().steps).toMatchObject([{ id: 'activities', childPaths: [], done: false }]);
-  });
+  }, 30_000);
   it('does not leave a run or reservation after an aborted admission transaction', async () => {
     const meta = await seed(ServiceNames.SuuntoApp);
     const original = mocks.db.runTransaction.bind(mocks.db);

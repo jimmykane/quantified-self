@@ -276,6 +276,11 @@ suites. These tests include real Auth/Firestore calls and concurrent dispatch tr
 and SDK backoff can exceed Vitest's five-second unit-test default. This does not change ordinary unit-test
 timeouts, add test retries, or reduce assertions; every marketing test remains mandatory in `mcp-data`.
 
+Manual history's concurrent Suunto, COROS and Wahoo admission cases use the same 30-second contention budget.
+They run real simultaneous transactions and verify one committed run, the losing request's `already-exists` error,
+and the matching reservation/projection. The budget covers Firestore lock waits and SDK backoff; its rollback and
+account-deletion cases retain the ordinary timeout.
+
 ### Automatically balanced delivery shards
 
 Delivery became the longest job in [run 37891665905](https://github.com/jimmykane/quantified-self/actions/runs/37891665905):
