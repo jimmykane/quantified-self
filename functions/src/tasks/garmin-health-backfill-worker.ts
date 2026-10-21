@@ -6,7 +6,7 @@ import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { QueueResult } from '../queue-utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
-  CLOUD_TASK_RETRY_CONFIG,
+  PROVIDER_CLOUD_TASK_RETRY_CONFIG,
   GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS,
 } from '../shared/queue-config';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
@@ -23,7 +23,7 @@ interface GarminHealthBackfillTaskPayload {
 }
 
 export const processGarminHealthBackfillTask = onTaskDispatched({
-  retryConfig: CLOUD_TASK_RETRY_CONFIG,
+  retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
   rateLimits: {
     maxConcurrentDispatches: 1,
     maxDispatchesPerSecond: 1,

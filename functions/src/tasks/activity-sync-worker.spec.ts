@@ -129,7 +129,7 @@ describe('processActivitySyncTask', () => {
         maxConcurrentDispatches: 10,
         maxDispatchesPerSecond: 250,
       },
-      retryConfig: { maxAttempts: 10, minBackoffSeconds: 900, maxBackoffSeconds: 14400, maxDoublings: 4 },
+      retryConfig: { maxAttempts: 20, minBackoffSeconds: 900, maxBackoffSeconds: 14400, maxDoublings: 4 },
     });
   });
 

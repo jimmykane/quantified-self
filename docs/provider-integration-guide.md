@@ -1239,6 +1239,39 @@ Treat a shared token-refresh lease owned by another worker as expected queue con
 
 Keep stable identity separate from transport data. A short-lived signed file URL must not be part of a new queue or event ID. When a provider offers a detail endpoint, retain the bounded stable request fields needed to recover a missing or expired URL, validate that the returned record/component matches the queue item, and persist only the refreshed queue URL under deletion and revision guards.
 
+### Provider retry budgets
+
+Recorded activity/route imports and delivery, Sleep/Health ingestion, Garmin Health backfill and connection-history
+recovery use `PROVIDER_MAX_RETRY_COUNT = 20` and the matching `PROVIDER_CLOUD_TASK_RETRY_CONFIG`. The seven task
+workers are `processWorkoutTask`, `processActivitySyncTask`, `processSleepSyncTask`, `processRouteSyncTask`,
+`processRouteDeliverySyncTask`, `processGarminHealthBackfillTask` and `processConnectionHistoryTask`.
+Internal derived calculations, normal/heavy/route reparses and date-sensitive Training delivery retain the default
+ten-attempt policy. Training's application ledger limit remains `MAX_RETRY_COUNT = 10`; it does not inherit the
+recorded-provider budget.
+
+The existing 15-minute, 30-minute, one-hour, two-hour and then four-hour retry delays, concurrency, schedules, leases,
+revision checks, lifecycle/deletion fences and terminal error classifications are unchanged. Twenty task attempts
+include the first delivery and span approximately 64 hours before runtime/throttling delays, rather than approximately
+24 hours for ten. The seven-day queue/send window still applies. Application counters and Cloud Tasks delivery counts
+are independent: a delivery can fail before recording an application retry. Raising only one limit is insufficient,
+and resetting an application counter does not reset a task's transport budget. No new retry loop, task identity,
+counter reset, failed-job replay or retention extension is introduced. Accepted uploads retain their exact continuation
+and status-only recovery; permanent rejection, revoked access, Stop and uncertain acceptance still stop as before.
+
+Monitoring coverage decision: **covered/unchanged** after review of the #829 import, #830 Health/Sleep, #832 activity
+delivery, #833 route and #847 connection-history source bundles/runbooks. Their existing worker/dispatcher, committed
+retry/failure, new-DLQ/manual-review and unknown-observation filters cover the same paths. Short failure-rate alert
+windows and heartbeat/backlog thresholds are not extended; exhausted-DLQ alerts naturally occur later. Normal backoff
+remains excluded from actionable undispatched samples. No metric, dashboard, alert resource or production apply changes.
+Existing Help describes automatic retries without a fixed attempt/time promise and needs no frontend change.
+MCP/Assistant schemas, consent, projections and Training behavior are unchanged; no client refresh is required.
+
+Release requires separate approval for the seven workers above plus the four recorded-import recovery dispatchers
+(`parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`, `parseCOROSAPIWorkoutQueue`, `parseWahooAPIWorkoutQueue`)
+so their query budget matches the workers. Read back each native queue's limit/backoff after deployment. Live tasks
+are not reset, and already deleted tasks or terminal failed records are not resurrected. Roll back the same endpoints
+to restore the previous limits; retained retries above the old limit may then become terminal on their next failure.
+
 ### Outbound activity delivery
 
 When a provider accepts activities, use the shared `activity-sync` route model rather than adding a provider-specific fan-out path. Define an explicit `source -> destination` route in `shared/activity-sync-routes.ts`, enable it only from Services, and route historical delivery through the existing date-range backfill callable.
@@ -1322,7 +1355,7 @@ HTTP status, fixed content-type category, response/ID/URL/header-field types, ID
 milliseconds. Never log response values, arbitrary field names, headers, signed URLs or credentials. Correlate by the
 platform execution ID. The optional HTTP metadata observer cannot change request/error handling. A successful HTTP
 response missing a usable upload ID or URL stops before any FIT bytes are sent and produces a typed `retryable/restart`
-failure. The shared queue uses its existing ten-retry budget and Cloud Tasks backoff, retaining
+failure. The shared queue uses the twenty-attempt provider budget and existing Cloud Tasks backoff, retaining
 `SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE` at exhaustion; no immediate response-validation retry loop is added.
 Direct clients receive `unavailable` with `retryMode: restart` for an explicit Retry upload. Invalid local account
 identity remains permanent, and accepted uploads retain their existing guarded continuation/status-only handling.

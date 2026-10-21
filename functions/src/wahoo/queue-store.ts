@@ -10,7 +10,7 @@ import {
   markWorkoutTaskDispatchedWithRetry,
 } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { MAX_RETRY_COUNT } from '../shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import {
   markQueueItemDeletedForUserCleanup,
@@ -370,7 +370,7 @@ export async function failWahooWorkoutQueueRevision(
         atRetryCount: totalRetryCount,
         date: Date.now(),
       }];
-      if (retryCount >= MAX_RETRY_COUNT) {
+      if (retryCount >= PROVIDER_MAX_RETRY_COUNT) {
         const failedItem: Record<string, unknown> = {
           ...current,
           error: error.message,

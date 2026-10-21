@@ -5,6 +5,7 @@ import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from 
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
 import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -6092,7 +6093,7 @@ describe('sleep queue', () => {
         });
         const state: Record<string, unknown> = {
             provider, providerUserId: account, userID: 'test-user-uid', dateCreated: 1_700_000_000_000,
-            processed: false, queueRevision: 'retry-status', retryCount: outcome === 'pending' ? 0 : 9,
+            processed: false, queueRevision: 'retry-status', retryCount: outcome === 'pending' ? 0 : PROVIDER_MAX_RETRY_COUNT - 1,
             type: provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll',
             ...(provider === 'GarminAPI' ? { garminSummaryType: 'dailies',
                 callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=fixture-token',

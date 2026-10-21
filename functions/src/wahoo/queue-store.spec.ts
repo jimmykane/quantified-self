@@ -4,6 +4,7 @@ import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.inte
 import { withHistoryExecution } from '../connection-history/context';
 import { HistoryLifecycleChangedError, type HistoryExecution } from '../connection-history/execution';
 import { recordImportCompletion } from '../queue/import-monitoring';
+import { QueueResult } from '../queue-utils';
 vi.mock('../queue/import-monitoring', () => ({ recordImportCommit: vi.fn(), recordImportCompletion: vi.fn() }));
 
 const mocks = vi.hoisted(() => {
@@ -144,6 +145,27 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
     expect(mocks.transactionDelete).not.toHaveBeenCalled();
+  });
+
+  it.each([9, 18, 19])('applies the 20-failure budget to the current claimed revision at %i', async retryCount => {
+    const item = { ...input, ref: mocks.ref, retryCount, totalRetryCount: retryCount,
+      processingOwner: 'worker-1' } as WahooAPIWorkoutQueueItemInterface;
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => item });
+
+    const result = await failWahooWorkoutQueueRevision(item, 'worker-1', new Error('Temporary provider failure'));
+
+    if (retryCount === 19) {
+      expect(result).toBe(QueueResult.MovedToDLQ);
+      expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.failedRef, expect.objectContaining({ context: 'MAX_RETRY_REACHED' }));
+      expect(mocks.transactionDelete).toHaveBeenCalledWith(mocks.ref);
+    } else {
+      expect(result).toBe(QueueResult.RetryIncremented);
+      expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+        retryCount: retryCount + 1, totalRetryCount: retryCount + 1, dispatchedToCloudTask: null,
+      }));
+      expect(mocks.transactionSet).not.toHaveBeenCalled();
+      expect(mocks.transactionDelete).not.toHaveBeenCalled();
+    }
   });
 
   it('queues a new revision and dispatches immediate webhook work', async () => {

@@ -5,18 +5,27 @@
  * immediate (Cloud Tasks) and background (scheduled) processing.
  */
 
-/** Maximum retry attempts before giving up on a queue item for background processing */
+/** Default application retry budget; scheduled Training delivery keeps this limit. */
 export const MAX_RETRY_COUNT = 10;
+
+/** Recorded provider imports/delivery and history can recover through multi-day outages. */
+export const PROVIDER_MAX_RETRY_COUNT = 20;
 
 /** Cron schedule for background processing (every 30 minutes) */
 export const QUEUE_SCHEDULE = '*/30 * * * *';
 
-/** Cloud Tasks retry configuration - totals ~24 hours */
+/** Default/internal Cloud Tasks budget: approximately 24 hours, including the first attempt. */
 export const CLOUD_TASK_RETRY_CONFIG = {
     maxAttempts: 10,
     minBackoffSeconds: 900,    // 15 minutes
     maxBackoffSeconds: 14400,  // 4 hours
     maxDoublings: 4,
+} as const;
+
+/** Provider jobs share the same backoff, but allow approximately 64 hours of recovery. */
+export const PROVIDER_CLOUD_TASK_RETRY_CONFIG = {
+    ...CLOUD_TASK_RETRY_CONFIG,
+    maxAttempts: PROVIDER_MAX_RETRY_COUNT,
 } as const;
 
 /** Runtime and HTTP dispatch deadline for the paced Garmin Health history worker. */

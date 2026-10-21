@@ -1,4 +1,4 @@
-import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../shared/queue-config';
+import { getCloudTaskRetryBackoffSeconds, PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import type { ConnectionHistoryRun, HistoryStep } from './model';
 
 export type HistoryChildObservation = 'pending' | 'processed' | 'unavailable' | 'failed' | 'skipped' | 'authorization' | 'mixed';
@@ -63,7 +63,7 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       run.nextAttemptAt = now + 2_000;
     } else {
       step.retryCount++;
-      step.done = failure.kind === 'split' || step.retryCount >= MAX_RETRY_COUNT;
+      step.done = failure.kind === 'split' || step.retryCount >= PROVIDER_MAX_RETRY_COUNT;
       step.status = step.done ? 'failed' : 'retrying';
       run.nextAttemptAt = step.done ? now + 2_000 : Math.max(failure.retryAt || 0, now + getCloudTaskRetryBackoffSeconds(step.retryCount) * 1000);
     }

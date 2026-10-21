@@ -2,7 +2,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import { performance } from 'node:perf_hooks';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import { PROVIDER_CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { QueueResult } from '../queue-utils';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -66,7 +66,7 @@ function safeWorkloadFields(queueItem: SleepSyncQueueItemInterface | undefined) 
 }
 
 export const processSleepSyncTask = onTaskDispatched({
-    retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     secrets: FUNCTION_SECRET_BINDINGS.processSleepSyncTask,
     memory: '1GiB',
     timeoutSeconds: 540,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
-import { MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { ServiceNames, ActivityParsingOptions, EventImporterFIT, COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 
@@ -520,6 +520,18 @@ describe('queue', () => {
             }));
         });
 
+        it.each([9, 18])('keeps legacy provider work retryable after %i failures', async retryCount => {
+            const admin = await import('firebase-admin');
+            const ref = { update: vi.fn().mockResolvedValue(undefined), parent: { id: 'suuntoAppWorkoutQueue' } };
+            const item = { id: 'legacy-provider-retry', ref, retryCount, totalRetryCount: retryCount,
+                processed: false, dateCreated: Date.now() } as unknown as QueueItemInterface;
+
+            expect(await increaseRetryCountForQueueItem(item, new Error('Temporary download failure')))
+                .toBe(QueueResult.RetryIncremented);
+            expect(ref.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: retryCount + 1 }));
+            expect(admin.firestore().batch().set).not.toHaveBeenCalled();
+        });
+
         it('should move to DLQ if max retries reached', async () => {
             const admin = await import('firebase-admin');
             const firestore = admin.firestore();
@@ -545,8 +557,8 @@ describe('queue', () => {
                 },
             };
 
-            // 10 is max retry count
-            await increaseRetryCountForQueueItem(queueItem, new Error('Big error'), 10);
+            // Exhaust the provider application retry budget.
+            await increaseRetryCountForQueueItem(queueItem, new Error('Big error'), PROVIDER_MAX_RETRY_COUNT);
 
             // Should NOT verify update on original ref
             expect(mockRef.update).not.toHaveBeenCalled();
@@ -568,7 +580,7 @@ describe('queue', () => {
             const queueItem: QueueItemInterface = {
                 id: 'provider-retry-exhausted',
                 ref: mockRef as any,
-                retryCount: 9,
+                retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                 processed: false,
                 dateCreated: Date.now(),
                 dispatchedToCloudTask: null,
@@ -4344,7 +4356,7 @@ describe('queue', () => {
         });
 
         it('retains a Suunto-specific DLQ context when incomplete FIT responses exhaust retries', async () => {
-            suuntoQueueItem.retryCount = 9;
+            suuntoQueueItem.retryCount = PROVIDER_MAX_RETRY_COUNT - 1;
             const providerBody = Buffer.from('temporary provider response', 'utf8');
             vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(providerBody, 'text/plain'));
 

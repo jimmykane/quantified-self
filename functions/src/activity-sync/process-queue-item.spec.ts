@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
-import { MAX_RETRY_COUNT } from '../shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
 import { sessionlessFixture } from '../../test-utils/fit-activity-session';
@@ -2042,7 +2042,7 @@ describe('activity-sync/process-queue-item', () => {
       destinationServiceName: ServiceNames.COROSAPI,
       destinationUploadID: '42',
       destinationProviderUserID: 'coros-user-1',
-      retryCount: MAX_RETRY_COUNT - 1,
+      retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
     };
     mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.COROSAPI,
@@ -2950,7 +2950,7 @@ describe('activity-sync/process-queue-item', () => {
 
   it.each([
     [0, QueueResult.RetryIncremented],
-    [MAX_RETRY_COUNT - 1, QueueResult.MovedToDLQ],
+    [PROVIDER_MAX_RETRY_COUNT - 1, QueueResult.MovedToDLQ],
   ])('handles malformed Suunto initialization within the existing retry budget (%i)', async (retryCount, expectedResult) => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -3012,7 +3012,7 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('retains terminal workspace review when Suunto initialization exhausts its existing attempt budget', async () => {
-    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: MAX_RETRY_COUNT - 1 };
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: PROVIDER_MAX_RETRY_COUNT - 1 };
     mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
       retryMode: 'restart', code: 'unavailable', message: 'Synthetic initialization failure.',

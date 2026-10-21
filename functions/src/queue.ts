@@ -3,7 +3,7 @@ import * as functions from 'firebase-functions/v1';
 import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { retainCOROSTrainingCompletion } from './coros/training-completion';
 import { config } from './config';
-import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
@@ -329,7 +329,7 @@ async function dispatchQueueItemTasksInternal(serviceName: ServiceNames) {
     .collection(getServiceWorkoutQueueName(serviceName))
     .where('processed', '==', false)
     .where('dispatchedToCloudTask', '==', null)
-    .where('retryCount', '<', MAX_RETRY_COUNT)
+    .where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT)
     .limit(batchSize)
     .get();
 

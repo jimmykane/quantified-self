@@ -1,3 +1,4 @@
+import { PROVIDER_MAX_RETRY_COUNT } from './shared/queue-config';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => {
@@ -64,8 +65,46 @@ describe('guarded terminal queue transitions', () => {
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: false });
     hoisted.transaction.get.mockResolvedValue({
       exists: true,
-      data: () => ({ revision: 'expected', retryCount: 9, totalRetryCount: 9 }),
+      data: () => ({ revision: 'expected', retryCount: PROVIDER_MAX_RETRY_COUNT - 1, totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1 }),
     });
+  });
+
+  it.each([9, 18])('keeps failure %i retryable without clearing an accepted upload', async retryCount => {
+    const current = {
+      revision: 'expected',
+      retryCount,
+      totalRetryCount: retryCount + 3,
+      destinationUploadID: 'accepted-upload',
+    };
+    hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => current });
+    const queueItem = {
+      id: 'accepted-provider-retry',
+      ref: { parent: { id: 'activitySyncQueue' }, id: 'accepted-provider-retry' },
+      ...current,
+    } as Parameters<typeof increaseRetryCountIfCurrentUserActive>[0]['queueItem'];
+    const onRetryExhaustedInTransaction = vi.fn();
+
+    const result = await increaseRetryCountIfCurrentUserActive({
+      queueItem,
+      error: new Error('Temporary status failure'),
+      userID: 'user-1',
+      phase: 'provider_retry',
+      logPrefix: 'ProviderQueue',
+      isCurrent: row => row.revision === 'expected',
+      onRetryExhaustedInTransaction,
+    });
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+      retryCount: retryCount + 1,
+      totalRetryCount: retryCount + 4,
+      dispatchedToCloudTask: null,
+    }));
+    expect(hoisted.transaction.update.mock.calls[0][1]).not.toHaveProperty('destinationUploadID');
+    expect(queueItem.destinationUploadID).toBe('accepted-upload');
+    expect(onRetryExhaustedInTransaction).not.toHaveBeenCalled();
+    expect(hoisted.transaction.set).not.toHaveBeenCalled();
+    expect(hoisted.transaction.delete).not.toHaveBeenCalled();
   });
 
   it('commits provider terminal state in the retry-exhausted DLQ transaction', async () => {
@@ -75,12 +114,12 @@ describe('guarded terminal queue transitions', () => {
         parent: { id: 'sleepSyncQueue' },
         id: 'guarded-retry-terminal-state',
       },
-      retryCount: 9,
+      retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
       dispatchedToCloudTask: 123,
     } as Parameters<typeof increaseRetryCountIfCurrentUserActive>[0]['queueItem'];
     const terminalStateRef = { id: 'provider-state' };
     const onRetryExhaustedInTransaction = vi.fn(async (transaction, current) => {
-      expect(current.retryCount).toBe(9);
+      expect(current.retryCount).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
       transaction.set(terminalStateRef, { status: 'failed' }, { merge: true });
     });
 
