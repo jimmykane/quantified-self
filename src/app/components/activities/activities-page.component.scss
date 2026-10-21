@@ -21,8 +21,7 @@
   min-width: 0;
 }
 .activity-explorer-filters .activity-date-filter { width: 210px; }
-.activity-custom-range { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; flex-basis: 100%; min-width: 0; }
-.activity-explorer-filters .activity-custom-date-field { width: 320px; max-width: 100%; }
+.activity-explorer-filters .activity-custom-date-field { width: 350px; max-width: 100%; }
 .activity-active-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .activity-active-filters mat-chip-set { min-width: 0; }
 .activity-active-filters mat-chip { max-width: 100%; }
@@ -30,4 +29,10 @@
 @include bp.max-768 {
   .activity-explorer-filters { width: 100%; }
   .activity-explorer-filters mat-form-field { flex: 1 1 140px; width: auto; }
+  .activity-explorer-filters .activity-custom-date-field { flex-basis: 100%; }
+}
+
+@include bp.max-480 {
+  // Tapping either date opens the picker; leave room for both dates and Clear.
+  .activity-custom-calendar-toggle { display: none; }
 }

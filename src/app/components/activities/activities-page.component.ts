@@ -63,8 +63,6 @@ export class ActivitiesPageComponent implements OnInit {
   readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
   readonly customRangeOpen = signal(false);
   readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
-  readonly rangeSelectorValue = computed(() => this.customRangeOpen() ? 'custom' : this.period());
-  readonly rangeSelectorLabel = computed(() => this.customRangeOpen() ? 'Custom dates' : this.periodLabel());
   readonly customDateForm = new FormGroup({
     start: new FormControl<Dayjs | null>(null, Validators.required),
     end: new FormControl<Dayjs | null>(null, Validators.required),
@@ -258,10 +256,19 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   cancelCustomRange(): void {
-    if (!this.showCustomRange() || (!this.customRangeOpen() && this.customDateForm.pristine)) return;
+    if (!this.showCustomRange()) return;
     this.customRangeOpen.set(false);
     this.resetCustomDateForm();
     this.haptics.selection();
+  }
+
+  onCustomPickerOpened(): void {
+    this.haptics.selection();
+  }
+
+  clearCustomRange(): void {
+    if (this.period() === 'custom') this.selectPeriod(this.defaultPeriod);
+    else this.cancelCustomRange();
   }
 
   private resetCustomDateForm(): void {

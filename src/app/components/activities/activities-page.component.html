@@ -39,18 +39,37 @@
               @for (tag of library(); track tag.key) { <mat-option [value]="tag.name">{{ tag.name }}</mat-option> }
             </mat-select>
           </mat-form-field>
-          <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Date range</mat-label>
-            <mat-select [value]="rangeSelectorValue()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
-              <mat-select-trigger>{{ rangeSelectorLabel() }}</mat-select-trigger>
-              @for (period of periods; track period.value) {
-                <mat-option [value]="period.value">
-                  @if (period.value === 'all') { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
-                  {{ period.label }}
-                </mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
+          @if (showCustomRange()) {
+            <mat-form-field class="activity-custom-date-field" [formGroup]="customDateForm" appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Custom dates</mat-label>
+              <mat-date-range-input [rangePicker]="customPicker" (click)="customPicker.open()" (keydown.enter)="applyCustomRange()">
+                <input matStartDate formControlName="start" placeholder="Start date" aria-label="Start date">
+                <input matEndDate formControlName="end" placeholder="End date" aria-label="End date">
+              </mat-date-range-input>
+              <mat-datepicker-toggle class="activity-custom-calendar-toggle" matIconSuffix [for]="customPicker"></mat-datepicker-toggle>
+              <button mat-icon-button matIconSuffix type="button" aria-label="Clear custom dates and show date presets"
+                matTooltip="Show date presets" (click)="clearCustomRange()"><mat-icon>close</mat-icon></button>
+              <mat-date-range-picker #customPicker (opened)="onCustomPickerOpened()">
+                <mat-date-range-picker-actions>
+                  <button mat-button matDateRangePickerCancel (click)="cancelCustomRange()">Cancel</button>
+                  <button mat-flat-button matDateRangePickerApply (click)="applyCustomRange()">Apply</button>
+                </mat-date-range-picker-actions>
+              </mat-date-range-picker>
+              <mat-error>Enter valid dates with the end on or after the start.</mat-error>
+            </mat-form-field>
+          } @else {
+            <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Date range</mat-label>
+              <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
+                @for (period of periods; track period.value) {
+                  <mat-option [value]="period.value">
+                    @if (period.value === 'all') { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
+                    {{ period.label }}
+                  </mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Sport</mat-label>
             <mat-select [value]="selectedSport()" (selectionChange)="selectSport($event.value)" aria-label="Sport">
@@ -58,24 +77,6 @@
               @for (sport of sports(); track sport) { <mat-option [value]="sport">{{ sport }}</mat-option> }
             </mat-select>
           </mat-form-field>
-          @if (showCustomRange()) {
-            <form class="activity-custom-range" [formGroup]="customDateForm" (ngSubmit)="applyCustomRange()" aria-label="Custom activity dates">
-              <mat-form-field class="activity-custom-date-field" appearance="outline" subscriptSizing="dynamic">
-                <mat-label>Custom dates</mat-label>
-                <mat-date-range-input [rangePicker]="customPicker">
-                  <input matStartDate formControlName="start" placeholder="Start date" aria-label="Start date">
-                  <input matEndDate formControlName="end" placeholder="End date" aria-label="End date">
-                </mat-date-range-input>
-                <mat-datepicker-toggle appHapticTap matIconSuffix [for]="customPicker"></mat-datepicker-toggle>
-                <mat-date-range-picker #customPicker></mat-date-range-picker>
-                <mat-hint>Both dates are included. Choose dates, then Apply.</mat-hint>
-                <mat-error>Enter valid dates with the end on or after the start.</mat-error>
-              </mat-form-field>
-              <button mat-flat-button type="submit" [disabled]="customDateForm.invalid || (period() === 'custom' && customDateForm.pristine)">Apply</button>
-              <button mat-button type="button" (click)="cancelCustomRange()"
-                [disabled]="!customRangeOpen() && customDateForm.pristine">Cancel</button>
-            </form>
-          }
         </div>
         @if (hasFilters()) {
           <div event-table-active-filters class="activity-active-filters">

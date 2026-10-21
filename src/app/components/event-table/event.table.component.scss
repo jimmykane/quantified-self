@@ -422,7 +422,11 @@
 
 @include bp.xsmall {
 
+  .table-toolbar-main .qs-search-field { grid-column: 1; }
+  .table-toolbar-actions { grid-column: 2; grid-row: 1; }
+
   .table-toolbar-filters {
+    grid-column: 1 / -1;
     align-items: stretch;
     flex-direction: column;
     width: 100%;
