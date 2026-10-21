@@ -1,29 +1,23 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnInit, afterNextRender, computed, inject, signal } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
-import type { PageEvent } from '@angular/material/paginator';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { catchError, combineLatest, firstValueFrom, of } from 'rxjs';
+import { combineLatest, Subscription } from 'rxjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
 import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
-import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerMatchesSearch, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerSport, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
+import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerSport, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
-import type { EventTableEventsChange, EventTablePagination } from '../event-table/event.table.component';
+import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { EventTableModule } from '../../modules/event-table.module';
 import { SharedModule } from '../../modules/shared.module';
-import { AppEventService, type EventQueryCursor } from '../../services/app.event.service';
+import { AppEventService } from '../../services/app.event.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
-
-interface ActivityPage {
-  events: AppEventInterface[];
-  hasNext: boolean;
-}
 
 @Component({
   selector: 'app-activities-page',
@@ -46,12 +40,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
   private owner: FirebaseUserType | null = null;
   private generation = 0;
-  private cursor: EventQueryCursor | null = null;
-  private remaining: AppEventInterface[] = [];
-  private sourceHasMore = true;
-  private requestedPage = 0;
-  private seenIDs = new Set<string>();
-  private readonly pages = new Map<number, ActivityPage>();
+  private eventsSubscription?: Subscription;
   private catalogVersion = 0;
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
@@ -60,19 +49,13 @@ export class ActivitiesPageComponent implements OnInit {
   readonly selectedTag = signal('');
   readonly selectedSport = signal('');
   readonly periods = ACTIVITY_EXPLORER_PERIODS;
-  readonly period = signal<ActivityExplorerPeriod>('all');
-  readonly pageIndex = signal(0);
-  readonly pageSize = signal(25);
-  readonly direction = signal<'asc' | 'desc'>('desc');
-  readonly searchTerm = signal('');
-  readonly pagination = computed<EventTablePagination>(() => ({ pageIndex: this.pageIndex(), pageSize: this.pageSize(), hasNext: this.hasMore(), direction: this.direction() }));
+  readonly defaultPeriod: ActivityExplorerPeriod = 'month';
+  readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
   readonly untagged = signal(false);
   readonly untaggedOption = { untagged: true } as const;
   readonly loading = signal(false);
   readonly catalogLoading = signal(false);
-  readonly historyLoaded = signal(false);
-  readonly hasMore = signal(false);
   readonly historyError = signal(false);
   readonly catalogError = signal(false);
   readonly library = computed(() => buildEventTagLibrary(this.events(), this.catalogTags(), this.selectedTag()));
@@ -83,10 +66,10 @@ export class ActivitiesPageComponent implements OnInit {
   readonly filters = computed(() => ({
     tag: this.selectedTag(), untagged: this.untagged(), sport: this.selectedSport(), period: this.period(),
   }));
-  readonly filterContext = computed(() => JSON.stringify({ ...this.filters(), direction: this.direction() }));
-  readonly hasFilters = computed(() => !!this.selectedTag() || this.untagged() || !!this.selectedSport() || this.period() !== 'all');
-  readonly filteredEvents = computed(() => this.user() ? [...this.events()] : []);
-  readonly complete = computed(() => this.historyLoaded() && !this.loading() && !this.historyError());
+  readonly filterContext = computed(() => JSON.stringify(this.filters()));
+  readonly hasFilters = computed(() => !!this.selectedTag() || this.untagged() || !!this.selectedSport() || this.period() !== this.defaultPeriod);
+  readonly filteredEvents = computed(() => this.user()
+    ? filterActivityExplorerEvents(this.events(), this.filters(), new Date(this.localDayStartMs())) : []);
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
     : this.historyError() ? 'Activities couldn’t be loaded'
       : this.selectedSport() ? 'No activities match these filters'
@@ -107,7 +90,7 @@ export class ActivitiesPageComponent implements OnInit {
     const next = new Date().setHours(0, 0, 0, 0);
     if (next === this.localDayStartMs()) return;
     this.localDayStartMs.set(next);
-    if (this.user() && this.period() !== 'all') this.restartHistory();
+    if (this.user() && this.period() !== 'all') this.loadHistory();
   }
 
   @HostListener('document:visibilitychange')
@@ -116,18 +99,17 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.destroyRef.onDestroy(() => { this.generation += 1; this.catalogVersion += 1; });
+    this.destroyRef.onDestroy(() => { this.generation += 1; this.catalogVersion += 1; this.eventsSubscription?.unsubscribe(); });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
-      this.refreshLocalDay();
-      const previousFilters = this.filterContext();
+      const previousPeriod = this.period();
       const tag = normalizeEventTagSuggestions([params.get('tag')])[0] || '';
       this.selectedTag.set(tag);
       this.untagged.set(!tag && params.get('untagged') === '1');
       this.selectedSport.set(normalizeActivityExplorerSport((params.get('sport') || '').trim().slice(0, 100)));
-      const period = this.periods.find(period => period.value === params.get('period'))?.value || 'all';
+      const period = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       this.period.set(period);
-      this.direction.set(params.get('order') === 'asc' ? 'asc' : 'desc');
-      if (previousFilters !== this.filterContext() && this.user()) this.restartHistory();
+      if (previousPeriod !== this.period() && this.user()) this.loadHistory();
+      else this.refreshLocalDay();
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([profile, owner]) => {
@@ -142,12 +124,14 @@ export class ActivitiesPageComponent implements OnInit {
         this.catalogTags.set([]);
         this.catalogLoading.set(false);
         this.catalogError.set(false);
-        this.searchTerm.set('');
-        this.pageSize.set(this.normalizePageSize(nextUser?.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 25));
-        this.resetHistory();
+        this.generation += 1;
+        this.eventsSubscription?.unsubscribe();
+        this.events.set([]);
+        this.loading.set(false);
+        this.historyError.set(false);
         if (nextUser) {
           void this.loadCatalog();
-          void this.loadPage(0);
+          this.loadHistory();
         }
       });
   }
@@ -158,7 +142,6 @@ export class ActivitiesPageComponent implements OnInit {
     if (next.toLowerCase() === this.selectedKey() && untagged === this.untagged()) return;
     this.selectedTag.set(next);
     this.untagged.set(untagged);
-    this.restartHistory(true);
     this.filtersChanged();
   }
 
@@ -166,14 +149,13 @@ export class ActivitiesPageComponent implements OnInit {
     const next = normalizeActivityExplorerSport(sport);
     if (next === this.selectedSport()) return;
     this.selectedSport.set(next);
-    this.restartHistory(true);
     this.filtersChanged();
   }
 
   selectPeriod(period: ActivityExplorerPeriod): void {
     if (period === this.period()) return;
     this.period.set(period);
-    this.restartHistory(true);
+    this.loadHistory(true);
     this.filtersChanged();
   }
 
@@ -182,8 +164,9 @@ export class ActivitiesPageComponent implements OnInit {
     this.selectedTag.set('');
     this.untagged.set(false);
     this.selectedSport.set('');
-    this.period.set('all');
-    this.restartHistory(true);
+    const periodChanged = this.period() !== this.defaultPeriod;
+    this.period.set(this.defaultPeriod);
+    if (periodChanged) this.loadHistory(true);
     this.filtersChanged();
   }
 
@@ -198,31 +181,23 @@ export class ActivitiesPageComponent implements OnInit {
       relativeTo: this.route,
       queryParams: {
         tag: this.selectedTag() || null, untagged: this.untagged() ? '1' : null,
-        sport: this.selectedSport() || null, period: this.period(), order: this.direction() === 'asc' ? 'asc' : null,
+        sport: this.selectedSport() || null, period: this.period(), order: null,
       },
       queryParamsHandling: 'merge',
     });
   }
 
-  async retryActivities(): Promise<void> {
+  retryActivities(): void {
     if (!this.user() || this.loading() || !this.historyError()) return;
     this.haptics.selection();
-    await this.loadPage(this.requestedPage, true);
-  }
-
-  private restartHistory(feedback = false): void {
-    this.resetHistory();
-    if (!this.user()) return;
-    void this.loadPage(0, feedback);
+    this.loadHistory(true);
   }
 
   refresh(): void {
     if (!this.user() || this.loading() || this.catalogLoading()) return;
-    this.refreshLocalDay();
     this.haptics.selection();
-    this.resetHistory();
     void this.loadCatalog(true);
-    void this.loadPage(0, true);
+    this.loadHistory(true);
   }
 
   retryCatalog(): void {
@@ -236,53 +211,17 @@ export class ActivitiesPageComponent implements OnInit {
     this.catalogTags.set(normalizeEventTagSuggestions([
       ...this.catalogTags(), ...this.library().map(tag => tag.name), ...Object.values(changes.updatedTags).flat(),
     ]));
-    // Requery after the confirmed write. Any page read started before it is fenced out.
-    this.restartHistory();
-  }
-
-  onPageRequest(page: PageEvent): void {
-    const size = this.normalizePageSize(page.pageSize);
-    if (size !== this.pageSize()) {
-      this.pageSize.set(size);
-      this.restartHistory(true);
-      return;
-    }
-    if (page.pageIndex < 0 || page.pageIndex === this.pageIndex() || this.loading()) return;
-    if (!this.pages.has(page.pageIndex) && (page.pageIndex !== this.pageIndex() + 1 || !this.hasMore())) return;
-    void this.loadPage(page.pageIndex, true);
-  }
-
-  onSearchChange(search: string): void {
-    if (search.trim().toLowerCase() === this.searchTerm().trim().toLowerCase()) return;
-    this.searchTerm.set(search);
-    this.restartHistory();
-  }
-
-  onDateSortChange(direction: 'asc' | 'desc'): void {
-    if (direction === this.direction()) return;
-    this.direction.set(direction);
-    this.restartHistory(true);
-    this.updateUrl();
-  }
-
-  private normalizePageSize(size: number): number {
-    return [10, 25, 50, 100, 250].includes(size) ? size : 25;
-  }
-
-  private resetHistory(): void {
-    this.generation += 1;
-    this.cursor = null;
-    this.remaining = [];
-    this.sourceHasMore = true;
-    this.requestedPage = 0;
-    this.seenIDs.clear();
-    this.pages.clear();
-    this.events.set([]);
-    this.pageIndex.set(0);
-    this.loading.set(false);
-    this.historyLoaded.set(false);
-    this.hasMore.set(false);
-    this.historyError.set(false);
+    // The live date-range query delivers subsequent changes. Reflect this
+    // confirmed mutation immediately without restarting the Firestore listener.
+    const deleted = new Set(changes.deletedEventIDs);
+    this.events.update(events => events.filter(event => !deleted.has(event.getID())).map(event => {
+      const tags = changes.updatedTags[event.getID()];
+      if (tags) {
+        event.tags = tags;
+        delete event.benchmarkReviewTags;
+      }
+      return event;
+    }));
   }
 
   private isCurrent(generation: number, userID: string): boolean {
@@ -312,76 +251,40 @@ export class ActivitiesPageComponent implements OnInit {
     }
   }
 
-  private async loadPage(index: number, feedback = false): Promise<void> {
+  private loadHistory(feedback = false): void {
+    this.localDayStartMs.set(new Date().setHours(0, 0, 0, 0));
+    this.generation += 1;
+    this.eventsSubscription?.unsubscribe();
+    this.events.set([]);
+    this.historyError.set(false);
     const user = this.user();
-    if (!user || this.loading()) return;
-    this.requestedPage = index;
-    const cached = this.pages.get(index);
-    if (cached) {
-      this.showPage(index, cached);
-      return;
-    }
+    this.loading.set(!!user);
+    if (!user) return;
     const generation = this.generation;
-    const now = new Date(this.localDayStartMs());
-    const filters = this.filters();
-    const search = this.searchTerm();
-    const size = this.pageSize();
-    const range = activityExplorerDateRange(filters.period, now);
+    const range = activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()));
+    // Match Dashboard's stored numeric date bounds and full selected-range query.
     const where = range ? [
-      { fieldPath: 'startDate', opStr: '>=', value: range.start },
-      { fieldPath: 'startDate', opStr: '<', value: range.end },
+      { fieldPath: 'startDate', opStr: '>=', value: range.start.getTime() },
+      { fieldPath: 'startDate', opStr: '<', value: range.end.getTime() },
     ] : [];
-    let cursor = this.cursor;
-    let more = this.sourceHasMore;
-    const matches = [...this.remaining];
-    const seenIDs = new Set(this.seenIDs);
-    this.loading.set(true);
-    this.historyError.set(false);
-    try {
-      // One matching lookahead enables Next without a guessed total or an empty last page.
-      while (matches.length <= size && more) {
-        const page = await firstValueFrom(this.eventService.getEventsPageOnceByWithMeta(
-          user, where, 'startDate', this.direction() === 'asc', 250,
-          { startAfterCursor: cursor, requireServer: true },
-        ).pipe(catchError(error => of({ error }))));
-        if (!this.isCurrent(generation, user.uid)) return;
-        if ('error' in page) throw page.error;
-        if (page.hasMore && (!page.lastCursor || page.lastCursor.id === cursor?.id)) {
-          throw new Error('Activity history pagination did not advance.');
-        }
-        const unseen = page.events.filter(isNormalActivityEvent).filter(event => {
-          const id = event.getID();
-          if (seenIDs.has(id)) return false;
-          seenIDs.add(id);
-          return true;
-        });
-        matches.push(...filterActivityExplorerEvents(unseen, filters, now)
-          .filter(event => activityExplorerMatchesSearch(event, search)));
-        cursor = page.lastCursor;
-        more = page.hasMore;
-      }
-      const page = { events: matches.splice(0, size), hasNext: matches.length > 0 };
-      this.cursor = cursor;
-      this.sourceHasMore = more;
-      this.remaining = matches;
-      this.seenIDs = seenIDs;
-      this.pages.set(index, page);
-      this.showPage(index, page);
-    } catch (error) {
-      if (!this.isCurrent(generation, user.uid)) return;
-      this.historyError.set(true);
-      this.logger.warn('[ActivitiesPage] Could not load activities', error);
-      if (feedback) this.haptics.error();
-    } finally {
-      if (this.isCurrent(generation, user.uid)) this.loading.set(false);
-    }
-  }
-
-  private showPage(index: number, page: ActivityPage): void {
-    this.pageIndex.set(index);
-    this.events.set([...page.events]);
-    this.hasMore.set(page.hasNext);
-    this.historyLoaded.set(true);
-    this.historyError.set(false);
+    let initial = true;
+    this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', false, 0)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: events => {
+          if (!this.isCurrent(generation, user.uid)) return;
+          this.events.set(events.filter(isNormalActivityEvent));
+          this.loading.set(false);
+          this.historyError.set(false);
+          initial = false;
+        },
+        error: error => {
+          if (!this.isCurrent(generation, user.uid)) return;
+          this.loading.set(false);
+          this.historyError.set(true);
+          this.logger.warn('[ActivitiesPage] Could not load activities', error);
+          if (feedback && initial) this.haptics.error();
+        },
+      });
   }
 }

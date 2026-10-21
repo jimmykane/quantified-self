@@ -26,8 +26,7 @@
     @for (tableUser of tableUsers(); track tableUser.uid) {
       <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true" presentation="dashboard"
         [isLoading]="loading()" [showTagFilter]="false"
-        [pagination]="pagination()" (pageRequest)="onPageRequest($event)" (searchChange)="onSearchChange($event)"
-        (dateSortChange)="onDateSortChange($event)" [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
+        [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
         [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
         (eventsChange)="onEventsChange($event)">
         <div event-table-filters class="activity-explorer-filters">
@@ -62,8 +61,8 @@
                   <button matChipRemove aria-label="Remove tag filter"><mat-icon>cancel</mat-icon></button>
                 </mat-chip>
               }
-              @if (period() !== 'all') {
-                <mat-chip (removed)="selectPeriod('all')">{{ periodLabel() }}
+              @if (period() !== defaultPeriod) {
+                <mat-chip (removed)="selectPeriod(defaultPeriod)">{{ periodLabel() }}
                   <button matChipRemove aria-label="Remove date filter"><mat-icon>cancel</mat-icon></button>
                 </mat-chip>
               }

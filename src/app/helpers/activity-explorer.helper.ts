@@ -26,8 +26,6 @@ export function activityExplorerDateRange(period: ActivityExplorerPeriod, now: D
 
 interface ActivityExplorerEvent extends EventTagsContainer {
   startDate?: Date;
-  name?: string;
-  description?: string;
   getActivityTypesAsArray(): string[];
 }
 
@@ -47,14 +45,6 @@ export function activityExplorerSports(events: readonly ActivityExplorerEvent[],
     ...events.flatMap(event => event.getActivityTypesAsArray()), selected]
     .map(normalizeActivityExplorerSport).filter(Boolean))]
     .sort((first, second) => first.localeCompare(second));
-}
-
-export function activityExplorerMatchesSearch(event: ActivityExplorerEvent, search: string): boolean {
-  const terms = search.toLowerCase().split(',').map(term => term.trim()).filter(Boolean);
-  if (!terms.length) return true;
-  const text = [event.name, event.description, ...getEventTags(event), ...event.getActivityTypesAsArray().map(normalizeActivityExplorerSport)]
-    .filter(Boolean).join(' ').toLowerCase();
-  return terms.some(term => text.includes(term));
 }
 
 /** Multisport events match any recorded sport within the selected local date range. */

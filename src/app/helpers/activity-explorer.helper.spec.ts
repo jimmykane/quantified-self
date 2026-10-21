@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityExplorerDateRange, activityExplorerMatchesSearch, activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
+import { activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
 
 const now = new Date(2026, 9, 21, 12);
 const filters: ActivityExplorerFilters = { tag: '', untagged: false, sport: '', period: 'all' };
@@ -7,11 +7,8 @@ const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20
   tags, startDate: date, getActivityTypesAsArray: () => sports,
 });
 
-describe('Activity explorer loaded-history filters', () => {
-  it('searches activity titles, descriptions, tags and canonical sports before paging', () => {
-    const record = { ...event(['Race'], ['Run']), name: 'Morning hills', description: 'Forest loop' };
-    for (const text of ['hills', 'FOREST', 'race', 'Running', 'missing, hills', '']) expect(activityExplorerMatchesSearch(record, text)).toBe(true);
-    expect(activityExplorerMatchesSearch(record, 'swimming')).toBe(false);
+describe('Activity explorer date-range filters', () => {
+  it('offers canonical sports beyond the current range', () => {
     expect(activityExplorerSports([], '', true)).toContain('Running');
   });
   it('defines familiar date ranges with an inclusive first day and exclusive tomorrow', () => {

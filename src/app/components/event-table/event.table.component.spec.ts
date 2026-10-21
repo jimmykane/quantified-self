@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
-import { EventTableComponent, EventTablePaginatorIntl, MatPaginatorIntlFireStore } from './event.table.component';
+import { EventTableComponent, MatPaginatorIntlFireStore } from './event.table.component';
 import { EventTableActionsComponent } from './actions/event.table.actions.component';
 import { MatListModule, type MatSelectionListChange } from '@angular/material/list';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
@@ -375,61 +375,17 @@ describe('EventTableComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('uses externally paged rows without slicing or local sorting and exposes an honest range', () => {
-        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
-        component.events = Array.from({ length: 10 }, (_, i) => new MockEvent('page-' + i)) as any;
-        component.ngOnChanges({ pagination: new SimpleChange(null, component.pagination, true), events: new SimpleChange([], component.events, false) });
-        fixture.detectChanges();
-        expect(component.data.paginator).toBeNull(); expect(component.data.sort).toBeNull();
-        expect(component.paginatorLength).toBe(11);
-        const intl = new EventTablePaginatorIntl(); intl.external = true;
-        expect(intl.getRangeLabel(0, 10, 11)).toBe('1 – 10');
-        expect(intl.getRangeLabel(1, 10, 13)).toBe('11 – 13');
-        expect(intl.getRangeLabel(0, 10, 0)).toBe('0 activities');
-        expect(component.tableSortActive).toBe('Start Date');
-        expect(component.tablePageSize).toBe(10);
-    });
-
-    it('forwards external pages and search with one feedback, and ignores pending or unchanged paging', async () => {
-        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
-        component.ngOnChanges({ pagination: new SimpleChange(null, component.pagination, true) });
-        const pages = vi.fn(); component.pageRequest.subscribe(pages);
-        const search = vi.fn(); component.searchChange.subscribe(search);
-        component.search('Race');
-        expect(search).toHaveBeenCalledWith('Race');
-        expect(mockHapticsService.selection).not.toHaveBeenCalled();
-        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 10, length: 11 });
-        expect(pages).toHaveBeenCalledOnce(); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
-        component.isLoading = true;
-        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 10, length: 11 });
-        component.isLoading = false;
-        await component.pageChanges({ pageIndex: 0, pageSize: 10, length: 11 });
-        expect(pages).toHaveBeenCalledOnce(); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
-    });
-
-    it('forwards date sorting for external pages and leaves other column ordering disabled', () => {
-        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
-        const changes = vi.fn(); component.dateSortChange.subscribe(changes);
-        component.sort.sortChange.next({ active: 'Duration', direction: 'asc' });
-        expect(changes).not.toHaveBeenCalled();
-        component.sort.sortChange.next({ active: 'Start Date', direction: 'asc' });
-        expect(changes).toHaveBeenCalledWith('asc'); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
-        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    });
-
-    it('rebuilds external rows when the responsive date format changes', () => {
+    it('rebuilds locally paged rows when the responsive date format changes', () => {
         const breakpoints = new Subject<any>();
         vi.spyOn(TestBed.inject(BreakpointObserver), 'observe').mockReturnValue(breakpoints);
         (component as any).breakpointSubscription.unsubscribe();
         (component as any).searchSubscription.unsubscribe();
-        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
-        component.ngOnChanges({ pagination: new SimpleChange(null, component.pagination, true) });
         const rebuild = vi.spyOn(component as any, 'processChanges');
         component.ngOnInit();
         breakpoints.next({ matches: true, breakpoints: {} });
         expect(rebuild).toHaveBeenCalledWith('breakpoint_change', true);
-        expect(component.data.paginator).toBeNull();
-        expect(component.data.sort).toBeNull();
+        expect(component.data.paginator).toBe(component.paginator);
+        expect(component.data.sort).toBe(component.sort);
     });
 
     it('should render a table toolbar with a filter projection slot', () => {
