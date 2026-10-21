@@ -95,12 +95,12 @@ describe('SideNavComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('keeps Tags hidden from the sidenav for guests and signed-in users', () => {
+    it('keeps Activities hidden from the sidenav for guests and signed-in users', () => {
         fixture.detectChanges();
-        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/activities')).toBe(false);
         mockUserService.user.mockReturnValue(new User('tags-owner'));
         fixture.detectChanges();
-        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/activities')).toBe(false);
     });
 
     it('does not render a navigation section heading', () => {

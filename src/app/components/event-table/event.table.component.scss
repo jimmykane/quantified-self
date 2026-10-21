@@ -587,6 +587,13 @@ mat-paginator {
   white-space: nowrap;
 }
 
+.activity-custom-name {
+  max-width: 140px;
+  margin-top: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
 .device-names-cell {
   max-width: 160px;
   min-width: 0;

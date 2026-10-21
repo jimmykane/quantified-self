@@ -414,6 +414,43 @@ describe('EventTableComponent', () => {
         expect(component.data.data[0]['Start Date']).toBe(dashboardDate);
     });
 
+    it('keeps the complete table and hides only generated names when Activities opts in', () => {
+        const event = component.events[0];
+        event.name = event.startDate.toISOString();
+        const originalColumns = [...component.displayedColumns];
+        component.hideGeneratedNames = true;
+        component.ngOnChanges({ hideGeneratedNames: new SimpleChange(false, true, false) });
+        expect(component.data.data[0].Name).toBe('');
+        expect(component.displayedColumns).toEqual(originalColumns);
+        expect(component.data.data[0]['Tag Action Label']).not.toContain(event.name);
+        expect(event.name).toBe(event.startDate.toISOString());
+        event.name = 'Autumn race';
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        expect(component.data.data[0].Name).toBe('Autumn race');
+        expect(component.data.data[0]['Library Activity Label']).toBe('Autumn race');
+        component.hideGeneratedNames = false;
+        event.name = event.startDate.toISOString();
+        component.ngOnChanges({ hideGeneratedNames: new SimpleChange(true, false, false) });
+        expect(component.data.data[0].Name).toBe(event.name);
+        expect(mockEventService.updateEventProperties).not.toHaveBeenCalled();
+    });
+
+    it('preserves shared search but resets page and selection when explorer filters change', () => {
+        component.preserveSearchOnFilterChange = true;
+        component.search('Run');
+        component.selection.select(component.data.data[0]);
+        component.paginator.pageIndex = 2;
+        component.paginator.firstPage = vi.fn(() => { component.paginator.pageIndex = 0; });
+        mockHapticsService.selection.mockClear();
+        component.ngOnChanges({ filterContext: new SimpleChange('all', 'Running', false) });
+        expect(component.searchTerm).toBe('Run');
+        expect(JSON.parse(component.data.filter).text).toBe('run');
+        expect(component.selection.isEmpty()).toBe(true);
+        expect(component.paginator.pageIndex).toBe(0);
+        expect(component.paginator.firstPage).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
     it('keeps Tag library columns, sorting, and pagination local without changing Dashboard preferences', async () => {
         const previousSettings = JSON.stringify(mockUser.settings.dashboardSettings);
         component.presentation = 'tag-library';
