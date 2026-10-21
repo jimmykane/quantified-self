@@ -19,7 +19,7 @@ import {
   type UserUnitSettingsInterface,
   VerticalSpeedUnits,
   WeightUnits,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 

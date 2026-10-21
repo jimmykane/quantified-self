@@ -2,7 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { parseWorkoutStructureV1, type WorkoutStructureV1 } from './planned-workout';
 import {
   parseStrengthWorkoutDraftV1,
-  projectStrengthWorkoutToV1,
+  isStrengthWorkoutSportV1, projectStrengthWorkoutToV1,
   type StrengthWorkoutDraftV1,
 } from './strength-workout';
 import { normalizeTrainingLocalDate, normalizeTrainingScheduleMutationId } from './training-plans';
@@ -114,14 +114,15 @@ export function parseWorkoutLibraryPrescription(
 ): Pick<WorkoutLibraryItemV1, 'title' | 'structure' | 'strength'> {
   const title = parseWorkoutLibraryTitle(titleValue);
   const structure = parseWorkoutStructureV1(structureValue);
-  if (structure.sport !== ActivityTypes.StrengthTraining) {
+  if (!isStrengthWorkoutSportV1(structure.sport)) {
     if (strengthValue !== undefined) {
       throw new WorkoutLibraryContractError('$.strength', 'Strength details require Strength Training.');
     }
     return { title, structure };
   }
   if (strengthValue === undefined) {
-    throw new WorkoutLibraryContractError('$.strength', 'Strength Training needs its full exercise prescription.');
+    if (structure.sport === ActivityTypes.StrengthTraining) throw new WorkoutLibraryContractError('$.strength', 'Strength Training needs its full exercise prescription.');
+    return { title, structure };
   }
   const strength = parseStrengthWorkoutDraftV1(strengthValue);
   const projected = projectStrengthWorkoutToV1({
@@ -129,7 +130,7 @@ export function parseWorkoutLibraryPrescription(
     workoutId: 'template',
     revision: 1,
     exercises: strength.exercises,
-  });
+  }, structure.sport);
   if (JSON.stringify(projected) !== JSON.stringify(structure)) {
     throw new WorkoutLibraryContractError('$.structure', 'Strength summary differs from its exercises.');
   }

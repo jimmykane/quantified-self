@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueItemInterface } from './queue/queue-item.interface';
 
-import { MAX_RETRY_COUNT } from './shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import {
     getUserDeletionGuardStateInTransaction,
@@ -836,7 +836,7 @@ export async function increaseRetryCountIfCurrentUserActive(
                 },
             ];
 
-            if (nextRetryCount >= MAX_RETRY_COUNT) {
+            if (nextRetryCount >= PROVIDER_MAX_RETRY_COUNT) {
                 movedToDlq = true;
                 await params.onRetryExhaustedInTransaction?.(
                     transaction,
@@ -908,9 +908,9 @@ export async function increaseRetryCountIfCurrentUserActive(
             recordRouteQueueCommit(params.queueItem, 'dead_lettered');
             if (params.manualReconciliation) recordRouteQueueCommit(params.queueItem, 'manual_reconciliation');
             if (params.manualReconciliation) {
-                logger.error(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
+                logger.error(`Item ${params.queueItem.id} exceeded max retries (${PROVIDER_MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
             } else {
-                logger.warn(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Moved it to DLQ.`);
+                logger.warn(`Item ${params.queueItem.id} exceeded max retries (${PROVIDER_MAX_RETRY_COUNT}). Moved it to DLQ.`);
             }
             return QueueResult.MovedToDLQ;
         }
@@ -963,8 +963,8 @@ export async function increaseRetryCountForQueueItem(
     }
 
     // Check if we overlap the max retry count
-    if ((queueItem.retryCount || 0) + incrementBy >= MAX_RETRY_COUNT) {
-        logger.warn(`Item ${queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Moving to DLQ.`);
+    if ((queueItem.retryCount || 0) + incrementBy >= PROVIDER_MAX_RETRY_COUNT) {
+        logger.warn(`Item ${queueItem.id} exceeded max retries (${PROVIDER_MAX_RETRY_COUNT}). Moving to DLQ.`);
         return moveToDeadLetterQueue(queueItem, error, bulkWriter, maxRetryDlqContext);
     }
 

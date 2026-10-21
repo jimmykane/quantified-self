@@ -905,6 +905,21 @@ describe('EventCardComponent', () => {
             expect(component.hasJumpsFlag()).toBe(true);
         });
 
+        it('separates Jumps from Laps without leaving a divider when no jumps are selected', () => {
+            const divider = fixture.nativeElement.querySelector('.event-jumps-divider') as HTMLElement;
+            expect(divider.previousElementSibling?.tagName).toBe('APP-EVENT-CARD-LAPS');
+            expect(divider.nextElementSibling?.tagName).toBe('APP-EVENT-CARD-JUMPS');
+
+            component.selectedActivitiesInstant.set([{
+                ...activityWithData,
+                getID: () => 'without-jumps',
+                getAllEvents: () => [],
+            } as ActivityInterface]);
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.event-jumps-divider')).toBeNull();
+            expect(fixture.nativeElement.querySelector('app-event-card-jumps')).toBeNull();
+        });
+
         it('should compute hasSwimLengthsFlag as true when swim lengths exist', () => {
             expect(component.hasSwimLengthsFlag()).toBe(true);
         });

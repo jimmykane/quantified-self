@@ -6,6 +6,8 @@ export interface QueueRetryHistogram {
     '0-3': number;
     '4-7': number;
     '8-9': number;
+    /** Optional for compatibility with older deployed queue-stat responses. */
+    '10-19'?: number;
 }
 
 export interface QueueTopError {
@@ -295,7 +297,8 @@ export interface AdminQueueProviderStats {
 }
 
 export interface AdminQueueStatsResponse {
-    connectionHistory?: { pending: number; failed: number; maxLagMs: number | null } | null;
+    /** Finished includes failed/skipped/request-only runs, not confirmed ingestion. Older backends omit it. */
+    connectionHistory?: { pending: number; finished?: number; failed: number; maxLagMs: number | null } | null;
     pending: number;
     succeeded: number;
     stuck: number;

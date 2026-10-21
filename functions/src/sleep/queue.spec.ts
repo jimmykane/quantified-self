@@ -5,6 +5,7 @@ import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from 
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
 import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -553,6 +554,25 @@ describe('sleep queue', () => {
             type: 'suunto_health_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
             providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000,
             dedupeKey: 'admin-fixed-id', preserveExisting: true, dispatchImmediately: false,
+        });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('does not reset or accelerate a retained immediate history job (processed=%s)', async processed => {
+        // The first read checks for duplicate immediate work; the transaction
+        // must still preserve an undispatched retry after an earlier enqueue failure.
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed, retryCount: 4, queueRevision: 'original', dateCreated: 123,
+                dispatchedToCloudTask: null }),
+        });
+        await addSleepSyncQueueItem({
+            type: 'suunto_health_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000,
+            connectionHistoryRunId: 'history-run',
+            dedupeKey: 'history-fixed-id', preserveExisting: true, dispatchImmediately: true,
         });
         expect(hoisted.docSet).not.toHaveBeenCalled();
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
@@ -2347,6 +2367,11 @@ describe('sleep queue', () => {
             reason: 'unsupported_stress_code', valueType: 'number', numericValue: 0,
             valueDisposition: 'included', sampleOffsetSeconds: 180,
         },
+        {
+            summaryType: 'skinTemp', summaryIndex: 0, field: 'durationInSeconds',
+            reason: 'negative_duration', valueType: 'number', numericValue: -16_920,
+            valueDisposition: 'included', sampleOffsetSeconds: null,
+        },
     ] as const)('logs only safe diagnostics and records a lifecycle-guarded Health failure before DLQ (%#)', async diagnostic => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
         hoisted.tokenRootGet.mockResolvedValue({
@@ -2384,8 +2409,8 @@ describe('sleep queue', () => {
             providerUserId: 'garmin-user-1',
             retryCount: 0,
             type: 'garmin_ping',
-            garminSummaryType: 'bodyComps',
-            callbackURL: 'https://apis.garmin.com/wellness-api/rest/bodyComps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+            garminSummaryType: diagnostic?.summaryType ?? 'bodyComps',
+            callbackURL: `https://apis.garmin.com/wellness-api/rest/${diagnostic?.summaryType ?? 'bodyComps'}?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token`,
             ref: { update } as unknown as admin.firestore.DocumentReference,
         });
 
@@ -6068,7 +6093,7 @@ describe('sleep queue', () => {
         });
         const state: Record<string, unknown> = {
             provider, providerUserId: account, userID: 'test-user-uid', dateCreated: 1_700_000_000_000,
-            processed: false, queueRevision: 'retry-status', retryCount: outcome === 'pending' ? 0 : 9,
+            processed: false, queueRevision: 'retry-status', retryCount: outcome === 'pending' ? 0 : PROVIDER_MAX_RETRY_COUNT - 1,
             type: provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll',
             ...(provider === 'GarminAPI' ? { garminSummaryType: 'dailies',
                 callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=fixture-token',

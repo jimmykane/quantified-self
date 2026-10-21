@@ -16,6 +16,7 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { UserProfileVerificationService } from './user-profile-verification.service';
 import { defaultSuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 
@@ -752,11 +753,75 @@ describe('AppUserService', () => {
             expect(mockAppCheck.getToken).toHaveBeenCalledTimes(5);
             expect(mockAppCheck.getToken).toHaveBeenCalledWith(true);
             expect(docData).not.toHaveBeenCalled();
-            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'appCheck/fetch-status-error' });
+            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'appCheck/fetch-status-error',
+                appCheckFailure: appCheckFailureDetails({ code: 'appCheck/fetch-status-error' }) });
             expect(mockAuth.signOut).not.toHaveBeenCalled();
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it.each(['initial-throttle', 'throttled', 'recaptcha-error'])(
+        'stops profile retries immediately for appCheck/%s and preserves the signed-in account', async code => {
+            vi.useFakeTimers();
+            try {
+                const failure = Object.assign(new Error('verification failed'), {
+                    code: `appCheck/${code}`, customData: { httpStatus: 403, time: '23h:59m:59s' },
+                });
+                mockAppCheck.getToken.mockRejectedValue(failure);
+                const logger = TestBed.inject(LoggerService);
+                const logError = vi.spyOn(logger, 'error');
+                service = TestBed.inject(AppUserService);
+                await vi.runAllTimersAsync();
+                expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
+                expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: `appCheck/${code}`,
+                    appCheckFailure: appCheckFailureDetails(failure) });
+                expect(docData).not.toHaveBeenCalled();
+                expect(mockAuth.signOut).not.toHaveBeenCalled();
+                expect(logError).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+    it('does not force-refresh App Check after a direct 403 exchange rejection', async () => {
+        mockAppCheck.getToken.mockRejectedValue({ code: 'appCheck/fetch-status-error', customData: { httpStatus: 403 } });
+        service = TestBed.inject(AppUserService);
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('error'));
+        expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
+        expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'appCheck/fetch-status-error',
+            appCheckFailure: appCheckFailureDetails({ code: 'appCheck/fetch-status-error', customData: { httpStatus: 403 } }) });
+    });
+
+    it.each([429, 503])('waits through a temporary SDK cooldown before retrying HTTP %s', async httpStatus => {
+        vi.useFakeTimers();
+        try {
+            const failure = { code: 'appCheck/initial-throttle', customData: { httpStatus, time: '00m:02s' } };
+            mockAppCheck.getToken.mockRejectedValueOnce(failure);
+            service = TestBed.inject(AppUserService);
+            await vi.advanceTimersByTimeAsync(2999);
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
+            expect(service.profileReadState()).toEqual({ status: 'recovering', uid: 'u1', attempt: 1,
+                code: failure.code, appCheckFailure: appCheckFailureDetails(failure) });
+            expect(docData).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(2);
+            expect(service.profileReadState().status).toBe('ready');
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
+    });
+
+    it('bounds repeated temporary SDK cooldowns with the existing retry budget', async () => {
+        vi.useFakeTimers();
+        try {
+            const failure = { code: 'appCheck/throttled', customData: { httpStatus: 503, time: '00m:02s' } };
+            mockAppCheck.getToken.mockRejectedValue(failure);
+            service = TestBed.inject(AppUserService);
+            await vi.runAllTimersAsync();
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(5);
+            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: failure.code,
+                appCheckFailure: appCheckFailureDetails(failure) });
+            expect(docData).not.toHaveBeenCalled();
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
     });
 
     it('should restart a failed profile stream with refreshed credentials and coalesce manual retries', async () => {

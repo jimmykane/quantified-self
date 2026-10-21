@@ -1,6 +1,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { createFirebaseCustomToken } from '../../bootstrap';
 import { onAdminCall } from '../../shared/auth';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
@@ -26,7 +27,7 @@ export const impersonateUser = onAdminCall<ImpersonateUserRequest, TokenResponse
             impersonatedBy: request.auth!.uid
         };
 
-        const customToken = await admin.auth().createCustomToken(targetUid, additionalClaims);
+        const customToken = await createFirebaseCustomToken(targetUid, additionalClaims);
 
         logger.info(`Admin ${request.auth!.uid} is impersonating user ${targetUid}`);
 
@@ -80,7 +81,7 @@ export const stopImpersonation = onCall({
     }
 
     try {
-        const customToken = await auth.createCustomToken(adminUid);
+        const customToken = await createFirebaseCustomToken(adminUid);
         logger.info(`User ${request.auth.uid} ended impersonation and returned to admin ${adminUid}`);
         return {
             token: customToken

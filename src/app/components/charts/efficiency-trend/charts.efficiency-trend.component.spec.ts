@@ -3,6 +3,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { init } from 'echarts';
 import { ChartsEfficiencyTrendComponent } from './charts.efficiency-trend.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -110,6 +111,62 @@ describe('ChartsEfficiencyTrendComponent', () => {
     expect(option.grid).toMatchObject({ bottom: 6, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' });
     expect(option.xAxis.axisLabel.margin).toBe(3);
     expect(option.xAxis.splitNumber).toBe(7);
+  });
+
+  it.each([0, 1.92])('renders a lone efficiency week as a native marker without changing values (%s)', async value => {
+    component.trend = {
+      latestWeekStartMs: Date.UTC(2026, 0, 5), latestValue: value,
+      points: [{ weekStartMs: Date.UTC(2026, 0, 5), value, sampleCount: 1, totalDurationSeconds: 3600 }],
+    };
+    const before = structuredClone(component.trend);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    try {
+      for (const [width, darkTheme] of [[320, false], [1200, true]] as const) {
+        component.darkTheme = darkTheme;
+        const option = component['buildOption'](component['getVisiblePoints']());
+        const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width, height: 240 });
+        try {
+          rendered.setOption(option);
+          const svg = new DOMParser().parseFromString(rendered.renderToSVGString(), 'image/svg+xml');
+          expect(svg.querySelectorAll('[ecmeta_series_index="0"][ecmeta_data_index="0"]')).toHaveLength(1);
+          const pixel = rendered.convertToPixel({ seriesIndex: 0 }, [Date.UTC(2026, 0, 5), value]);
+          expect(rendered.containPixel({ gridIndex: 0 }, pixel)).toBe(true);
+        } finally { rendered.dispose(); }
+      }
+    } finally { context.mockRestore(); }
+    expect(component.showNoDataError).toBe(false);
+    expect(component.trend).toEqual(before);
+  });
+
+  it('shows a single-week range marker and removes it when the range includes multiple weeks again', async () => {
+    const end = Date.UTC(2026, 0, 5);
+    component.trend = {
+      latestWeekStartMs: end, latestValue: 1.92,
+      points: [
+        { weekStartMs: end - 20 * 7 * 86400000, value: 1.8, sampleCount: 2, totalDurationSeconds: 7200 },
+        { weekStartMs: end, value: 1.92, sampleCount: 1, totalDurationSeconds: 3600 },
+        { weekStartMs: end + 86400000, value: NaN, sampleCount: 0, totalDurationSeconds: 0 },
+      ],
+    };
+    const before = structuredClone(component.trend);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    for (const [range, count] of [['8w', 1], ['all', 2], ['8w', 1]] as const) {
+      mockLoader.setOption.mockClear();
+      component.range = range;
+      await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+      const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+      expect(option.series[0].showSymbol).toBe(count === 1);
+      expect(option.series[0].symbol).toBe(count === 1 ? 'circle' : 'none');
+      expect(option.series[0].data).toEqual(count === 1
+        ? [[end, 1.92]] : [[end - 20 * 7 * 86400000, 1.8], [end, 1.92]]);
+      expect(option.series[0].itemStyle.color).toBe(option.series[0].lineStyle.color);
+    }
+    expect(component.trend).toEqual(before);
   });
 
   it('shows pending no-data message while stale', async () => {

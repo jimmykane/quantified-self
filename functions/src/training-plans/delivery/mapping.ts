@@ -6,7 +6,7 @@ import { hashTrainingScheduleRequestPayload } from '../persistence';
 import { serializeGarminWorkoutV1, serializeGarminStrengthWorkoutV1 } from '../providers/garmin-workout.serializer';
 import { serializeCorosTrainingPlanV1, serializeCorosStrengthPlanV1,
   type SerializeCorosTrainingPlanOptionsV1 } from '../providers/coros-training-plan.serializer';
-import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { serializeWahooPlanJsonV1, serializeWahooStrengthPlanV1 } from '../providers/wahoo-plan.serializer';
 import { serializeSuuntoGuideJsonV1 } from '../providers/suunto-guide.serializer';
 import { ProviderWorkoutMappingError } from '../providers/provider-mapping';
@@ -17,7 +17,7 @@ export const TRAINING_DELIVERY_MAPPING_VERSION = 'fixtures-v1';
 export const GARMIN_POOL_SWIMMING_DELIVERY_READY = true;
 export function corosWorkoutMapping(workout: ScheduledWorkoutV1, strength: StrengthWorkoutDetailsV1 | null | undefined,
   options: SerializeCorosTrainingPlanOptionsV1) {
-  if (workout.structure.sport !== ActivityTypes.StrengthTraining) return serializeCorosTrainingPlanV1(workout.structure, options);
+  if (!isStrengthWorkoutSportV1(workout.structure.sport)) return serializeCorosTrainingPlanV1(workout.structure, options);
   let details: StrengthWorkoutDetailsV1;
   try {
     details = parseStrengthWorkoutDetailsV1(strength);
@@ -26,11 +26,11 @@ export function corosWorkoutMapping(workout: ScheduledWorkoutV1, strength: Stren
     throw new ProviderWorkoutMappingError('coros', 'unsupported', [{ severity: 'unsupported',
       code: 'provider_contract_unavailable', path: '$.strength', message: 'The complete matching strength prescription is required.' }]);
   }
-  return serializeCorosStrengthPlanV1(details, options);
+  return serializeCorosStrengthPlanV1(details, { ...options, sport: workout.structure.sport });
 }
 export function garminWorkoutMapping(workout: ScheduledWorkoutV1, strength?: StrengthWorkoutDetailsV1 | null) {
   const options = { name: workout.title, allowDegraded: true };
-  if (workout.structure.sport !== ActivityTypes.StrengthTraining) return serializeGarminWorkoutV1(workout.structure, options);
+  if (!isStrengthWorkoutSportV1(workout.structure.sport)) return serializeGarminWorkoutV1(workout.structure, options);
   let details: StrengthWorkoutDetailsV1;
   try {
     details = parseStrengthWorkoutDetailsV1(strength);
@@ -39,10 +39,10 @@ export function garminWorkoutMapping(workout: ScheduledWorkoutV1, strength?: Str
     throw new ProviderWorkoutMappingError('garmin', 'unsupported', [{ severity: 'unsupported',
       code: 'provider_contract_unavailable', path: '$.strength', message: 'The complete matching strength prescription is required.' }]);
   }
-  return serializeGarminStrengthWorkoutV1(details, options);
+  return serializeGarminStrengthWorkoutV1(details, { ...options, sport: workout.structure.sport });
 }
 export function wahooWorkoutMapping(workout: ScheduledWorkoutV1, strength?: StrengthWorkoutDetailsV1 | null) {
-  if (workout.structure.sport !== ActivityTypes.StrengthTraining) return serializeWahooPlanJsonV1(workout.structure,
+  if (!isStrengthWorkoutSportV1(workout.structure.sport)) return serializeWahooPlanJsonV1(workout.structure,
     { name: workout.title, description: workout.title,
       location: wahooWorkoutSportProfileV1(workout.structure.sport)?.location === 0 ? 'indoor' : 'outdoor', allowDegraded: true });
   let details: StrengthWorkoutDetailsV1;
@@ -53,14 +53,14 @@ export function wahooWorkoutMapping(workout: ScheduledWorkoutV1, strength?: Stre
     throw new ProviderWorkoutMappingError('wahoo', 'unsupported', [{ severity: 'unsupported',
       code: 'provider_contract_unavailable', path: '$.strength', message: 'The complete matching strength prescription is required.' }]);
   }
-  return serializeWahooStrengthPlanV1(details, { name: workout.title, allowDegraded: true });
+  return serializeWahooStrengthPlanV1(details, { name: workout.title, sport: workout.structure.sport, allowDegraded: true });
 }
 /** Fixture assessment is available without provider access; serialization is NOT delivery. */
 export function assessTrainingDeliveryMapping(provider: PlannedWorkoutProviderId, workout: ScheduledWorkoutV1,
   destinationKey: string, timeZone: string, strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
   const digest = hashTrainingScheduleRequestPayload({ provider, destinationKey, timeZone,
     mappingVersion: TRAINING_DELIVERY_MAPPING_VERSION, title: workout.title, localDate: workout.localDate, structure: workout.structure,
-    ...((provider === 'garmin' || provider === 'coros' || provider === 'wahoo') && workout.structure.sport === ActivityTypes.StrengthTraining
+    ...((provider === 'garmin' || provider === 'coros' || provider === 'wahoo') && isStrengthWorkoutSportV1(workout.structure.sport)
       && strength ? { strength: strength.exercises } : {}) });
   if (provider === 'garmin' && workout.structure.sport === ActivityTypes.Swimming
     && !GARMIN_POOL_SWIMMING_DELIVERY_READY) {

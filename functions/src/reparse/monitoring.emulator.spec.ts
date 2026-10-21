@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Firestore, Query, Timestamp, Transaction } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { observeReparseQueue, REPARSE_PROBE_LIMIT, type ReparseProbeProfile } from './monitoring-probe';
+import { beforeReparseScan, observeReparseQueue, REPARSE_PROBE_LIMIT, type ReparseProbeProfile } from './monitoring-probe';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('reparse monitoring / real bounded read-only observation', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -38,6 +38,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('reparse monitoring / real
     expect(validation).not.toHaveBeenCalled();
     expect(observations()).toHaveLength(3);
     for (const tier of ['normal', 'heavy', 'route']) expect(sample(tier)).toMatchObject({ pendingSample: 0, unknownSample: 0, truncated: false, stalled: false });
+  });
+  it.each(['normal', 'route'] as const)('finishes the bounded %s observation before discovery starts without writing jobs', async tier => {
+    const route = tier === 'route';
+    const p = route ? { ...profile, collection: 'sportsLibRouteReparseJobs' as const } : profile;
+    const ref = await seed('before-discovery', {}, route);
+    const before = await ref.get();
+    const query = vi.spyOn(Query.prototype, 'get');
+    const writes = vi.spyOn(Transaction.prototype, 'set');
+    const operation = vi.fn(async () => {
+      expect(sample(tier)).toMatchObject({ pendingSample: 1, unknownSample: 0, stalled: true });
+      expect(query).toHaveBeenCalledTimes(2);
+      expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    });
+    await beforeReparseScan(operation, () => observeReparseQueue(db, p, now),
+      route ? ['route'] : ['normal', 'heavy'], route ? '2026-10-19T13:06:02Z' : '2026-10-19T13:00:01Z');
+    expect(operation).toHaveBeenCalledOnce();
+    expect(observations()).toHaveLength(route ? 1 : 2);
+    expect(writes).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(2);
+    expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    expect(JSON.stringify(observations())).not.toContain('PRIVATE');
   });
   it('separates serialized heavy progress from normal progress and recovers when that tier completes', async () => {
     const pending = await seed('normal-pending'); await seed('heavy-pending', { processingTier: 'heavy' });

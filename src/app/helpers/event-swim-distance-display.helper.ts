@@ -1,6 +1,6 @@
 import {
   ActivityInterface, ActivityTypes, ActivityTypesHelper, DataActiveLengths, DataInterface, DataPoolLength, LapInterface,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import { AppSwimLength, getActivitySwimLengths, getRecordedLapActive, isRestSwimLength } from './event-swim-length.helper';
 import { sumSwimValues } from './event-swim-analytics.helper';
 

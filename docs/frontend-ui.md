@@ -275,6 +275,28 @@ Partial HR coverage is visible, and unsupported aggregate metrics remain blank w
 This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
 remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
+Event lap tables use `getEventLapTableGroups` to append one Session end segment to a single unambiguous sequence.
+Its positive recorded interval must follow non-overlapping laps inside the activity and end at the activity boundary
+(allowing one second of end-time rounding). Recorded pause gaps are allowed. The final row continues the numbering
+and has a compact **Final lap** label without widening the 48px number column. Mixed types, multiple session endings,
+missing/overlapping intervals and cross-leg laps retain separate groups. Grouping is per activity, never across sports.
+Rows keep their original lap objects, types, metrics and source-index selection/disclosure keys, including when
+hydrating another lap type makes an assignment ambiguous. Only the table projection changes: source files, storage,
+chart/map marker exclusions, Training and MCP contracts remain unchanged; no reparse or migration is needed.
+
+The persistent lap Summary row appears only when an activity/display-group table contains at least two visible original
+laps and has summary metrics. A single lap retains its recorded row without a duplicate summary. Count original laps
+including any appended final segment before rest-block grouping, not the number of collapsed display rows. Column availability follows the same rule:
+session-only Max HR cannot advertise a column in a single-lap table without its own recorded peak. Temporary selection
+summaries remain available, including when one lap is selected. Changing the visible lap set recomputes this presentation.
+
+Ordinary lap numbers use a 48px pinned column with 8px inline cell padding instead of the former 88px column. The
+independent selection column keeps its 48px checkbox target. Persistent and selected summary labels span those two
+columns, with their combined width derived from the same local CSS variables so metric columns remain aligned.
+Summary and ordinary rows use separate Material row definitions: CDK measures sticky offsets per definition,
+so a spanning Summary label must not shift the number cells over the duration cells in ordinary rows.
+Cross-leg context tables retain a 128px number/context column; rest ranges and context labels wrap rather than clip.
+
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,
 including empty lists, retain precedence. The display-only `DataNormalizedSwolf` extends Sports Lib's numeric data
 class. Stroke, total strokes and normalized SWOLF choices are limited to swimming in both the chooser and the
@@ -311,6 +333,12 @@ Activity details use the workspace shell's inline gutters once. The primary summ
 activity selector, statistics, map, charts, and lap/jump/swim sections align to the same content edges without extra
 section-wide side insets. Section headings omit redundant top padding and retain an 8px gap below. Material controls,
 table cells, chart axes, overlays, and fullscreen/export frames keep their internal spacing.
+The Jumps divider reuses the performance-chart divider's 16px top and 8px bottom margins in addition to the section
+stack's existing gap, so the heading is separated from the preceding lap table or chart. No divider is rendered when
+no selected activity has jumps. A single jump-bearing activity renders its table directly, matching Laps and Swim
+Lengths; mixed selections with only one jump-bearing activity retain its source label as compact secondary text.
+Multiple jump-bearing activities retain the existing Material tabs. Table sorting, units and horizontal
+scrolling are unchanged, without adding a card or extra inline padding.
 The shared summary's `--summary-primary-info-padding-inline` and section header's `--event-section-header-padding`
 hooks are set only by activity details; saved-route summaries and headers retain their default spacing.
 At tablet widths, activity details set `--summary-primary-info-metrics-order` to keep summary actions beside the
@@ -430,7 +458,18 @@ change to Training planning semantics or MCP read/write contracts, scopes, proje
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
-server snapshots; permission or App Check failures refresh both credentials with the existing bounded retry/backoff.
+server snapshots; permission and transient App Check network/server failures refresh both credentials with bounded
+retry/backoff. For App Check `initial-throttle`/`throttled` with HTTP 408/429/5xx, a validated remaining SDK wait of
+at most ten seconds may use that same retry budget. The delay is at least the SDK duration plus one second to cover
+its rounding, as well as the normal retry backoff. Recovering states retain the safe failure details for correct UI
+guidance. Rejected HTTP 403/404 checks, unknown/long SDK waits, other direct exchange 4xx rejections,
+reCAPTCHA failures and configuration failures stop automatic profile retries immediately. A forced refresh cannot
+clear the SDK's cooldown. The recovery panel explains browser verification separately and offers **Reload page**
+for these failures, with regular-window, trusted-network and script-blocking checks. Reloading starts a new check
+but does not guarantee acceptance. It never signs out, clears storage or writes account data; transient network
+failures and ordinary profile errors retain **Retry**. A requested page reload shows **Reloading…** and prevents
+repeated clicks/duplicate haptics. A five-second UI-only fallback re-enables the action if navigation was cancelled;
+it never requests a token or reloads automatically, and component destruction cancels it.
 The recovery panel on `/login` explains that the user is still signed in. Its Retry action restarts the profile stream
 and refreshes credentials without signing out, clearing persistence, or writing account data. Actual Auth sign-out or
 an account switch cancels the old profile load and ends its recovery attempt.
@@ -453,6 +492,29 @@ restarted profile load invalidate the old shared result. Transient failures use 
 The fallback does not clear or repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
 without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
 beta, and production builds; only the App Check debug provider is development-specific.
+
+Sentry's existing `beforeBreadcrumb` hook inspects already emitted console warnings. App Check initialization
+subscribes to sanitized initial rejections before starting verification, and registers the public `onTokenChanged`
+error observer before downstream Auth/Firestore consumers. The hook accepts only the SDK console prefix and the
+warning's exact initial-throttle grammar; unrelated logs and arbitrary arguments are ignored without formatting.
+This also captures initial refresh rejections when the SDK retains a still-valid cached token and its public token
+observer omits the error. No global Firebase user log handler is installed: that API formats even disabled debug
+payloads before filtering, which can add work to unrelated Firestore/Auth operations. Console logging and SDK log
+levels stay unchanged. `AppCheckReadinessService` also reports explicit token-request failures and invalidates memoized readiness
+after a background failure. The single `App Check verification failed` Sentry message uses fixed phase/code labels,
+a bounded HTTP status, a validated SDK retry duration (up to one day), source, online hint and document visibility.
+It never copies raw error messages/stacks, SDK custom data, response bodies, URLs, identifiers or tokens. Existing
+Sentry session context is retained. An initial rejection and its subsequent cooldown share one report until a usable
+fresh token arrives; repeated notifications of the same cached token do not reset deduplication. Token comparison
+is memory-only. An already active cooldown is labelled honestly when the original rejection was unavailable. These
+diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
+warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
+
+Monitoring impact: **unchanged** for Cloud Monitoring queues, dashboards and alert policies. This is browser-only
+App Check recovery; no workers, schedules, backlog/lease/dead-letter semantics, provider connections or monitoring
+bundle definitions change. Existing import monitoring remains authoritative for server queues; browser verification
+uses the scoped Sentry diagnostic above. No production App Check enforcement, risk threshold, token TTL, provider,
+Firebase settings or alert configuration changes are part of this fix.
 
 ## Surface elevation
 
@@ -489,6 +551,92 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
+### Event chart gaps and zoom
+
+Event Details **Chart options → Line continuity** and **Settings → Charts → Event chart line continuity**
+share the account preference `settings.chartSettings.eventLineContinuity` (`mode`, `maxGapSeconds`).
+Settings uses **Save Changes**; Event Details saves immediately for the signed-in viewer, including while viewing
+someone else's shared activity. Missing or invalid preferences resolve to **Continuous**, without a migration.
+
+- **Continuous** (default) connects available readings within each activity, including across missing data.
+  A connecting line does not establish that intermediate measurements exist.
+- **Detect gaps** uses the full metric's recorded timing, independently for each activity. Intervals up to two seconds
+  connect. Longer intervals connect only when exactly equal to the dominant interval in either neighboring window
+  of 16 intervals (excluding the interval being tested), with at least eight valid neighbors and 75% agreement.
+  Otherwise the line breaks. This conservative heuristic handles regular slower sampling, but cannot distinguish
+  lost readings from an identical genuine sampling pattern. It is an optional display choice, not validated missing-data attribution.
+- **Custom gap limit** connects readings at most the configured number of seconds apart. The input accepts whole
+  seconds from 1 to 86400, defaulting to 10 when first enabled. The limit measures time **between readings**.
+
+The shared `event-chart-line-continuity.helper` prepares display segment IDs once from the full metric before coordinate
+filtering. Worker snapshots carry the preference and return transferable segment buffers; synchronous builds use the
+same code. The panel cache key includes the preference. Zoom does not rerun cadence detection. Invalid or non-increasing
+sample timestamps break recorded-time connections. Distance coordinates omitted during projection cannot hide a
+pre-existing segment break. The segment buffer costs four bytes per chart-grid position and is never persisted.
+
+`buildEventRecordedLineValues` uses the prepared IDs for packed worker buffers; legacy point arrays cache equivalent
+IDs against immutable input references and the preference. It uses absolute sample timestamps on Duration, Time and
+Distance axes. Display buffers contain only original finite coordinates plus null separators. Grade-colored elevation,
+intensity-zone styling, overlays, and comparison activities retain the same connection decisions and original values.
+Each activity has its own series; preferences never connect separate activities.
+
+The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
+endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
+even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.
+Nearby-row matching uses the current native viewport, including before shared zoom state catches up. The vertical scale
+includes recorded endpoints of segments crossing a viewport edge, following each series' connection policy. Context
+readings remain outside tooltip and selection-statistic results. A Continuous line crossing missing data adds no tooltip
+reading or range statistic there.
+
+Battery retains its sparse-reading display in Continuous and follows explicit Detect/Custom choices. Untimed route
+series keep adjacent-row connections: distance/point-index coordinates are not elapsed time, and missing elevations
+still break route lines. Power's 3s display retains its complete-window requirement and adjacent-row gaps; its recorded
+whiskers do not add line context from offscreen raw readings. These policies also govern viewport scaling.
+
+Both preference surfaces validate custom limits, disable pending edits, and provide semantic haptic feedback. Event
+Details rolls back failed saves to the latest saved preference and ignores late completions after account changes or
+destruction. The custom-limit input keeps its entered draft until the parent supplies a new value; a rejection before
+that update leaves the draft available for retry without changing the active chart preference. Settings refreshes
+an untouched preference pair without discarding unrelated edits, preserves edited pairs, and omits untouched continuity
+fields from unrelated saves. Existing settings writes and authentication safeguards apply; no new backend endpoint,
+index, rules, migration, or reparse is required.
+
+Original streams, raw chart-series buffers, range statistics, Training load and MCP responses are unchanged. This is a
+frontend display preference with no MCP/Training contract impact. The chart never manufactures intermediate measurements.
+
+### Dashboard Efficiency single-week display
+
+When the selected Efficiency Trend range contains one finite weekly observation, ECharts displays that observation as
+a small circle in the line's theme color. Two or more observations keep the existing line presentation. Changing the
+range updates this choice, and a valid zero remains visible. This affects only rendering of the existing weekly values;
+calculation, filtering, stored/derived data, Training and MCP contracts are unchanged.
+
+### Event Power display views
+
+Event Details Power panels open in Raw. The Material Raw / 3s control is local to the panel and emits one selection
+haptic only on an accepted change. It resets silently for a different activity set, stays selected across axis/theme/zoom
+changes, and is omitted from inert previews and streams without a complete three-second window.
+
+`event-power-display.helper.ts` builds a separate packed display buffer from the existing raw/worker series. A trailing
+average needs three finite consecutive one-second samples according to their absolute recorded times; zeros count,
+missing readings and timestamp interruptions do not. The same computation therefore applies on Duration, Time and Distance
+axes, including repeated distance positions. The input series is never mutated. Each comparison activity has its own buffer.
+
+The 3s view keeps recorded peaks and dips as thin, silent ECharts whiskers alongside the average line. Both raw extrema
+are retained in each approximately seven-pixel visible interval, at their original x positions and separately within each
+uninterrupted recording run. Each whisker extends from the local 3s average to the actual raw value; a recorded-value cap
+remains visible when a complete average is unavailable. Zoom, container resize and fullscreen changes rebucket these
+extrema. The 3s line omits area fill so the whiskers stay visible; Raw keeps its original fill. Device patterns and zone coloring
+remain attached to the average line, including each independent comparison series. Tooltips show canonical Sports Lib-formatted
+3s and recorded values separately; the y-axis includes both raw and averaged values in the current view so zooming cannot
+clip an average whose window starts before the visible range. Original streams still own minimum/maximum, selection
+statistics, overlays, marker positions, power curves, benchmark calculations and recorded metrics. Existing shared tooltip,
+scrolling and chart haptic controllers retain interaction ownership.
+
+MCP/Training impact review: this is an in-memory frontend display projection. No stored activity or Training metric,
+benchmark calculation, chart/sample read response, catalog, plan/workout contract, consent, provider action or mutation changes.
+The three-second buffer is neither persisted nor exposed as another numeric metric or MCP stream.
+
 ### Lazy chart code and release bundle budgets
 
 `EChartsLoaderService` loads the core and `echarts-registrations.helper.ts` only in the browser, on chart demand.
@@ -510,6 +658,33 @@ only the registered chart families, not unused treemap/sunburst/sankey/gauge/gra
 chart/loader/host/public-preview tests, frontend environment/workflow/policy checks, service-worker asset checks
 and the public startup/prerender checks pass. A synthetic browser smoke test imports the production chunks and
 renders all six chart types on Canvas, including resize and connect/disconnect. No account or provider data is used.
+
+#### Worker metrics imports
+
+The event chart worker and its transitive metric helpers use the public
+`@sports-alliance/sports-lib/metrics` entry introduced in Sports Lib 23.3. Root imports stay available for file
+import/export consumers. A root import anywhere in the worker graph can make a splitting bundler emit unused FIT/GPX
+parser chunks even when the worker never imports those chunks at runtime. Inspect every emitted script when measuring
+the `allScript` budget. The app has no local adapter, internal package-file imports or custom resolution aliases.
+
+The new entry shares the root API's exact data classes, `DataStore`, `DynamicDataLoader`, units and stream utilities.
+The two shared metric helpers use the same public entry on frontend and Functions, so both consumers must adopt the
+compatible package release. No calculations, serialized tokens, data catalog, persistence, Training/MCP contracts,
+user preferences, consent or Help behavior change.
+
+`event-chart-worker-bundle.spec.ts` compiles the actual worker with Angular's esbuild version and checks all output
+files for parser/adapter code. It executes the bundled worker against the synchronous builder for running/swimming,
+metric/imperial preferences and all three x-axis modes, including zero readings, gaps, transferable buffers and
+error recovery. The worker service's existing fallback coverage remains in place. Production and beta retain the
+`13600kb` total-script error limit and `13000kb` warning limit; the hosting configuration spec guards both values.
+
+Verification with the Sports Lib 23.3.0 release artifact: production on Node 22 emits 13,307,265 script bytes
+against the 13,600,000-byte cap, leaving 292,735 bytes of headroom. Beta also passes with the same artifact.
+Production service-worker and public
+startup/prerender checks pass, as does beta's service-worker check. All 722 targeted app assertions pass, including
+the existing App Check recovery tests. Functions compilation and the MCP compatibility check also pass. Package
+verification covers ESM/CommonJS identity, TypeScript resolution and every emitted metrics-worker chunk. Both the
+app and Functions pin 23.3.0 with registry URLs and the verified release integrity in their lockfiles.
 
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
@@ -556,6 +731,15 @@ private text after an edit, hide/remove or owner change. No chart recreation or 
 continue through ordinary rendering. Range registrations remain deduplicated, and disposal releases the retained
 option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
 Form, Forecast and the four Training trend adapters share this path, without chart-local fetches or haptics.
+
+Timeline note titles face into the available chart space, including each Form grid and Sleep/weekly category bands.
+Titles stay inside the bottom of the plot on normal and reversed value axes, including swim pace charts.
+Their width is bounded and truncated with an ellipsis; the native marker tooltip retains the full title. After
+ECharts finishes layout, the shared host refines placement using `convertToPixel`, which accounts for automatic axis
+label margins. A geometry key prevents repeated patches; only marker series are merged, preserving readings, zoom,
+legend state and chart height. Real container resizes also refresh these overlays. The shared host removes its native
+layout listener on disposal and rejects queued work for a disposed or replaced chart. Help's existing shortened-title
+and full-tooltip guidance still applies; there are no changes to notes access, Training calculations or MCP contracts.
 
 `date-time-format.helper.ts` reuses at most 64 Intl date formatters for explicit timezone/locale/option combinations,
 with least-recently-used eviction. Health chart labels and workspace dates, Training readiness dates,

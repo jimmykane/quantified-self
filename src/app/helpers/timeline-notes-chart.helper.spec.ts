@@ -120,6 +120,50 @@ describe('timeline chart overlays', () => {
     expect(marker.label.formatter()).toBe(named.title);
     expect(marker.tooltip.formatter()).toContain(named.title);
   });
+  it.each([320, 1000])('faces edge titles into the plot on every Form grid at width %s', width => {
+    const notes = ['2026-09-01', '2026-09-10'].map((startDate, i) => ({ ...note, id: String(i), title: `Edge ${i}`, startDate, endDate: startDate }));
+    const source = { ...option, grid: [{ left: 40, right: 20 }, { left: '10%', right: '10%' }],
+      xAxis: [{ ...option.xAxis, gridIndex: 0 }, { ...option.xAxis, gridIndex: 1 }],
+      series: [option.series[0], { ...option.series[0], xAxisIndex: 1, yAxisIndex: 1 }] };
+    const result = addTimelineNotesToChart(source, notes, {}, date('2026-09-10'), buildDashboardEChartsStyleTokens(false, width), width);
+    for (const overlay of result.overlays as any[]) {
+      const [left, right] = overlay.markLine.data;
+      expect(left.label).toMatchObject({ align: 'left', distance: [6, 6] });
+      expect(right.label).toMatchObject({ align: 'right', distance: [-6, 6] });
+      expect(right.tooltip.formatter()).toContain(notes[1].title);
+    }
+  });
+  it.each([true, false])('bounds category titles on narrow weekly/Sleep plots (boundaryGap: %s)', boundaryGap => {
+    const notes = ['2026-09-01', '2026-09-03'].map((startDate, i) => ({ ...note, id: String(i), startDate, endDate: startDate }));
+    const source = { grid: { left: 20, right: 20 },
+      xAxis: { type: 'category', boundaryGap, data: notes.map(item => date(item.startDate)) }, series: [{ data: [1, 2] }] };
+    const overlay = addTimelineNotesToChart(source, notes, {}, date('2026-09-10'), buildDashboardEChartsStyleTokens(false, 160), 160).overlays[0] as any;
+    expect(overlay.markLine.data.map(marker => marker.label.align)).toEqual(['left', 'right']);
+    for (const marker of overlay.markLine.data) {
+      expect(marker.label.width).toBeGreaterThan(0);
+      expect(marker.label.width).toBeLessThanOrEqual(boundaryGap ? 84 : 114);
+    }
+  });
+  it('anchors titles inside the bottom of each series value axis, including reversed pace axes', () => {
+    const notes = ['2026-09-01', '2026-09-10'].map((startDate, i) => ({ ...note, id: String(i), startDate, endDate: startDate }));
+    const source = { ...option, grid: [{ left: 32, right: 16 }, { left: 32, right: 16 }],
+      xAxis: [{ ...option.xAxis, gridIndex: 0 }, { ...option.xAxis, gridIndex: 1 }],
+      yAxis: [{ inverse: false, gridIndex: 1 }, { inverse: true, gridIndex: 0 }],
+      series: [{ ...option.series[0], yAxisIndex: 1 }, { ...option.series[0], xAxisIndex: 1, yAxisIndex: 0 }] };
+    const result = addTimelineNotesToChart(source, notes, {}, date('2026-09-10'), buildDashboardEChartsStyleTokens(false, 320), 320);
+    const [reversed, normal] = result.overlays as any[];
+    expect(reversed.yAxisIndex).toBe(1);
+    expect(reversed.markLine.data.map(marker => marker.label)).toMatchObject([
+      { position: 'insideEndTop', align: 'left', distance: [-6, 6], offset: [0, 0] },
+      { position: 'insideEndTop', align: 'right', distance: [6, 6], offset: [0, -14] },
+    ]);
+    expect(normal.yAxisIndex).toBe(0);
+    expect(normal.markLine.data.map(marker => marker.label)).toMatchObject([
+      { position: 'insideStartTop', align: 'left', distance: [6, 6] },
+      { position: 'insideStartTop', align: 'right', distance: [-6, 6] },
+    ]);
+    expect(result.option.series.slice(0, 2)).toEqual(source.series);
+  });
   it.each([[false, 320], [true, 320], [false, 1000], [true, 1000]] as const)('uses the shared tooltip card and chrome (dark: %s, width: %s)', (darkTheme, width) => {
     const style = buildDashboardEChartsStyleTokens(darkTheme, width);
     const result = addTimelineNotesToChart(option, [{ ...note, color: 'purple' }], {}, date('2026-09-10'), style);

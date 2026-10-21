@@ -367,6 +367,28 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('processing health');
     });
 
+    it('renders accurate connection-history labels on desktop and mobile without fake counts', () => {
+        adminServiceSpy.getQueueStats.mockReturnValue(of({
+            ...mockQueueStats,
+            connectionHistory: { pending: 3, finished: 17, failed: 1, maxLagMs: 8 * 86400000 },
+        }));
+        createComponent();
+        const elements = [...(fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row, .queue-card')]
+            .filter(element => element.textContent?.includes('Connection history'));
+        expect(elements).toHaveLength(2);
+        for (const element of elements) {
+            const text = element.textContent ?? '';
+            expect(text).toContain('Oldest import age');
+            expect(text).toContain('Finished runs');
+            expect(text).toContain('17');
+            expect(text).toContain('Retained failed runs');
+            expect(text).toContain('—');
+            expect(text).not.toContain('30 days');
+            expect(text).not.toContain('Longest wait');
+        }
+        expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
     it('links Training delivery to its admin queue with one selection feedback', () => {
         adminServiceSpy.getQueueStats.mockReturnValue(of({
             ...mockQueueStats,

@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -15,6 +15,8 @@ import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppWindowService } from '../../services/app.window.service';
+import { appCheckFailureDetails } from '../../helpers/app-check-error.helper';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from '../../authentication/auth-redirect-url';
 
 
@@ -31,10 +33,21 @@ export class LoginComponent implements OnInit, OnDestroy {
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
+  private profileReloadResetTimeout: ReturnType<typeof setTimeout> | undefined;
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
   private readonly haptics = inject(AppHapticsService);
+  private readonly windowService = inject(AppWindowService);
+  readonly profileVerificationFailure = computed(() => {
+    const state = this.userService.profileReadState();
+    return state.status === 'error' || state.status === 'recovering'
+      ? state.appCheckFailure ?? appCheckFailureDetails({ code: state.code }) : null;
+  });
+  readonly profileVerificationNeedsReload = computed(() => {
+    const failure = this.profileVerificationFailure();
+    return !!failure && !failure.retryable;
+  });
   private static readonly nonReportableAuthenticationErrorCodes = new Set([
     'auth/account-exists-with-different-credential',
     'auth/cancelled-popup-request',
@@ -438,7 +451,22 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isProfileRecoveryInProgress = true;
     this.isLoading = true;
     this.haptics.selection();
+    let pageReloadRequested = false;
     try {
+      if (this.profileVerificationNeedsReload()) {
+        // A new page starts a fresh browser check. A same-page forced token refresh
+        // cannot bypass the SDK's cooldown. Reloading does not guarantee acceptance.
+        this.windowService.windowRef.location.reload();
+        pageReloadRequested = true;
+        // A cancelled beforeunload prompt leaves this document alive. Bound the
+        // pending state without making another token request or automatic reload.
+        this.profileReloadResetTimeout = setTimeout(() => {
+          this.isLoading = false;
+          this.isProfileRecoveryInProgress = false;
+          this.profileReloadResetTimeout = undefined;
+        }, 5000);
+        return;
+      }
       if (await this.userService.retryProfileRead()) {
         this.haptics.success();
       } else {
@@ -451,8 +479,10 @@ export class LoginComponent implements OnInit, OnDestroy {
         duration: 5000,
       });
     } finally {
-      this.isLoading = false;
-      this.isProfileRecoveryInProgress = false;
+      if (!pageReloadRequested) {
+        this.isLoading = false;
+        this.isProfileRecoveryInProgress = false;
+      }
     }
   }
 
@@ -538,6 +568,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.profileReloadResetTimeout !== undefined) clearTimeout(this.profileReloadResetTimeout);
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();
     }

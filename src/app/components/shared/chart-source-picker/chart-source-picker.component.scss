@@ -1,7 +1,8 @@
 :host { display:block; min-width:0; max-width:100%; }
 .chart-reading-picker { display:flex; flex-direction:column; gap:4px; max-width:100%; margin-block:4px 8px; }
 .chart-reading-picker > span, .chart-reading-method { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); }
-.chart-reading-picker mat-select { max-width:100%; font:var(--mat-sys-body-medium); }
+.chart-reading-picker .chart-reading-trigger { min-height:44px; font:var(--mat-sys-body-medium); width:100%; }
+.chart-reading-trigger .chart-source-trigger-content { justify-content:space-between; }
 .chart-reading-method { display:block; margin-block:4px; }
 // Bound the projected label without reaching into Material's internal elements.
 .chart-source-trigger { display:inline-grid; grid-template-columns:minmax(0,1fr); align-items:center; max-width:100%; height:auto; min-height:40px; padding:6px 8px; font:var(--mat-sys-label-medium); }
@@ -14,3 +15,6 @@
 .chart-source-option { display:flex; flex-direction:column; gap:3px; padding-block:8px; white-space:normal; overflow-wrap:anywhere; }
 .chart-source-option-label { font:var(--mat-sys-label-large); }
 .chart-source-option-detail { font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }
+
+.chart-source-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.25rem 0.75rem; min-width:0; }
+:host(.chart-source-picker-compact) .chart-reading-picker { margin-block:0 4px; }

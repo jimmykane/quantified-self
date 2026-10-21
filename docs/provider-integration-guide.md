@@ -122,7 +122,7 @@ The canonical `receiveSuunto247Data` webhook uses isolated owner-module entrypoi
 its Gen 1 HTTP trigger, 60-second timeout and notification secret. See [entrypoint verification](functions-entrypoint-loading.md);
 this startup/memory configuration does not change webhook authentication, durable admission or provider registration.
 
-Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health queue with a five-minute dispatch bucket per UID, provider account, exact local-day window, and captured token/root/connection generations. The ingress still acknowledges only after durable staging and the retryable trigger retains its lifecycle checks. Queue admission schedules one bounded refetch just after the bucket closes; distinct notifications in that bucket reuse the same queued refetch. An ingress that reaches a bucket after dispatch has begun receives a deterministic notification-specific follow-up, so corrections are not lost. Poll and history jobs retain their current schedules. The 30-minute dispatcher preserves the earliest dispatch time when recovering an enqueue failure. Monitor `coalescedWindows` (reused bucket admissions, which can include an exact Eventarc retry), `duplicateIngressWindows` (exact late-ingress retries), actual task/worker counts, queue age, and Health freshness during rollout; revert the Functions revision to restore per-notification dispatch without migrating existing queue data. See [Suunto ingestion](suunto-integration.md#ingestion-and-revision-flow).
+Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health queue with a five-minute dispatch bucket per UID, provider account, exact local-day window, and captured token/root/connection generations. The ingress still acknowledges only after durable staging and the retryable trigger retains its lifecycle checks. Queue admission schedules one bounded refetch just after the bucket closes; distinct notifications in that bucket reuse the same queued refetch. An ingress that reaches a bucket after dispatch has begun receives a deterministic notification-specific follow-up, so corrections are not lost. Poll and manual bulk-history jobs retain their current schedules; connection-history children use the bounded prompt dispatch described below. The 30-minute dispatcher preserves the earliest dispatch time when recovering an enqueue failure. Monitor `coalescedWindows` (reused bucket admissions, which can include an exact Eventarc retry), `duplicateIngressWindows` (exact late-ingress retries), actual task/worker counts, queue age, and Health freshness during rollout; revert the Functions revision to restore per-notification dispatch without migrating existing queue data. See [Suunto ingestion](suunto-integration.md#ingestion-and-revision-flow).
 
 The Suunto Health worker also emits one safe per-invocation feed summary for Activity, daily statistics, and Recovery request attempts/time and source-record write outcomes. A compact webhook notification mask is unioned when Activity and Recovery share a queue row; a notification that cannot merge before the worker claims the row gets a deterministic follow-up. The mask changes telemetry only, not which feeds are fetched. Compare those summaries with whole-worker telemetry and billed Cloud Run time before considering feed-specific pulls. See [Suunto operations](suunto-integration.md#sleep-and-health) for field meanings and the correction/reconciliation limit.
 
@@ -352,8 +352,36 @@ is disclosed through the existing mapping review and bound to the authored conte
 Changed or unsupported recipes retain an existing provider copy until a supported replacement is approved.
 The 21 previously verified Wahoo profiles keep their payload behavior; walking aliases retain timed, untargeted
 steps. COROS walking aliases remain unsupported and COROS delivery stays disabled. Classic/Skate Skiing and
-AMRAP/EMOM/Tabata/BODYPUMP have no approved outbound mapping. Recorded-activity uploads use their independent
+AMRAP/EMOM/Tabata use Garmin Cardio Training and Wahoo Cardio Class after mapping review. Recorded-activity uploads use their independent
 mapping contract; this planning table does not widen that contract.
+
+`Weight Training`, `Core Training`, `LES MILLS CORE`, `LES MILLS GRIT Strength` and `LES MILLS BODYPUMP` have
+Suunto interval-planning aliases to the existing `Strength Training` / Gym (`23`) Guide profile.
+`Kettlebell` (`63`) and `Calisthenics` (`104`) use their own native
+recommendation profiles with HR-only default live readings, from Suunto's
+[published activity catalog](https://aspartnercontent.blob.core.windows.net/apizone/docs/Activities.pdf).
+The [Guide contract](https://apizone.suunto.com/suuntoplus-guide-description) uses those IDs as activity recommendations;
+they do not establish device availability or account-side delivery proof.
+The original recipe sport survives reads and JSON round trips. This is the generic interval mapper, not the
+exercise-aware strength companion: existing ending/target validation applies, and profile substitutions require
+explicit mapping-loss approval. Native Kettlebell/Calisthenics do not introduce a profile loss. These generic interval profiles do not gain repetition endings or native external-load tracking. The approved additional Suunto modes
+are Yoga (`121`), Pilates (`120`), Stretching (`58`), Crossfit (`54`), Circuit training (`73`), Aerobics (`69`),
+Crosstrainer (`55`) and Meditation (`112`), with HR-only default live readings. Flexibility Training → Stretching,
+Elliptical Trainer → Crosstrainer and Breathwork → Meditation are disclosed substitutions requiring review.
+Garmin, COROS and Wahoo require complete strength companions for the seven approved strength aliases; generic Suunto intervals alone do not grant delivery support.
+`Virtual Rowing` uses Suunto Indoor Rowing (`57`), Garmin's existing Indoor Rowing → Generic mapping (with device
+warning and review), and Wahoo Indoor Rowing (Plan family `6`, indoor location `0`, dated Workout type `22`). Wahoo
+keeps timed, untargeted steps only; unsupported distance/manual endings and intensity targets cannot be approved away.
+All three providers retain the original QS recipe name and require mapping review. COROS rowing remains unsupported.
+Virtual Rowing uses rowing's metric distances and 500 m split presentation in QS/MCP and the Suunto app description,
+including with imperial preferences. Provider target speeds remain canonical m/s; native watch units stay watch-controlled.
+The catalog audit checked all 283 recipe-valid sports across all four assessors and serializers (1,132 pairs): no
+advertised mapping disagreed with serialization for a timed, untargeted recipe. All 45 interval-editor sports have
+Suunto, Garmin and Wahoo mappings; COROS retains its nine documented unsupported editor sports and stays disabled.
+Suunto now maps 65 catalog sports; its other 218 names remain unsupported for generic planned-workout delivery.
+That is a support boundary, not 218 import bugs: native activity recording alone never establishes workout delivery.
+All 180 preceding supported serializer results remain byte-identical. This batch adds exactly 11 Suunto sport names
+and Garmin/Wahoo Virtual Rowing; no additional classifications were inferred from activity groups.
 
 Monitoring coverage decision for this alias extension: **unchanged**. The existing Training monitoring bundle
 (`tools/training-monitoring/definitions.mjs`) already selects Garmin, Wahoo and Suunto delivery outcome/failure
@@ -422,7 +450,9 @@ past deletion even with opt-in. Synthetic wrapper/emulator evidence is not provi
 | Suunto | `enabled` | Numeric early-Lap endings use v6 OR transitions with private lap-safe boundary paths; device proof remains separate.  Connected Pro users can explicitly deliver one workout as a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact supported canonical sport selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, Hand Cycle, pool Swimming (`21`), and Openwater swimming (`85`) where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Completed #650 records approved cloud lifecycle and owner-confirmed app/watch visibility/selection. App/watch receipt remains unknowable through the partner API and is not inferred from fixtures or positive cloud reads. Suunto-confirmed retained app/watch copies after cloud removal are expected, not a failed withdrawal or automatic-recreation signal. #710 keeps negative classification and automatic repair disabled. |
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
-not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
+not a repository artifact. Yoga, Pilates and Cardio Training use its native `YOGA`, `PILATES` and `CARDIO_TRAINING`
+profiles, with local serializer/MCP compatibility evidence only; no exercise details are inferred and no new live
+Garmin/device acceptance is claimed. Workout content and its date-only schedule remain separate artifacts because each has its own
 provider ID and CRUD lifecycle. The fixture mapper supports Running and Cycling exactly. Trail Running, Treadmill,
 Indoor Running and Virtual Running fold to `RUNNING`; Mountain Biking, Indoor and Virtual Cycling, E-Biking, Hand Cycle,
 Velomobile, Enduro MTB and Downhill Cycling fold to `CYCLING`. These are the explicit QS running/cycling Training
@@ -507,6 +537,23 @@ degradations. FTP and heart-rate header references are integer fields; a fractio
 after explicit degradation approval. Relative threshold/max-heart-rate and threshold-speed targets are also explicit
 device-support degradations: Wahoo documents them for treadmill workouts in the Wahoo app, not ELEMNT computers or
 RIVAL. Unsupported endings fail.
+Yoga, Elliptical Trainer and Cardio Training additionally use indoor Gym Plan family `6` with dated Workout types
+`66`, `20` and `43`. Cardio Training discloses its Cardio Class substitution. Only timed, untargeted steps are
+supported. Authorized 20 October 2026 API tests verified Plan/file/Workout/association readback and temporary-copy
+removal, including payloads generated by the QS serializers; app/watch playback and the integrated QS queue were not
+tested. The approved follow-up also maps Crossfit/Circuit Training/Aerobics/HIIT/AMRAP/EMOM/Tabata to Garmin Cardio Training
+and Wahoo Cardio Class, Crosstrainer/Elliptical Trainer to Garmin Cardio Training and Wahoo Elliptical,
+Stretching/Flexibility Training/Meditation/Breathwork to Garmin Generic and Wahoo Gym, and Pilates to Wahoo Gym.
+Mobility/Gym substitutions are timed and untargeted; every sport fold requires review. The seven strength aliases use
+complete matching exercise companions on Garmin/COROS/Wahoo, preserve their source name throughout persistence,
+and reuse existing exercise, consent and serializer restrictions; COROS delivery stays disabled.
+Direct API tests verified all 21 approved Wahoo source names through Plan/file/Workout/association readback and cleanup.
+Wahoo rejects fractional minutes on dated Workouts, so new delivery requires an exact whole-minute total; QS does
+not round or pad the prescription. Stored decimal seconds and repeat counts are summed exactly for this decision,
+so floating-point residue cannot reject a valid whole minute or conceal a real fraction. Historical digests remain
+unchanged; only validated recovery accepts the old minutes representation. Read-only compatibility explains the same restriction. This is Cloud evidence,
+not proof of local app/watch playback. Existing OAuth, consent, queue, revision and monitoring boundaries remain unchanged. See the detailed evidence
+and limitations in [Training](training-workspace.md).
 
 Suunto mapping follows the official [Guide API workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api),
 [Guide JSON reference](https://apizone.suunto.com/suuntoplus-guide-description), and
@@ -608,6 +655,13 @@ updates remain undocumented capabilities, not guessed upload fields. See the sin
 [swimming screen contract](training-workspace.md#configurable-swimming-guide-screens-v14) and
 [v15 allocation/recovery verification](training-workspace.md#swimming-field-allocation-and-headings-v15).
 This change still needs separately approved Functions/frontend deployment and physical watch verification.
+
+The later [swimming wording and reported validation](training-workspace.md#swimming-wording-and-reported-validation-19-october-2026)
+clarifies app choices as last/next Work block **planned** distance, distinct from measured results and repetition
+numbering. It changes no saved preference, allocation, watch payload or provider lifecycle. Reported numbering and
+consistent countdown sound/vibration are recorded for the tested case, not font-size control or a custom final tone.
+Previous-effort Rest statistics remain a focused future investigation in #905, separate from #828's native targets.
+Monitoring and MCP contracts are unchanged; this copy-only follow-up needs no Functions, Rules or index deployment.
 
 Recipes with timed Rest now select private **v16**, adding a native `default` alert with a `stepDuration` condition
 and `countdown: { type: "standard" }` at the exact Rest duration. This applies across supported sports, including
@@ -845,6 +899,25 @@ Provider OAuth / webhook / history request
 ```
 
 This is preferred over processing partner payloads directly in a webhook or callable because provider requests can be retried, payloads may be incomplete, original files may need another download, and processing can exceed partner timeouts.
+
+Shared recorded-activity imports and manual reuploads reuse an existing event's stored activity document IDs and
+source keys rather than adding legacy event/index IDs beside source-keyed reparse results. The shared
+`functions/src/shared/import-preservation.ts` helper reads only that owner's event activities, with a field mask and
+the existing 100-leg bound, inside the existing source-write reservation transaction before marking load pending.
+Rejected identities leave the saved source, load metadata and cache untouched; matched IDs/keys are applied only
+after the reservation commits, before original-file/source writes. Unique identity matching includes verified sport
+refinements and reordered multisport legs; ambiguous or changed saved leg sets fail through the existing error/retry
+path instead of guessing, appending or deleting rows.
+The existing first-import marker still permits missing legs on an interrupted initial-write retry, subject to ID
+collision checks. New imports retain their existing ID behavior; this is not a historical duplicate cleanup.
+Guarded document transactions preserve live titles, descriptions, tags, privacy, notes, legacy feedback fields,
+canonical Feeling/RPE stats (including cleared ratings), and custom device names. Parsed measurements and source-file
+provenance keep their existing write behavior. Reparse shares the event-edit preservation policy.
+Monitoring coverage is **unchanged**: the existing #829 provider/worker retry, failure and committed-outcome metrics
+still cover these imports; no queue, schedule, lease, retry, metric label, alert, Rules or index changes are added.
+Training formulas, source-write reservation/finalization, planning and MCP contracts remain unchanged. Existing Help
+already promises retained activity names and saved load preferences; no frontend release or client refresh is needed.
+Local tests do not authorize deployment, provider calls, replay or production data cleanup.
 
 Provider health/wellness data uses the separate [unified health foundation](unified-health-data.md):
 
@@ -1087,6 +1160,15 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
+Connection-history Sleep/Health children dispatch through the existing immediate, revision-bound queue path after
+durable admission. The single-dispatch coordinator retains bounded batches, capacity checks and minute-long child waits;
+manual bulk backfills, Garmin Health pacing and the half-hour recovery scan are unchanged. Existing children are never
+reset or replayed to obtain faster dispatch. The Admin card distinguishes oldest **import age** from task delay and
+counts retained finished coordinators, not ingested records; unavailable metrics are not zero. See
+[coordination and recovery](connection-history-import.md#coordination-persistence-and-retries) for exact failure,
+monitoring and separately approved backend/frontend release boundaries. Coverage remains **covered/unchanged** under
+#847 and #830; no new monitoring resource, provider scope, MCP or Training contract is introduced.
+
 Health/Sleep request boundaries are provider-specific and shared through
 `getHealthBackfillStartMs` in `shared/sleep-backfill.ts`: Garmin requests the latest
 rolling five calendar years, Suunto requests from January 1, 2000, and COROS retains
@@ -1156,6 +1238,45 @@ Use a transaction for an upsert that can race with another webhook or history pa
 Treat a shared token-refresh lease owned by another worker as expected queue contention, not as a provider failure. Before acknowledging the current workout task, enqueue a distinct delayed recovery after the refresh lease can expire and bind its payload to the exact queue revision or legacy creation timestamp. Carry a monotonic recovery generation in the task payload and persist the next generation with the retained dispatch marker: retries of one task then deduplicate the same recovery, stale deliveries acknowledge without adding work, and a later recovery can advance to a new task name. Only after the enqueue is confirmed may the guarded transaction retain the non-null marker and generation; this prevents the scheduled dispatcher from producing an immediate duplicate. If either enqueue confirmation or the guarded marker write fails, fail the current task so Cloud Tasks retries it. Apply this contract to initial credential reads and provider-specific forced-refresh paths. Contention must not consume provider retry budget or produce warning-level noise.
 
 Keep stable identity separate from transport data. A short-lived signed file URL must not be part of a new queue or event ID. When a provider offers a detail endpoint, retain the bounded stable request fields needed to recover a missing or expired URL, validate that the returned record/component matches the queue item, and persist only the refreshed queue URL under deletion and revision guards.
+
+### Provider retry budgets
+
+Recorded activity/route imports and delivery, Sleep/Health ingestion, Garmin Health backfill and connection-history
+recovery use `PROVIDER_MAX_RETRY_COUNT = 20` and the matching `PROVIDER_CLOUD_TASK_RETRY_CONFIG`. The seven task
+workers are `processWorkoutTask`, `processActivitySyncTask`, `processSleepSyncTask`, `processRouteSyncTask`,
+`processRouteDeliverySyncTask`, `processGarminHealthBackfillTask` and `processConnectionHistoryTask`.
+Internal derived calculations, normal/heavy/route reparses and date-sensitive Training delivery retain the default
+ten-attempt policy. Training's application ledger limit remains `MAX_RETRY_COUNT = 10`; it does not inherit the
+recorded-provider budget.
+
+The existing 15-minute, 30-minute, one-hour, two-hour and then four-hour retry delays, concurrency, schedules, leases,
+revision checks, lifecycle/deletion fences and terminal error classifications are unchanged. Twenty task attempts
+include the first delivery and span approximately 64 hours before runtime/throttling delays, rather than approximately
+24 hours for ten. The seven-day queue/send window still applies. Application counters and Cloud Tasks delivery counts
+are independent: a delivery can fail before recording an application retry. Raising only one limit is insufficient,
+and resetting an application counter does not reset a task's transport budget. No new retry loop, task identity,
+counter reset, failed-job replay or retention extension is introduced. Accepted uploads retain their exact continuation
+and status-only recovery; permanent rejection, revoked access, Stop and uncertain acceptance still stop as before.
+
+Monitoring coverage decision: **covered/unchanged** after review of the #829 import, #830 Health/Sleep, #832 activity
+delivery, #833 route and #847 connection-history source bundles/runbooks. Their existing worker/dispatcher, committed
+retry/failure, new-DLQ/manual-review and unknown-observation filters cover the same paths. Short failure-rate alert
+windows and heartbeat/backlog thresholds are not extended; exhausted-DLQ alerts naturally occur later. Normal backoff
+remains excluded from actionable undispatched samples. No Cloud Monitoring metric, dashboard, alert resource or production
+apply changes. The admin Queue Monitor uses the same provider retry limit for pending/stuck counts, including source and
+Sleep-provider breakdowns. Its retry histogram adds a `10-19` bucket, with eight additional bounded aggregate count queries
+per stats request and no new index shape. The shared response key is optional so older backend responses still render;
+older clients ignore it until the admin chart is released. Existing Help describes automatic retries without a fixed
+attempt/time promise and needs no wording change. MCP/Assistant schemas, consent, projections and Training behavior are
+unchanged; no registered-app refresh is required.
+
+Release requires separate approval for the seven workers above plus the four recorded-import recovery dispatchers
+(`parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`, `parseCOROSAPIWorkoutQueue`, `parseWahooAPIWorkoutQueue`)
+so their query budget matches the workers, plus `getQueueStats` for correct admin counts. Release the frontend separately
+to display the new admin histogram bucket; this does not change sending or retry behavior. Read back each native queue's
+limit/backoff after deployment. Live tasks are not reset, and already deleted tasks or terminal failed records are not
+resurrected. Roll back the same endpoints to restore the previous limits; retained retries above the old limit may then
+become terminal on their next failure.
 
 ### Outbound activity delivery
 
@@ -1240,7 +1361,7 @@ HTTP status, fixed content-type category, response/ID/URL/header-field types, ID
 milliseconds. Never log response values, arbitrary field names, headers, signed URLs or credentials. Correlate by the
 platform execution ID. The optional HTTP metadata observer cannot change request/error handling. A successful HTTP
 response missing a usable upload ID or URL stops before any FIT bytes are sent and produces a typed `retryable/restart`
-failure. The shared queue uses its existing ten-retry budget and Cloud Tasks backoff, retaining
+failure. The shared queue uses the twenty-attempt provider budget and existing Cloud Tasks backoff, retaining
 `SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE` at exhaustion; no immediate response-validation retry loop is added.
 Direct clients receive `unavailable` with `retryMode: restart` for an explicit Retry upload. Invalid local account
 identity remains permanent, and accepted uploads retain their existing guarded continuation/status-only handling.
@@ -1961,8 +2082,33 @@ retry or MCP contract change. Fixed-label telemetry separates accepted task
 admission, whole-attempt ACK, committed rewrite/skip/supersession and same-target/tier progress. Heavy/manual
 review and deployment waits are not ordinary failure pages. The four collection-scoped job indexes,
 five existing Function updates and dashboard/metrics/policies were deployed/activated with owner approval
-on 19 October 2026; exact live evidence and remaining route/batch checks are in the runbook.
+on 19 October 2026. Natural heartbeat and representative normal-tier completion/duration
+evidence are verified. A native scanner-timeout coverage gap was found when an
+HTTP 504/DEADLINE_EXCEEDED request later logged an application ACK, escaping the existing
+structured-only discovery-failure policy. A narrow correction adds native Cloud Run
+5xx request counts for the two exact scanner services to that same policy and dashboard,
+retaining three errors per scanner in an hour and preserving the structured condition.
+It adds no log metric, Function, Firestore work or runtime/retry tuning. The owner-approved
+correction was applied and verified at 12:28–12:32 UTC on 19 October 2026: ten owned
+metrics, seven enabled policies/eight conditions, all 28 chart/condition queries, stable
+resource IDs and unchanged unrelated monitoring/channel configuration. #834's monitoring
+acceptance criteria are complete; no further Functions deployment was needed. The earlier
+504 and explicitly unavailable samples remain recorded as such, not successful/healthy
+runs. Exact scope, native-metric limitations and verification are in the runbook.
 Future production changes still require separate approval; #543 owns the heavy backlog cap.
+
+A subsequent observation-health email exposed hourly checks starved behind long discovery
+passes. The follow-up runs the existing five-second-bounded check before discovery
+in both scanners, retaining the hourly cadence, read caps, deletion/privacy fences and
+all alert thresholds. With separate owner approval, only the two scanner Functions were
+deployed and independently verified ACTIVE at 13:51 UTC on 19 October 2026, preserving
+resource/schedule/queue controls and all monitoring. Read-only verification at 17:13–17:14
+Helsinki confirmed natural route and normal/heavy samples at 17:06 and 17:08 respectively:
+zero eligible sampled pending work, zero unknowns, no truncation or stall, positive sample
+series, whole-attempt ACKs and native HTTP 200 for both invocations. The older unavailable
+observations remain in the historical three-hour warning window; no CLOSED email is claimed.
+No monitoring bundle, index, Rule, worker, provider behavior or MCP contract changes.
+See the runbook's starvation follow-up for exact revisions, bounds and limitations.
 
 ### Suunto EnergySense parser support
 

@@ -810,8 +810,18 @@ Operational behavior:
 - malformed targeted or global checkpoint cursors are ignored and that scan restarts from the beginning
 
 Compile-time defaults remain in `functions/src/reparse/sports-lib-reparse.config.ts` under
-`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`. They supply `enabled`, `scanLimit`, `enqueueLimit`, and the legacy
-`uidAllowlist` only when the checkpoint has no persisted `runtimeSettings` value.
+`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`. The scan/enqueue limits always come from these defaults; `enabled`
+and the legacy `uidAllowlist` are fallbacks only when the checkpoint has no persisted `runtimeSettings` value.
+
+Activity discovery scans and admits at most 1,800 candidates/jobs per ten-minute tick, up from 1,200.
+The same activity scan default is reused by the local reparse and processing-metadata backfill scripts when
+`--limit` is omitted; their explicit limits and execute/dry-run controls are unchanged. Route discovery keeps
+independent 1,200-item limits. Worker concurrency, the serialized heavy queue, enqueue pacing logic, retry
+budgets, discovery enablement, version selection and checkpoint handling are unchanged. This is a local default
+change until separately approved deployment; deploying a newer library target can still make older-version
+activities eligible again. Monitoring coverage is **unchanged**: the existing normal/heavy metrics and policies
+cover committed outcomes, failures, admission, native scanner timeouts and eligible backlog age regardless of
+batch size; no alert/resource apply is needed. App Help and MCP contracts are unaffected by this internal limit.
 
 ## Required Firestore Index
 Global processing-query discovery requires:
@@ -899,7 +909,15 @@ The separately owned [Cloud Monitoring runbook](../../../docs/reparse-monitoring
 normal/heavy/route attempt, committed-outcome and bounded pending-progress observations.
 It reuses the two existing ten-minute scanners with hourly observations and an empty-queue
 fast path, adds no scheduler or monitoring state, and does not enable discovery or change
-reparse limits. Activation and live evidence are tracked
+reparse limits. The starvation correction performs that bounded hourly observation
+before discovery, retaining its five-second deadline. The owner-approved two-scanner
+deployment completed on 19 October 2026. Read-only verification confirmed the next natural
+route sample at 14:06 UTC and normal/heavy samples at 14:08 UTC: known idle values,
+positive sample series, whole-attempt ACKs and native HTTP 200 for both scanner requests.
+The older unavailable observations remain historical failures; this does not establish
+discovery-throughput or future deadline guarantees. Exact bounds and evidence are recorded
+in the monitoring runbook.
+Activation and live evidence are tracked
 in #834; the heavy admission cap remains #543. Admin queue inspection below remains independent.
 
 Check:

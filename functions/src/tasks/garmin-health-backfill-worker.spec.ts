@@ -17,10 +17,14 @@ const hoisted = vi.hoisted(() => ({
   failedJobsGet: vi.fn(),
   cleanupDeleted: vi.fn(),
   processItem: vi.fn(),
+  taskOptions: [] as unknown[],
 }));
 
 vi.mock('firebase-functions/v2/tasks', () => ({
-  onTaskDispatched: (_options: unknown, handler: TaskHandlerMock) => handler,
+  onTaskDispatched: (options: unknown, handler: TaskHandlerMock) => {
+    hoisted.taskOptions.push(options);
+    return handler;
+  },
 }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('firebase-admin', () => ({
@@ -50,10 +54,6 @@ vi.mock('../queue-utils', () => ({
 }));
 vi.mock('../secrets', () => ({
   FUNCTION_SECRET_BINDINGS: { processGarminHealthBackfillTask: [] },
-}));
-vi.mock('../shared/queue-config', () => ({
-  CLOUD_TASK_RETRY_CONFIG: {},
-  GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS: 1_800,
 }));
 vi.mock('../../../shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: { processGarminHealthBackfillTask: { region: 'europe-west2' } },
@@ -85,6 +85,14 @@ describe('processGarminHealthBackfillTask', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.cleanupDeleted.mockResolvedValue(false);
+  });
+
+  it('uses 20 attempts without changing serialized pacing or the task timeout', () => {
+    expect(hoisted.taskOptions[0]).toMatchObject({
+      retryConfig: { maxAttempts: 20, minBackoffSeconds: 900, maxBackoffSeconds: 14400, maxDoublings: 4 },
+      rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
+      timeoutSeconds: 1800,
+    });
   });
 
   it('processes the bound Garmin Health backfill revision', async () => {

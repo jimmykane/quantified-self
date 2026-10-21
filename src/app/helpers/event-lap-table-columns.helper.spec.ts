@@ -114,16 +114,27 @@ describe('event lap table columns helper', () => {
   });
 
   it.each([undefined, unitSettings])('discovers summary-only Max HR before column selection with units %j', units => {
-    const lap = hrLap(undefined);
+    const laps = [hrLap(undefined), hrLap(undefined)];
     const otherTabLap = hrLap(165, 130, true);
     const types = [DataHeartRateMax.type, DataPowerMax.type];
-    for (const activity of [hrActivity([lap], 160), hrActivity([lap], undefined, [170]), hrActivity([lap, otherTabLap])]) {
-      expect(getAvailableEventLapMetricTypes(activity, [lap], types, units))
+    for (const activity of [hrActivity(laps, 160), hrActivity(laps, undefined, [170]), hrActivity([...laps, otherTabLap])]) {
+      expect(getAvailableEventLapMetricTypes(activity, laps, types, units))
         .toEqual(new Set([DataHeartRateMax.type]));
       expect(getAvailableEventLapMetricTypes(activity, [], types, units)).toEqual(new Set());
     }
-    expect(getAvailableEventLapMetricTypes(hrActivity([lap], 0, [null, 0, -1, Number.NaN]), [lap], types, units))
+    expect(getAvailableEventLapMetricTypes(hrActivity(laps, 0, [null, 0, -1, Number.NaN]), laps, types, units))
       .toEqual(new Set());
+  });
+
+  it.each([undefined, unitSettings])('does not advertise a hidden single-lap session summary with units %j', units => {
+    const lap = hrLap(undefined);
+    const otherTabLap = hrLap(165, 130, true);
+    for (const activity of [hrActivity([lap], 160), hrActivity([lap], undefined, [170]), hrActivity([lap, otherTabLap])]) {
+      expect(getAvailableEventLapMetricTypes(activity, [lap], [DataHeartRateMax.type], units)).toEqual(new Set());
+    }
+    const recordedPeak = hrLap(150);
+    expect(getAvailableEventLapMetricTypes(hrActivity([recordedPeak], 170), [recordedPeak], [DataHeartRateMax.type], units))
+      .toEqual(new Set([DataHeartRateMax.type]));
   });
 
   it('excludes cross-leg context laps from the session peak across lap tabs', () => {

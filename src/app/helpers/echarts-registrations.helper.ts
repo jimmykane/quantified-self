@@ -1,7 +1,7 @@
 import { BarChart, PictorialBarChart, CustomChart, PieChart, LineChart, ScatterChart } from 'echarts/charts';
 import {
   GraphicComponent, GridComponent, TooltipComponent, LegendComponent, TitleComponent, AxisPointerComponent,
-  MarkLineComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
+  MarkLineComponent, MarkPointComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 
@@ -12,7 +12,7 @@ export function registerEChartsModules(core: Pick<typeof import('echarts/core'),
   core.use([
     BarChart, PictorialBarChart, CustomChart, PieChart, LineChart, ScatterChart,
     GraphicComponent, GridComponent, TooltipComponent, LegendComponent, TitleComponent, AxisPointerComponent,
-    MarkLineComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
+    MarkLineComponent, MarkPointComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
     CanvasRenderer,
   ]);
 }

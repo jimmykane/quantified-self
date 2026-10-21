@@ -7,7 +7,15 @@
         @if (userService.hasActionableProfileReadFailure()) {
         <div class="profile-read-error" role="alert" data-testid="profile-read-error">
           <mat-icon aria-hidden="true">error_outline</mat-icon>
-          @if (userService.profileReadState().status === 'error') {
+          @if (profileVerificationNeedsReload()) {
+          <h2 class="title">We couldn't verify this browser</h2>
+          <p class="subtitle">You're still signed in. The browser security check failed, so your account data couldn't load.</p>
+          @if (profileVerificationFailure()?.cooldown) {
+          <p class="subtitle">Verification is temporarily paused. Repeated retries in this page won't help; the pause can last up to 24 hours.</p>
+          }
+          <p class="subtitle">Reload the page to start a new check. If it fails again, try a regular browser window or another trusted network. Check whether a privacy extension is blocking Google's verification scripts on this site.</p>
+          <p class="subtitle">Reloading may still fail if verification is rejected again. Your saved data stays unchanged.</p>
+          } @else if (userService.profileReadState().status === 'error') {
           <h2 class="title">We couldn't load your account</h2>
           <p class="subtitle">You're still signed in, but we couldn't verify your account data. Check your connection, then try again.</p>
           } @else {
@@ -16,8 +24,11 @@
           }
           <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-retry"
             (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
-            {{ isProfileRecoveryInProgress ? 'Retrying…' : 'Retry' }}
+            {{ isProfileRecoveryInProgress ? (profileVerificationNeedsReload() ? 'Reloading…' : 'Retrying…') : profileVerificationNeedsReload() ? 'Reload page' : 'Retry' }}
           </button>
+          @if (profileVerificationNeedsReload()) {
+          <a mat-button routerLink="/help" fragment="troubleshooting" appHapticTap>Browser verification help</a>
+          }
         </div>
         } @else {
 

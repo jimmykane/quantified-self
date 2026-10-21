@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import { onAdminCall } from '../../shared/auth';
+import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { getCloudTaskQueueStatsForQueue } from '../../utils';
 import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../../suunto/constants';
@@ -158,9 +159,9 @@ async function getActivitySyncBreakdownStats(
         }
     };
     const [pending, succeeded, stuck, manualReconciliationRequired, dead] = await Promise.all([
-        count(queue.where('processed', '==', false).where('retryCount', '<', 10), 'pending'),
+        count(queue.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT), 'pending'),
         count(queue.where('resultStatus', '==', 'success'), 'succeeded'),
-        count(queue.where('processed', '==', false).where('retryCount', '>=', 10), 'stuck'),
+        count(queue.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT), 'stuck'),
         count(queue.where('resultStatus', '==', 'manual_reconciliation_required'), 'manualReconciliationRequired'),
         count(failed, 'dead'),
     ]);
@@ -497,7 +498,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         // Advanced stats
         let totalThroughput = 0;
         let maxLagMs = 0;
-        const retryHistogram = { '0-3': 0, '4-7': 0, '8-9': 0 };
+        const retryHistogram = { '0-3': 0, '4-7': 0, '8-9': 0, '10-19': 0 };
 
         const ONE_HOUR_AGO = Date.now() - (60 * 60 * 1000);
         const activitySyncCollection = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME);
@@ -510,11 +511,12 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             activitySyncRetry0to3Snap,
             activitySyncRetry4to7Snap,
             activitySyncRetry8to9Snap,
+            activitySyncRetry10to19Snap,
             activitySyncThroughputSnap,
             activitySyncOldestPendingSnap,
             activitySyncDeadSnap,
         ] = await Promise.all([
-            activitySyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count activity sync pending jobs:', e);
                 return null;
             }),
@@ -526,7 +528,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error('[admin/getQueueStats] Failed to count activity sync jobs requiring manual reconciliation:', e);
                 return null;
             }),
-            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count activity sync stuck jobs:', e);
                 return null;
             }),
@@ -540,6 +542,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 8-9:', e);
+                return null;
+            }),
+            activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync retry bucket 10-19:', e);
                 return null;
             }),
             activitySyncCollection.where('successProcessedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
@@ -565,6 +571,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             '0-3': activitySyncRetry0to3Snap?.data().count || 0,
             '4-7': activitySyncRetry4to7Snap?.data().count || 0,
             '8-9': activitySyncRetry8to9Snap?.data().count || 0,
+            '10-19': activitySyncRetry10to19Snap?.data().count || 0,
         };
         const activitySyncThroughput = activitySyncThroughputSnap?.data().count || 0;
         const [historicalActivitySync, manualUploadActivitySync, directActivitySync] = await Promise.all([
@@ -590,11 +597,12 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeDeliverySyncRetry0to3Snap,
             routeDeliverySyncRetry4to7Snap,
             routeDeliverySyncRetry8to9Snap,
+            routeDeliverySyncRetry10to19Snap,
             routeDeliverySyncThroughputSnap,
             routeDeliverySyncOldestPendingSnap,
             routeDeliverySyncDeadSnap,
         ] = await Promise.all([
-            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route delivery sync pending jobs:', e);
                 return null;
             }),
@@ -610,7 +618,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error('[admin/getQueueStats] Failed to count route delivery sync jobs requiring manual reconciliation:', e);
                 return null;
             }),
-            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route delivery sync stuck jobs:', e);
                 return null;
             }),
@@ -624,6 +632,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route delivery sync retry bucket 8-9:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync retry bucket 10-19:', e);
                 return null;
             }),
             routeDeliverySyncCollection.where('successProcessedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
@@ -650,6 +662,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             '0-3': routeDeliverySyncRetry0to3Snap?.data().count || 0,
             '4-7': routeDeliverySyncRetry4to7Snap?.data().count || 0,
             '8-9': routeDeliverySyncRetry8to9Snap?.data().count || 0,
+            '10-19': routeDeliverySyncRetry10to19Snap?.data().count || 0,
         };
         const routeDeliverySyncThroughput = routeDeliverySyncThroughputSnap?.data().count || 0;
         let routeDeliverySyncMaxLagMs = 0;
@@ -669,11 +682,12 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeSyncRetry0to3Snap,
             routeSyncRetry4to7Snap,
             routeSyncRetry8to9Snap,
+            routeSyncRetry10to19Snap,
             routeSyncThroughputSnap,
             routeSyncOldestPendingSnap,
             routeSyncDeadSnap,
         ] = await Promise.all([
-            routeSyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route sync pending jobs:', e);
                 return null;
             }),
@@ -685,7 +699,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error('[admin/getQueueStats] Failed to count route sync skipped jobs:', e);
                 return null;
             }),
-            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route sync stuck jobs:', e);
                 return null;
             }),
@@ -699,6 +713,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 8-9:', e);
+                return null;
+            }),
+            routeSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route sync retry bucket 10-19:', e);
                 return null;
             }),
             routeSyncCollection.where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
@@ -724,6 +742,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             '0-3': routeSyncRetry0to3Snap?.data().count || 0,
             '4-7': routeSyncRetry4to7Snap?.data().count || 0,
             '8-9': routeSyncRetry8to9Snap?.data().count || 0,
+            '10-19': routeSyncRetry10to19Snap?.data().count || 0,
         };
         const routeSyncThroughput = routeSyncThroughputSnap?.data().count || 0;
         let routeSyncMaxLagMs = 0;
@@ -743,11 +762,12 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             sleepSyncRetry0to3Snap,
             sleepSyncRetry4to7Snap,
             sleepSyncRetry8to9Snap,
+            sleepSyncRetry10to19Snap,
             sleepSyncThroughputSnap,
             sleepSyncOldestPendingSnap,
             sleepSyncDeadSnap,
         ] = await Promise.all([
-            sleepSyncCollection.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count sleep sync pending jobs:', e);
                 return null;
             }),
@@ -759,7 +779,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 logger.error('[admin/getQueueStats] Failed to count sleep sync provider-disabled jobs:', e);
                 return null;
             }),
-            sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count sleep sync stuck jobs:', e);
                 return null;
             }),
@@ -773,6 +793,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count sleep sync retry bucket 8-9:', e);
+                return null;
+            }),
+            sleepSyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count sleep sync retry bucket 10-19:', e);
                 return null;
             }),
             sleepSyncCollection.where('processedAt', '>', ONE_HOUR_AGO).count().get().catch(e => {
@@ -798,6 +822,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             '0-3': sleepSyncRetry0to3Snap?.data().count || 0,
             '4-7': sleepSyncRetry4to7Snap?.data().count || 0,
             '8-9': sleepSyncRetry8to9Snap?.data().count || 0,
+            '10-19': sleepSyncRetry10to19Snap?.data().count || 0,
         };
         const sleepSyncThroughput = sleepSyncThroughputSnap?.data().count || 0;
         let sleepSyncMaxLagMs = 0;
@@ -817,7 +842,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 providerStuckSnap,
                 providerDeadSnap,
             ] = await Promise.all([
-                providerQuery.where('processed', '==', false).where('retryCount', '<', 10).count().get().catch(e => {
+                providerQuery.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                     logger.error(`[admin/getQueueStats] Failed to count sleep sync pending jobs for ${provider}:`, e);
                     return null;
                 }),
@@ -829,7 +854,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     logger.error(`[admin/getQueueStats] Failed to count sleep sync provider-disabled jobs for ${provider}:`, e);
                     return null;
                 }),
-                providerQuery.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
+                providerQuery.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT).count().get().catch(e => {
                     logger.error(`[admin/getQueueStats] Failed to count sleep sync stuck jobs for ${provider}:`, e);
                     return null;
                 }),
@@ -868,18 +893,19 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 // Base stats + Retry Histogram + Throughput
                 const [
                     p, s, f,
-                    retry0to3, retry4to7, retry8to9,
+                    retry0to3, retry4to7, retry8to9, retry10to19,
                     throughput
                 ] = await Promise.all([
                     // Standard stats
-                    col.where('processed', '==', false).where('retryCount', '<', 10).count().get(),
+                    col.where('processed', '==', false).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get(),
                     col.where('processed', '==', true).count().get(),
-                    col.where('processed', '==', false).where('retryCount', '>=', 10).count().get(),
+                    col.where('processed', '==', false).where('retryCount', '>=', PROVIDER_MAX_RETRY_COUNT).count().get(),
 
                     // Retry Histogram
                     col.where('processed', '==', false).where('retryCount', '<', 4).count().get(),
                     col.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get(),
                     col.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get(),
+                    col.where('processed', '==', false).where('retryCount', '>=', 10).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT).count().get(),
 
                     // Throughput (Processed in last hour)
                     col.where('processed', '==', true).where('processedAt', '>', ONE_HOUR_AGO).count().get()
@@ -902,6 +928,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 retryHistogram['0-3'] += retry0to3.data().count;
                 retryHistogram['4-7'] += retry4to7.data().count;
                 retryHistogram['8-9'] += retry8to9.data().count;
+                retryHistogram['10-19'] += retry10to19.data().count;
 
                 totalThroughput += throughput.data().count;
             }));
@@ -1477,14 +1504,16 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
     }
 });
 
-async function getConnectionHistoryMonitoring(db: admin.firestore.Firestore): Promise<{ pending: number; failed: number; maxLagMs: number } | null> {
+async function getConnectionHistoryMonitoring(db: admin.firestore.Firestore): Promise<{ pending: number; finished: number; failed: number; maxLagMs: number } | null> {
     try {
         const queue = db.collection(CONNECTION_HISTORY_COLLECTION);
-        const [pending, failed, oldest] = await Promise.all([
-            queue.where('processed', '==', false).count().get(), queue.where('failed', '==', true).count().get(),
+        const [pending, finished, failed, oldest] = await Promise.all([
+            queue.where('processed', '==', false).count().get(),
+            queue.where('processed', '==', true).count().get(),
+            queue.where('failed', '==', true).count().get(),
             queue.where('processed', '==', false).orderBy('dateCreated').limit(1).get(),
         ]);
-        return { pending: pending.data().count, failed: failed.data().count,
+        return { pending: pending.data().count, finished: finished.data().count, failed: failed.data().count,
             maxLagMs: oldest.empty ? 0 : Math.max(0, Date.now() - Number(oldest.docs[0].data().dateCreated)) };
     } catch { logger.warn('[ConnectionHistory]', { event: 'monitoring_unavailable' }); return null; }
 }

@@ -1,3 +1,5 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { wahooDurationSeconds, wahooIdentities, wahooPlanBody } from './mapping';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
@@ -28,6 +30,93 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     op.strength = wahooFixtureStrengthDetails();
     next({ title: 'Timed strength', structure: projectStrengthWorkoutToV1(op.strength) });
   };
+  it('recovers a retained fractional-minute Plan without permitting a new provider write', async () => {
+    op.workout!.structure.nodes = [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] }];
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    const seeded = await server.request({ method: 'POST', path: '/v1/plans', body: wahooPlanBody(op.workout!, op.destinationKey, true) }, guard);
+    const plan = String((seeded.body as { id: string }).id);
+    op.artifact = { ids: { ...wahooIdentities(op.destinationKey, op.workout!.id), plan }, localDate: op.workout!.localDate,
+      completed: false, timeZone: op.timeZone };
+    op.progress = { version: 1, step: 'plan-create', state: 'started' };
+    server.calls.length = 0;
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect(op.artifact?.ids.plan).toBe(plan);
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls.every(call => call.method === 'GET')).toBe(true);
+    op.digest = 'changed-after-journal'; server.calls.length = 0;
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('keeps full-companion validation while recovering a fractional-minute strength attempt', async () => {
+    timedStrength(); op.strength!.exercises[0].sets[0].ending = { kind: 'time', seconds: 31 };
+    next({ structure: projectStrengthWorkoutToV1(op.strength) });
+    op.strength!.workoutId = 'foreign';
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('keeps other unsupported prescriptions blocked during recovery', async () => {
+    op.workout!.structure = { version: 1, sport: ActivityTypes.Yoga, nodes: [{ kind: 'step', id: 'yoga', purpose: 'work',
+      ending: { kind: 'time', seconds: 90 }, targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] }] };
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+    op.workout!.structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'distance', purpose: 'work',
+      ending: { kind: 'distance', meters: 1000 }, targets: [] }] };
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  const decimalMinuteWorkout = () => {
+    next({ structure: { version: 1, sport: ActivityTypes.Running, nodes: [10.2, 21.9, 27.9].map((seconds, index) => ({
+      kind: 'step', id: `work-${index}`, purpose: 'work', ending: { kind: 'time', seconds }, targets: [],
+    })) } });
+  };
+  it('delivers an exact decimal minute as integer minutes and verifies its readback', async () => {
+    decimalMinuteWorkout();
+    const artifact = (await execute())!;
+    expect(server.workouts.get(artifact.ids.workout)?.minutes).toBe(1);
+    expect(server.calls.filter(call => call.path === '/v1/workouts' && call.method === 'POST')).toHaveLength(1);
+  });
+  it('accepts historical floating-point minutes only when recovering the same uncertain attempt', async () => {
+    decimalMinuteWorkout();
+    const legacyMinutes = wahooDurationSeconds(op.workout!.structure)! / 60;
+    expect(legacyMinutes).not.toBe(1);
+    server.afterHandle = async request => {
+      if (request.method === 'POST' && request.path === '/v1/workouts') {
+        [...server.workouts.values()][0].minutes = legacyMinutes;
+        throw new WahooTrainingHttpError('uncertain', false);
+      }
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    server.afterHandle = null;
+    const writes = server.calls.filter(call => call.method !== 'GET').length;
+    expect(await recover()).toMatchObject({ kind: 'accepted' });
+    expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    expect(server.workouts.size).toBe(1);
+    op.digest = 'different-prescription';
+    await expect(recover()).rejects.toMatchObject({ kind: 'terminal' });
+  });
+  it('does not accept a historical floating-point total as readback of a new write', async () => {
+    decimalMinuteWorkout();
+    server.afterHandle = async request => {
+      if (request.method === 'POST' && request.path === '/v1/workouts') {
+        [...server.workouts.values()][0].minutes = wahooDurationSeconds(op.workout!.structure)! / 60;
+      }
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+  });
+  it.each([1e-12, 1e-20])('refuses new writes when a genuine %s-second fraction follows a minute', async fraction => {
+    next({ structure: { version: 1, sport: ActivityTypes.Running, nodes: [60, fraction].map((seconds, index) => ({
+      kind: 'step', id: `work-${index}`, purpose: 'work', ending: { kind: 'time', seconds }, targets: [],
+    })) } });
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls).toHaveLength(0);
+  });
+
   it('keeps a renewed Plan identity through create, edit and reschedule, with stable completion correlation', async () => {
     op.wahooPlanGeneration = 1;
     const artifact = (await execute())!;

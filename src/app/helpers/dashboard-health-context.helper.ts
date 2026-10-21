@@ -12,7 +12,7 @@ import { buildHealthChartModels, buildHealthHrvChartStatusOverlay, healthHrvChar
 import { buildDashboardSleepTrendContext, resolveSleepTrendDate } from './dashboard-sleep-chart.helper';
 import type { DashboardChartAvailability } from './dashboard-chart-availability.helper';
 import { healthChartSourceChoice } from './chart-source.helper';
-import { selectDefaultHealthSourceKey, type HealthSourceSelectionCandidate } from './health-source-selection.helper';
+import { resolveHealthSourceKey, selectDefaultHealthSourceKey, type HealthSourceSelectionCandidate } from './health-source-selection.helper';
 export interface DashboardHealthEvidence {
     window: HealthWorkspaceWindow;
     health: HealthWorkspaceRangeLoad | null;
@@ -100,7 +100,8 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     const missingFilteredSource = !settings.sourceKey && providerFilter.length > 0 && !initial;
     // Existing Dashboard Sleep tiles use the legacy raw key. Health preferences
     // store its opaque alias; both resolve to the exact same account, never a fallback.
-    const pinnedSource = settings.sourceKey ? sources.find(source => source.key === settings.sourceKey
+    const pinnedKey = settings.sourceKey ? resolveHealthSourceKey(candidates, settings.sourceKey) : null;
+    const pinnedSource = settings.sourceKey ? sources.find(source => source.key === pinnedKey
         || settings.metric === 'sleep' && opaqueHealthSeriesId(source.key) === settings.sourceKey) : undefined;
     const selectedKey = settings.sourceKey ? pinnedSource?.key || settings.sourceKey : initial?.key || null;
     const selected = charts.find(chart => chart.key === selectedKey) || null;

@@ -6,6 +6,8 @@ import { plannedWorkoutAliasedSportsV1, plannedWorkoutSportAliasV1 } from './pla
  * The 21 base profiles have owner-confirmed timed playback (#789). Additional
  * QS names alias those profiles; they add no native playback claim or proof
  * of distance/intensity support.
+ * Yoga, Elliptical and Cardio Class additionally have authorized cloud
+ * Plan/prescription/Workout readback; that is not app/watch playback proof.
  * https://cloud-api.wahooligan.com/#workout-types */
 export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Running,
@@ -29,12 +31,20 @@ export const WAHOO_PLANNED_WORKOUT_SPORTS_V1 = [...new Set([
   ActivityTypes.Rowing,
   ActivityTypes.IndoorRowing,
   ActivityTypes.StrengthTraining,
+  ActivityTypes.Yoga,
+  ActivityTypes.EllipticalTrainer,
+  ActivityTypes.CardioTraining,
+  ActivityTypes.Pilates,
+  ActivityTypes.Stretching,
+  ActivityTypes.FlexibilityTraining,
+  ActivityTypes.Meditation,
+  ActivityTypes.Breathwork,
   ...plannedWorkoutAliasedSportsV1('wahoo'),
 ])] as const;
 
 export interface WahooWorkoutSportProfileV1 {
   family: 0 | 1 | 2 | 3 | 6 | 9;
-  workoutType: 0 | 1 | 4 | 5 | 6 | 9 | 12 | 13 | 22 | 25 | 26 | 39 | 42 | 64 | 68 | 70 | 71;
+  workoutType: 0 | 1 | 4 | 5 | 6 | 9 | 12 | 13 | 20 | 22 | 25 | 26 | 39 | 42 | 43 | 64 | 66 | 68 | 70 | 71;
   location: 0 | 1;
   foldedTo?: string;
   untargetedTimeOnly?: true;
@@ -69,6 +79,15 @@ export function wahooWorkoutSportProfileV1(sport: ActivityTypes): WahooWorkoutSp
     case ActivityTypes.Rowing: return { family: 3, workoutType: 39, location: 1, untargetedTimeOnly: true };
     case ActivityTypes.IndoorRowing: return { family: 6, workoutType: 22, location: 0, untargetedTimeOnly: true };
     case ActivityTypes.StrengthTraining: return { family: 6, workoutType: 42, location: 0 };
+    case ActivityTypes.Yoga: return { family: 6, workoutType: 66, location: 0, untargetedTimeOnly: true };
+    case ActivityTypes.EllipticalTrainer: return { family: 6, workoutType: 20, location: 0, untargetedTimeOnly: true };
+    case ActivityTypes.CardioTraining: return { family: 6, workoutType: 43, location: 0, untargetedTimeOnly: true,
+      foldedTo: 'Cardio Class' };
+    case ActivityTypes.Pilates:
+    case ActivityTypes.Stretching:
+    case ActivityTypes.FlexibilityTraining:
+    case ActivityTypes.Meditation:
+    case ActivityTypes.Breathwork: return { family: 6, workoutType: 42, location: 0, untargetedTimeOnly: true, foldedTo: 'Gym' };
     default: return null;
   }
 }
@@ -83,7 +102,8 @@ export function isWahooUntargetedWorkoutSportV1(sport: ActivityTypes): boolean {
   return wahooWorkoutSportProfileV1(sport)?.untargetedTimeOnly === true;
 }
 
-/** Exact time only; repeat counts are total passes. Never infer duration from distance or reps. */
+/** Historical floating-point total retained for existing delivery digests and recovery.
+ * Repeat counts are total passes. Never infer duration from distance or reps. */
 export function wahooDurationSeconds(structure: WorkoutStructureV1): number | null {
   let total = 0;
   for (const node of structure.nodes) {
@@ -93,4 +113,40 @@ export function wahooDurationSeconds(structure: WorkoutStructureV1): number | nu
     }
   }
   return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+/** Sum the stored decimal values exactly. Binary arithmetic residue must neither
+ * reject a whole minute nor conceal a genuinely fractional authored duration. */
+export function wahooWholeMinutes(structure: WorkoutStructureV1): number | null {
+  let total = 0n;
+  let scale = 1n;
+  for (const node of structure.nodes) {
+    const passes = node.kind === 'step' ? 1 : node.count;
+    if (!Number.isSafeInteger(passes) || passes < 1) return null;
+    for (const step of node.kind === 'step' ? [node] : node.steps) {
+      if (step.ending.kind !== 'time' || !Number.isFinite(step.ending.seconds) || step.ending.seconds <= 0) return null;
+      const [coefficient, exponent = '0'] = String(step.ending.seconds).split('e');
+      const [whole, fraction = ''] = coefficient.split('.');
+      const places = fraction.length - Number(exponent);
+      const stepScale = 10n ** BigInt(Math.max(places, 0));
+      const value = BigInt(whole + fraction) * 10n ** BigInt(Math.max(-places, 0)) * BigInt(passes);
+      if (stepScale > scale) {
+        total *= stepScale / scale;
+        scale = stepScale;
+      }
+      total += value * (scale / stepScale);
+    }
+  }
+  const minuteScale = scale * 60n;
+  if (total <= 0n || total % minuteScale !== 0n) return null;
+  const minutes = total / minuteScale;
+  return minutes <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(minutes) : null;
+}
+
+/** The dated Workout API rejects fractional minutes (including numeric JSON values).
+ * The Plan file still retains exact seconds; never round the authored prescription. */
+export const WAHOO_WHOLE_MINUTE_ISSUE = 'Wahoo requires a whole-minute total duration for its dated Workout record. Adjust the authored steps to a whole-minute total before sending; QS keeps the exact prescription and does not round it.';
+export function wahooHasFractionalMinutes(structure: WorkoutStructureV1): boolean {
+  const seconds = wahooDurationSeconds(structure);
+  return seconds !== null && wahooWholeMinutes(structure) === null;
 }

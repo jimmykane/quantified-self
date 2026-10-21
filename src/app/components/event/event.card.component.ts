@@ -101,7 +101,7 @@ export class EventCardComponent implements OnInit {
   );
 
   public hasJumpsFlag = computed(() =>
-    hasVisibleEventJumps(this.event()?.getActivities() ?? [])
+    hasVisibleEventJumps(this.selectedActivitiesInstant())
   );
 
   public hasSwimLengthsFlag = computed(() =>

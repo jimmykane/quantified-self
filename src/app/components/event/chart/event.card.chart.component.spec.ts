@@ -207,6 +207,102 @@ describe('EventCardChartComponent', () => {
     component.event = { ...component.event, getActivities: () => [activity] };
   }
 
+  it('defaults to Continuous, follows saved continuity silently and rebuilds for a mode change', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity()).toEqual({ mode: 'continuous', maxGapSeconds: 10 });
+    vi.mocked(eventDataHelper.buildEventChartPanels).mockClear();
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'detect', maxGapSeconds: 10 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity().mode).toBe('detect');
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenCalledWith(expect.objectContaining({
+      lineContinuity: { mode: 'detect', maxGapSeconds: 10 },
+    }));
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+  });
+
+  it('saves continuity for the signed-in viewer once and blocks overlapping/no-op writes', async () => {
+    component.targetUserID = 'event-owner';
+    let finish!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const pending = component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 20 });
+    expect(component.lineContinuity()).toEqual({ mode: 'custom', maxGapSeconds: 20 });
+    expect(component.isSavingLineContinuity()).toBe(true);
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 20 });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith(
+      { eventLineContinuity: { mode: 'custom', maxGapSeconds: 20 } }, { force: true, expectedUserID: 'u1' },
+    );
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finish(); await pending;
+    await component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 20 });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('rolls continuity back after a failed save and allows retry', async () => {
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('Offline'));
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    expect(component.lineContinuity().mode).toBe('continuous');
+    expect(component.isSavingLineContinuity()).toBe(false);
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockSnackBar.open).toHaveBeenCalledOnce();
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    expect(component.lineContinuity().mode).toBe('detect');
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('restores the latest saved continuity after a failed concurrent edit', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let reject!: (error: Error) => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(
+      () => new Promise<void>((_, fail) => { reject = fail; }),
+    );
+    const pending = component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    // Another settings surface changes the saved preference while this write is pending.
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 30 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    reject(new Error('Save rejected'));
+    await pending;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity()).toEqual({ mode: 'custom', maxGapSeconds: 30 });
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({
+      lineContinuity: { mode: 'custom', maxGapSeconds: 30 },
+    }));
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 60 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity().maxGapSeconds).toBe(60);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
+  it.each(['sign-out', 'switch', 'destroy'] as const)('ignores a late continuity save after %s', async action => {
+    let reject!: (error: Error) => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }));
+    const pending = component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    if (action === 'destroy') fixture.destroy();
+    else authUserSubject.next(action === 'sign-out' ? null : { uid: 'u2' } as User);
+    reject(new Error('Offline')); await pending;
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+    if (action !== 'destroy') expect(component.lineContinuity().mode).toBe('continuous');
+  });
+
+  it('ignores continuity edits without authentication', async () => {
+    authUserSubject.next(null);
+    await component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 60 });
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
   it('defaults zone colors on and silently follows saved preferences', async () => {
     setZoneActivity();
     fixture.detectChanges();
@@ -855,6 +951,79 @@ describe('EventCardChartComponent', () => {
     component.xAxisType = XAxisTypes.Distance;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
+  });
+
+  it('persists an accepted axis change with one haptic and ignores an immediate repeat', () => {
+    component.onXAxisTypeChange(XAxisTypes.Time);
+    component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith({ xAxisType: XAxisTypes.Time });
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it.each(['signed out', 'multisport'])('ignores stale axis actions when controls are disabled: %s', (reason) => {
+    if (reason === 'signed out') component.user = null;
+    else component.event = { isMultiSport: () => true } as any;
+
+    component.onXAxisTypeChange(XAxisTypes.Duration);
+    component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [undefined, XAxisTypes.Duration],
+    [XAxisTypes.Distance, XAxisTypes.Duration],
+    [XAxisTypes.Duration, XAxisTypes.Duration],
+    [XAxisTypes.Time, XAxisTypes.Time],
+  ])('renders pool swimming with saved axis %s as %s without changing preferences or haptics', async (savedAxis, expectedAxis) => {
+    chartSettingsSignal.set({ ...defaultChartSettings, xAxisType: savedAxis });
+    const streams = [
+      { type: DataHeartRate.type, getData: () => [100, 110, 105] },
+      { type: DataDistance.type, getData: () => [0, 25, 50] },
+      { type: XAxisTypes.Time, getData: () => [0, 30, 60] },
+    ];
+    const activity = {
+      type: ActivityTypes.Swimming,
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'pool-swim',
+      getAllStreams: () => streams,
+      getStream: (type: string) => streams.find(stream => stream.type === type),
+    } as any;
+    fixture.componentRef.setInput('event', {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'swim-event',
+    });
+    fixture.componentRef.setInput('selectedActivities', [activity]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.renderedXAxisType).toBe(expectedAxis);
+    expect(component.displayedXAxisType).toBe(expectedAxis);
+    expect(component.canSelectDistanceXAxis).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
+    expect(eventDataHelper.buildEventLapMarkers).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+    // Selecting the displayed fallback is a no-op, and a stale Distance action is still blocked.
+    component.onXAxisTypeChange(expectedAxis);
+    component.onXAxisTypeChange(XAxisTypes.Distance);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(component.xAxisType).toBe(savedAxis ?? XAxisTypes.Duration);
+
+    // Browsing another sport restores the original preference, not the swim fallback.
+    if (savedAxis === XAxisTypes.Distance) {
+      const openWaterSwim = { ...activity, type: ActivityTypes.OpenWaterSwimming, getID: () => 'open-water-swim' };
+      fixture.componentRef.setInput('selectedActivities', [openWaterSwim]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(component.renderedXAxisType).toBe(XAxisTypes.Distance);
+      expect(component.canSelectDistanceXAxis).toBe(true);
+      expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    }
   });
 
   it('falls back to duration axis when a selected diving activity has heart rate but no distance stream', async () => {

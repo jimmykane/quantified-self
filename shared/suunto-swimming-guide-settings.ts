@@ -13,7 +13,7 @@ export const SUUNTO_SWIM_FIELD_LABELS: Readonly<Record<SuuntoSwimWorkField | Suu
   interval: 'Planned interval number', heartRate: 'Current heart rate', strokes: 'Current lap stroke count',
   strokeRate: 'Current lap average stroke rate', swolf: 'Current lap average SWOLF (pool only)',
   workoutDistance: 'Total workout distance', workoutStrokes: 'Total workout stroke count',
-  previousPlannedDistance: 'Previous planned interval distance', nextPlannedDistance: 'Next planned interval distance',
+  previousPlannedDistance: 'Last work block: planned distance', nextPlannedDistance: 'Next work block: planned distance',
 };
 export function defaultSuuntoSwimmingGuideSettings(): SuuntoSwimmingGuideSettings {
   return { version: 1, workFields: ['distance', 'duration', 'pace', 'interval'],

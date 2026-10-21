@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
     ACTIVITY_SYNC_TASK_RATE_LIMITS,
-    CLOUD_TASK_RETRY_CONFIG,
+    PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     getCloudTaskRetryBackoffSeconds,
 } from '../shared/queue-config';
 import { enqueueActivitySyncTask } from '../shared/cloud-tasks';
@@ -65,7 +65,7 @@ function getScheduledProviderStatusPollAtMs(
     return (
         Number.isFinite(scheduledAtMs)
         && remainingDelayMs > 0
-        && remainingDelayMs <= (CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds * 1000)
+        && remainingDelayMs <= (PROVIDER_CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds * 1000)
     ) ? Math.floor(scheduledAtMs) : null;
 }
 
@@ -160,7 +160,7 @@ function getSafeRetryReason(queueItem: ActivitySyncQueueItemInterface): string |
 }
 
 export const processActivitySyncTask = onTaskDispatched({
-    retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     rateLimits: ACTIVITY_SYNC_TASK_RATE_LIMITS,
     secrets: FUNCTION_SECRET_BINDINGS.processActivitySyncTask,
     memory: '1GiB',

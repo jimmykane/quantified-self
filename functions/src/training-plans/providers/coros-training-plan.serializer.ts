@@ -413,11 +413,11 @@ export function serializeCorosTrainingPlanV1(
 /** Complete companion mapper. Local serialization is not cloud/app/watch acceptance evidence. */
 export function serializeCorosStrengthPlanV1(
     detailsValue: unknown,
-    options: SerializeCorosTrainingPlanOptionsV1,
+    options: SerializeCorosTrainingPlanOptionsV1 & { sport?: ActivityTypes },
 ): ProviderSerializationResultV1<CorosTrainingPlanPushDataV1> {
     const details: StrengthWorkoutDetailsV1 = parseStrengthWorkoutDetailsV1(detailsValue);
     const resolved = resolveProviderSerializationIssuesV1({ provider: 'coros',
-        structure: projectStrengthWorkoutToV1(details), strength: details, allowDegraded: options.allowDegraded });
+        structure: projectStrengthWorkoutToV1(details, options.sport), strength: details, allowDegraded: options.allowDegraded });
     const athleteId = positiveCorosInteger(options.athleteId, 'COROS athlete ID');
     const workoutId = options.workoutId !== undefined
         ? positiveCorosInteger(options.workoutId, 'COROS workout ID')

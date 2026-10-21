@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { AppCheck, getToken as getAppCheckToken } from 'app/firebase/app-check';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 
 @Injectable({
   providedIn: 'root'
@@ -8,7 +9,9 @@ export class AppCheckReadinessService {
   private static readonly readinessTimeoutMs = 15_000;
 
   private appCheck = inject(AppCheck, { optional: true });
+  private readonly diagnostics = inject(AppCheckDiagnosticsService);
   private readyPromise: Promise<void> | null = null;
+  private readyRevision = 0;
 
   isConfigured(): boolean {
     return !!this.appCheck;
@@ -19,13 +22,14 @@ export class AppCheckReadinessService {
       return;
     }
 
-    if (!forceRefresh && this.readyPromise) {
+    if (!forceRefresh && this.readyPromise && this.readyRevision === this.diagnostics.failureRevision) {
       await this.readyPromise;
       return;
     }
 
     const readinessPromise = this.fetchTokenWithinDeadline(forceRefresh).then(() => undefined);
     this.readyPromise = readinessPromise;
+    this.readyRevision = this.diagnostics.failureRevision;
 
     try {
       await readinessPromise;
@@ -64,7 +68,10 @@ export class AppCheckReadinessService {
       throw new Error('App Check is not configured for this app.');
     }
 
-    const appCheckResult = await getAppCheckToken(this.appCheck, forceRefresh);
+    const appCheckResult = await getAppCheckToken(this.appCheck, forceRefresh).catch(error => {
+      this.diagnostics.reportFailure(error, 'token-request');
+      throw error;
+    });
     const appCheckToken = appCheckResult?.token;
     if (!appCheckToken) {
       throw new Error('Could not retrieve App Check token.');

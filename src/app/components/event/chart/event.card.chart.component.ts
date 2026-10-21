@@ -1,3 +1,4 @@
+import { resolveEventLineContinuity, equalEventLineContinuity, type EventLineContinuitySettings } from '../../../helpers/event-chart-line-continuity.helper';
 import {
   ChangeDetectorRef,
   ChangeDetectionStrategy,
@@ -384,6 +385,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   readonly canChangeZoneColors = computed(() => !!this.chartSettingsUserID());
   readonly colorIntensityZoneLines = computed(() => this.zoneColorsOverride()
     ?? (this.userSettingsQuery.chartSettings()?.colorIntensityZoneLines !== false));
+  private readonly lineContinuityOverride = signal<EventLineContinuitySettings | null>(null);
+  readonly isSavingLineContinuity = signal(false);
+  readonly canChangeLineContinuity = computed(() => !!this.chartSettingsUserID());
+  readonly lineContinuity = computed(() => this.lineContinuityOverride()
+    ?? resolveEventLineContinuity(this.userSettingsQuery.chartSettings()?.eventLineContinuity));
 
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
@@ -423,12 +429,19 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.isSavingDistinctLinePatterns.set(false);
       this.zoneColorsOverride.set(null);
       this.isSavingZoneColors.set(false);
+      this.lineContinuityOverride.set(null);
+      this.isSavingLineContinuity.set(false);
     });
     effect(() => {
       this.deviceColorPreferences.deviceColorByName();
       const chartSettings = this.userSettingsQuery.chartSettings();
       const distinctLinePatterns = this.useDistinctLinePatterns();
       const zoneColors = this.colorIntensityZoneLines();
+      const lineContinuity = this.lineContinuity();
+      if (!this.isSavingLineContinuity() && this.lineContinuityOverride()
+        && equalEventLineContinuity(lineContinuity, resolveEventLineContinuity(chartSettings?.eventLineContinuity))) {
+        this.lineContinuityOverride.set(null);
+      }
       if (!this.isSavingZoneColors()
         && this.zoneColorsOverride() !== null
         && zoneColors === (chartSettings?.colorIntensityZoneLines !== false)) {
@@ -512,6 +525,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public onXAxisTypeChange(value: XAxisTypes): void {
+    if (!this.user || this.event?.isMultiSport() || value === this.displayedXAxisType
+      || (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis)) {
+      return;
+    }
+    this.hapticsService.selection();
     this.xAxisType = value;
   }
 
@@ -584,6 +602,36 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       if (isCurrentSave()) {
         this.isSavingZoneColors.set(false);
       }
+    }
+  }
+
+  async onLineContinuityChange(value: EventLineContinuitySettings): Promise<void> {
+    const userID = this.chartSettingsUserID();
+    const settings = resolveEventLineContinuity(value);
+    if (!userID || this.destroyRef.destroyed || this.isSavingLineContinuity()
+      || equalEventLineContinuity(settings, this.lineContinuity())) return;
+    const authRevision = this.chartSettingsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.chartSettingsAuthRevision && this.chartSettingsUserID() === userID;
+    this.hapticsService.selection();
+    this.lineContinuityOverride.set(settings);
+    this.isSavingLineContinuity.set(true);
+    try {
+      await this.userSettingsQuery.updateChartSettings(
+        { eventLineContinuity: settings }, { force: true, expectedUserID: userID },
+      );
+      if (isCurrentSave()) this.hapticsService.success();
+    } catch (error) {
+      this.logger.error('[EventCardChart] Failed to save line continuity', error);
+      if (isCurrentSave()) {
+        // Follow the current settings stream again. Restoring the value captured
+        // before this write can mask a newer preference saved in another tab.
+        this.lineContinuityOverride.set(null);
+        this.hapticsService.error();
+        this.snackBar.open('Could not save line continuity. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (isCurrentSave()) this.isSavingLineContinuity.set(false);
     }
   }
 
@@ -825,6 +873,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
           colorIntensityZoneLines: this.shouldColorIntensityZoneLines(),
+          lineContinuity: this.lineContinuity(),
         };
         const nextChartPanels = this.eventChartPanelWorkerService.shouldUseWorker()
           ? await this.eventChartPanelWorkerService.buildPanels(
@@ -1203,6 +1252,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       unitSettingsKey,
       intensityZoneColoringKey,
       intensityZoneBoundariesKey,
+      JSON.stringify(this.lineContinuity()),
     ].join('|');
   }
 

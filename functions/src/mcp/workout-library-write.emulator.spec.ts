@@ -1,3 +1,4 @@
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -38,6 +39,53 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
   afterAll(async () => {
     for (const uid of users) await db.recursiveDelete(db.collection('users').doc(uid));
     await db.terminate();
+  });
+
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('validates complete %s saves and blocks summary-only library updates before approval', async sport => {
+    const { uid, user, deps, input } = await setup();
+    const strength = { version: 1 as const, exercises: [{ id: 'hold', name: 'Plank', sets: [
+      { id: 'one', ending: { kind: 'time' as const, seconds: 30 }, externalLoadKg: 2.5, restAfterSeconds: 30 },
+    ] }] };
+    const details = { ...strength, workoutId: 'lift', revision: 1 };
+    const recipe = projectStrengthWorkoutToV1(details, sport);
+    await mutateTrainingScheduleForUser(uid, { mutationId: 'create-lift', expectedRevisions: [
+      { scope: 'state', id: 'current', revision: 0 },
+    ], operation: { kind: 'create-workout', workoutId: 'lift', planId: null, title: 'Hold session',
+      localDate: '2026-10-02', structure: recipe, strength, confirmPlanRangeExtension: false } }, { db, nowMs });
+    const source = user.collection('scheduledWorkouts').doc('lift');
+    const companion = source.collection('strengthDetails').doc('current');
+    const workoutRef = encodeOpaqueValue('training_read', { kind: 'workout', id: 'lift', createdAtMs: nowMs }, uid, 'connection');
+    const save = { expectedScheduleRevision: 1, expectedLibraryRevision: 0, change: { kind: 'save-workout',
+      workoutRef, expectedWorkoutRevision: 1 } };
+    await companion.set({ ...details, workoutId: 'foreign' });
+    await expect(previewSavedWorkoutChange(input(save), deps)).rejects.toThrow('inconsistent strength details');
+    expect((await user.collection('trainingMcpLibraryProposals').get()).empty).toBe(true);
+    await companion.set(details);
+    const preview = await previewSavedWorkoutChange(input(save), deps);
+    const applied = await applySavedWorkoutChange(input({ proposalRef: preview.proposalRef, permissionMode: 'schedule' }), deps);
+    const decoded = decodeOpaqueValue('training_read', applied.savedWorkoutRef!, uid, 'connection', 'Saved workout');
+    const saved = user.collection('workoutLibrary').doc(decoded.id as string);
+    expect((await saved.get()).get('structure.sport')).toBe(sport);
+    expect((await saved.get()).get('strength')).toEqual(strength);
+    const stripped = { expectedScheduleRevision: 1, expectedLibraryRevision: 1, change: { kind: 'update',
+      savedWorkoutRef: applied.savedWorkoutRef, expectedRevision: 1, title: 'Edited title', structure: recipe } };
+    await expect(previewSavedWorkoutChange(input(stripped), deps)).rejects.toThrow('complete exercise prescription');
+    expect((await saved.get()).get('strength')).toEqual(strength);
+    const updated = await previewSavedWorkoutChange(input({ ...stripped, change: { ...stripped.change, strength } }), deps);
+    await applySavedWorkoutChange(input({ proposalRef: updated.proposalRef, permissionMode: 'schedule' }), deps);
+    expect((await saved.get()).get('strength')).toEqual(strength);
+    await mutateTrainingScheduleForUser(uid, { mutationId: 'create-legacy', expectedRevisions: [
+      { scope: 'state', id: 'current', revision: 1 },
+    ], operation: { kind: 'create-workout', workoutId: 'legacy', planId: null, title: 'Legacy intervals',
+      localDate: '2026-10-02', structure: { ...structure, sport }, confirmPlanRangeExtension: false } }, { db, nowMs: nowMs + 1 });
+    const legacyRef = encodeOpaqueValue('training_read', { kind: 'workout', id: 'legacy', createdAtMs: nowMs + 1 }, uid, 'connection');
+    const legacy = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 2, expectedLibraryRevision: 2,
+      change: { kind: 'save-workout', workoutRef: legacyRef, expectedWorkoutRevision: 1 } }), deps);
+    const legacySaved = await applySavedWorkoutChange(input({ proposalRef: legacy.proposalRef, permissionMode: 'schedule' }), deps);
+    const legacyId = decodeOpaqueValue('training_read', legacySaved.savedWorkoutRef!, uid, 'connection', 'Saved workout').id as string;
+    const legacyItem = await user.collection('workoutLibrary').doc(legacyId).get();
+    expect(legacyItem.get('strength')).toBeUndefined();
+    expect(legacyItem.get('structure')).toEqual({ ...structure, sport });
   });
 
   it('previews, applies and replays a create without schedule or provider consent', async () => {

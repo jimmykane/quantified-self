@@ -2,7 +2,7 @@ import {
   DataPotentialStamina,
   DataStamina,
   DynamicDataLoader,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import { SUSTAINABLE_DISTANCE_TYPE, getEnduranceMetricLabel } from '@shared/endurance-metrics';
 
 export const APP_CHART_EXTRA_DATA_TYPES: string[] = [

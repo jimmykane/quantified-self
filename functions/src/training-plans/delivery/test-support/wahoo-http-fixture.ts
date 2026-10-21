@@ -7,7 +7,7 @@ export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
   return { schemaVersion: 1, id: 'w', planId: null, title: 'Intervals', localDate: '2026-10-25', lifecycle: 'planned',
     revision: 1, createdAtMs: 1_700_000_000_000, updatedAtMs: 1_700_000_000_000,
     structure: { version: 1, sport: ActivityTypes.Running, nodes: [
-      { kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] },
+      { kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 120 }, targets: [] },
     ] } };
 }
 export function wahooFixtureStrengthDetails(workoutId = 'w'): StrengthWorkoutDetailsV1 {

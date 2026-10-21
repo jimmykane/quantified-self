@@ -3,14 +3,14 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatSelectModule } from '@angular/material/select';
 import type { ChartSourceChoice } from '../../../helpers/chart-source.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-chart-source-picker', standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, MatSelectModule],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
   templateUrl: './chart-source-picker.component.html', styleUrl: './chart-source-picker.component.scss',
+  host: { '[class.chart-source-picker-compact]': 'compact()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartSourcePickerComponent {
@@ -18,13 +18,21 @@ export class ChartSourcePickerComponent {
   readonly selectedKey = input<string | null>(null);
   readonly chartTitle = input.required<string>();
   readonly disabled = input(false);
+  readonly compact = input(false);
   readonly selected = output<string>();
   private readonly haptics = inject(AppHapticsService);
-  private readonly trigger = viewChild(MatMenuTrigger);
+  private readonly trigger = viewChild<MatMenuTrigger>('sourceTrigger');
+  private readonly measurementTrigger = viewChild<MatMenuTrigger>('measurementTrigger');
   readonly choice = computed(() => this.choices().find(choice => choice.key === this.selectedKey()) || null);
+  readonly methodLabel = computed(() => this.choice()?.readingKey === 'daytime' && this.choice()?.readingMethod === 'Calculated by QS'
+    ? 'Daily average · Calculated by QS' : this.choice()?.readingMethod);
   readonly measurements = computed(() => [...new Map(this.choices().filter(choice => choice.readingKey).map(choice =>
-    [choice.readingKey!, { key: choice.readingKey!, label: choice.readingLabel!, order: choice.readingOrder ?? 99 }])).values()]
+    [choice.readingKey!, { key: choice.readingKey!, label: choice.readingLabel!, order: choice.readingOrder ?? 99, secondary: !!choice.secondaryMeasurement }])).values()]
     .sort((a, b) => (a.order < 0 ? 99 : a.order) - (b.order < 0 ? 99 : b.order)));
+  readonly primaryMeasurements = computed(() => this.measurements().some(reading => !reading.secondary)
+    ? this.measurements().filter(reading => !reading.secondary) : this.measurements());
+  readonly secondaryMeasurements = computed(() => this.measurements().some(reading => !reading.secondary)
+    ? this.measurements().filter(reading => reading.secondary) : []);
   readonly sourceChoices = computed(() => this.measurements().length
     ? this.choices().filter(choice => choice.readingKey === this.choice()?.readingKey) : this.choices());
   readonly label = computed(() => (this.choice()?.readingKey ? this.choice()?.sourceLabel : this.choice()?.shortLabel)
@@ -34,7 +42,10 @@ export class ChartSourcePickerComponent {
     ? 'The selected reading has no data in this period.' : 'Choose a source and reading.'));
   readonly ariaLabel = computed(() => `${this.chartTitle()} source: ${this.description()}${this.canChoose() ? this.measurements().length ? ' Change source.' : ' Change source and reading.' : ''}`);
   constructor() {
-    effect(() => { if (this.disabled() || !this.canChoose()) this.trigger()?.closeMenu(); });
+    effect(() => {
+      if (this.disabled() || !this.canChoose()) this.trigger()?.closeMenu();
+      if (this.disabled() || !this.measurements().length || this.measurements().length === 1 && this.choice()) this.measurementTrigger()?.closeMenu();
+    });
   }
   opened(): void { this.haptics.selection(); }
   chooseMeasurement(readingKey: string): void {

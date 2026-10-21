@@ -51,6 +51,7 @@ const hoisted = vi.hoisted(() => {
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockGunzipSync = vi.fn();
   const mockUploadDebugFile = vi.fn();
+  const mockPrepareTrainingLoad = vi.fn();
 
   return {
     capturedOnRequestOptions,
@@ -82,6 +83,7 @@ const hoisted = vi.hoisted(() => {
     mockSportsLibVersionToCode,
     mockGunzipSync,
     mockUploadDebugFile,
+    mockPrepareTrainingLoad,
   };
 });
 
@@ -167,6 +169,11 @@ vi.mock('../utils', () => ({
 
 vi.mock('../debug-utils', () => ({
   uploadDebugFile: hoisted.mockUploadDebugFile,
+}));
+
+vi.mock('../shared/import-preservation', async importOriginal => ({
+  ...await importOriginal<typeof import('../shared/import-preservation')>(),
+  prepareImportedEventWrite: hoisted.mockPrepareTrainingLoad,
 }));
 
 vi.mock('../shared/event-writer', () => ({
@@ -302,6 +309,7 @@ describe('uploadActivity', () => {
     hoisted.mockSetEventDocumentIfUserActive.mockResolvedValue(undefined);
     hoisted.mockEnforceAppCheckFlag.value = true;
     hoisted.mockUploadDebugFile.mockReset().mockResolvedValue(undefined);
+    hoisted.mockPrepareTrainingLoad.mockReset().mockResolvedValue(Object.assign(vi.fn(), { sourceWriteId: 'attempt' }));
 
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValue(makeParsedEvent());
     hoisted.mockGPXImporter.getFromString.mockResolvedValue(makeParsedEvent());
@@ -1494,7 +1502,7 @@ describe('uploadActivity', () => {
       expect.anything(),
       { ok: true },
       undefined,
-      undefined,
+      expect.any(Function),
       expect.any(Function),
     );
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
@@ -1525,5 +1533,26 @@ describe('uploadActivity', () => {
       Buffer.from([0xbb]),
     )).rejects.toThrow('deletion in progress');
     expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+  });
+
+  it('uses atomic import preparation and applies live edit preservation to both document kinds', async () => {
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({ headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' } }), response);
+    const adapter = hoisted.capturedFirestoreAdapter.value as {
+      prepareTrainingLoad: (event: unknown) => Promise<unknown>;
+      setDoc: (path: string[], data: unknown) => Promise<void>;
+    };
+    const parsed = { ...makeParsedEvent(), getID: () => 'saved' };
+    await adapter.prepareTrainingLoad(parsed);
+    expect(hoisted.mockPrepareTrainingLoad).toHaveBeenCalledWith('user-1', parsed);
+    for (const kind of ['events', 'activities']) {
+      await adapter.setDoc(['users', 'user-1', kind, 'saved'], { creator: { name: 'Parsed' } });
+      const transform = hoisted.mockSetEventDocumentIfUserActive.mock.calls.at(-1)![5] as (incoming: object, saved: object) => object;
+      expect(transform(kind === 'events' ? { name: 'File' } : { creator: { name: 'Parsed' } },
+        kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { creator: { name: 'Edited watch' } }))
+        .toMatchObject(kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { creator: { name: 'Edited watch' } });
+    }
+    hoisted.mockPrepareTrainingLoad.mockRejectedValueOnce(new Error('deleted or superseded'));
+    await expect(adapter.prepareTrainingLoad(parsed)).rejects.toThrow('deleted or superseded');
   });
 });

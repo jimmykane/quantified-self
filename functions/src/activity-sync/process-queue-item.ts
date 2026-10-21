@@ -89,7 +89,7 @@ import {
     DisabledSyncRouteTransitionResult,
     finalizeDisabledSyncRouteIfCurrent,
 } from '../queue/sync-route-eligibility';
-import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../shared/queue-config';
+import { getCloudTaskRetryBackoffSeconds, PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import { activityDeliveryFailureOutcome, recordActivityDeliveryCommit, recordActivityDeliveryCompletion } from './monitoring';
 
 function toExtension(path?: string, extension?: string): string {
@@ -2315,14 +2315,14 @@ export async function processActivitySyncQueueItem(
                     && !queueItem.destinationUploadID
                     && !queueItem.destinationWorkoutKey
                     && !queueItem.destinationUploadContinuation
-                    && (queueItem.retryCount || 0) + 1 < MAX_RETRY_COUNT;
+                    && (queueItem.retryCount || 0) + 1 < PROVIDER_MAX_RETRY_COUNT;
                 if (queueItem.sendBatchID && !retryUnsentSuuntoInitialization) {
                     const confirmedFailure = actionableError.operation === 'activity_upload_status';
                     return finalizeActivitySyncQueueItemIfCurrent(queueItem, { resultStatus: confirmedFailure ? 'skipped' : 'manual_reconciliation_required', sendConfirmedFailure: confirmedFailure });
                 }
                 // At exhaustion retain the failed COROS upload IDs for DLQ reconciliation.
                 const corosRetryExhausted = queueItem.destinationServiceName === ServiceNames.COROSAPI
-                    && (queueItem.retryCount || 0) + 1 >= MAX_RETRY_COUNT;
+                    && (queueItem.retryCount || 0) + 1 >= PROVIDER_MAX_RETRY_COUNT;
                 if (!corosRetryExhausted) {
                     const cleared = await clearPendingDestinationUploadForRestart(queueItem);
                     if (!cleared) {

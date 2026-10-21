@@ -18,21 +18,47 @@ export function wahooFixtureWorkout(): ScheduledWorkoutV1 {
     structure: { version: 1, sport: ActivityTypes.Running, nodes: [
       { kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] },
       { kind: 'repeat', id: 'repeat', count: 3, steps: [
-        { kind: 'step', id: 'interval', purpose: 'work', ending: { kind: 'time', seconds: 31 }, targets: [] },
+        { kind: 'step', id: 'interval', purpose: 'work', ending: { kind: 'time', seconds: 30 }, targets: [] },
       ] },
     ] } };
 }
 describe('Wahoo delivery mapping (no editor changes)', () => {
+  it.each([30, 90, 96, 150])('blocks the dated Workout API rejection for %s seconds without changing the prescription', seconds => {
+    const workout = wahooFixtureWorkout();
+    workout.structure.nodes = [{ kind: 'step', id: 'hold', purpose: 'work', ending: { kind: 'time', seconds }, targets: [] }];
+    const before = structuredClone(workout);
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'unsupported',
+      issues: [expect.stringContaining('whole-minute total')] });
+    const file = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    expect(JSON.parse(Buffer.from(file.split(',')[1], 'base64').toString()).intervals[0].exit_trigger_value).toBe(seconds);
+    expect(workout).toEqual(before);
+  });
+  it('sends Virtual Rowing as indoor rowing in both the Plan and dated Workout after mapping review', () => {
+    const workout = wahooFixtureWorkout();
+    workout.structure.sport = ActivityTypes.VirtualRowing;
+    const before = structuredClone(workout);
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'degraded',
+      issues: expect.arrayContaining([expect.stringContaining('Virtual Rowing using its Indoor Rowing profile')]) });
+    // Delivery intent enforces approval; this helper builds the approved create/update payload.
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    expect(recipe.header).toMatchObject({ workout_type_family: 6, workout_type_location: 0, duration_s: 180 });
+    const fields = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
+    expect(fields.get('workout[workout_type_id]')).toBe('22');
+    expect(fields.get('workout[minutes]')).toBe('3');
+    expect(workout).toEqual(before);
+  });
+
   it.each([[ActivityTypes.Walking, 6], [ActivityTypes.Hiking, 9]] as const)('keeps %s Plan family and exact Workout type aligned, including repeats', (sport, type) => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
     expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('exact');
     const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
     const recipe = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
-    expect(recipe.header).toMatchObject({ workout_type_family: 9, workout_type_location: 1, duration_s: 183 });
+    expect(recipe.header).toMatchObject({ workout_type_family: 9, workout_type_location: 1, duration_s: 180 });
     expect(recipe.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
     const fields = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
     expect(fields.get('workout[workout_type_id]')).toBe(String(type));
-    expect(fields.get('workout[minutes]')).toBe('3.05');
+    expect(fields.get('workout[minutes]')).toBe('3');
     expect(workout.structure.sport).toBe(sport);
     const changed = structuredClone(workout);
     changed.structure.nodes = [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 },
@@ -47,9 +73,15 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header.workout_type_family)
       .toBe(sport === ActivityTypes.Cycling ? 0 : 1);
   });
-  it('covers every editor sport and only the explicit additional running/cycling profiles', () => {
+  it('covers every editor sport and the explicit strength, virtual rowing and fitness additions', () => {
     expect(new Set(WAHOO_PLANNED_WORKOUT_SPORTS_V1)).toEqual(new Set([
-      ...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining,
+      ...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining, ActivityTypes.VirtualRowing,
+      ActivityTypes.Yoga, ActivityTypes.EllipticalTrainer, ActivityTypes.CardioTraining,
+      ActivityTypes.Crosstrainer, ActivityTypes.Crossfit, ActivityTypes['Circuit Training'], ActivityTypes.Aerobics,
+      ActivityTypes.HIIT, ActivityTypes.AMRAP, ActivityTypes.EMOM, ActivityTypes.Tabata,
+      ActivityTypes.Pilates, ActivityTypes.Stretching, ActivityTypes.FlexibilityTraining, ActivityTypes.Meditation, ActivityTypes.Breathwork,
+      ActivityTypes.WeightTraining, ActivityTypes.Kettlebell, ActivityTypes.Calisthenics, ActivityTypes.CoreTraining,
+      ActivityTypes.LesMillsCore, ActivityTypes.LesMillsGritStrength, ActivityTypes['LES MILLS BODYPUMP'],
     ]));
     for (const row of WAHOO_SPORT_FIXTURES) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(row.sport);
     for (const sport of MANUAL_WORKOUT_EDITOR_SPORTS_V1) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(sport);
@@ -69,7 +101,9 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     [ActivityTypes.IndoorRowing, '4c185661176a0c59ecc8ee69a9326a61d524d6abe713da92ea893bfdaa82a439', 'bc91be6f001ab1cd8a20c19c3fb988d46ba34b9fee82c16a3778062a8129dfc8'],
   ] as const)('preserves the pre-proof %s v4 payload and digest when only the warning changes', (sport, digest, payloadHash) => {
     const workout = wahooFixtureWorkout(); workout.structure.sport = sport;
-    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ mappingVersion: 'wahoo-plans-v4', digest });
+    const repeat = workout.structure.nodes[1]; if (repeat.kind !== 'repeat') throw new Error('Expected repeat');
+    repeat.steps[0].ending = { kind: 'time', seconds: 31 };
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'unsupported', mappingVersion: 'wahoo-plans-v4', digest });
     expect(createHash('sha256').update(wahooPlanBody(workout, 'destination', true)
       + '\n' + wahooWorkoutBody(workout, 'destination', 'UTC', '123')).digest('hex')).toBe(payloadHash);
   });
@@ -84,7 +118,7 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(recipe.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
     const fields = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123'));
     expect(fields.get('workout[workout_type_id]')).toBe(String(type));
-    expect(fields.get('workout[minutes]')).toBe('3.05');
+    expect(fields.get('workout[minutes]')).toBe('3');
     expect(workout).toEqual(before);
     if (level === 'degraded') {
       expect(assessWahooDelivery(workout, 'destination', 'UTC').requiresApproval).not.toBe(false);
@@ -92,7 +126,7 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
         location: location === 0 ? 'indoor' : 'outdoor', allowDegraded: false })).toThrow();
     }
   });
-  it.each([ActivityTypes.Yoga, ActivityTypes.Other])('never admits arbitrary recorded activity %s or defaults it to running', sport => {
+  it.each([ActivityTypes.Soccer, ActivityTypes.Other])('never admits arbitrary recorded activity %s or defaults it to running', sport => {
     const workout = { ...wahooFixtureWorkout(), structure: { ...wahooFixtureWorkout().structure, sport } };
     expect(assessWahooDelivery(workout, 'destination', 'UTC').level).toBe('unsupported');
     expect(() => wahooWorkoutBody(workout, 'destination', 'UTC', '123')).toThrow();
@@ -158,11 +192,11 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString()).header)
       .toMatchObject({ workout_type_family: 6, workout_type_location: 0 });
   });
-  it('derives exact fractional minutes and encodes the existing recipe', () => {
+  it('derives exact whole minutes and encodes the existing recipe', () => {
     const workout = wahooFixtureWorkout();
-    expect(wahooDurationSeconds(workout.structure)).toBe(183);
+    expect(wahooDurationSeconds(workout.structure)).toBe(180);
     const body = new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'Europe/Helsinki', '123'));
-    expect(body.get('workout[minutes]')).toBe('3.05');
+    expect(body.get('workout[minutes]')).toBe('3');
     expect(body.get('workout[plan_id]')).toBe('123');
     expect(body.get('workout[workout_type_id]')).toBe('1');
     expect(body.has('workout[day_code]')).toBe(false);
@@ -172,6 +206,35 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(plan.intervals[0].targets).toEqual([{ type: 'rpe', low: 1, high: 10 }]);
     expect(plan.intervals[1].intervals[0].targets).toEqual([{ type: 'rpe', low: 1, high: 10 }]);
     expect(plan.intervals[1]).toMatchObject({ exit_trigger_type: 'repeat', exit_trigger_value: 2 });
+  });
+  it.each([
+    { seconds: [10.2, 21.9, 27.9], repeats: 1, digest: '582ba03e3869592904bd142d1270a1293b4159790370f3f3e4791b4c6a87201d' },
+    { seconds: [1.1, 18.9], repeats: 3, digest: null },
+    { seconds: [1e-7, 59.9999999], repeats: 1, digest: null },
+  ])('admits exact decimal whole-minute recipes without changing their steps: $seconds x $repeats', ({ seconds, repeats, digest }) => {
+    const workout = wahooFixtureWorkout();
+    const steps = seconds.map((value, index) => ({ kind: 'step' as const, id: `step-${index}`, purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: value }, targets: [] }));
+    workout.structure.nodes = repeats === 1 ? steps : [{ kind: 'repeat', id: 'round', count: repeats, steps }];
+    const before = structuredClone(workout);
+    const assessment = assessWahooDelivery(workout, 'destination', 'UTC');
+    expect(assessment.level).toBe('exact');
+    // Frozen pre-fix identity continues to bind older attempts to this recipe.
+    if (digest) expect(assessment.digest).toBe(digest);
+    expect(new URLSearchParams(wahooWorkoutBody(workout, 'destination', 'UTC', '123')).get('workout[minutes]')).toBe('1');
+    const encoded = new URLSearchParams(wahooPlanBody(workout, 'destination', true)).get('plan[file]')!;
+    const plan = JSON.parse(Buffer.from(encoded.split(',')[1], 'base64').toString());
+    const intervals = repeats === 1 ? plan.intervals : plan.intervals[0].intervals;
+    expect(intervals.map((interval: { exit_trigger_value: number }) => interval.exit_trigger_value)).toEqual(seconds);
+    expect(workout).toEqual(before);
+  });
+  it.each([[59.99999999999999], [60.00000000000001], [60, 1e-12], [60, 1e-20], [60, Number.MIN_VALUE]])(
+    'does not round a genuine decimal fractional-minute total with step seconds %j', (...seconds) => {
+    const workout = wahooFixtureWorkout();
+    workout.structure.nodes = seconds.map((value, index) => ({ kind: 'step', id: `work-${index}`, purpose: 'work',
+      ending: { kind: 'time', seconds: value }, targets: [] }));
+    expect(assessWahooDelivery(workout, 'destination', 'UTC')).toMatchObject({ level: 'unsupported',
+      issues: [expect.stringContaining('whole-minute total')] });
   });
   it.each(['distance', 'kilojoules'] as const)('does not estimate duration from %s endings', ending => {
     const workout = wahooFixtureWorkout();

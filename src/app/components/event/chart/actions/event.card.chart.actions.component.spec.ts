@@ -19,6 +19,8 @@ import { EventCardChartActionsComponent } from './event.card.chart.actions.compo
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
 import { MenuRadioListComponent } from '../../../shared/menu-radio-list/menu-radio-list.component';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 
 describe('EventCardChartActionsComponent', () => {
@@ -40,6 +42,8 @@ describe('EventCardChartActionsComponent', () => {
         MatButtonModule,
         MatDividerModule,
         MatIconModule,
+        MatFormFieldModule,
+        MatInputModule,
         MatMenuModule,
         MatProgressSpinnerModule,
         MatSliderModule,
@@ -85,6 +89,91 @@ describe('EventCardChartActionsComponent', () => {
       .find(toggle => toggle.textContent?.includes('Color by zones'))
       ?.querySelector('button[role="switch"]') as HTMLButtonElement | undefined;
   }
+
+  it('shows Continuous by default and emits a mode choice while leaving feedback to the parent', async () => {
+    component.canChangeLineContinuity = true;
+    const emit = vi.spyOn(component.lineContinuityChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const options = Array.from(overlay.querySelectorAll('button'));
+    expect(options.find(button => button.textContent?.includes('Continuous'))?.textContent).toContain('radio_button_checked');
+    hapticsServiceMock.selection.mockClear();
+    options.find(button => button.textContent?.includes('Detect gaps'))!.click();
+    expect(emit).toHaveBeenCalledExactlyOnceWith({ mode: 'detect', maxGapSeconds: 10 });
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    expect(overlay.textContent).toContain('Saved to your chart settings');
+  });
+
+  it('validates custom seconds while typing and saves a valid committed value only', async () => {
+    component.canChangeLineContinuity = true;
+    component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
+    const emit = vi.spyOn(component.lineContinuityChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const input = overlay.querySelector('input[type="number"]') as HTMLInputElement;
+    hapticsServiceMock.selection.mockClear();
+    const type = (value: string) => {
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    };
+    for (const value of ['', '0', '-1', '1.5', '86401']) {
+      type(value); input.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(overlay.querySelector('[role="alert"]')).toBeTruthy();
+      expect(input.getAttribute('aria-describedby')).toContain(component.gapLimitErrorID);
+      expect(emit).not.toHaveBeenCalled();
+    }
+    type('20');
+    expect(overlay.querySelector('[role="alert"]')).toBeNull();
+    expect(emit).not.toHaveBeenCalled();
+    component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 }; // Unrelated settings snapshot.
+    fixture.detectChanges();
+    expect(input.value).toBe('20');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(emit).toHaveBeenCalledExactlyOnceWith({ mode: 'custom', maxGapSeconds: 20 });
+    expect(input.value).toBe('20');
+    component.lineContinuity = { mode: 'custom', maxGapSeconds: 20 };
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    component.isSavingLineContinuity = true; fixture.detectChanges();
+    expect(input.disabled).toBe(true);
+    expect(input.value).toBe('20');
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(emit).toHaveBeenCalledOnce();
+    component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 }; // Parent rolls a failed save back.
+    component.isSavingLineContinuity = false; fixture.detectChanges();
+    expect(input.value).toBe('10');
+    expect(overlay.textContent).toContain('Custom gap limit');
+  });
+
+  it('retains a custom-limit draft for retry when rejected before the parent renders', async () => {
+    component.canChangeLineContinuity = true;
+    component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
+    const emit = vi.spyOn(component.lineContinuityChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const input = overlay.querySelector('input[type="number"]') as HTMLInputElement;
+    input.value = '20';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    // The parent rejects before exposing an optimistic settings snapshot.
+    fixture.detectChanges();
+    expect(component.lineContinuity.maxGapSeconds).toBe(10);
+    expect(input.value).toBe('20');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(emit).toHaveBeenCalledTimes(2);
+    expect(emit).toHaveBeenLastCalledWith({ mode: 'custom', maxGapSeconds: 20 });
+  });
+
+  it('keeps unauthorized, pending and unchanged continuity requests silent', async () => {
+    const emit = vi.spyOn(component.lineContinuityChange, 'emit');
+    component.onLineContinuityModeChange('detect');
+    component.canChangeLineContinuity = true;
+    component.onLineContinuityModeChange('continuous');
+    component.isSavingLineContinuity = true;
+    component.onLineContinuityModeChange('custom');
+    component.onGapLimitCommit();
+    const overlay = await openOptionsMenu();
+    expect(fixture.nativeElement.querySelector('[aria-label="Saving chart settings"]')).toBeTruthy();
+    expect(Array.from(overlay.querySelectorAll('app-menu-radio-list:first-child button')).every(button => (button as HTMLButtonElement).disabled)).toBe(true);
+    expect(emit).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
+  });
 
   it('hides zone colors when unavailable, including comparisons', async () => {
     const overlay = await openOptionsMenu();
@@ -248,6 +337,45 @@ describe('EventCardChartActionsComponent', () => {
     const distanceOption = component.xAxisOptions.find((option) => option.value === XAxisTypes.Distance);
 
     expect(distanceOption?.disabled).toBe(true);
+  });
+
+  it('renders disabled Distance with Duration and Time enabled in the axis menu', async () => {
+    component.canSelectDistanceXAxis = false;
+    const emit = vi.spyOn(component.xAxisTypeChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const axisList = Array.from(overlay.querySelectorAll('app-menu-radio-list'))
+      .find(list => list.textContent?.includes('X Axis'))!;
+    const option = (label: string) => Array.from(axisList.querySelectorAll('button'))
+      .find(button => button.querySelector('span')?.textContent?.trim() === label)!;
+    hapticsServiceMock.selection.mockClear();
+
+    expect(option('Duration').disabled).toBe(false);
+    expect(option('Duration').textContent).toContain('radio_button_checked');
+    expect(option('Time').disabled).toBe(false);
+    expect(option('Distance').disabled).toBe(true);
+    option('Duration').click();
+    option('Distance').click();
+    expect(emit).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
+    option('Time').click();
+    expect(emit).toHaveBeenCalledExactlyOnceWith(XAxisTypes.Time);
+    await component.onXAxisTypeChange(XAxisTypes.Time);
+    expect(emit).toHaveBeenCalledOnce();
+    // The parent validates the live activity selection and owns accepted-change feedback.
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
+  it.each(['signed out', 'multisport'])('ignores axis actions when the menu is disabled: %s', async (reason) => {
+    if (reason === 'signed out') component.user = null;
+    else component.event = { isMultiSport: () => true } as EventInterface;
+    const emit = vi.spyOn(component.xAxisTypeChange, 'emit');
+
+    await component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(emit).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
   });
 
   it('ignores distance x-axis changes when distance is unavailable', async () => {

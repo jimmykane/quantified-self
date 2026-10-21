@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
-import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import { PROVIDER_CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { markQueueItemSkipped, QUEUE_SKIPPED_REASONS, QueueResult } from '../queue-utils';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import {
@@ -26,7 +26,7 @@ function normalizeDispatchRecoveryGeneration(value: unknown): number | null {
  * Force update: 2025-12-25 21:12
  */
 export const processWorkoutTask = onTaskDispatched({
-    retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     secrets: FUNCTION_SECRET_BINDINGS.processWorkoutTask,
     memory: '1GiB',
     timeoutSeconds: 540,

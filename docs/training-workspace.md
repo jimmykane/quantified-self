@@ -1139,7 +1139,7 @@ implies workout delivery support. #738 and #739 are complete: approved account-s
 confirmation of all four sports on the watch are recorded there. Synthetic tests and positive API reads alone do not
 prove app/watch visibility, completed activities or behavior on other devices.
 
-Strength Training is one exact Sports Lib sport with a separate exercise-aware editor. Its strict `StrengthWorkoutDetailsV1`
+The exercise-aware editor supports Strength Training and the seven approved strength aliases below. Its strict `StrengthWorkoutDetailsV1`
 companion lives at `users/{uid}/scheduledWorkouts/{workoutId}/strengthDetails/current` and contains ordered exercises,
 individual repetition or timed-hold sets, optional external load in canonical kilograms, and optional rest seconds.
 Only server mutation paths write it. `ScheduledWorkoutV1.structure` stays a valid v1, server-derived compatibility
@@ -1149,6 +1149,123 @@ companion and fail closed on missing or mismatched data. The companion content r
 edits; schedule shifts preserve it. Sports Lib `DataWeight` uses the owner's independent kg/lb preference for
 external-load display and converts edited pounds back to canonical kilograms; changing distance units does not
 change load units. An unchanged rounded pound display preserves its stored kilogram value.
+
+Separately, generic interval recipes authored as `Weight Training`, `Core Training`, `LES MILLS CORE`,
+`LES MILLS GRIT Strength` or `LES MILLS BODYPUMP` use Suunto's existing Gym (`23`) profile through the
+`Strength Training` planning alias for Suunto interval recipes. These substitutions are degraded
+and require the existing explicit mapping review. `Kettlebell` and `Calisthenics` use their own native Suunto
+recommendation profiles (`63` and `104`), with HR-only default live readings and no profile-substitution loss.
+Additional approved Suunto generic-interval profiles use HR-only default live readings:
+
+| QS recipe sport | Suunto recommendation | Profile substitution |
+| --- | --- | --- |
+| Yoga | Yoga (`121`) | None |
+| Pilates | Pilates (`120`) | None |
+| Stretching / Flexibility Training | Stretching (`58`) | Flexibility Training requires review |
+| Crossfit | Crossfit (`54`) | None |
+| Circuit Training | Circuit training (`73`) | None |
+| Aerobics | Aerobics (`69`) | None |
+| Crosstrainer / Elliptical Trainer | Crosstrainer (`55`) | Elliptical Trainer requires review |
+| Meditation / Breathwork | Meditation (`112`) | Breathwork requires review |
+
+`Virtual Rowing` uses Suunto Indoor Rowing (`57`), Garmin's existing Indoor Rowing → `GENERIC` fallback,
+and Wahoo's Indoor Rowing Plan family `6`, indoor location `0` and dated Workout type `22`. All three substitutions
+require mapping review. Garmin retains its device-support warning and authored-name description. Wahoo retains
+timed, untargeted steps only, including exact repeat durations; distance/manual endings and intensity targets remain
+unsupported even after approval. COROS remains unsupported for rowing. Garmin additionally maps Yoga, Pilates and
+Cardio Training to native `YOGA`, `PILATES` and `CARDIO_TRAINING` profiles documented by Training API V2 §3.2.1.
+Their original recipe, ordered steps and values are preserved; no exercise names, poses or repetitions are inferred.
+These three native profiles have local serializer and strict MCP read/compatibility coverage, not new Garmin account
+or device proof. Wahoo additionally maps Yoga (`66`), Elliptical Trainer (`20`) and Cardio Training (`43`, disclosed
+Cardio Class substitution), all using indoor Gym Plan family `6`. These support timed steps without intensity targets
+only, including inside repeats. Authorized direct API probes on 20 October 2026 verified Plan metadata, exact downloaded
+JSON prescriptions, dated Workout type/duration, and the independent Plan association for all three; every temporary
+test copy was removed and removal checked. This is cloud evidence, not app/watch playback or an integrated QS queue
+test. No deployment or QS workout/plan creation was performed. The approved follow-up mappings are:
+
+| Authored QS sport | Garmin | Wahoo | COROS |
+| --- | --- | --- | --- |
+| Weight Training, Kettlebell, Calisthenics, Core Training, LES MILLS CORE, LES MILLS GRIT Strength, LES MILLS BODYPUMP | Strength Training, complete companion and verified exercise names required | Gym / type `42`, complete companion and timed sets/rests required | Existing full-strength mapper; delivery disabled |
+| Crossfit, Circuit Training, Aerobics, HIIT, AMRAP, EMOM, Tabata | Cardio Training | Cardio Class / type `43` | Unsupported |
+| Crosstrainer, Elliptical Trainer | Cardio Training | Elliptical / type `20` | Unsupported |
+| Stretching, Flexibility Training, Meditation, Breathwork | Generic; timed steps without targets | Gym / type `42`; timed steps without targets | Unsupported |
+| Pilates | Existing native Pilates | Gym / type `42`; timed steps without targets | Unsupported |
+
+All substitutions require the existing content-bound mapping review. Wahoo's cardio and elliptical mappings also
+require timed steps without intensity targets. Garmin cardio retains its existing validated interval/target rules.
+QS preserves the original sport in the recipe, editor, library, JSON, copies and revision history. The Strength editor
+now offers all eight names; no exercises, repetitions, loads or durations are inferred. Legacy Suunto interval recipes
+under these names can remain generic intervals without a companion; that does not admit them to Garmin, Wahoo or
+COROS strength delivery. A present companion must match the source workout and its projection. Editing, copying,
+plan transfer, library placement, history and restore retain it; restoring history that would drop it is blocked.
+Library updates to a strength sport must include the complete prescription when the saved item already has one;
+app and MCP previews reject summary-only replacements. MCP save previews validate companion identity and projection
+for all eight strength names, while interval-only legacy aliases can be saved without inventing exercise details.
+Opening an older interval-only workout preserves title/date edits made during its companion lookup, and changing
+its interval sport preserves the authored steps.
+Suunto rich-strength aliases keep native Kettlebell/Calisthenics recommendations; the other five use Gym, with the
+existing manual-repetition and instruction-only load limitation. Generic interval behavior remains available separately.
+
+Authorized API probes on 20 October 2026 checked all 14 cardio/mobility source names and all seven full-strength
+aliases: Plan metadata, exact downloaded JSON, dated Workout type/duration and independent Plan association.
+Every temporary test Plan and Workout was removed and checked. This proves Cloud acceptance and readback, not
+watch playback. The strength fixture included fractional and explicit zero loads, timed sets and final rests.
+
+The same probes found that Wahoo rejects fractional `workout[minutes]` values, including numeric JSON `1.5`, `1.6`
+and `2.5`, despite its public API describing the field as Number. Whole-minute controls succeeded. New Wahoo Sends
+are therefore blocked before provider writes unless their exact authored total is a positive whole number of minutes.
+QS does not round or pad steps; adjust the recipe explicitly. Exact seconds remain in the Plan file and historical
+payload reconstruction remains available for recovery. Recovery still validates the original digest and complete
+prescription, and may inspect an older fractional-minute attempt so its retained Plan can be withdrawn through Stop.
+This exception permits no new create or update; current delivery compatibility remains mandatory for creates and
+updates. Compatibility reads disclose this scheduling limit using the
+existing issue contract. This restriction applies to all Wahoo planned-workout sports, not just strength.
+The whole-minute check sums stored decimal seconds and repeat counts exactly. For example, 10.2 + 21.9 + 27.9
+seconds is one minute, despite binary addition producing 59.99999999999999; it sends `minutes=1` with the authored
+Plan seconds unchanged. No tolerance, rounding or padding admits a truly fractional total, including a tiny fraction
+above or below a minute. The historical floating-point total remains frozen in delivery digests. Only recovery of
+the same validated attempt also accepts its historical minutes representation; normal writes require the exact
+whole-minute value. Existing recipe/compatibility reads expose this correction through the same issue contract;
+no MCP schema, metadata, scope, consent, provider action or bundled workflow changes. Help's whole-minute restriction
+remains accurate. Monitoring coverage is unchanged: this arithmetic correction retains the existing Wahoo worker,
+queue, lease, retry, outcome and telemetry lifecycle.
+Virtual Rowing shares the rowing display rule: prescribed distances stay metric, and pace targets, profile
+bounds/axes, summaries, MCP display steps and the Suunto app preview use 500 m splits under metric or imperial
+preferences. Canonical distance and speed values remain unchanged. This display classification does not add a
+manual-editor option or claim control over the watch's native pace units. MCP schemas and recipe round trips stay
+unchanged; focused public-read, chart, summary and Guide-preview regressions cover this rule.
+All keep their authored sport in storage, history and public recipe reads; they do not become exercise-aware
+strength workouts or gain repetition/load tracking or new manual-editor choices. On normal delivery reconciliation,
+previously unsupported eligible workouts are
+reassessed: substitutions become `approval_required`, while native mappings can become `pending` with existing valid
+service consent. Other mapping losses still require review. No migration,
+recorded-activity reparse or manual provider replay is needed, and deployment alone does not rewrite saved status.
+The local compatibility read and mutation preview share this mapping. MCP impact: the existing sport, issue code
+and exact/degraded/unsupported contracts already cover it; no schema, scope, consent, tool or plugin change.
+Focused strict read/JSON, serializer and delivery-intent tests verify all 19 preserved names, native recommendations,
+HR targets, manual transitions, unsupported repetition endings, approval boundaries and other-provider exclusions.
+The audit checked all 283 recipe-valid catalog sports across four assessors and serializers (1,132 timed, untargeted
+cases), with no assessment/serialization disagreement. All 45 manual interval-editor sports have Suunto, Garmin and
+Wahoo mappings; COROS keeps its nine documented exclusions. Suunto maps 65 names, with 218 other catalog names
+remaining outside planned delivery support. Recorded import, route delivery and provider activity recording are
+separate contracts; other catalog sports do not gain outbound support from their group. The existing Training
+monitoring bundle still covers these unchanged adapters, queue states and provider labels; no monitoring changes.
+The preceding Suunto/Virtual Rowing batch preserved all 180 previously supported serializer results byte for byte;
+its additions were the 11 approved Suunto sport names and the Garmin/Wahoo Virtual Rowing pairs.
+The subsequent native-fitness audit again checked all 1,132 timed, untargeted cases: all 193 previously supported
+serializer artifacts and compatibility levels remained unchanged. Only Garmin Yoga/Pilates/Cardio Training and Wahoo
+Yoga/Elliptical Trainer/Cardio Training became supported. Their profiles do not expand the manual editor or grant
+strength-companion, repetition/load or new COROS support. Strict MCP compatibility reads use the same local assessment;
+no wire schema, scope, consent, tool, mutation or plugin changed. Existing provider-labelled delivery workers, queues
+and terminal outcomes remain covered by the unchanged Training monitoring bundle.
+
+The current follow-up catalog audit checked all 1,132 timed/untargeted sport-provider pairs, found no assessment/serializer
+disagreement and preserved all 199 previously supported serializer artifacts and mapping levels. Exactly 26 generic
+recipe/provider pairs became supported; full-strength aliases are tested separately with matching companions.
+Monitoring decision: unchanged. Existing garmin/wahoo/suunto adapters, provider labels, delivery queues, failure and
+approval states remain covered by the Training monitoring bundle; no new endpoint, retry, worker or telemetry label.
+MCP impact: strict read and update coverage extends to all seven companions and preserves the authored sport.
+Registered wire schemas, scopes, confirmation and provider actions remain unchanged.
 
 Suunto maps strength to a dated Gym (`23`) Guide containing exercise/set instructions. Rep sets use manual transitions,
 so mapping remains degraded and is not native strength tracking. This standard limitation is disclosed during normal
@@ -1298,7 +1415,11 @@ only synthetic rendered markup at 320px and desktop widths in light/dark; physic
 and the **Show profile** disclosure on saved scheduled and library workouts. Saved inspection consumes the complete
 canonical recipe independently of the narrower manual editor: relative snapshots,
 two simultaneous targets, and manual/kJ/repetition endings remain readable. Strength retains its exercise editor;
-the v1 strength compatibility summary is not presented as a complete exercise profile.
+the v1 strength compatibility summary is not presented as a complete exercise profile. Scheduled cards for all eight
+approved strength names label the steps **Interval summary only** and direct athletes to **Edit** for the complete
+workout and any saved lifting loads. This is a sport-based reminder, not a claim that a companion exists: legacy
+interval-only aliases keep their chart and instructions. Browsing does not fetch companions or add per-card reads;
+the existing revision/owner-guarded editor lookup validates them only when Edit is opened.
 
 `workout-profile.helper.ts` shapes presentation only. The horizontal axis is explicitly step order with equal widths,
 never elapsed time or distance. The shared prescription analyzer now supplies canonical timing and coverage for
@@ -1346,7 +1467,48 @@ Accepted selection owns haptics; raw chart pointer feedback is disabled to avoid
 tests cover silent hydration/context changes, selection and disposal; browser checks use synthetic recipes, not private
 exports. Physical vibration still needs device verification.
 
-MCP impact: no schema, scope, consent, recipe variant, projection, provider action, plugin guidance or mutation change.
+The strength-alias guidance follow-up updates MCP tool descriptions/server instructions, built-in Assistant guidance
+and the bundled Training/cross-domain skills. All eight names direct readers to the complete strength-details tool;
+an unavailable read must not be treated as proof of a legacy interval-only workout. Existing alias updates preserve
+the authored sport; the unchanged strict strength-create schema still creates Strength Training, so other new strength
+names use the app editor. Named strength recipe edits select the existing complete-strength preview; provider/lifecycle
+requests retain their existing routes, and write guidance remains gated on the advertised preview after the successful
+current-schedule read. The seven alias names must describe the requested workout to select the strength editor;
+incidental mentions in another sport's notes do not change its editor. If the complete-strength preview is missing,
+the Assistant withholds other Training previews rather than substituting a summary-only writer. This private routing
+repair preserves the public contract and existing guidance, so it needs no additional metadata digest or plugin refresh.
+`trainingWorkoutRoutingContext` excludes quoted note content, note-preservation clauses and negated actions before
+all preview-selection decisions, including library, phase and Garmin replacement routing. Quoted notes also supply
+no provider-delivery intent. Note edits retain their target and the note noun, so removing a note cannot select workout
+deletion. Single/curly quoted notes retain apostrophes in contractions. The original prompt, constraints and requested
+note text still reach the model intact; this projection must never author or persist a prescription. Named exercise,
+set and repetition edits use the same complete strength preview even when the request omits the word workout.
+Paired-quote scanning distinguishes apostrophes from delimiters and handles note text before or after its note label;
+quoted target titles cannot introduce a note or action for later text. Independent action clauses after unquoted note
+qualifiers remain visible, including polite requests. Note edits that name the real strength workout retain
+that target. Read-current-state, full-companion validation and app confirmation remain mandatory.
+Mixed non-strength create/lifecycle/provider requests use the existing batch only when it can express the requested
+operations. Complete-strength authoring combined with delivery or another workout's edit withholds all previews and
+asks which action to review first; one focused strength preview cannot silently stand for both. Same-workout title/date
+edits and provider-only or plan-only requests keep their existing routes. An exact, unambiguous strength sport choice
+immediately answering that question may select the complete-strength schema from the preceding compound request;
+it supplies no recipe, provider consent or Apply approval. Cancellation, intervening topics, new actions and ambiguous
+same-sport targets do not inherit that route. Other strength follow-up forms retain the existing clarification limits.
+An explicit Stop-sync request requires a returned Stop provider preview, both when checking completion of model calls
+and before attaching an app-owned pending proposal. A create-only or Send response cannot produce an Apply card for
+that Stop request. Negated and quoted Stop text does not request delivery. Public tools, schemas, grants, confirmation,
+metadata and provider actions are unchanged; these are first-party routing/proposal guards with no new plugin refresh.
+Scheduled strength editor lookups distinguish a confirmed absent alias companion from failed reads or invalid data.
+Only confirmed absence opens the original legacy interval recipe. Loading and failed lookups block calendar and
+library saves, sport conversion and interval editing; an inline error directs users to close and reopen for a fresh
+lookup. Stale failures after navigation/account changes cannot alter another draft or emit feedback. These are local
+editor/routing guards: MCP read/proposal shapes, metadata, scopes, consent and provider actions remain unchanged.
+The existing strength Help explains complete-prescription editing; the inline error supplies the retry instruction.
+No tools, schemas, scopes, consent, read fields, mutation kinds or provider actions are added.
+The pending metadata digest records a developer refresh; deployed-server update, registered-app rescan and bundle
+refresh remain separate release steps. Local bundle validation/sync uses only a temporary profile with a fixture app ID.
+
+The original interval-renderer change has no schema, scope, consent, recipe variant, projection, provider action or mutation impact.
 Focused `get_planned_workout`/`get_planned_workout_v2` regressions retain exact mixed distance/HR and untargeted
 60/75/90-second fixtures, two saved-reference targets, a valid zero-percent relative pace range, canonical ordering and
 scope/connection isolation. Presentation
@@ -1414,7 +1576,7 @@ disclosures and haptic ownership. Production deployment and physical device/prov
 
 The authenticated `/training/plans/library` route is a free, noindex part of the Plans workspace. A library entry is an
 undated, owner-scoped `WorkoutLibraryItemV1` at `users/{uid}/workoutLibrary/{itemId}`. It stores a validated v1
-`WorkoutStructureV1`, title, optional complete Strength Training exercise draft, active/archived status, revision and
+`WorkoutStructureV1`, title, optional complete strength exercise draft, active/archived status, revision and
 timestamps. It contains no schedule, completion, provider identity or delivery consent. The canonical structure JSON
 and Sports Lib unit boundary are unchanged. Browser rules permit owner reads only; `mutateWorkoutLibrary` owns
 create, snapshot-from-current-workout, update, status and confirmed deletion. It verifies Auth, App Check, account
@@ -3219,6 +3381,45 @@ authored notes. Synthetic transport and demo-Firestore lifecycle tests cover ori
 same-ID update, pinning, consent, exact archives, protected copies and idempotent repeat reconciliation. Physical
 app/watch layout remains a release check; local tests cannot prove text visibility, sensor data or vibration.
 
+##### Swimming wording and reported validation (19 October 2026)
+
+The Rest field choices now say **Last work block: planned distance** and **Next work block: planned distance**.
+They refer to the Work prescriptions immediately before and after that Rest, not measured completed distance,
+remaining distance or the repetition number. Equal-distance repeats can show the same value for both. Lap-only
+Work has no prescribed distance, even if a title/instruction mentions one; an absent neighbor also supplies no value.
+Settings and Help explain that `Work 1/10` means the first of ten prescribed Work occurrences, while `Rest 1/10`
+belongs to that preceding occurrence. It is not the next repetition or completion/adherence evidence. These are
+app labels and explanations only: persisted enum values/preferences, defaults, field allocation, the compact
+watch text, mapping versions/digests and every Guide payload remain unchanged. Existing interactions/haptics,
+account fences and Save semantics remain unchanged; opening the explanation makes no write.
+
+Swimming feedback supplied on 19 October confirms correct Work/Rest numbering on the tested watch, but reports
+the heading too small to read comfortably. Record counter behavior as confirmed for that reported case, not
+readability resolved or universal device proof. The current Guide interface provides no font-size control.
+Do not request another identical counter/alert test without a concrete alternative to verify. A Rest screenshot
+without a countdown cannot establish a regression: inspect its authored ending before proposing a timing change.
+
+The focused future investigation [#905](https://github.com/jimmykane/quantified-self/issues/905) tracks previous-effort
+statistics during Rest: average pace over the whole completed Work interval, elapsed time, measured distance and
+stroke count where supported. It is separate from #828's native-target investigation and does not reopen completed
+#784. No verified previous-effort selector exists in the current integration; freshly reset Rest lap averages,
+planned distances and workout totals are not substitutes. No new field/control or provider experiment is added.
+
+MCP impact: **no wire impact**. This wording/evidence-only change adds no planning/read capability, recipe field,
+projection, schema, tool, mutation, consent, Assistant authority, provider action or bundled guidance. Existing
+strict plan/workout reads and proposal/confirmation contracts remain unchanged; no MCP coverage is deferred.
+Monitoring is **unchanged**: delivery workers, queues, outcomes, retries, labels, dashboards and policies are untouched.
+Only the frontend wording/help requires the normal separately approved release; no Functions, Rules/indexes,
+mapping migration, requeue or production action is needed. Tests cover the visible labels, explanations, unchanged
+saved choice values and silent initialization; existing serializer regressions cover unchanged watch artifacts.
+
+Verification: 283 focused frontend settings, delivery-dialog, Help and Hosting tests passed; 53 existing Suunto
+swimming presentation/countdown-alert serializer tests passed. Frontend policy checked 634 specs with zero fixture
+review warnings; changed-file lint and `git diff --check` passed. `npm run build-production` passed with unchanged
+budgets, including service-worker asset and all 33 prerendered-page checks. Synthetic Material dialog browser QA
+covered 320px light and desktop dark layouts: explanations wrap and selected values remain accessible; narrow
+selects retain their existing ellipsis. This is app-copy verification, not new physical-watch validation.
+
 ##### Native timed Rest countdown alerts (v16)
 
 Recipes containing a canonical `purpose: rest` step with a time ending now use private `suunto-guides-v16`, across
@@ -3251,6 +3452,11 @@ This proves the standard alert path on that watch, not exact five-second timing,
 quiet/tones-off behavior or audibility while swimming. The watch owns the pattern; do not add guessed sound/haptic
 flags or promise a long final tone. Quiet/tones-off behavior remains a physical verification follow-up. Previous-effort
 Rest statistics, native pace-format overrides and pool-length detection improvements are still outside this change.
+
+Post-release swimming feedback supplied on 19 October separately reports consistent sound and vibration on every
+tested countdown, with beeps starting around four seconds remaining and a short cue at zero. This corroborates the
+standard-alert behavior for that athlete's reported test; it does not prove an exact five-second sequence, a long
+final tone, quiet-mode behavior or all devices. Keep the native alert and exact Rest duration unchanged.
 
 V15 and all older attempts remain frozen: recovery first proves the journal's exact original payload, including
 unit/preferences snapshots, then ordinary reconciliation can update an eligible future copy once under the same
@@ -3742,7 +3948,7 @@ Wahoo uses the shared plan settings, standalone Send, Stop, Retry, approval, rec
 available to authenticated Pro users with a connected, correctly scoped Wahoo account and explicit plan/workout consent;
 there is no UID allowlist. The editor and `WorkoutStructureV1` are unchanged. Delivery accepts the
 documented Running/Cycling baseline with time endings throughout. Required Workout `minutes` is the exact sum of
-step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
+step seconds times total repeat passes divided by 60. The exact total must be a whole number of minutes; the live API rejects fractional minutes. Distance endings cannot supply
 that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
 capabilities do not add editor features or imply delivery eligibility. Existing target/degradation approvals still apply.
 The unsupported verdict is visible at the first Send preview, before any Wahoo consent or HTTP operation. A supported
@@ -3757,8 +3963,7 @@ backend compatibility verdict.
 
 #### Wahoo sport-profile mappings and validation (#789)
 
-The explicit Wahoo planning whitelist covers all 15 manual-editor sports and the six already-authorized MCP
-running/cycling subprofiles. It does not widen the editor, recipe contract or MCP consent to the recorded-activity
+The explicit Wahoo planning whitelist covers all 45 manual interval-editor names and the additional fitness and complete-prescription strength names in the mapping table above. It does not widen the editor, recipe contract or MCP consent to the recorded-activity
 catalog. The [Cloud Workout types](https://cloud-api.wahooligan.com/#workout-types) and
 [families](https://cloud-api.wahooligan.com/#workout-type-families) define separate identifiers; the public
 [plan.json format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf) documents only Biking/Running families.
@@ -3777,7 +3982,7 @@ catalog. The [Cloud Workout types](https://cloud-api.wahooligan.com/#workout-typ
 | Swimming / Open Water Swimming | 25 / 26 | 2 | Indoor / Outdoor | Owner-confirmed timed/untargeted playback |
 | Rowing | 39 | 3 | Outdoor | Owner-confirmed timed/untargeted playback |
 | Indoor Rowing | 22 | 6 | Indoor | Owner-confirmed timed/untargeted playback |
-| Strength Training | 42 | 6 | Indoor | Existing full-companion timed sets/rests; instruction-only load |
+| Strength Training and the seven approved strength names | 42 | 6 | Indoor | Complete companion, timed sets/rests, instruction-only load; aliases require profile review |
 
 Authored sports, units and prescriptions remain unchanged in QS. Substitutions and loss of an authored pool length
 use existing degraded compatibility and digest-bound mapping approval; changing an approved prescription requires
@@ -6432,7 +6637,12 @@ Downloads, reparse and historical sends resolve the stored path; manual sends re
 format, provenance, size and generation checks. Storage sharing remains the existing event-folder policy, including
 retained revisions of a public event. MCP schemas, user-facing controls and Help are unchanged.
 Browser and backend use the same canonical source projection for SHA-256
-fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
+fingerprints, rejecting stale candidate/source combinations. Canonicalization omits undefined object properties and
+array entries, matching backend Firestore serialization with `ignoreUndefinedProperties`; explicit nulls, zero values,
+array order and duplicates remain significant. This prevents unnamed source devices from blocking import/reparse
+finalization without weakening source-change or reservation checks. No Sports Lib, schema, MCP contract/authority,
+Help or queue-monitoring change is needed; existing persistence-phase errors and retries cover this boundary.
+Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
 leg edits until stale activity details are reopened. The
 Sports Lib JSON reader preserves zero W/kg power-curve values so reopening a saved leg does not falsely change its
@@ -7854,6 +8064,19 @@ below. MCP impact: none—the counts are admin-only and do not change Training r
 user-visible delivery projections or provider actions.
 
 ### Training delivery production monitoring
+
+Connection and entitlement lifecycle triggers emit `[TrainingDeliveryLifecycle]` diagnostics: a SHA-256 hash of the
+CloudEvent ID (stable across redelivery), fixed trigger/stage labels, transaction-attempt count and elapsed times.
+DEBUG checkpoints precede runtime setup, the transaction, deletion-guard reads, delivery-state reads and commit;
+INFO completion is emitted only after the transaction resolves, with the committed staging/skip outcome. WARN failure
+includes only an allowlisted Firestore/gRPC code and rethrows the original error. No UID, document path, connection
+payload, provider identity or raw exception is logged. The last checkpoint can locate a hard timeout, but its absence
+of completion does not prove that a commit failed or that a later retry recovered. Correlate the event hash and later
+completion logs; `reconciliation_staged` means only that reconciliation was staged, not that a workout was delivered.
+Stage times measure wall-clock waits, not individual RPC duration; the commit wait can include SDK retry backoff.
+Monitoring coverage: **unchanged**—the separate log prefix does not match the existing Training delivery metrics.
+These diagnostics do not change reads/writes, retry/timeout/resource options, queue lifecycle, metrics or alerts.
+MCP/read projections, consent and user-facing behavior are unchanged; no Help or MCP contract change is needed.
 
 Production activation and email-delivery verification were completed on 6 October 2026 under #655. Repository
 definitions live in `tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture

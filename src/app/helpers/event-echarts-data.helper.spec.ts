@@ -41,9 +41,13 @@ import {
   buildEventChartPanelsFromSnapshot,
   createEventChartPanelBuildSnapshot,
   eventChartSeriesToPoints,
+  buildEventRecordedLineValues,
+  canConnectEventChartPoints,
+  collectEventChartPanelTransferables,
   normalizeEventLapType,
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
+import type { EventChartPanelSeries } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
 
 it('places a shared multisport lap at its actual ending leg even when it is that leg\'s sole lap', () => {
@@ -67,6 +71,67 @@ describe('event-echarts-data.helper', () => {
     vi.restoreAllMocks();
   });
 
+  describe('recorded activity display lines', () => {
+    function hrSeries(points: Array<{ x: number; y: number | null; time: number }>, format: 'legacy' | 'packed'): EventChartPanelSeries {
+      return {
+        id: 'hr', activityID: 'test', activityName: 'Test', color: '#ff0000',
+        streamType: DataHeartRate.type, displayName: DataHeartRate.type, unit: '',
+        lineContinuity: { mode: 'custom', maxGapSeconds: 2 },
+        ...(format === 'legacy' ? { points } : {
+          lineValues: Float64Array.from(points.flatMap(p => [p.x, p.y ?? NaN])),
+          timeValues: Float64Array.from(points.map(p => p.time)), pointCount: points.length,
+        }),
+      };
+    }
+
+    it.each(['legacy', 'packed'] as const)('connects 1/2-second readings but preserves longer gaps without changing %s data', format => {
+      const points = [null, 118, 119, null, 117, null, 116, null, null, 115, 114, null]
+        .map((y, x) => ({ x, y, time: x * 1000 }));
+      const series = hrSeries(points, format);
+      const before = structuredClone(series);
+      expect(Array.from(buildEventRecordedLineValues(series)))
+        .toEqual([1, 118, 2, 119, 4, 117, 6, 116, 9, NaN, 9, 115, 10, 114]);
+      expect(series).toEqual(before);
+    });
+
+    it.each(['legacy', 'packed'] as const)('detects gaps even without explicit empty rows (%s)', format => {
+      const series = hrSeries([
+        { x: 0, y: 100, time: 0 }, { x: 2, y: 101, time: 2000 },
+        { x: 5, y: 102, time: 5000 }, { x: 6, y: 103, time: 6000 },
+        { x: 40, y: 104, time: 40000 }, { x: 42, y: 105, time: 42000 },
+      ], format);
+      expect(Array.from(buildEventRecordedLineValues(series)))
+        .toEqual([0, 100, 2, 101, 5, NaN, 5, 102, 6, 103, 40, NaN, 40, 104, 42, 105]);
+    });
+
+    it.each(['legacy', 'packed'] as const)('uses elapsed timestamps, not distance spacing, and retains zero (%s)', format => {
+      const series = hrSeries([
+        { x: 0, y: 100, time: 0 }, { x: 500, y: 101, time: 2000 },
+        { x: 500, y: 102, time: 4000 }, { x: 501, y: 103, time: 10000 },
+        { x: 501, y: 0, time: 11000 },
+      ], format);
+      expect(Array.from(buildEventRecordedLineValues(series)))
+        .toEqual([0, 100, 500, 101, 500, 102, 501, NaN, 501, 103, 501, 0]);
+    });
+
+    it.each([2001, 0, -1000, NaN, Infinity])('does not connect uncertain or interrupted timestamps (%s)', time => {
+      const series = hrSeries([
+        { x: 0, y: 100, time: 0 }, { x: 1, y: 101, time },
+        { x: 2, y: 102, time: 1000 },
+      ], 'legacy');
+      const line = Array.from(buildEventRecordedLineValues(series));
+      expect(line.slice(0, 6)).toEqual([0, 100, 1, NaN, 1, 101]);
+      if (!Number.isFinite(time) || time >= 1000) expect(line.slice(6)).toEqual([2, NaN, 2, 102]);
+    });
+
+    it('handles empty and single readings without inventing a neighbour', () => {
+      expect(buildEventRecordedLineValues(hrSeries([], 'legacy'))).toHaveLength(0);
+      expect(buildEventRecordedLineValues(hrSeries([{ x: 0, y: null, time: 0 }], 'packed'))).toHaveLength(0);
+      expect(Array.from(buildEventRecordedLineValues(hrSeries([{ x: 0, y: 118, time: 0 }], 'packed'))))
+        .toEqual([0, 118]);
+    });
+  });
+
   function mockEventChartStreamDependencies(displayType = 'Heart Rate', unit = 'bpm'): void {
     vi.spyOn(ActivityUtilities, 'createUnitStreamsFromStreams').mockReturnValue([] as any);
     vi.spyOn(DynamicDataLoader, 'getUnitBasedDataTypesFromDataTypes').mockImplementation((types: any) => types as any);
@@ -78,6 +143,62 @@ describe('event-echarts-data.helper', () => {
       unit
     } as any));
   }
+
+  it.each([XAxisTypes.Time, XAxisTypes.Duration, XAxisTypes.Distance])(
+    'uses the same saved continuity in synchronous and worker builds on %s without changing source data', xAxisType => {
+      mockEventChartStreamDependencies();
+      const times = Array.from({ length: 60 }, (_, i) => i * 5);
+      const values = times.map((_, i) => i >= 25 && i < 29 ? null : 100 + i);
+      const distance = times.map(time => time * 3);
+      const streams = [
+        { type: DataHeartRate.type, getData: () => values },
+        { type: XAxisTypes.Time, getData: () => times },
+        { type: DataDistance.type, getData: () => distance },
+      ];
+      const activity = {
+        startDate: new Date('2024-01-01T00:00:00Z'), creator: { name: 'Test' }, type: ActivityTypes.Cycling,
+        getID: () => 'a', getAllStreams: () => streams,
+        getStream: (type: string) => streams.find(stream => stream.type === type),
+      } as any;
+      const before = structuredClone({ times, values, distance });
+      const base = {
+        selectedActivities: [activity], allActivities: [activity], xAxisType,
+        showAllData: false, dataTypesToUse: [DataHeartRate.type], userUnitSettings: {} as any,
+        eventColorService: { getActivityColor: () => '#ff0000' } as any,
+      };
+      const defaultSeries = buildEventChartPanels(base)[0].series[0];
+      expect(canConnectEventChartPoints(defaultSeries, 24, 29)).toBe(true);
+      for (const mode of ['continuous', 'detect', 'custom'] as const) {
+        const input = { ...base, lineContinuity: { mode, maxGapSeconds: 10 } };
+        const panels = buildEventChartPanels(input);
+        const synchronous = panels[0].series[0];
+        const snapshot = createEventChartPanelBuildSnapshot(input);
+        const worker = buildEventChartPanelsFromSnapshot(snapshot)[0].series[0];
+        expect(worker.lineSegmentIds).toEqual(synchronous.lineSegmentIds);
+        expect(canConnectEventChartPoints(worker, 23, 24)).toBe(true);
+        expect(canConnectEventChartPoints(worker, 24, 29)).toBe(mode === 'continuous');
+        expect(worker.lineValues).toEqual(defaultSeries.lineValues);
+        expect(worker.timeValues).toEqual(defaultSeries.timeValues);
+        expect(collectEventChartPanelTransferables(panels)).toContain(synchronous.lineSegmentIds.buffer);
+      }
+      expect({ times, values, distance }).toEqual(before);
+    },
+  );
+
+  it('defaults legacy rendering to continuous and changes policy without mutating the readings', () => {
+    const points = [100, null, null, 120, null, 130].map((y, x) => ({ x, y, time: x * 10_000 }));
+    const series = {
+      id: 'hr', activityID: 'a', activityName: 'Test', color: '#ff0000', streamType: DataHeartRate.type,
+      displayName: 'HR', unit: 'bpm', points,
+    };
+    const before = structuredClone(points);
+    expect(Array.from(buildEventRecordedLineValues(series))).toEqual([0, 100, 3, 120, 5, 130]);
+    const custom = { ...series, lineContinuity: { mode: 'custom' as const, maxGapSeconds: 20 } };
+    expect(Array.from(buildEventRecordedLineValues(custom))).toEqual([0, 100, 3, NaN, 3, 120, 5, 130]);
+    custom.lineContinuity.maxGapSeconds = 30;
+    expect(Array.from(buildEventRecordedLineValues(custom))).toEqual([0, 100, 3, 120, 5, 130]);
+    expect(points).toEqual(before);
+  });
 
   function buildSingleStreamPanel(input: {
     streamType: string;

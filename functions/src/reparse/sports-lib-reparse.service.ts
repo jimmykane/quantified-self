@@ -51,12 +51,13 @@ import {
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
-import { getEventTags, preserveEventTagsOnRewrite } from '../../../shared/event-tags';
+import { getEventTags } from '../../../shared/event-tags';
 import {
     ActivityIdentityLike,
     resolveActivityIdentityAssignments,
 } from '../shared/activity-identity-matcher';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
+import { IMPORTED_EVENT_EDIT_FIELDS as REPARSE_PRESERVED_EVENT_FIELDS, preserveImportedEventEdits } from '../shared/import-preservation';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { shouldPreserveParsedDistance } from './regeneration-distance';
 import { preserveFreshSourceEventSummary } from './source-event-summary';
@@ -69,14 +70,6 @@ export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
 export { SPORTS_LIB_PRIMARY_BUCKET } from './non-activity-sources';
 const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
-const REPARSE_PRESERVED_EVENT_FIELDS = [
-    'name',
-    'description',
-    'privacy',
-    'notes',
-    'rpe',
-    'feeling',
-] as const;
 export {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
@@ -1074,7 +1067,7 @@ function preserveReparseEventEditsOnRewrite(
     existingData: admin.firestore.DocumentData | null,
     identity: BenchmarkReparseIdentity,
 ): admin.firestore.DocumentData {
-    const preservedData = preserveEventTagsOnRewrite(incomingData, existingData);
+    const preservedData = preserveImportedEventEdits(incomingData, existingData);
     if (!existingData) {
         return sanitizeEventFirestoreWritePayload(preservedData);
     }

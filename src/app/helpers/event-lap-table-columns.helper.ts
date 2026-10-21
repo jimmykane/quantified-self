@@ -574,10 +574,10 @@ export const getAvailableEventLapMetricTypes = (
       }
       return formatEventLapMetric(stat, type, unitSettings, activity.type).trim().length > 0;
     })));
-  if (metricTypes.includes(DataHeartRateMax.type) && !availableTypes.has(DataHeartRateMax.type)) {
+  if (laps.length > 1 && metricTypes.includes(DataHeartRateMax.type) && !availableTypes.has(DataHeartRateMax.type)) {
     const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, eventActivities));
     // The table can show this column from its session summary even when every
-    // individual lap cell is empty. Reuse the same scope and validity rules.
+    // individual lap cell is empty. Single-lap tables have no Summary row.
     if (getAverageEventLapMetrics(localLaps, [DataHeartRateMax.type], unitSettings, activity.type, activity, eventActivities).length) {
       availableTypes.add(DataHeartRateMax.type);
     }

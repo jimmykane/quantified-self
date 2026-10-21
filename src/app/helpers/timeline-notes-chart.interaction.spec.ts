@@ -14,6 +14,51 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
   let host: HTMLDivElement | undefined;
   afterEach(() => { chart?.dispose(); host?.remove(); vi.restoreAllMocks(); });
 
+  it.each([160, 320, 1000].flatMap(width => [false, true].flatMap(dark => ['time', 'category']
+    .flatMap(axis => [false, true].map(inverse => ({ width, dark, axis, inverse }))))))(
+    'keeps edge note titles inside both rendered grids ($width, dark: $dark, $axis, inverse: $inverse)', async ({ width, dark, axis, inverse }) => {
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        measureText: (text: string) => ({ width: text.length * 6 }),
+      } as never);
+      host = document.createElement('div'); document.body.append(host);
+      chart = init(host, null, { renderer: 'svg', width, height: 300 });
+      const controller = new EChartsHostController({ eChartsLoader: {
+        init: async () => chart,
+        setOption: (target, option, settings) => target.setOption(option, settings),
+        dispose: () => {}, subscribeToViewportResize: () => () => {}, attachMobileSeriesTapFeedback: () => () => {},
+      } as never });
+      await controller.init(host, dark ? 'dark' : 'light');
+      const dates = [Date.UTC(2026, 8, 1), Date.UTC(2026, 8, 10)];
+      const notes: TimelineNote[] = ['2026-09-01', '2026-09-10'].map((startDate, index) => ({
+        id: String(index), category: 'travel', title: `${index ? 'Right' : 'Left'} edge note with a long title to truncate`, startDate, endDate: startDate,
+        timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+      }));
+      const xAxis = [0, 1].map(gridIndex => axis === 'time'
+        ? { type: 'time', min: dates[0], max: dates[1], gridIndex }
+        : { type: 'category', data: dates, gridIndex });
+      const option = { animation: false,
+        grid: [{ left: 32, right: 16, top: 15, height: 100, outerBoundsMode: 'none' },
+          { left: 32, right: 16, top: 155, height: 100, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' }],
+        xAxis, yAxis: [0, 1].map(gridIndex => ({ min: 0, max: 100, gridIndex, inverse })),
+        series: [0, 1].map(index => ({ type: 'line', xAxisIndex: index, yAxisIndex: index,
+          data: axis === 'time' ? [[dates[0], 50], [dates[1], 50]] : [50, 50] })),
+      };
+      controller.setTimelineNotes({ notes, select: vi.fn(), reportRange: vi.fn() });
+      controller.setOption(option);
+      await Promise.resolve(); await Promise.resolve();
+      const titles = chart.getZr().storage.getDisplayList().filter(element =>
+        element.type === 'tspan' && typeof element.style.text === 'string' && /^(Left|Right)/.test(element.style.text));
+      expect(titles).toHaveLength(4);
+      for (const title of titles) {
+        const bounds = title.getBoundingRect().clone();
+        bounds.applyTransform(title.getComputedTransform());
+        expect(bounds.x).toBeGreaterThanOrEqual(32);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 16);
+        expect(option.grid.some(grid => bounds.y >= grid.top && bounds.y + bounds.height <= grid.top + grid.height)).toBe(true);
+      }
+      controller.dispose();
+    });
+
   it('merges note edits and removals without resetting readings, zoom or legend selection', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       measureText: (text: string) => ({ width: text.length * 6 }),

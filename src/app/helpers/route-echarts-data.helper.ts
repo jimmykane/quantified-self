@@ -176,6 +176,7 @@ function buildRouteSeries(
     activityName: segment.label,
     color: segment.color,
     streamType,
+    lineGapPolicy: 'adjacent',
     displayName: normalizeUnitDerivedTypeLabel(target.panelDataType, target.displayName || dataClass.displayType || dataClass.type),
     unit: dataClass.unit || '',
     lineValues: pointCount * 2 === lineValues.length ? lineValues : lineValues.slice(0, pointCount * 2),

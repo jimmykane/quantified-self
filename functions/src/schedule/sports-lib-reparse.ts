@@ -1,7 +1,7 @@
 import { hasUnchangedNonActivitySources, isNonActivitySkipReason } from '../reparse/non-activity-sources';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { monitorReparseAttempt, monitorReparseEnqueue } from '../reparse/monitoring';
-import { afterReparseScan, observeReparseQueue } from '../reparse/monitoring-probe';
+import { beforeReparseScan, observeReparseQueue } from '../reparse/monitoring-probe';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -786,7 +786,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     schedule: 'every 10 minutes',
     memory: '512MiB',
     timeoutSeconds: 300,
-}, async event => afterReparseScan(
+}, async event => beforeReparseScan(
     () => monitorReparseAttempt('normal', 'scan_attempt', scanSportsLibReparse),
     () => observeReparseQueue(admin.firestore(), {
         collection: SPORTS_LIB_REPARSE_JOBS_COLLECTION, target: resolveTargetSportsLibVersion(),

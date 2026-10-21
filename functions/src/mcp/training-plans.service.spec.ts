@@ -4,10 +4,10 @@ import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
 import { assessDeliveryCompatibility, readTrainingPlans, TRAINING_READ_LIMITS, type TrainingReadCodec, type TrainingReads } from './training-plans.service';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA, type TrainingReadTool } from './training-plans.schemas';
 import { trainingDeliverySummaryIdentity } from '../../../shared/training-delivery-summary';
-import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { serializeSuuntoGuideJsonV1 } from '../training-plans/providers/suunto-guide.serializer';
 import { WAHOO_SPORT_FIXTURES } from '../training-plans/delivery/test-support/wahoo-sport-fixtures';
-import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
+import { GARMIN_GENERIC_WORKOUT_SPORTS_V1, GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
 import type { WorkoutStructureV1 } from '../../../shared/planned-workout';
 
 const structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
@@ -58,6 +58,79 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each([ActivityTypes.Yoga, ActivityTypes.Pilates, ActivityTypes.CardioTraining])(
+    'reads %s unchanged and exposes its native Garmin compatibility', async sport => {
+      const f = fixture();
+      const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 123 }, targets: [] },
+      ] };
+      f.structures.w1 = recipe;
+      const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const read = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse(await f.run('get_planned_workout_v3', { workoutRef }));
+      expect(JSON.parse(JSON.stringify(read.workout.structure))).toEqual(recipe);
+      const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
+        'assess_planned_workout_compatibility', { workoutRef, providers: ['garmin'] }));
+      expect(compatibility.assessments).toEqual([{ provider: 'garmin', level: 'exact', issues: [] }]);
+      expect(f.structures.w1).toEqual(recipe);
+    });
+
+  it.each([
+    [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
+    [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
+    [ActivityTypes['LES MILLS BODYPUMP'], 'Strength Training'], [ActivityTypes.VirtualRowing, 'Indoor Rowing'],
+    [ActivityTypes.Kettlebell, null], [ActivityTypes.Calisthenics, null],
+    [ActivityTypes.Yoga, null], [ActivityTypes.Pilates, null], [ActivityTypes.Stretching, null],
+    [ActivityTypes.FlexibilityTraining, 'Stretching'], [ActivityTypes.Crossfit, null],
+    [ActivityTypes['Circuit Training'], null], [ActivityTypes.Aerobics, null], [ActivityTypes.Crosstrainer, null],
+    [ActivityTypes.EllipticalTrainer, 'Crosstrainer'], [ActivityTypes.Meditation, null], [ActivityTypes.Breathwork, 'Meditation'],
+  ] as const)('keeps %s in recipe reads and reports its approved profiles accurately', async (sport, fallback) => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [
+      { kind: 'step', id: 'lift', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] },
+    ] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(recipe);
+    }
+    const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run(
+      'assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'coros', 'wahoo'] }));
+    expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([
+      ['suunto', fallback ? 'degraded' : 'exact'], ['garmin', sport === ActivityTypes.VirtualRowing ? 'degraded'
+        : sport === ActivityTypes.Yoga || sport === ActivityTypes.Pilates ? 'exact'
+          : ([ActivityTypes.Crossfit, ActivityTypes['Circuit Training'], ActivityTypes.Aerobics, ActivityTypes.Crosstrainer,
+            ActivityTypes.EllipticalTrainer] as readonly ActivityTypes[]).includes(sport) ? 'degraded' : 'unsupported'],
+      ['coros', 'unsupported'], ['wahoo', 'unsupported'],
+    ]);
+    expect(compatibility.assessments[0].issues).toEqual(fallback ? [{ severity: 'degraded', code: 'sport_profile_degraded',
+      field: '$.sport', message: `Suunto receives ${sport} using its ${fallback} profile; QS keeps the authored sport.` }] : []);
+    expect(JSON.stringify(compatibility)).not.toMatch(/digest|destinationKey|activityIds|account-a|strengthDetails/);
+    expect(f.structures.w1).toEqual(recipe);
+    await expect(f.run('assess_planned_workout_compatibility', { workoutRef }, [])).rejects.toThrow();
+  });
+
+  it('discloses all three Virtual Rowing fallbacks and keeps Wahoo timed and untargeted', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.VirtualRowing, nodes: [
+      { kind: 'step', id: 'row', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] },
+    ] };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const assess = () => f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'wahoo', 'coros'] });
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess());
+    expect(result.assessments.map(item => [item.provider, item.level])).toEqual([
+      ['suunto', 'degraded'], ['garmin', 'degraded'], ['wahoo', 'degraded'], ['coros', 'unsupported'],
+    ]);
+    expect(result.assessments[1].issues[0].message).toContain('Generic workouts are supported only on some devices');
+    expect(result.assessments[2].issues[0].message).toContain('using its Indoor Rowing profile');
+    recipe.nodes[0] = { kind: 'step', id: 'row', purpose: 'work', ending: { kind: 'distance', meters: 500 }, targets: [] };
+    expect(TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await assess()).assessments[2])
+      .toMatchObject({ level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
+    expect(JSON.stringify(result)).not.toMatch(/digest|destinationKey|workout_type|activityIds/);
+  });
+
   it('reads phases through a dedicated strict projection and independent consent with bound references', async () => {
     const f = fixture();
     const planRef = f.codec.encode({ kind: 'plan', id: 'p1', createdAtMs: 1 }, 'owner', 'connection');
@@ -448,6 +521,34 @@ describe('Training plan MCP reads', () => {
       delete f.collections.trainingDeliveryStatuses[id][key];
     }
   });
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('reads complete %s and its provider substitutions through the strict existing contracts', async sport => {
+    const f = fixture();
+    const details = { version: 1 as const, workoutId: 'w1', revision: 1, exercises: [{ id: 'hold', name: 'Plank',
+      sets: [{ id: 'one', ending: { kind: 'time' as const, seconds: 30 }, externalLoadKg: 2.5, restAfterSeconds: 30 }] }] };
+    f.structures.w1 = projectStrengthWorkoutToV1(details, sport); f.strengthDocs.w1 = details;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const prescription = TRAINING_READ_OUTPUTS.get_strength_workout_details.parse(await f.run('get_strength_workout_details', { workoutRef }));
+    expect(prescription.details.exercises[0].sets[0]).toMatchObject({ externalLoadKg: 2.5, restAfterSeconds: 30 });
+    const result = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run('assess_planned_workout_compatibility', { workoutRef }));
+    for (const provider of ['garmin', 'wahoo', 'coros'] as const) expect(result.assessments.find(a => a.provider === provider))
+      .toMatchObject({ level: 'degraded', issues: expect.arrayContaining([expect.objectContaining({ code: 'sport_profile_degraded', field: '$.sport' })]) });
+    const suunto = result.assessments.find(a => a.provider === 'suunto')!;
+    expect(suunto.issues[0].message).toContain(sport === ActivityTypes.Kettlebell || sport === ActivityTypes.Calisthenics ? sport : 'Gym');
+    expect(f.structures.w1).toEqual(projectStrengthWorkoutToV1(details, sport));
+    f.strengthDocs.w1 = { ...details, workoutId: 'foreign' };
+    await expect(f.run('get_strength_workout_details', { workoutRef })).rejects.toThrow();
+    delete f.strengthDocs.w1;
+    await expect(f.run('get_strength_workout_details', { workoutRef })).rejects.toThrow();
+    const missing = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['garmin', 'wahoo', 'coros'] }));
+    expect(missing.assessments.every(a => a.level === 'unsupported')).toBe(true);
+  });
+  it('discloses the dated Wahoo whole-minute limit without rounding the recipe', () => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Pilates, nodes: [{ kind: 'step', id: 'hold',
+      purpose: 'work', ending: { kind: 'time', seconds: 96 }, targets: [] }] };
+    expect(assessDeliveryCompatibility('wahoo', recipe)).toMatchObject({ level: 'unsupported',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'scheduling_duration_unavailable', message: expect.stringContaining('whole-minute') })]) });
+    expect(recipe.nodes[0].ending).toEqual({ kind: 'time', seconds: 96 });
+  });
   it('assesses timed Wahoo strength from the complete companion without changing the strict wire schema or leaking provider identities', async () => {
     const f = fixture();
     const details = { version: 1 as const, workoutId: 'w1', revision: 1,
@@ -469,7 +570,7 @@ describe('Training plan MCP reads', () => {
       await expect(f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['wahoo'] })).rejects.toThrow();
     }
   });
-  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('reads authored %s and discloses Garmin Generic through the unchanged strict MCP contract', async sport => {
+  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1.filter(sport => !(GARMIN_UNTARGETED_FITNESS_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)))('reads authored %s and discloses Garmin Generic through the unchanged strict MCP contract', async sport => {
     const f = fixture();
     const authored = { version: 1, sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
       ending: { kind: 'distance', meters: 500 }, targets: [] }] };
@@ -844,7 +945,8 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.displaySteps[0].text).toContain('25 m');
   });
 
-  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s canonical in the planned-workout read', async sport => {
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.VirtualRowing])('keeps %s canonical in the planned-workout read', async sport => {
+    const rowing = [ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.VirtualRowing].includes(sport);
     const f = fixture();
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
       startDate: '2026-09-01', endDate: '2027-01-01',
@@ -857,22 +959,24 @@ describe('Training plan MCP reads', () => {
           data: { ...doc.data, structure: { ...structure, sport,
             nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
               ending: { kind: 'distance', meters: 500 },
-              targets: sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing
+              targets: rowing
                 ? [{ kind: 'speed', mode: 'absolute', presentation: 'pace',
                   minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 }]
                 : [] }] } },
         } : doc;
       },
     }));
-    const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', {
-      workoutRef: list.workouts[0].workoutRef,
-    }));
-    expect(result.workout.structure.sport).toBe(sport);
-    expect(result.workout.displaySteps[0].text).toContain(
-      sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing ? '500' : 'mi',
-    );
-    if (sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing) {
-      expect(result.workout.displaySteps[0].text).toContain('/ 500');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef: list.workouts[0].workoutRef }));
+      expect(result.workout.structure.sport).toBe(sport);
+      expect(result.workout.displaySteps[0].text).toContain(rowing ? '500' : 'mi');
+      if (rowing) {
+        expect(result.workout.displaySteps[0].text).toContain('01m 45s–02m 00s / 500.0 m');
+        expect(JSON.parse(JSON.stringify(result.workout.structure))).toMatchObject({ sport, nodes: [{
+          ending: { kind: 'distance', meters: 500 }, targets: [{ minimumMetersPerSecond: 500 / 120,
+            maximumMetersPerSecond: 500 / 105 }],
+        }] });
+      }
     }
   });
 

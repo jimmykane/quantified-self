@@ -16,6 +16,9 @@ import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from '../../authentication/auth-red
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { MemoryStorage } from '../../services/storage/memory.storage';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppWindowService } from '../../services/app.window.service';
+import { MatButtonModule } from '@angular/material/button';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -51,6 +54,7 @@ describe('LoginComponent', () => {
         retryProfileRead: vi.fn().mockResolvedValue(true),
     };
     const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+    const appWindow = { windowRef: { location: { reload: vi.fn() } } };
 
     const mockRouter = {
         navigate: vi.fn(),
@@ -118,6 +122,7 @@ describe('LoginComponent', () => {
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppHapticsService, useValue: haptics },
+                { provide: AppWindowService, useValue: appWindow },
                 { provide: AppEventService, useValue: {} },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
@@ -165,6 +170,124 @@ describe('LoginComponent', () => {
         expect(haptics.success).toHaveBeenCalledTimes(1);
         expect(component.isLoading).toBe(false);
         expect(component.isProfileRecoveryInProgress).toBe(false);
+    });
+
+    it.each(['initial-throttle', 'throttled', 'recaptcha-error'])('reloads for appCheck/%s without retrying credentials or signing out', async code => {
+        mockUserService.profileReadState.set({ status: 'error', uid: '123', code: `appCheck/${code}` });
+        expect(component.profileVerificationNeedsReload()).toBe(true);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        await component.recoverFromProfileReadError();
+        expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(1);
+        expect(mockUserService.retryProfileRead).not.toHaveBeenCalled();
+        expect(mockAuthService.signOut).not.toHaveBeenCalled();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).not.toHaveBeenCalled();
+    });
+
+    it('keeps Retry for a temporary verification network error', async () => {
+        mockUserService.profileReadState.set({ status: 'error', uid: '123', code: 'appCheck/fetch-network-error' });
+        expect(component.profileVerificationNeedsReload()).toBe(false);
+        await component.recoverFromProfileReadError();
+        expect(mockUserService.retryProfileRead).toHaveBeenCalledTimes(1);
+        expect(appWindow.windowRef.location.reload).not.toHaveBeenCalled();
+    });
+
+    it.each(['error', 'recovering'])('keeps temporary SDK cooldown guidance during %s', status => {
+        mockUserService.profileReadState.set({ status, uid: '123', attempt: 4, code: 'appCheck/initial-throttle',
+            appCheckFailure: { code: 'appCheck/initial-throttle', httpStatus: 503, retryAfterSeconds: 2,
+                cooldown: true, retryable: true } });
+        expect(component.profileVerificationNeedsReload()).toBe(false);
+    });
+
+    it('keeps reload pending and ignores repeat clicks until the page unloads', async () => {
+        mockUserService.profileReadState.set({ status: 'error', uid: '123', code: 'appCheck/throttled' });
+        await component.recoverFromProfileReadError();
+        await component.recoverFromProfileReadError();
+        expect(component.isProfileRecoveryInProgress).toBe(true);
+        expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-enables a cancelled reload without another request or haptic and cancels its timer on destruction', async () => {
+        vi.useFakeTimers();
+        try {
+            mockUserService.profileReadState.set({ status: 'error', uid: '123', code: 'appCheck/throttled' });
+            await component.recoverFromProfileReadError();
+            await vi.advanceTimersByTimeAsync(4999);
+            expect(component.isProfileRecoveryInProgress).toBe(true);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(component.isProfileRecoveryInProgress).toBe(false);
+            expect(mockUserService.retryProfileRead).not.toHaveBeenCalled();
+            expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(1);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            await component.recoverFromProfileReadError();
+            component.ngOnDestroy();
+            await vi.advanceTimersByTimeAsync(5000);
+            expect(component.isProfileRecoveryInProgress).toBe(true);
+        } finally { vi.useRealTimers(); }
+    });
+
+    it('re-enables recovery if requesting a reload throws', async () => {
+        mockUserService.profileReadState.set({ status: 'error', uid: '123', code: 'appCheck/throttled' });
+        appWindow.windowRef.location.reload.mockImplementationOnce(() => { throw new Error('reload unavailable'); });
+        await component.recoverFromProfileReadError();
+        expect(component.isProfileRecoveryInProgress).toBe(false);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(mockUserService.retryProfileRead).not.toHaveBeenCalled();
+    });
+
+    it.each([403, 503])('uses the classified exchange status %s for recovery guidance', httpStatus => {
+        mockUserService.profileReadState.set({ status: 'error', uid: '123', code: 'appCheck/fetch-status-error',
+            appCheckFailure: { code: 'appCheck/fetch-status-error', httpStatus, retryAfterSeconds: null,
+                cooldown: false, retryable: httpStatus === 503 } });
+        expect(component.profileVerificationNeedsReload()).toBe(httpStatus === 403);
+    });
+
+    it.each(['appCheck/throttled', 'permission-denied'])('renders and wires the recovery action for %s', async code => {
+        // Only template tests compile a real fixture; login/auth lifecycle is covered separately.
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            declarations: [LoginComponent], imports: [MatButtonModule], schemas: [NO_ERRORS_SCHEMA],
+            providers: [
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppUserService, useValue: mockUserService },
+                { provide: AppHapticsService, useValue: haptics },
+                { provide: AppWindowService, useValue: appWindow },
+                { provide: AppEventService, useValue: {} },
+                { provide: Router, useValue: mockRouter },
+                { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
+                { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: MatDialog, useValue: mockDialog },
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: AppAnalyticsService, useValue: {} },
+            ],
+        });
+        mockUserService.hasActionableProfileReadFailure.set(true);
+        mockUserService.profileReadState.set({ status: 'error', uid: '123', code });
+        const fixture = TestBed.createComponent(LoginComponent);
+        vi.spyOn(fixture.componentInstance, 'ngOnInit').mockResolvedValue(undefined);
+        fixture.detectChanges();
+        const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="profile-read-error"]');
+        const button: HTMLButtonElement = panel.querySelector('button')!;
+        expect(button.textContent.trim()).toBe(code === 'appCheck/throttled' ? 'Reload page' : 'Retry');
+        if (code === 'appCheck/throttled') {
+            expect(panel.textContent).toContain("Repeated retries in this page won't help");
+            expect(panel.textContent).toContain('another trusted network');
+            expect(panel.querySelector('a')?.textContent).toContain('Browser verification help');
+        }
+        button.click();
+        if (code === 'appCheck/throttled') {
+            fixture.detectChanges();
+            expect(button.disabled).toBe(true);
+            expect(button.textContent.trim()).toBe('Reloading…');
+        } else {
+            await fixture.whenStable();
+        }
+        expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(code === 'appCheck/throttled' ? 1 : 0);
+        expect(mockUserService.retryProfileRead).toHaveBeenCalledTimes(code === 'appCheck/throttled' ? 0 : 1);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        fixture.destroy();
     });
 
     it('should keep the recovery action available when profile loading fails during login', async () => {

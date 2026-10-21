@@ -14,6 +14,10 @@ describe('Training delivery mapping and production boundary', () => {
     const authored = { ...workout, structure: { ...workout.structure, sport: alias.sport } };
     for (const provider of ['suunto', 'garmin', 'coros', 'wahoo'] as const) {
       if (alias[provider] === null) continue;
+      if (provider !== 'suunto' && alias[provider] === ActivityTypes.StrengthTraining) {
+        expect(assessTrainingDeliveryMapping(provider, authored, 'destination', 'UTC').level).toBe('unsupported');
+        continue;
+      }
       const result = assessTrainingDeliveryMapping(provider, authored, 'destination', 'UTC');
       expect(result.level).not.toBe('unsupported');
       const changedSport = alias[provider] === alias.sport ? ActivityTypes.Cycling : alias[provider]!;

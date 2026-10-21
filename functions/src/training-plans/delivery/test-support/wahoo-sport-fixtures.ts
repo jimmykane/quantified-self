@@ -22,4 +22,12 @@ export const WAHOO_SPORT_FIXTURES = [
   { sport: ActivityTypes.OpenWaterSwimming, family: 2, type: 26, location: 1, level: 'exact' },
   { sport: ActivityTypes.Rowing, family: 3, type: 39, location: 1, level: 'exact' },
   { sport: ActivityTypes.IndoorRowing, family: 6, type: 22, location: 0, level: 'exact' },
+  { sport: ActivityTypes.Yoga, family: 6, type: 66, location: 0, level: 'exact' },
+  { sport: ActivityTypes.EllipticalTrainer, family: 6, type: 20, location: 0, level: 'exact' },
+  { sport: ActivityTypes.CardioTraining, family: 6, type: 43, location: 0, level: 'degraded' },
+  { sport: ActivityTypes.Crosstrainer, family: 6, type: 20, location: 0, level: 'degraded' },
+  ...[ActivityTypes.Crossfit, ActivityTypes['Circuit Training'], ActivityTypes.Aerobics, ActivityTypes.HIIT,
+    ActivityTypes.AMRAP, ActivityTypes.EMOM, ActivityTypes.Tabata].map(sport => ({ sport, family: 6, type: 43, location: 0, level: 'degraded' }) as const),
+  ...[ActivityTypes.Pilates, ActivityTypes.Stretching, ActivityTypes.FlexibilityTraining, ActivityTypes.Meditation,
+    ActivityTypes.Breathwork].map(sport => ({ sport, family: 6, type: 42, location: 0, level: 'degraded' }) as const),
 ] as const;

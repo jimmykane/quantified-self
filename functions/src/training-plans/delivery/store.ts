@@ -6,7 +6,7 @@ import { normalizeSuuntoSwimmingGuideSettings, type SuuntoSwimmingGuideSettings 
 import { isSuuntoSwimmingSport } from '../providers/suunto-swimming-presentation';
 import {
   STRENGTH_DETAILS_COLLECTION_ID, STRENGTH_DETAILS_DOCUMENT_ID,
-  parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails,
+  isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails,
   type StrengthWorkoutDetailsV1,
 } from '../../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
@@ -25,10 +25,13 @@ import { readPastCleanupAuthorization } from './marker';
 
 export async function readStrengthDetailsForDelivery(tx: Transaction,
   user: FirebaseFirestore.DocumentReference, workout: ScheduledWorkoutV1): Promise<StrengthWorkoutDetailsV1 | null> {
-  if (workout.structure.sport !== ActivityTypes.StrengthTraining) return null;
+  if (!isStrengthWorkoutSportV1(workout.structure.sport)) return null;
   const snapshot = await tx.get(user.collection('scheduledWorkouts').doc(workout.id)
     .collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID));
-  if (!snapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', 'Strength prescription is missing.');
+  if (!snapshot.exists) {
+    if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new TrainingScheduleMutationError('failed-precondition', 'Strength prescription is missing.');
+    return null;
+  }
   const details = parseStrengthWorkoutDetailsV1(snapshot.data());
   if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) {
     throw new TrainingScheduleMutationError('failed-precondition', 'Strength prescription and summary do not match.');

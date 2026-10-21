@@ -301,6 +301,16 @@ describe('scheduleSportsLibRouteReparseScan', () => {
         }));
     });
 
+    it('observes the hourly route queue before enabled discovery reads its checkpoint', async () => {
+        hoisted.mockRuntimeDefaults.enabled = true;
+        const handler = scheduleSportsLibRouteReparseScan as unknown as (event: { scheduleTime: string }) => Promise<void>;
+        await handler({ scheduleTime: '2026-10-19T09:06:02Z' });
+        expect(observeReparseQueue).toHaveBeenCalledOnce();
+        expect(hoisted.mockCheckpointGet).toHaveBeenCalledOnce();
+        expect(vi.mocked(observeReparseQueue).mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.mockCheckpointGet.mock.invocationCallOrder[0]);
+    });
+
     it('enqueues stale route processing metadata when enabled', async () => {
         hoisted.mockRuntimeDefaults.enabled = true;
 

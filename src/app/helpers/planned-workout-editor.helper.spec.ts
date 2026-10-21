@@ -1,3 +1,4 @@
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '@shared/strength-workout';
 import { changeManualEditorTargetPresentation, workoutEditorTargetUnit, createManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 import { ActivityTypes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -15,6 +16,12 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('preserves a legacy generic %s recipe without inventing exercises', sport => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'step', id: 'hold', purpose: 'work',
+      ending: { kind: 'time', seconds: 31 }, targets: [] }] };
+    const editor = workoutStructureToManualEditor('Legacy guide', '2026-10-20', recipe);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(recipe);
+  });
   it.each(MANUAL_WORKOUT_EDITOR_SPORTS_V1)('retains the exact %s name and canonical values through JSON, edit and copy', sport => {
     const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] });
     const structure: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'repeat', id: 'pair', count: 2,
@@ -31,8 +38,11 @@ describe('manual planned-workout editor conversion', () => {
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1).toHaveLength(45);
     expect(new Set(MANUAL_WORKOUT_EDITOR_SPORTS_V1).size).toBe(45);
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1).not.toContain(ActivityTypes.StrengthTraining);
-    expect(() => workoutStructureToManualEditor('Unsupported', '2026-10-11', { version: 1, sport: ActivityTypes.Football, nodes: [] }))
-      .toThrow('not supported');
+    for (const sport of [ActivityTypes.Football, ActivityTypes.VirtualRowing]) {
+      expect(() => workoutStructureToManualEditor('Unsupported', '2026-10-11', { version: 1, sport, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] },
+      ] })).toThrow('not supported');
+    }
   });
   it.each([ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill,
     ActivityTypes.Cycling, ActivityTypes.IndoorCycling, ActivityTypes.MountainBiking])('round-trips editable cadence for %s', sport => {

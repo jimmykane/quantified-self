@@ -1,3 +1,4 @@
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({
@@ -293,7 +294,7 @@ describe('durable history coordinator', () => {
     await processConnectionHistoryRun(run.id, '0');
     expect(signals()).toContainEqual({ telemetryVersion: 1, event: 'operation_retry', provider: 'wahoo' });
     expect(signals()).not.toContainEqual(expect.objectContaining({ outcome: 'failed' }));
-    const row = saved(); row.steps[0].retryCount = 9; row.nextAttemptAt = now; mocks.rows.set(path(), row);
+    const row = saved(); row.steps[0].retryCount = PROVIDER_MAX_RETRY_COUNT - 1; row.nextAttemptAt = now; mocks.rows.set(path(), row);
     await processConnectionHistoryRun(run.id, String(row.revision));
     expect(signals()).toContainEqual({ telemetryVersion: 1, event: 'checkpoint', provider: 'wahoo', outcome: 'failed' });
     expect(JSON.stringify(signals())).not.toContain('PRIVATE');

@@ -109,6 +109,7 @@ import {
 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import {
+  isStrengthWorkoutSportV1, STRENGTH_WORKOUT_SPORT_ALIASES_V1,
   parseStrengthWorkoutDraftV1,
   projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails,
@@ -141,6 +142,7 @@ interface WorkoutEditorSession {
   value: ManualWorkoutEditorValue;
   strength: StrengthWorkoutDraftV1 | null;
   strengthLoading: boolean;
+  strengthLoadFailed: boolean;
 }
 
 interface WorkoutRow {
@@ -148,6 +150,7 @@ interface WorkoutRow {
   completion: TrainingWorkoutCompletionV1 | null;
   summary: string[];
   prescriptionSummary: string;
+  mayHaveStrengthDetails: boolean;
   actionBusy: boolean;
   historyScope: TrainingScheduleRevisionScope;
 }
@@ -249,6 +252,7 @@ export class PlansWorkspaceComponent {
 
   readonly sportOptionGroups: ReadonlyArray<{
     label: string;
+    strength?: boolean;
     options: ReadonlyArray<{ value: ManualWorkoutSport; label: string }>;
   }> = [
     {
@@ -274,7 +278,7 @@ export class PlansWorkspaceComponent {
       label: 'Rowing',
       options: MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1.map(value => ({ value, label: value })),
     },
-    { label: 'Strength', options: [{ value: ActivityTypes.StrengthTraining, label: 'Strength Training' }] },
+    { label: 'Strength', strength: true, options: [ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1].map(value => ({ value, label: value })) },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
@@ -284,7 +288,8 @@ export class PlansWorkspaceComponent {
   ];
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
-  readonly editorIsStrength = computed(() => this.editor()?.value.sport === ActivityTypes.StrengthTraining);
+  readonly editorIsStrength = computed(() => !!this.editor()?.strength || !!this.editor()?.strengthLoading || !!this.editor()?.strengthLoadFailed
+    || this.editor()?.value.sport === ActivityTypes.StrengthTraining);
   readonly editorIsRowing = computed(() => isRowingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
   readonly editorWeightUnit = computed(() => this.editor()?.unitSettings.weightUnits === WeightUnits.Pounds ? 'lb' : 'kg');
@@ -531,6 +536,7 @@ export class PlansWorkspaceComponent {
         : workout.planId === selectedPlanId)
       .map(workout => ({
         workout,
+        mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
         prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
           this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
         completion: this.completions().find(completion => completion.workoutId === workout.id) ?? null,
@@ -560,6 +566,7 @@ export class PlansWorkspaceComponent {
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
     workout,
+    mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
     prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
       this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
     completion: null,
@@ -730,12 +737,12 @@ export class PlansWorkspaceComponent {
         this.libraryEditorItem.set(item);
         this.editor.set({ mode: 'edit', original: null, originalWorkoutRevision: null,
           destinationPlanId: null, unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
-          value: item.structure.sport === ActivityTypes.StrengthTraining
+          value: item.strength
             ? { ...createManualWorkoutEditorValue(todayLocalDate()), title: item.title,
-              sport: ActivityTypes.StrengthTraining, nodes: [] }
+              sport: item.structure.sport as ManualWorkoutSport, nodes: [] }
             : workoutStructureToManualEditor(item.title, todayLocalDate(), item.structure,
               normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings)),
-          strength: item.strength ?? null, strengthLoading: false });
+          strength: item.strength ?? null, strengthLoading: false, strengthLoadFailed: false });
       }).catch(error => {
         if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
         this.showError(error);
@@ -1112,6 +1119,7 @@ export class PlansWorkspaceComponent {
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
       strength: null,
       strengthLoading: false,
+      strengthLoadFailed: false,
     });
   }
 
@@ -1131,7 +1139,7 @@ export class PlansWorkspaceComponent {
       this.clearPlanActions();
       this.advanceEditorGeneration();
       this.workoutDateInputInvalid.set(false);
-      const strength = workout.structure.sport === ActivityTypes.StrengthTraining;
+      const strength = isStrengthWorkoutSportV1(workout.structure.sport);
       const unitSettings = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
       this.editor.set({
         mode: 'edit',
@@ -1141,26 +1149,37 @@ export class PlansWorkspaceComponent {
         unitSettings,
         value: strength
           ? { ...createManualWorkoutEditorValue(workout.localDate), title: workout.title,
-            sport: ActivityTypes.StrengthTraining, nodes: [] }
+            sport: workout.structure.sport as ManualWorkoutSport, nodes: [] }
           : workoutStructureToManualEditor(
             workout.title, workout.localDate, workout.structure, unitSettings,
           ),
         strength: null,
         strengthLoading: strength,
+        strengthLoadFailed: false,
       });
       if (strength) {
         const generation = this.editorGeneration;
         const uid = this.currentUser()?.uid;
         if (!uid) throw new Error('Sign in to edit this strength workout.');
-        void this.plansService.getStrengthDetails(uid, workout.id).then(details => {
+        const pending = workout.structure.sport === ActivityTypes.StrengthTraining
+          ? this.plansService.getStrengthDetails(uid, workout.id) : this.plansService.getStrengthDetails(uid, workout.id, true);
+        void pending.then(details => {
           if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+          if (!details) {
+            if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new Error('The strength prescription is missing.');
+            this.editor.update(session => session && session.original?.id === workout.id ? { ...session,
+              value: workoutStructureToManualEditor(session.value.title, session.value.localDate, workout.structure, unitSettings),
+              strength: null, strengthLoading: false } : session);
+            return;
+          }
           if (!strengthProjectionMatchesDetails(workout.structure, details)) throw new Error('Strength prescription and summary do not match.');
           this.editor.update(session => session && session.original?.id === workout.id ? {
             ...session, strength: { version: details.version, exercises: details.exercises }, strengthLoading: false,
           } : session);
         }).catch(error => {
-          if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
-          this.editor.update(session => session ? { ...session, strengthLoading: false } : session);
+          if (generation !== this.editorGeneration || this.destroyRef.destroyed || uid !== this.currentUser()?.uid) return;
+          this.editor.update(session => session && session.original?.id === workout.id
+            ? { ...session, strengthLoading: false, strengthLoadFailed: true } : session);
           this.showError(error);
         });
       }
@@ -1230,19 +1249,22 @@ export class PlansWorkspaceComponent {
   updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
     if (this.busyAction() || this.editor()?.value[field] === value) return;
     if (field === 'sport' && this.editor()?.mode === 'edit'
-      && (this.editor()?.value.sport === ActivityTypes.StrengthTraining || value === ActivityTypes.StrengthTraining)) return;
+      && (this.editorIsStrength() || isStrengthWorkoutSportV1(value))) return;
     if (field === 'sport' || field === 'poolLengthUnit') this.haptics.selection();
     this.editor.update(session => {
       if (!session) return null;
       if (field !== 'sport') return { ...session, value: { ...session.value, [field]: value } };
       const sport = value as ManualWorkoutSport;
-      if (sport === ActivityTypes.StrengthTraining) return {
+      if (isStrengthWorkoutSportV1(sport) && session.strength && isStrengthWorkoutSportV1(session.value.sport)) {
+        return { ...session, value: { ...session.value, sport } };
+      }
+      if (isStrengthWorkoutSportV1(sport)) return {
         ...session,
         value: { ...session.value, sport, nodes: [], poolLengthValue: null },
         strength: { version: 1, exercises: [{ id: this.nextNodeId('exercise'), name: '',
           sets: [{ id: this.nextNodeId('set'), ending: { kind: 'repetitions', repetitions: 8 } }] }] } as StrengthWorkoutDraftV1,
       };
-      const manual = session.value.sport === ActivityTypes.StrengthTraining
+      const manual = session.strength || session.value.sport === ActivityTypes.StrengthTraining
         ? { ...session.value, sport, nodes: [createManualWorkoutEditorStep(this.nextNodeId('step'))] }
         : changeManualWorkoutEditorSport(session.value, sport, session.unitSettings);
       return { ...session, value: manual, strength: null };
@@ -1527,9 +1549,11 @@ export class PlansWorkspaceComponent {
   }
 
   private editorStructure(session: WorkoutEditorSession) {
-    return session.value.sport === ActivityTypes.StrengthTraining
+    if (session.strengthLoading) throw new Error('The exercise prescription is still loading.');
+    if (session.strengthLoadFailed) throw new Error('The exercise prescription could not be loaded. Close and reopen this workout to retry.');
+    return session.strength || session.value.sport === ActivityTypes.StrengthTraining
       ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
-        workoutId: session.original?.id ?? 'draft', revision: 1 })
+        workoutId: session.original?.id ?? 'draft', revision: 1 }, session.value.sport)
       : manualWorkoutEditorToStructure(session.value, session.unitSettings);
   }
 

@@ -314,6 +314,58 @@ describe('EChartsHostController', () => {
     controller.dispose();
   });
 
+  it('updates only note layout after a real resize and leaves unchanged sizes alone', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const container = document.createElement('div');
+    let width = 800;
+    Object.defineProperty(container, 'clientWidth', { get: () => width });
+    Object.defineProperty(container, 'clientHeight', { value: 300 });
+    const loader = buildLoaderMock();
+    loader.init.mockResolvedValue({ ...chartMock, getWidth: () => width });
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    await controller.init(container);
+    controller.setTimelineNotes({ notes: [{ id: 'edge', category: 'travel', title: 'Right edge note',
+      startDate: '2026-09-10', endDate: '2026-09-10', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      select: vi.fn(), reportRange: vi.fn() });
+    controller.setOption({ xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) },
+      yAxis: {}, series: [{ type: 'line', data: [] }] });
+    loader.setOption.mockClear();
+    width = 160;
+    controller.scheduleResize(); frames.shift()!(0);
+    const patch = loader.setOption.mock.calls[0][1] as any;
+    expect(Object.keys(patch)).toEqual(['series']);
+    expect(patch.series[0].markLine.data[0].label).toMatchObject({ align: 'right', width: 100 });
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    controller.scheduleResize(); frames.shift()!(16);
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
+  it('refines native marker positions once, then ignores unchanged layouts and queued work after disposal', async () => {
+    let finished: () => void;
+    const chart = { ...chartMock, getWidth: () => 320, convertToPixel: () => 278,
+      on: vi.fn((_event, handler) => { finished = handler; }), off: vi.fn() };
+    const loader = buildLoaderMock(); loader.init.mockResolvedValue(chart);
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    await controller.init(document.createElement('div'));
+    controller.setTimelineNotes({ notes: [{ id: 'edge', category: 'travel', title: 'Right edge note',
+      startDate: '2026-09-06', endDate: '2026-09-06', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      select: vi.fn(), reportRange: vi.fn() });
+    controller.setOption({ xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) },
+      yAxis: {}, series: [{ type: 'line', data: [] }] });
+    loader.setOption.mockClear();
+    finished!(); await Promise.resolve();
+    const patch = loader.setOption.mock.calls[0][1] as any;
+    expect(Object.keys(patch)).toEqual(['series']);
+    expect(patch.series[0].markLine.data[0].label.align).toBe('right');
+    finished!(); await Promise.resolve();
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    finished!(); controller.dispose(); await Promise.resolve();
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    expect(chart.off).toHaveBeenCalledWith('finished', finished!);
+  });
+
   it('keeps chart reuse and size callbacks working without ResizeObserver', async () => {
     delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
     const frames: FrameRequestCallback[] = [];

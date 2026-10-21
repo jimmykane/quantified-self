@@ -2,7 +2,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 
-import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import { PROVIDER_CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { QueueResult } from '../queue-utils';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { RouteDeliverySyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -16,7 +16,7 @@ interface RouteDeliverySyncTaskPayload {
 }
 
 export const processRouteDeliverySyncTask = onTaskDispatched({
-    retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     secrets: FUNCTION_SECRET_BINDINGS.processRouteDeliverySyncTask,
     memory: '1GiB',
     timeoutSeconds: 540,

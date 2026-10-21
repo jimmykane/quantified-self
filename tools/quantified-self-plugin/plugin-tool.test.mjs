@@ -1104,6 +1104,23 @@ test('Training authoring guidance preserves source prescriptions and bounds veri
   }
 });
 
+test('strength workflows distinguish complete companions from legacy intervals and retain sport names', async () => {
+  for (const skill of ['analyze-quantified-self', 'analyze-quantified-self-training']) {
+    const source = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'skills', skill, 'SKILL.md'), 'utf8');
+    const text = source.replace(/\s+/g, ' ');
+    for (const sport of ['Strength Training', 'Weight Training', 'Kettlebell', 'Calisthenics', 'Core Training',
+      'LES MILLS CORE', 'LES MILLS GRIT Strength', 'LES MILLS BODYPUMP']) assert.ok(text.includes(sport), `${skill}: ${sport}`);
+    assert.match(text, /[Oo]lder aliases (?:may|can) be interval-only/);
+    assert.match(text, /unavailable details read does not (?:prove|establish)/);
+    assert.match(text, /QS Edit/);
+  }
+  const training = (await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'skills',
+    'analyze-quantified-self-training', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+  assert.match(training, /updates preserve the original strength sport name/);
+  assert.match(training, /New strength creates through that preview use Strength Training/);
+  assert.match(training, /QS editor to create another strength sport/);
+});
+
 test('every CLI-dependent root command bootstraps the pinned plugin tooling', async () => {
   const rootPackage = JSON.parse(
     await readFile(join(DEFAULT_REPO_ROOT, 'package.json'), 'utf8'),

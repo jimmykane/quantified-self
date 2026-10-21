@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   onDocumentWritten: vi.fn((options: unknown, handler: unknown) => ({ options, handler })),
@@ -8,26 +10,194 @@ vi.mock('firebase-functions/v2/firestore', () => ({ onDocumentWritten: mocks.onD
 vi.mock('../../shared/user-deletion-guard', () => ({ getUserDeletionGuardStateInTransaction: vi.fn() }));
 vi.mock('./marker', () => ({ stageTrainingDeliveryReconciliation: vi.fn() }));
 vi.mock('./runtime', () => ({
-  DELIVERY_SERVICES: {},
+  DELIVERY_SERVICES: { suunto: { name: 'suuntoApp' } },
   productionDeliveryRuntime: vi.fn(),
 }));
 vi.mock('./contracts', () => ({ DELIVERY_STATE: 'trainingDeliveryState' }));
 
-import './lifecycle';
+import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
+import { stageTrainingDeliveryReconciliation } from './marker';
+import { productionDeliveryRuntime } from './runtime';
+import { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged } from './lifecycle';
+
+type TestEvent = { id: string; params: { uid: string; service: string }; data?: unknown };
+type TestTrigger = { options: Record<string, unknown>; handler: (event: TestEvent) => Promise<void> };
+const connection = onTrainingDeliveryConnectionChanged as unknown as TestTrigger;
+const entitlement = onTrainingDeliveryEntitlementChanged as unknown as TestTrigger;
+const event: TestEvent = { id: 'private-cloud-event', params: { uid: 'private-user-uid', service: 'suuntoApp' },
+  data: { private: 'private-connection-payload' } };
+const eventHash = createHash('sha256').update(event.id).digest('hex');
+const stateRef = { path: 'private-document-path' };
+const stateCollection = { doc: vi.fn(() => stateRef) };
+const userRef = { collection: vi.fn(() => stateCollection) };
+const users = { doc: vi.fn(() => userRef) };
+const tx = { get: vi.fn() };
+const db = { collection: vi.fn(() => users), runTransaction: vi.fn() };
+let nowMs: number;
+
+function logFields() {
+  return [logger.debug, logger.info, logger.warn].flatMap(log => vi.mocked(log).mock.calls.map(call => call[1]));
+}
 
 describe('Training delivery lifecycle triggers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const log of [logger.debug, logger.info, logger.warn]) vi.mocked(log).mockReset();
+    vi.mocked(stageTrainingDeliveryReconciliation).mockReset();
+    nowMs = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    vi.mocked(getUserDeletionGuardStateInTransaction).mockResolvedValue({ userExists: true,
+      deletionInProgress: false, shouldSkip: false });
+    tx.get.mockResolvedValue({ data: () => ({ revision: 1 }) });
+    db.runTransaction.mockImplementation(async callback => callback(tx));
+    vi.mocked(productionDeliveryRuntime).mockReturnValue({ db } as unknown as ReturnType<typeof productionDeliveryRuntime>);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
   it('allocates 512 MiB to the connection and entitlement reconciliation triggers', () => {
-    expect(mocks.onDocumentWritten).toHaveBeenCalledWith(expect.objectContaining({
+    expect(connection.options).toEqual({
       document: 'users/{uid}/meta/{service}',
       region: 'europe-west2',
       memory: '512MiB',
       retry: true,
-    }), expect.any(Function));
-    expect(mocks.onDocumentWritten).toHaveBeenCalledWith(expect.objectContaining({
+    });
+    expect(entitlement.options).toEqual({
       document: 'users/{uid}/system/status',
       region: 'europe-west2',
       memory: '512MiB',
       retry: true,
-    }), expect.any(Function));
+    });
+  });
+
+  it.each([['connection', connection], ['entitlement', entitlement]] as const)(
+    'correlates %s events without logging private event or account data', async (trigger, fn) => {
+      await fn.handler(event);
+      await fn.handler(event); // Redelivery retains the event hash.
+      expect(getUserDeletionGuardStateInTransaction).toHaveBeenCalledWith(db, tx, event.params.uid);
+      expect(db.collection).toHaveBeenCalledWith('users');
+      expect(users.doc).toHaveBeenCalledWith(event.params.uid);
+      expect(userRef.collection).toHaveBeenCalledWith('trainingDeliveryState');
+      expect(stateCollection.doc).toHaveBeenCalledWith('current');
+      expect(tx.get).toHaveBeenCalledWith(stateRef);
+      expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledTimes(2);
+      expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledWith(tx, db, event.params.uid);
+      expect(logger.info).toHaveBeenCalledTimes(2);
+      expect(logger.info).toHaveBeenLastCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+        event: 'completed', trigger, eventHash, stage: 'commit', attempt: 1, outcome: 'reconciliation_staged',
+      }));
+      const serialized = JSON.stringify(logFields());
+      for (const privateValue of [event.id, event.params.uid, stateRef.path, 'private-connection-payload']) {
+        expect(serialized).not.toContain(privateValue);
+      }
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+  it('ignores unsupported metadata documents without creating a runtime or logs', async () => {
+    await connection.handler({ ...event, params: { ...event.params, service: 'unrelated' } });
+    expect(productionDeliveryRuntime).not.toHaveBeenCalled();
+    expect(logFields()).toEqual([]);
+  });
+
+  it('keeps the deletion guard skip without reading delivery state or staging work', async () => {
+    vi.mocked(getUserDeletionGuardStateInTransaction).mockResolvedValue({ userExists: false,
+      deletionInProgress: false, shouldSkip: true });
+    await connection.handler(event);
+    expect(tx.get).not.toHaveBeenCalled();
+    expect(stageTrainingDeliveryReconciliation).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'completed', outcome: 'deletion_guard_skipped',
+    }));
+  });
+
+  it('keeps the missing-state skip without staging reconciliation', async () => {
+    tx.get.mockResolvedValue({ data: () => undefined });
+    await connection.handler(event);
+    expect(stageTrainingDeliveryReconciliation).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'completed', outcome: 'no_delivery_state',
+    }));
+  });
+
+  it('emits the read stage before waiting and reports elapsed time only after commit', async () => {
+    let resolveRead!: (value: unknown) => void;
+    let resolveCommit!: () => void;
+    const read = new Promise(resolve => { resolveRead = resolve; });
+    const commit = new Promise<void>(resolve => { resolveCommit = resolve; });
+    tx.get.mockImplementation(() => {
+      expect(logger.debug).toHaveBeenLastCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+        event: 'stage_started', stage: 'delivery_state', attempt: 1,
+      }));
+      return read;
+    });
+    db.runTransaction.mockImplementation(async callback => {
+      const outcome = await callback(tx);
+      expect(logger.info).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenLastCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+        stage: 'commit', previousStage: 'delivery_state', previousStageMs: 40,
+      }));
+      await commit;
+      return outcome;
+    });
+    const pending = connection.handler(event);
+    await vi.waitFor(() => expect(tx.get).toHaveBeenCalled());
+    nowMs += 40;
+    resolveRead({ data: () => ({ revision: 1 }) });
+    await vi.waitFor(() => expect(stageTrainingDeliveryReconciliation).toHaveBeenCalled());
+    expect(logger.info).not.toHaveBeenCalled();
+    nowMs += 20;
+    resolveCommit();
+    await pending;
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'completed', elapsedMs: 60, stageElapsedMs: 20,
+    }));
+  });
+
+  it('counts transaction attempts and reports only the final committed outcome', async () => {
+    db.runTransaction.mockImplementation(async callback => {
+      await callback(tx); // Simulate an aborted first attempt, then changed current state.
+      tx.get.mockResolvedValue({ data: () => ({ revision: 0 }) });
+      return callback(tx);
+    });
+    await connection.handler(event);
+    expect(getUserDeletionGuardStateInTransaction).toHaveBeenCalledTimes(2);
+    expect(logger.info).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'completed', attempt: 2, outcome: 'no_delivery_state',
+    }));
+  });
+
+  it.each([[4, 'deadline-exceeded'], ['unavailable', 'unavailable'], ['private-error-code', 'unknown']])(
+    'bounds failure code %s and preserves the original retryable error', async (code, persistenceCode) => {
+      const error = Object.assign(new Error('private-error-message'), { code, details: 'private-error-details' });
+      tx.get.mockRejectedValueOnce(error);
+      await expect(connection.handler(event)).rejects.toBe(error);
+      expect(logger.warn).toHaveBeenCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+        event: 'failed', stage: 'delivery_state', persistenceCode,
+      }));
+      expect(logger.info).not.toHaveBeenCalled();
+      expect(stageTrainingDeliveryReconciliation).not.toHaveBeenCalled();
+      expect(JSON.stringify(logFields())).not.toMatch(/private-error/);
+    });
+
+  it('does not report completion if commit fails', async () => {
+    const error = Object.assign(new Error('private-commit-failure'), { code: 10 });
+    db.runTransaction.mockImplementation(async callback => { await callback(tx); throw error; });
+    await expect(connection.handler(event)).rejects.toBe(error);
+    expect(logger.info).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'failed', stage: 'commit', persistenceCode: 'aborted',
+    }));
+  });
+
+  it('does not let logging failures change transaction behavior', async () => {
+    const failLog = () => { throw new Error('logging unavailable'); };
+    vi.mocked(logger.debug).mockImplementation(failLog);
+    vi.mocked(logger.info).mockImplementation(failLog);
+    vi.mocked(logger.warn).mockImplementation(failLog);
+    await expect(connection.handler(event)).resolves.toBeUndefined();
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledOnce();
+    const error = new Error('original-failure');
+    tx.get.mockRejectedValueOnce(error);
+    await expect(connection.handler(event)).rejects.toBe(error);
   });
 });

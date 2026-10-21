@@ -5,7 +5,7 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLEC
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME, WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../wahoo/constants';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
-import { MAX_RETRY_COUNT } from '../shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 
 const SOURCES = [
   { service: ServiceNames.GarminAPI, provider: 'garmin', queue: GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, root: GARMIN_API_TOKENS_COLLECTION_NAME, identity: 'userID' },
@@ -57,7 +57,7 @@ export async function observeImportQueue(db: FirebaseFirestore.Firestore, servic
   let stopped = false;
   const sample = async () => {
     const candidates = await db.collection(source.queue).where('processed', '==', false)
-      .where('dispatchedToCloudTask', '==', null).where('retryCount', '<', MAX_RETRY_COUNT)
+      .where('dispatchedToCloudTask', '==', null).where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT)
       .select(...QUEUE_FIELDS).limit(IMPORT_PROBE_LIMIT + 1).get();
     if (stopped) return;
     let dueSample = 0; let excludedSample = 0; let unknownSample = 0; let ageLowerBoundMs = 0;

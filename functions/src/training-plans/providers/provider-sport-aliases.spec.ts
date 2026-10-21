@@ -1,7 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { resolveCompatibleActivityType } from '../../../../shared/activity-type-compatibility';
-import { parseWorkoutStructureV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, parseWorkoutStructureV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
 import { assessPlannedWorkoutProviderMappingV1, isPlannedWorkoutProviderDeliveryEnabled } from '../../../../shared/planned-workout-providers';
 import { wahooWorkoutSportProfileV1 } from '../../../../shared/wahoo-workout-sports';
 import { serializeSuuntoGuideJsonV1 } from './suunto-guide.serializer';
@@ -32,12 +32,123 @@ const recipe = (sport: ActivityTypes): WorkoutStructureV1 => ({ version: 1, spor
   { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] },
   { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 60 }, targets: [] },
 ] });
+// Approved Suunto additions: expected IDs/fidelity do not come from the mapper.
+const additionalSuuntoRows: Array<[string, number, boolean]> = [
+  ['Kettlebell', 63, true], ['Calisthenics', 104, true],
+  ['Core Training', 23, false], ['LES MILLS CORE', 23, false],
+  ['LES MILLS GRIT Strength', 23, false], ['LES MILLS BODYPUMP', 23, false],
+  ['Yoga', 121, true], ['Pilates', 120, true], ['Stretching', 58, true],
+  ['Flexibility Training', 58, false], ['Crossfit', 54, true], ['Circuit Training', 73, true],
+  ['Aerobics', 69, true], ['Crosstrainer', 55, true], ['Elliptical Trainer', 55, false],
+  ['Meditation', 112, true], ['Breathwork', 112, false],
+];
 const suuntoOptions = { name: 'Alias fixture', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
   sourceWorkoutId: 'alias-fixture', localDate: '2026-10-11', allowDegraded: true };
 const corosOptions = { athleteId: 24680, workoutId: 13579, title: 'Alias fixture', localDate: '2026-10-11',
   lastModifiedDate: '2026-10-10T12:00:00', allowDegraded: true };
 
 describe('approved planned-workout sport aliases', () => {
+  it.each(additionalSuuntoRows)('maps %s to its approved Suunto profile without changing its prescription', (name, activityId, native) => {
+    const structure = recipe(resolveCompatibleActivityType(name)!);
+    structure.nodes[0] = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' },
+      targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] };
+    const before = structuredClone(structure);
+    const guide = serializeSuuntoGuideJsonV1(structure, { ...suuntoOptions, allowDegraded: !native });
+    expect(guide.artifact.activities).toEqual([activityId]);
+    expect(guide.level).toBe(native ? 'exact' : 'degraded');
+    expect(guide.artifact.steps[0]).toMatchObject({ type: 'fields', fields: expect.arrayContaining([
+      expect.objectContaining({ type: 'heartRate' }), expect.objectContaining({ type: 'targetHeartRate', min: 100, max: 130 }),
+    ]), transitions: [{ condition: { type: 'manualLap' } }] });
+    if (native) {
+      expect(guide.issues).toEqual([]);
+      // Stationary HR-only presentation must not invent pace or extra recorded laps.
+      expect(guide.artifact.steps[0]).not.toHaveProperty('createManualLap');
+      expect(JSON.stringify(guide.artifact.steps)).not.toMatch(/"type":"(?:pace|speed|power|cadence)"/);
+    } else {
+      expect(guide.issues).toContainEqual(expect.objectContaining({ code: 'sport_profile_degraded', message: expect.stringContaining(name) }));
+      expect(() => serializeSuuntoGuideJsonV1(structure, { ...suuntoOptions, allowDegraded: false })).toThrow();
+    }
+    for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+      if (provider === 'garmin' && (name === 'Yoga' || name === 'Pilates')) continue;
+      if (provider !== 'coros' && !['Kettlebell', 'Calisthenics', 'Core Training', 'LES MILLS CORE', 'LES MILLS GRIT Strength', 'LES MILLS BODYPUMP'].includes(name)) continue;
+      expect(assessPlannedWorkoutProviderMappingV1(provider, recipe(structure.sport)).level).toBe('unsupported');
+    }
+    expect(structure).toEqual(before);
+    expect(parseWorkoutStructureV1(JSON.parse(JSON.stringify(structure)))).toEqual(before);
+    const repetitions = { ...structure, nodes: [{ kind: 'step', id: 'reps', purpose: 'work',
+      ending: { kind: 'repetitions', repetitions: 10 }, targets: [] }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', repetitions)).toMatchObject({ level: 'unsupported',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
+  });
+
+  it('maps Virtual Rowing through the existing rowing profiles and retains provider-specific limits', () => {
+    const structure = recipe(ActivityTypes.VirtualRowing);
+    const before = structuredClone(structure);
+    expect(serializeSuuntoGuideJsonV1(structure, suuntoOptions).artifact)
+      .toEqual(serializeSuuntoGuideJsonV1(recipe(ActivityTypes.IndoorRowing), suuntoOptions).artifact);
+    const garminOptions = { name: 'Virtual rowing fixture', allowDegraded: true };
+    const garmin = serializeGarminWorkoutV1(structure, garminOptions);
+    expect(garmin.artifact.sport).toBe('GENERIC');
+    expect(garmin.artifact.description).toContain('Quantified Self sport: Virtual Rowing');
+    expect(garmin.issues).toContainEqual(expect.objectContaining({ code: 'sport_profile_degraded',
+      message: expect.stringContaining('Generic workouts are supported only on some devices') }));
+    expect(() => serializeGarminWorkoutV1(structure, { ...garminOptions, allowDegraded: false })).toThrow();
+    const wahooOptions = { name: 'Virtual rowing fixture', location: 'indoor' as const, allowDegraded: true };
+    const wahoo = serializeWahooPlanJsonV1(structure, wahooOptions);
+    expect(wahoo.artifact).toEqual(serializeWahooPlanJsonV1(recipe(ActivityTypes.IndoorRowing), wahooOptions).artifact);
+    expect(wahooWorkoutSportProfileV1(ActivityTypes.VirtualRowing)).toEqual({ family: 6, workoutType: 22,
+      location: 0, untargetedTimeOnly: true, foldedTo: 'Indoor Rowing' });
+    expect(wahoo.issues).toContainEqual(expect.objectContaining({ code: 'sport_profile_degraded',
+      message: expect.stringContaining('Virtual Rowing using its Indoor Rowing profile') }));
+    expect(() => serializeWahooPlanJsonV1(structure, { ...wahooOptions, allowDegraded: false })).toThrow();
+    expect(() => serializeWahooPlanJsonV1(structure, { ...wahooOptions, location: 'outdoor' })).toThrow();
+    expect(assessPlannedWorkoutProviderMappingV1('coros', structure).level).toBe('unsupported');
+    for (const step of [
+      { kind: 'step', id: 'manual', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 500 }, targets: [] },
+      { kind: 'step', id: 'hr', purpose: 'work', ending: { kind: 'time', seconds: 60 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }] },
+    ]) {
+      expect(assessPlannedWorkoutProviderMappingV1('wahoo', { ...structure, nodes: [step] }).level).toBe('unsupported');
+    }
+    expect(structure).toEqual(before);
+    expect(parseWorkoutStructureV1(JSON.parse(JSON.stringify(structure)))).toEqual(before);
+  });
+
+  it('delivers Weight Training through Suunto Gym without changing the recipe or enabling other providers', () => {
+    const structure = parseWorkoutStructureV1(JSON.parse(JSON.stringify(recipe(ActivityTypes.WeightTraining))));
+    structure.nodes[0] = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' },
+      targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }], note: 'Lift with good form' };
+    const before = structuredClone(structure);
+    const guide = serializeSuuntoGuideJsonV1(structure, suuntoOptions);
+    const canonical = { ...structure, sport: ActivityTypes.StrengthTraining };
+    expect(guide.artifact).toEqual(serializeSuuntoGuideJsonV1(canonical, suuntoOptions).artifact);
+    expect(guide.artifact.activities).toEqual([23]);
+    expect(guide.artifact.steps[0]).toMatchObject({ type: 'fields', fields: expect.arrayContaining([
+      expect.objectContaining({ type: 'heartRate' }),
+      expect.objectContaining({ type: 'targetHeartRate', min: 100, max: 130 }),
+    ]), transitions: [{ condition: { type: 'manualLap' } }] });
+    expect(guide.level).toBe('degraded');
+    expect(guide.issues).toContainEqual(expect.objectContaining({ code: 'sport_profile_degraded', path: '$.sport',
+      message: expect.stringContaining('Weight Training using its Strength Training profile') }));
+    expect(() => serializeSuuntoGuideJsonV1(structure, { ...suuntoOptions, allowDegraded: false })).toThrow();
+    for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+      expect(assessPlannedWorkoutProviderMappingV1(provider, recipe(ActivityTypes.WeightTraining))).toMatchObject({
+        level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'provider_contract_unavailable' })]),
+      });
+    }
+    const repetitions = { ...structure, nodes: [{ kind: 'step', id: 'reps', purpose: 'work',
+      ending: { kind: 'repetitions', repetitions: 10 }, targets: [] }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', repetitions)).toMatchObject({ level: 'unsupported',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]) });
+    expect(structure).toEqual(before);
+    expect(parseWorkoutStructureV1(JSON.parse(JSON.stringify(structure)))).toEqual(before);
+  });
+
+  it.each(MANUAL_WORKOUT_EDITOR_SPORTS_V1)('has a Suunto mapping for the editor sport %s', sport => {
+    expect(serializeSuuntoGuideJsonV1(recipe(sport), suuntoOptions).artifact.activities.length).toBeGreaterThan(0);
+  });
+
   it.each(rows)('delivers %s through the approved existing profiles and retains its QS recipe', (name, suunto, garmin, coros, wahoo) => {
     const sport = resolveCompatibleActivityType(name)!;
     expect(sport).toBe(name);
@@ -74,7 +185,7 @@ describe('approved planned-workout sport aliases', () => {
       issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_target' })]) });
   });
 
-  it.each(['Classic Crosscountry Skiing', 'Skate Skiing', 'AMRAP', 'EMOM', 'Tabata', 'LES MILLS BODYPUMP'])('does not infer unapproved outbound support for %s', name => {
+  it.each(['Classic Crosscountry Skiing', 'Skate Skiing'])('does not infer unapproved outbound support for %s', name => {
       for (const provider of ['suunto', 'garmin', 'coros', 'wahoo'] as const) {
         expect(assessPlannedWorkoutProviderMappingV1(provider, recipe(resolveCompatibleActivityType(name)!)).level).toBe('unsupported');
       }

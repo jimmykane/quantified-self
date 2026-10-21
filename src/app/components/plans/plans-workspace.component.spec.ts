@@ -16,7 +16,7 @@ import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, AppThemes, DataDistance, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
-import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
+import { projectStrengthWorkoutToV1, STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
 import dayjs from 'dayjs';
@@ -2594,7 +2594,8 @@ describe('PlansWorkspaceComponent', () => {
     expect(groups.find(group => group.label === 'Swimming')!.options).toEqual([
       { value: ActivityTypes.Swimming, label: 'Pool swimming' }, { value: ActivityTypes.OpenWaterSwimming, label: 'Open-water swimming' }]);
     expect(values('Rowing')).toEqual(['Rowing', 'Indoor Rowing']);
-    expect(values('Strength')).toEqual(['Strength Training']);
+    expect(values('Strength')).toEqual(['Strength Training', 'Weight Training', 'Kettlebell', 'Calisthenics', 'Core Training',
+      'LES MILLS CORE', 'LES MILLS GRIT Strength', 'LES MILLS BODYPUMP']);
   });
 
   it.each(['plans', 'standalone'] as const)('creates a lap-ended workout in %s through the Material selector', async scope => {
@@ -2824,11 +2825,12 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
-  it('creates an exercise-aware strength workout with reps, hold, load and rest', async () => {
+  it.each([ActivityTypes.StrengthTraining, ActivityTypes.WeightTraining, ActivityTypes.Kettlebell, ActivityTypes.Calisthenics,
+    ActivityTypes.CoreTraining, ActivityTypes.LesMillsCore, ActivityTypes.LesMillsGritStrength, ActivityTypes['LES MILLS BODYPUMP']])('creates %s with complete exercises, sets and its original name', async sport => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-24' });
     const fixture = await renderPlans();
     const editor = fixture.componentInstance;
-    editor.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    editor.updateEditorField('sport', sport);
     editor.updateEditorField('title', 'Gym session');
     editor.updateStrengthExerciseName(0, 'Squat');
     editor.updateStrengthSet(0, 0, 'value', 5);
@@ -2846,8 +2848,52 @@ describe('PlansWorkspaceComponent', () => {
       kind: 'create-workout', strength: expect.objectContaining({ exercises: [expect.objectContaining({
         name: 'Squat', sets: [expect.objectContaining({ externalLoadKg: 80, restAfterSeconds: 120 }),
           expect.objectContaining({ ending: { kind: 'time', seconds: 30 } })],
-      })] }), structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }),
+      })] }), structure: expect.objectContaining({ sport }),
     }) }));
+  });
+
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('labels the %s scheduled preview and opens its full exercise details from Edit', async sport => {
+    const details = { version: 1 as const, workoutId: 'standalone-workout', revision: 1,
+      exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
+    schedule.workouts = schedule.workouts.map(workout => workout.id === details.workoutId
+      ? { ...workout, structure: projectStrengthWorkoutToV1(details, sport) } : workout);
+    getStrengthDetails.mockResolvedValue(details);
+    setRouteState({ mode: 'browse', scope: 'standalone' });
+    const fixture = await renderPlans();
+    const row = fixture.nativeElement.querySelector('[data-workout-id="standalone-workout"]') as HTMLElement;
+    expect(row.querySelector('.strength-summary-hint')?.textContent).toContain('Interval summary only. Choose Edit for the full workout and any saved lifting loads.');
+    expect(row.querySelector('app-workout-profile') !== null).toBe(sport !== ActivityTypes.StrengthTraining);
+    expect(getStrengthDetails).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    row.querySelector<HTMLButtonElement>('[aria-label="Edit workout"]')!.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.editorIsStrength()).toBe(true);
+    expect(fixture.componentInstance.editor()?.value.sport).toBe(sport);
+    expect(fixture.componentInstance.editor()?.strength?.exercises).toEqual(details.exercises);
+    expect(fixture.nativeElement.textContent).toContain('Exercises and sets');
+    expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', details.workoutId,
+      ...(sport === ActivityTypes.StrengthTraining ? [] : [true]));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy strength-name interval previews available without claiming exercise details exist', async () => {
+    const workout = schedule.workouts.find(item => item.id === 'standalone-workout')!;
+    const legacy = { ...workout, structure: { ...workout.structure, sport: ActivityTypes.WeightTraining } };
+    schedule.workouts = [legacy, { ...workout, id: 'ordinary-running', title: 'Ordinary running' }];
+    setRouteState({ mode: 'browse', scope: 'standalone' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelectorAll('.strength-summary-hint')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[data-workout-id="ordinary-running"] .strength-summary-hint')).toBeNull();
+    const profile = fixture.debugElement.queryAll(By.directive(WorkoutProfileComponent))
+      .map(element => element.componentInstance as WorkoutProfileComponent)
+      .find(component => component.structure()?.sport === ActivityTypes.WeightTraining)!;
+    profile.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expect(profile.model()?.structure).toEqual(legacy.structure);
+    expect(profile.steps()).toHaveLength(1);
+    expect(getStrengthDetails).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('loads a strength companion before editing and rejects a missing companion', async () => {
@@ -2863,6 +2909,172 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.editor()?.strength?.exercises[0].sets[0].externalLoadKg).toBe(80);
     expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', 'standalone-workout');
+  });
+
+  it.each([ActivityTypes.WeightTraining, ActivityTypes.Kettlebell, ActivityTypes.Calisthenics, ActivityTypes.CoreTraining,
+    ActivityTypes.LesMillsCore, ActivityTypes.LesMillsGritStrength, ActivityTypes['LES MILLS BODYPUMP']])('edits complete %s without renaming or dropping its exercises', async sport => {
+    const details = { version: 1 as const, workoutId: 'standalone-workout', revision: 1, exercises: [{ id: 'hold', name: 'Plank',
+      sets: [{ id: 'one', ending: { kind: 'time' as const, seconds: 60 }, externalLoadKg: 2.5 }] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === details.workoutId
+      ? { ...workout, structure: projectStrengthWorkoutToV1(details, sport) } : workout) };
+    getStrengthDetails.mockResolvedValue(details);
+    setRouteState({ mode: 'edit', workoutId: details.workoutId });
+    const fixture = await renderPlans(); await fixture.whenStable(); fixture.detectChanges();
+    const editor = fixture.componentInstance;
+    expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', details.workoutId, true);
+    expect(editor.editorIsStrength()).toBe(true); expect(editor.editor()?.value.sport).toBe(sport);
+    editor.updateEditorField('sport', ActivityTypes.Running);
+    expect(editor.editor()?.value.sport).toBe(sport);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    editor.updateStrengthSet(0, 0, 'externalLoadKg', 5); await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'update-workout', structure: expect.objectContaining({ sport }),
+      strength: expect.objectContaining({ exercises: [expect.objectContaining({ sets: [expect.objectContaining({ externalLoadKg: 5 })] })] }),
+    }) }));
+  });
+  it('keeps a legacy Weight Training interval recipe editable when it has no exercise companion', async () => {
+    const structure = { version: 1 as const, sport: ActivityTypes.WeightTraining, nodes: [{ kind: 'step' as const, id: 'work',
+      purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61 }, targets: [] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure } : workout) };
+    getStrengthDetails.mockResolvedValue(null);
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans(); await fixture.whenStable(); fixture.detectChanges();
+    const editor = fixture.componentInstance; expect(editor.editorIsStrength()).toBe(false);
+    editor.updateEditorField('title', 'Keep legacy intervals'); await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      structure, title: 'Keep legacy intervals',
+    }) }));
+    expect(mutate.mock.calls[0][0].operation.strength).toBeUndefined();
+  });
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('blocks editing and saving %s after an exercise lookup fails', async sport => {
+    const workout = schedule.workouts.find(item => item.id === 'standalone-workout')!;
+    schedule.workouts = [{ ...workout, structure: { ...workout.structure, sport } }];
+    getStrengthDetails.mockRejectedValueOnce(new Error('Exercise lookup failed'));
+    setRouteState({ mode: 'edit', workoutId: workout.id });
+    const fixture = await renderPlans(true); await fixture.whenStable(); fixture.detectChanges();
+    const editor = fixture.componentInstance;
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Close and reopen');
+    expect(fixture.nativeElement.querySelector('.workout-nodes-heading')?.textContent).toContain('Exercises and sets');
+    expect(fixture.nativeElement.querySelector('.workout-nodes-heading button').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('.editor-library-copy-action').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('.editor-save-actions button:last-child').disabled).toBe(true);
+    expect(editor.editorProfile()).toBeNull();
+    editor.addEditorStep(); editor.updateEditorField('sport', ActivityTypes.Running);
+    expect(editor.editor()?.value.nodes).toHaveLength(0);
+    expect(editor.editor()?.value.sport).toBe(sport);
+    await editor.saveWorkout(); await editor.saveEditorCopyToLibrary();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(snackBarOpen).toHaveBeenCalledWith('Exercise lookup failed', 'Dismiss', expect.any(Object));
+  });
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('blocks %s with a mismatched exercise companion', async sport => {
+    const details = { version: 1 as const, workoutId: 'standalone-workout', revision: 1, exercises: [{ id: 'plank', name: 'Plank',
+      sets: [{ id: 'one', ending: { kind: 'time' as const, seconds: 60 }, externalLoadKg: 2.5 }] }] };
+    schedule.workouts = schedule.workouts.map(workout => workout.id === details.workoutId
+      ? { ...workout, structure: projectStrengthWorkoutToV1(details, sport) } : workout);
+    getStrengthDetails.mockResolvedValue({ ...details, exercises: [{ ...details.exercises[0], name: 'Wrong exercise' }] });
+    setRouteState({ mode: 'edit', workoutId: details.workoutId });
+    const fixture = await renderPlans(true); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Close and reopen');
+    fixture.componentInstance.addEditorStep();
+    await fixture.componentInstance.saveWorkout(); await fixture.componentInstance.saveEditorCopyToLibrary();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+  it('blocks programmatic saves while a strength alias is still resolving', async () => {
+    const workout = schedule.workouts.find(item => item.id === 'standalone-workout')!;
+    schedule.workouts = [{ ...workout, structure: { ...workout.structure, sport: ActivityTypes.WeightTraining } }];
+    getStrengthDetails.mockImplementation(() => new Promise(() => {}));
+    setRouteState({ mode: 'edit', workoutId: workout.id });
+    const fixture = await renderPlans(true); const editor = fixture.componentInstance;
+    expect(editor.editor()?.strengthLoading).toBe(true);
+    await editor.saveWorkout(); await editor.saveEditorCopyToLibrary();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    expect(snackBarOpen).toHaveBeenCalledWith(expect.stringContaining('still loading'), 'Dismiss', expect.any(Object));
+  });
+  it('keeps canonical strength blocked when its required exercise prescription is missing', async () => {
+    schedule.workouts = schedule.workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure: { ...workout.structure, sport: ActivityTypes.StrengthTraining } } : workout);
+    getStrengthDetails.mockResolvedValue(null); setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans(true); const editor = fixture.componentInstance;
+    expect(editor.editor()?.strengthLoadFailed).toBe(true);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Close and reopen');
+    await editor.saveWorkout(); await editor.saveEditorCopyToLibrary();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+  it('retries a failed strength lookup on reopen and only then restores a confirmed legacy interval recipe', async () => {
+    const workout = { ...schedule.workouts.find(item => item.id === 'standalone-workout')!,
+      structure: { ...schedule.workouts[0].structure, sport: ActivityTypes.WeightTraining } };
+    schedule.workouts = schedule.workouts.map(item => item.id === workout.id ? workout : item);
+    getStrengthDetails.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce(null);
+    setRouteState({ mode: 'edit', workoutId: workout.id });
+    const fixture = await renderPlans(true); const editor = fixture.componentInstance;
+    expect(editor.editor()?.strengthLoadFailed).toBe(true);
+    editor.cancelEditor(); fixture.detectChanges(); await fixture.whenStable();
+    editor.editWorkout(workout); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(getStrengthDetails).toHaveBeenCalledTimes(2);
+    expect(editor.editor()?.strengthLoadFailed).toBe(false); expect(editor.editorIsStrength()).toBe(false);
+    expect(manualWorkoutEditorToStructure(editor.editor()!.value)).toEqual(workout.structure);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+  it('ignores a failed strength lookup after navigating to another workout', async () => {
+    const workout = schedule.workouts.find(item => item.id === 'standalone-workout')!;
+    schedule.workouts = schedule.workouts.map(item => item.id === workout.id
+      ? { ...item, structure: { ...item.structure, sport: ActivityTypes.WeightTraining } } : item);
+    let rejectDetails!: (error: Error) => void;
+    getStrengthDetails.mockImplementation(() => new Promise((_resolve, reject) => { rejectDetails = reject; }));
+    setRouteState({ mode: 'edit', workoutId: workout.id });
+    const fixture = await renderPlans(true); const editor = fixture.componentInstance;
+    editor.cancelEditor(); fixture.detectChanges(); await fixture.whenStable();
+    editor.editWorkout(schedule.workouts.find(item => item.id === 'plan-workout')!);
+    fixture.detectChanges(); await fixture.whenStable();
+    rejectDetails(new Error('Stale failure')); await fixture.whenStable(); fixture.detectChanges();
+    expect(editor.editor()?.original?.id).toBe('plan-workout'); expect(editor.editor()?.strengthLoadFailed).toBe(false);
+    expect(editor.editorIsStrength()).toBe(false); expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+  it('preserves title and date edits while resolving a legacy strength-name companion', async () => {
+    const structure = { version: 1 as const, sport: ActivityTypes.WeightTraining, nodes: [{ kind: 'step' as const,
+      id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61 }, targets: [] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure } : workout) };
+    let resolveDetails!: (value: null) => void;
+    getStrengthDetails.mockImplementation(() => new Promise(resolve => { resolveDetails = resolve; }));
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans(); const editor = fixture.componentInstance;
+    expect(editor.editor()?.strengthLoading).toBe(true);
+    editor.updateEditorField('title', 'Typing during the lookup'); editor.updateEditorField('localDate', '2026-09-25');
+    resolveDetails(null); await fixture.whenStable(); fixture.detectChanges();
+    expect(editor.editor()?.value).toMatchObject({ title: 'Typing during the lookup', localDate: '2026-09-25' });
+    expect(editor.editor()?.strengthLoading).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('changes a legacy strength-name interval sport without dropping its steps', async () => {
+    const structure = { version: 1 as const, sport: ActivityTypes.WeightTraining, nodes: [{ kind: 'step' as const,
+      id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61 }, targets: [] }] };
+    schedule = { ...populatedSchedule(), workouts: populatedSchedule().workouts.map(workout => workout.id === 'standalone-workout'
+      ? { ...workout, structure } : workout) };
+    getStrengthDetails.mockResolvedValue(null); setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
+    const fixture = await renderPlans(); await fixture.whenStable(); const editor = fixture.componentInstance;
+    editor.updateEditorField('sport', ActivityTypes.Running);
+    expect(editor.editor()?.value.sport).toBe(ActivityTypes.Running);
+    expect(manualWorkoutEditorToStructure(editor.editor()!.value).nodes).toEqual(structure.nodes);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await editor.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      structure: { ...structure, sport: ActivityTypes.Running },
+    }) }));
+  });
+
+  it('keeps entered sets when selecting another approved strength name in a new draft', async () => {
+    const fixture = await renderPlans(); const editor = fixture.componentInstance;
+    editor.openNewWorkout(); editor.updateEditorField('sport', ActivityTypes.WeightTraining);
+    editor.updateStrengthExerciseName(0, 'Plank'); editor.updateStrengthSet(0, 0, 'externalLoadKg', 2.5);
+    const before = structuredClone(editor.editor()?.strength);
+    editor.updateEditorField('sport', ActivityTypes.Kettlebell);
+    expect(editor.editor()?.strength).toEqual(before); expect(editor.editor()?.value.sport).toBe(ActivityTypes.Kettlebell);
   });
 
   it('uses the opening weight unit for strength input and preserves unchanged canonical kilograms', async () => {
@@ -3589,7 +3801,7 @@ describe('PlansWorkspaceComponent', () => {
       html.replace('<body class="app-hydrated">', '<body class="app-hydrated dark-theme">'));
   }
 
-  async function renderPlans() {
+  async function renderPlans(mockNotices = false) {
     vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation((commands, extras) => {
       const root = `${commands[0] ?? ''}`;
       if (root === '/training/plans/workout') {
@@ -3610,6 +3822,7 @@ describe('PlansWorkspaceComponent', () => {
       return Promise.resolve(true);
     });
     const fixture = TestBed.createComponent(PlansWorkspaceComponent);
+    if (mockNotices) vi.spyOn((fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar, 'open').mockImplementation(snackBarOpen);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();

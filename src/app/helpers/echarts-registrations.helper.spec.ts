@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { BarChart, PictorialBarChart, CustomChart, PieChart, LineChart, ScatterChart } from 'echarts/charts';
 import {
   GraphicComponent, GridComponent, TooltipComponent, LegendComponent, TitleComponent, AxisPointerComponent,
-  MarkLineComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
+  MarkLineComponent, MarkPointComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { registerEChartsModules } from './echarts-registrations.helper';
@@ -16,7 +16,7 @@ describe('lazy ECharts named registrations', () => {
     expect(use).toHaveBeenCalledExactlyOnceWith([
       BarChart, PictorialBarChart, CustomChart, PieChart, LineChart, ScatterChart,
       GraphicComponent, GridComponent, TooltipComponent, LegendComponent, TitleComponent, AxisPointerComponent,
-      MarkLineComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
+      MarkLineComponent, MarkPointComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
       CanvasRenderer,
     ]);
   });

@@ -6,7 +6,7 @@ import {
   DataDuration,
   DataInterface,
   UserUnitSettingsInterface,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import {
   type UnitAwareStatDisplay,
   createSwimDistanceDisplayStat,

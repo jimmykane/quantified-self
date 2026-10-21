@@ -7,6 +7,8 @@ import {
   ElementRef,
   EventEmitter,
   Input,
+  inject,
+  signal,
   NgZone,
   OnChanges,
   OnDestroy,
@@ -15,7 +17,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChartCursorBehaviours, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ChartCursorBehaviours, DataPower, LapTypes, UserUnitSettingsInterface, XAxisTypes } from '@sports-alliance/sports-lib';
 import type { ECElementEvent, EChartsType } from 'echarts/core';
 import { AppBreakpoints } from '../../../../constants/breakpoints';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
@@ -42,6 +44,9 @@ import {
   getEventChartSeriesPointCount,
   getEventChartSeriesPackedLineValues,
   getEventChartSeriesX,
+  buildEventRecordedLineValues,
+  canConnectEventChartPoints,
+  getEventChartLineGapPolicy,
 } from '../../../../helpers/event-echarts-data.helper';
 import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
@@ -71,7 +76,7 @@ import type {
   EventChartZoneColorPiece,
 } from '../../../../helpers/event-echarts-data.helper';
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
-import type { LineSeriesOption } from 'echarts/charts';
+import type { LineSeriesOption, CustomSeriesOption } from 'echarts/charts';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import {
   EChartsHorizontalTouchGestureController,
@@ -80,6 +85,9 @@ import {
 } from '../../../../helpers/echarts-horizontal-touch-gesture.controller';
 import { resolveEventChartPinchRange } from '../../../../helpers/event-chart-pinch-zoom.helper';
 import { resolveEventChartPanRange } from '../../../../helpers/event-chart-pan-range.helper';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
+import { buildEventPowerDisplay, buildEventPowerWhiskers, buildEventPowerWhiskerOption,
+  type EventPowerDisplayMode, type EventPowerDisplayProjection } from '../../../../helpers/event-power-display.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -293,6 +301,25 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   public rangeStats: EventPanelRangeStat[] = [];
   public isFullscreen = false;
   public readonly zoomCursorBehaviour = ChartCursorBehaviours.ZoomX;
+  public readonly powerView = signal<EventPowerDisplayMode>('raw');
+  private readonly haptics = inject(AppHapticsService);
+  private powerViews = new WeakMap<EventChartPanelSeries, EventPowerDisplayProjection>();
+
+  public get canSmoothPower(): boolean {
+    return this.panel?.dataType === DataPower.type
+      && this.panel.series.some(series => this.powerProjection(series).hasAverage);
+  }
+
+  private get powerIs3s(): boolean {
+    return this.powerView() === '3s' && this.canSmoothPower;
+  }
+
+  public setPowerView(mode: EventPowerDisplayMode): void {
+    if (this.destroyed || !this.canSmoothPower || (mode !== 'raw' && mode !== '3s') || mode === this.powerView()) return;
+    this.powerView.set(mode);
+    this.haptics.selection();
+    this.queueChartRefresh('powerDisplay');
+  }
 
   private readonly chartHost: EChartsHostController;
   private eventsBound = false;
@@ -382,6 +409,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         useDirtyRect: true,
       },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      onContainerResize: () => {
+        if (this.powerIs3s) this.scheduleCanonicalAxisScaleUpdate();
+      },
     });
   }
 
@@ -592,6 +622,14 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.panel) {
+      this.powerViews = new WeakMap();
+      const previous = changes.panel.previousValue as EventChartPanelModel | null;
+      if (previous?.dataType !== this.panel?.dataType
+        || previous?.series.map(series => series.id).join('|') !== this.panel?.series.map(series => series.id).join('|')) {
+        this.powerView.set('raw');
+      }
+    }
     if (!this.chartHost.getChart()) {
       return;
     }
@@ -829,10 +867,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const restoredZoomRange = this.getStoredZoomRange();
     const visibleRange = restoredZoomRange ?? this.getVisibleXAxisRange();
     const overlayPanel = this.getActiveOverlayPanel();
+    // Native clipping retains connected endpoints through narrow zooms.
+    // Each series still supplies its own real gap separators.
     const shareOverlayYAxis = canShareEventPanelYAxis(panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
-      ? this.buildSharedYAxisPanel(panel, overlayPanel)
-      : panel;
+      ? this.buildSharedYAxisPanel(this.powerYAxisPanel(panel), overlayPanel)
+      : this.powerYAxisPanel(panel);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: primaryYAxisPanel,
       visibleRange,
@@ -854,7 +894,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionEnabled, this.isMobile);
 
-    const seriesOptions: ChartLineSeriesOption[] = [];
+    const seriesOptions: Array<ChartLineSeriesOption | CustomSeriesOption> = [];
     const seriesVisualMaps: Record<string, unknown>[] = [];
     panel.series.forEach((series) => {
       if (this.isAltitudeGradeColorSeries(series)) {
@@ -867,7 +907,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         return;
       }
 
-      const connectAcrossMissingValues = this.isBatteryStreamType(series.streamType);
+      const connectAcrossMissingValues = getEventChartLineGapPolicy(series) === 'connect';
       const useZoneColors = !!series.zoneColorPieces?.length;
       const seriesIndex = seriesOptions.length;
       seriesOptions.push({
@@ -897,7 +937,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           ...(this.areaFillColor
             ? { color: this.areaFillColor }
             : (!useZoneColors ? { color: series.color } : {})),
-          opacity: seriesFillOpacity,
+          opacity: this.powerIs3s ? 0 : seriesFillOpacity,
           origin: primaryAreaFillOrigin,
         },
         emphasis: {
@@ -905,15 +945,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         },
         silent: !this.interactionsEnabled,
         dimensions: ['x', 'y'],
-        data: this.getSeriesLineData(series),
+        data: this.powerIs3s
+          ? this.powerProjection(series).lineValues as unknown as ChartLineSeriesOption['data']
+          : this.getSeriesLineData(series),
       });
 
       if (useZoneColors) {
         seriesVisualMaps.push(this.buildZoneVisualMapOption(series, seriesIndex));
       }
+      if (this.powerIs3s) seriesOptions.push(this.powerWhiskers(series, visibleRange));
     });
 
-    if (seriesOptions[0]) {
+    if (seriesOptions[0]?.type === 'line') {
       seriesOptions[0].markLine = this.buildMarkerMarkLine(chartStyle);
     }
 
@@ -1031,7 +1074,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           startValue: restoredZoomRange?.start,
           endValue: restoredZoomRange?.end,
           disabled: !interactionEnabled || this.cursorBehaviour === ChartCursorBehaviours.SelectX,
-          filterMode: 'filter',
+          filterMode: 'none',
           throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
@@ -1046,7 +1089,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           show: this.showZoomBar,
           height: 16,
           top: 8,
-          filterMode: 'filter',
+          filterMode: 'none',
           showDataShadow: false,
           throttle: DATA_ZOOM_THROTTLE_MS,
         }
@@ -1062,6 +1105,40 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return this.overlayPanel.series?.length ? this.overlayPanel : null;
+  }
+
+  private powerProjection(series: EventChartPanelSeries): EventPowerDisplayProjection {
+    let projection = this.powerViews.get(series);
+    if (!projection) {
+      projection = buildEventPowerDisplay(series);
+      this.powerViews.set(series, projection);
+    }
+    return projection;
+  }
+
+  private powerYAxisPanel(panel: EventChartPanelModel): EventChartPanelModel {
+    if (!this.powerIs3s) return panel;
+    return {
+      ...panel,
+      series: [
+        // Whiskers contribute only recorded values inside the viewport.
+        ...panel.series.map(series => ({ ...series, lineGapPolicy: 'none' as const })),
+        ...panel.series.map(series => ({
+          ...series,
+          lineGapPolicy: 'adjacent' as const,
+          lineValues: this.powerProjection(series).lineValues,
+          timeValues: series.timeValues ?? Float64Array.from((series.points ?? []).map(point => point.time)),
+          pointCount: getEventChartSeriesPointCount(series),
+        })),
+      ],
+    };
+  }
+
+  private powerWhiskers(series: EventChartPanelSeries, range: EventChartRange): CustomSeriesOption {
+    const width = this.chartHost.getChart()?.getWidth?.() || this.chartDiv?.nativeElement?.clientWidth || 360;
+    const points = buildEventPowerWhiskers(series, this.powerProjection(series), range, Math.max(1, width - 64));
+    const color = this.showActivityNamesInTooltip ? series.color : buildEventEChartsVisualTokens(this.darkTheme, this.isMobile).textColor;
+    return buildEventPowerWhiskerOption(series.id, points, color);
   }
 
   private buildSharedYAxisPanel(
@@ -1150,7 +1227,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       smooth: false,
       showSymbol: false,
       symbolSize: 5,
-      connectNulls: this.isBatteryStreamType(series.streamType),
+      connectNulls: getEventChartLineGapPolicy(series) === 'connect',
       progressive: getEventChartSeriesPointCount(series) >= PROGRESSIVE_THRESHOLD ? PROGRESSIVE_STEP : 0,
       progressiveThreshold: PROGRESSIVE_THRESHOLD,
       progressiveChunkMode: 'mod',
@@ -1234,10 +1311,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     groups.push(this.createAltitudeGradeLineGroup('ungraded', series.color, null));
 
     const pointCount = getEventChartSeriesPointCount(series);
-    let leftPoint = getEventChartSeriesPoint(series, 0);
+    let leftIndex = 0;
+    let leftPoint = getEventChartSeriesPoint(series, leftIndex);
     for (let pointIndex = 1; pointIndex < pointCount; pointIndex += 1) {
       const rightPoint = getEventChartSeriesPoint(series, pointIndex);
-      if (!this.isRenderableSegmentPoint(leftPoint) || !this.isRenderableSegmentPoint(rightPoint)) {
+      // Empty grid rows are not measurements. Skip them only for activity
+      // readings; route/derived rows retain their explicit gaps.
+      if (rightPoint && Number.isFinite(rightPoint.x) && rightPoint.y === null
+        && getEventChartLineGapPolicy(series) === 'recorded-time') continue;
+      if (!this.isRenderableSegmentPoint(leftPoint) || !this.isRenderableSegmentPoint(rightPoint)
+        || !canConnectEventChartPoints(series, leftIndex, pointIndex)) {
+        leftIndex = pointIndex;
         leftPoint = rightPoint;
         continue;
       }
@@ -1247,7 +1331,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         ? groups.findIndex((group) => group.piece && this.isValueInsideGradeColorPiece(gradeValue, group.piece))
         : -1;
       const group = groups[gradeGroupIndex >= 0 ? gradeGroupIndex : ungradedGroupIndex];
-      this.appendAltitudeGradeSegment(group, pointIndex - 1, pointIndex, leftPoint, rightPoint);
+      this.appendAltitudeGradeSegment(group, leftIndex, pointIndex, leftPoint, rightPoint);
+      leftIndex = pointIndex;
       leftPoint = rightPoint;
     }
 
@@ -1840,13 +1925,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return '';
     }
 
+    // Context retained for clipped lines must not become an offscreen tooltip.
+    const visibleRange = this.getVisibleXAxisRange();
+    if (xValue < visibleRange.start || xValue > visibleRange.end) {
+      return '';
+    }
+
     const header = formatEventXAxisValue(
       xValue,
       this.xAxisType,
       { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
     );
     const tooltipLines: string[] = [];
-    const resolvedPoints = this.resolveTooltipPointsAtX(xValue);
+    const resolvedPoints = this.resolveTooltipPointsAtX(xValue, visibleRange);
     const hasOverlay = !!this.getActiveOverlayPanel();
     for (let index = 0; index < resolvedPoints.length; index += 1) {
       const resolvedPoint = resolvedPoints[index];
@@ -1854,6 +1945,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       const label = this.buildTooltipRowLabel(resolvedPoint, hasOverlay);
       const markerColor = this.resolveSeriesPointColor(resolvedPoint.series, resolvedPoint.point.y, resolvedPoint.index);
       const gradeLabel = this.buildTooltipGradeLabel(resolvedPoint.series, resolvedPoint.index);
+      if (this.powerIs3s && resolvedPoint.panel === this.panel) {
+        const average = this.powerProjection(resolvedPoint.series).lineValues[resolvedPoint.index * 2 + 1];
+        const formattedAverage = Number.isFinite(average) ? this.formatDataValue(resolvedPoint.series.streamType, average) : '—';
+        tooltipLines.push(`<div>${label ? `${label} · ` : ''}3s average: ${formattedAverage}</div>`);
+        tooltipLines.push(`<div>${label ? `${label} · ` : ''}Recorded: ${formatted}</div>`);
+        continue;
+      }
       tooltipLines.push(
         `<div><span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${markerColor};"></span>${label ? `${label}: ` : ''}${formatted}${gradeLabel}</div>`
       );
@@ -1952,12 +2050,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || (ArrayBuffer.isView(value) && typeof (value as unknown as ArrayLike<unknown>).length === 'number');
   }
 
-  private resolveTooltipPointsAtX(xValue: number): TooltipResolvedPoint[] {
+  private resolveTooltipPointsAtX(
+    xValue: number,
+    visibleRange = this.getVisibleXAxisRange()
+  ): TooltipResolvedPoint[] {
     if (!this.panel) {
       return [];
     }
 
-    const pixelTolerance = this.getTooltipMaxXDistance();
+    const pixelTolerance = this.getTooltipMaxXDistance(visibleRange);
     const panels = [
       this.panel,
       this.getActiveOverlayPanel(),
@@ -1970,6 +2071,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         const series = panel.series[seriesIndex];
         const nearestPoint = this.findNearestTooltipPoint(series, xValue);
         if (!nearestPoint || typeof nearestPoint.point.y !== 'number' || !Number.isFinite(nearestPoint.point.y)) {
+          continue;
+        }
+        // Line clipping retains context points, including in overlays/comparisons.
+        // They may draw a segment through the view but are not visible readings.
+        if (nearestPoint.point.x < visibleRange.start || nearestPoint.point.x > visibleRange.end) {
           continue;
         }
 
@@ -1990,11 +2096,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return resolvedPoints;
   }
 
-  private getTooltipMaxXDistance(): number {
-    const domain = this.getActiveDomain();
-    const visibleRange = this.sharedZoomRange
-      ? clampEventRange(this.sharedZoomRange, domain.start, domain.end) || domain
-      : domain;
+  private getTooltipMaxXDistance(visibleRange: EventChartRange): number {
     const span = Math.max(0, visibleRange.end - visibleRange.start);
     if (!Number.isFinite(span) || span <= 0) {
       return 0;
@@ -2222,8 +2324,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const overlayPanel = this.getActiveOverlayPanel();
     const shareOverlayYAxis = canShareEventPanelYAxis(this.panel, overlayPanel);
     const primaryYAxisPanel = shareOverlayYAxis && overlayPanel
-      ? this.buildSharedYAxisPanel(this.panel, overlayPanel)
-      : this.panel;
+      ? this.buildSharedYAxisPanel(this.powerYAxisPanel(this.panel), overlayPanel)
+      : this.powerYAxisPanel(this.panel);
     const yAxisConfig = buildEventPanelYAxisConfig({
       panel: primaryYAxisPanel,
       visibleRange,
@@ -2256,9 +2358,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         interval: yAxisConfig.interval,
       };
 
+    const seriesUpdates: Array<ChartLineSeriesOption | CustomSeriesOption> = this.powerIs3s
+      ? this.panel.series.map(series => this.powerWhiskers(series, visibleRange))
+      : [];
     this.chartHost.setOption({
       ...(scaleOptions ? { xAxis: scaleOptions } : {}),
       yAxis: yAxisUpdate,
+      ...(seriesUpdates.length ? { series: seriesUpdates } : {}),
     }, {
       notMerge: false,
       lazyUpdate: true,
@@ -2898,6 +3004,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private getSeriesLineData(series: EventChartPanelSeries): ChartLineSeriesOption['data'] {
+    if (getEventChartLineGapPolicy(series) === 'recorded-time') {
+      return buildEventRecordedLineValues(series) as unknown as ChartLineSeriesOption['data'];
+    }
+
     const packedLineValues = getEventChartSeriesPackedLineValues(series);
     if (packedLineValues) {
       return packedLineValues as unknown as ChartLineSeriesOption['data'];
@@ -2940,10 +3050,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return resolveEChartsTooltipSurfaceConfig(this.isMobile);
-  }
-
-  private isBatteryStreamType(streamType: string): boolean {
-    return `${streamType || ''}`.toLowerCase().includes('battery');
   }
 
   private isNonPrimaryMouseButtonEvent(event: Event): boolean {

@@ -7,7 +7,7 @@ import {
     STRENGTH_DETAILS_COLLECTION_ID,
     STRENGTH_DETAILS_DOCUMENT_ID,
     parseStrengthWorkoutDetailsV1,
-    strengthProjectionMatchesDetails,
+    isStrengthWorkoutSportV1, strengthProjectionMatchesDetails,
     type StrengthWorkoutDetailsV1,
 } from '../../../shared/strength-workout';
 import {
@@ -134,7 +134,7 @@ export function applyTrainingPlanDeletion(
     const convertedWorkouts = new Map<string, ScheduledWorkoutV1>();
     const permanentlyDeletedWorkoutIds: string[] = [];
     for (const current of planWorkouts) {
-        if (current.structure.sport === ActivityTypes.StrengthTraining) {
+        if (current.structure.sport === ActivityTypes.StrengthTraining || before.strengthDetails?.has(current.id)) {
             const details = before.strengthDetails?.get(current.id);
             if (!details || details.workoutId !== current.id || !strengthProjectionMatchesDetails(current.structure, details)) {
                 throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing or mismatched for ${current.id}.`);
@@ -187,14 +187,17 @@ async function readStrengthDetailsForPlanWorkouts(
     workoutsRef: admin.firestore.CollectionReference,
     workouts: Map<string, ScheduledWorkoutV1>,
 ): Promise<Map<string, StrengthWorkoutDetailsV1>> {
-    const strengthWorkouts = [...workouts.values()].filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining);
+    const strengthWorkouts = [...workouts.values()].filter(workout => isStrengthWorkoutSportV1(workout.structure.sport));
     const snapshots = await Promise.all(strengthWorkouts.map(workout => transaction.get(
         workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID),
     )));
     const details = new Map<string, StrengthWorkoutDetailsV1>();
     snapshots.forEach((snapshot, index) => {
         const workout = strengthWorkouts[index];
-        if (!snapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+        if (!snapshot.exists) {
+            if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new TrainingScheduleMutationError('failed-precondition', `Strength details are missing for ${workout.id}.`);
+            return;
+        }
         const parsed = parseStrengthWorkoutDetailsV1(documentData(snapshot));
         if (parsed.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, parsed)) {
             throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);
@@ -432,18 +435,24 @@ async function prepareStandaloneRevisionSnapshots(
         }
         return convertedWorkoutForLock(current, lock);
     });
-    const strengthRefs = converted
-        .filter(workout => workout.structure.sport === ActivityTypes.StrengthTraining)
-        .map(workout => workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID));
+    const strengthCandidates = converted.filter(workout => isStrengthWorkoutSportV1(workout.structure.sport));
+    const strengthRefs = strengthCandidates.map(workout => workoutsRef.doc(workout.id).collection(STRENGTH_DETAILS_COLLECTION_ID).doc(STRENGTH_DETAILS_DOCUMENT_ID));
     const strengthSnapshots = strengthRefs.length > 0 ? await db.getAll(...strengthRefs) : [];
     const strengthById = new Map<string, StrengthWorkoutDetailsV1>();
-    strengthSnapshots.forEach((snapshot) => {
-        if (!snapshot.exists) throw new TrainingScheduleMutationError('failed-precondition', 'A locked strength prescription is missing.');
+    strengthSnapshots.forEach((snapshot, index) => {
+        if (!snapshot.exists) {
+            if (strengthCandidates[index].structure.sport === ActivityTypes.StrengthTraining) throw new TrainingScheduleMutationError('failed-precondition', 'A locked strength prescription is missing.');
+            return;
+        }
         const details = parseStrengthWorkoutDetailsV1(documentData(snapshot));
-        strengthById.set(details.workoutId, details);
+        const source = strengthCandidates[index];
+        if (details.workoutId !== source.id || !strengthProjectionMatchesDetails(source.structure, details)) {
+            throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${source.id}.`);
+        }
+        strengthById.set(source.id, details);
     });
     converted.forEach(workout => {
-        if (workout.structure.sport !== ActivityTypes.StrengthTraining) return;
+        if (workout.structure.sport !== ActivityTypes.StrengthTraining && !strengthById.has(workout.id)) return;
         const details = strengthById.get(workout.id);
         if (!details || !strengthProjectionMatchesDetails(workout.structure, details)) {
             throw new TrainingScheduleMutationError('failed-precondition', `Strength details are mismatched for ${workout.id}.`);

@@ -4,6 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import type { BulkWriter } from 'firebase-admin/firestore';
 import type { GarminAPIActivityQueueItemInterface, SleepSyncQueueItemInterface } from './queue/queue-item.interface';
 import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { PROVIDER_MAX_RETRY_COUNT } from './shared/queue-config';
 import { TTL_CONFIG } from './shared/ttl-config';
 import { withHistoryExecution } from './connection-history/context';
 import { HistoryLifecycleChangedError, type HistoryExecution } from './connection-history/execution';
@@ -250,7 +251,7 @@ describe('queue-utils', () => {
         it('counts retry-exhausted reconciliation without counting a retry as success', async () => {
             vi.spyOn(logger, 'info').mockImplementation(() => {});
             const current = item();
-            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, retryCount: 9 }) });
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, retryCount: PROVIDER_MAX_RETRY_COUNT - 1 }) });
             expect(await increaseRetryCountIfCurrentUserActive({ queueItem: current, error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => true, manualReconciliation: {} })).toBe(QueueResult.MovedToDLQ);
             expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['dead_lettered', 'manual_reconciliation']);
         });
@@ -613,8 +614,8 @@ describe('queue-utils', () => {
                 exists: true,
                 data: () => ({
                     revision: 'expected',
-                    retryCount: 9,
-                    totalRetryCount: 9,
+                    retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                    totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                     destinationUploadContinuation: {
                         uploadUrl: 'https://blob.example/signed',
                     },
@@ -635,8 +636,8 @@ describe('queue-utils', () => {
             expect(hoisted.transaction.set).toHaveBeenCalledWith(
                 expect.objectContaining({ id: 'guarded-retry-2' }),
                 expect.objectContaining({
-                    retryCount: 10,
-                    totalRetryCount: 10,
+                    retryCount: PROVIDER_MAX_RETRY_COUNT,
+                    totalRetryCount: PROVIDER_MAX_RETRY_COUNT,
                     context: 'PROVIDER_RETRY_EXHAUSTED',
                 }),
             );
@@ -650,8 +651,8 @@ describe('queue-utils', () => {
             const queueItem: any = {
                 id: 'guarded-retry-manual',
                 ref: { parent: { id: 'activitySyncQueue' }, id: 'guarded-retry-manual' },
-                retryCount: 9,
-                totalRetryCount: 9,
+                retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                 dispatchedToCloudTask: 123,
                 destinationUploadID: 'upload-1',
             };
@@ -659,8 +660,8 @@ describe('queue-utils', () => {
                 exists: true,
                 data: () => ({
                     revision: 'expected',
-                    retryCount: 9,
-                    totalRetryCount: 9,
+                    retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                    totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                     destinationUploadID: 'upload-1',
                 }),
             });
@@ -683,8 +684,8 @@ describe('queue-utils', () => {
 
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
-                retryCount: 10,
-                totalRetryCount: 10,
+                retryCount: PROVIDER_MAX_RETRY_COUNT,
+                totalRetryCount: PROVIDER_MAX_RETRY_COUNT,
                 processed: true,
                 resultStatus: 'manual_reconciliation_required',
                 manualReconciliationContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
@@ -731,7 +732,7 @@ describe('queue-utils', () => {
                 ref: { parent: { id: 'sleepSyncQueue' }, id: 'garmin-health-exhausted' },
                 userID: 'user-1',
                 queueRevision: 'revision-1',
-                retryCount: 9,
+                retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
             } as unknown as SleepSyncQueueItemInterface;
             const callbacks = ['https://apis.garmin.com/wellness-api/rest/dailies?token=test-only'];
             hoisted.transaction.get.mockResolvedValue({
@@ -744,7 +745,7 @@ describe('queue-utils', () => {
 
             expect(hoisted.transaction.set.mock.calls[0][1]).toMatchObject({
                 originalCollection: 'sleepSyncQueue',
-                retryCount: 10,
+                retryCount: PROVIDER_MAX_RETRY_COUNT,
                 garminCallbackURLs: callbacks,
             });
             expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);

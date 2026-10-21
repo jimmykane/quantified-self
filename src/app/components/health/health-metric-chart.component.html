@@ -1,12 +1,19 @@
-@if (heartRateChoices().length) {
+@if (measurementChoices().length) {
   <div class="health-reading-controls">
     @if (soleMeasurementLabel(); as label) { <p>{{ label }}</p> }
-    <app-chart-source-picker [choices]="heartRateChoices()" [selectedKey]="chosenKey()"
-      chartTitle="Heart rate" (selected)="chooseSource($event)" />
+    <app-chart-source-picker [choices]="measurementChoices()" [selectedKey]="chosenKey()"
+      [chartTitle]="measurementTitle()" [compact]="true" (selected)="chooseSource($event)">
+      @if (canCompareSources()) {
+        <button chartSourceAction mat-button type="button" [attr.aria-expanded]="comparingSources()"
+          aria-controls="health-source-charts" (click)="toggleComparison()">
+          {{ comparingSources() ? 'Hide comparison' : 'Compare sources' }}
+        </button>
+      }
+    </app-chart-source-picker>
     @if (!chosenReading()) { <p role="status">Your selected source and measurement have no readings in this period. Choose another measurement or period.</p> }
   </div>
 }
-<div class="health-chart-grid" aria-label="Charts by source">
+<div id="health-source-charts" class="health-chart-grid" aria-label="Charts by source">
   @for (chart of renderedModels(); track chart.model.series.id) {
     @let model = chart.model;
     <app-compact-row
@@ -26,6 +33,25 @@
             }
           </mat-chip-set>
         }
+        @if (chart.compactReading) {
+          <div class="health-chart-reading-header">
+            <div>
+              @if (chart.hrvSummary && comparingSources()) { <span class="health-chart-reading-label">{{ chart.hrvSummary.headlineLabel }}</span> }
+              @if (!chart.hrvSummary && (comparingSources() || chart.calculatedByQS)) { <span class="health-chart-reading-label">{{ chart.readingCaption }}</span> }
+              <strong class="health-chart-reading-value">{{ chart.hrvSummary?.headlineText || model.latestText }}</strong>
+            </div>
+            @if (model.recordedDateText) { <span class="health-chart-recorded-date">Recorded {{ model.recordedDateText }}</span> }
+          </div>
+          @if (chart.hrvSummary; as hrv) {
+            <p class="health-hrv-status">{{ hrv.statusLabel }}@if (hrv.progressText) { <span> · {{ hrv.progressText }}</span> }</p>
+            @if (hrv.latestText || hrv.rangeText) { <dl class="health-hrv-summary">
+              @if (hrv.latestText) { <div><dt>Latest night</dt><dd>{{ hrv.latestText }}</dd></div> }
+              @if (hrv.rangeText) { <div><dt>Personal range · 60 days</dt><dd>{{ hrv.rangeText }}</dd></div> }
+            </dl> }
+            <p class="health-hrv-attribution">{{ hrv.latestText ? '7-day average and personal range calculated by QS.' : 'Personal range calculated by QS.' }}</p>
+          }
+          <p class="health-chart-coverage">@if (chart.hrvSummary) { Nightly readings · }{{ model.series.coverageText }}</p>
+        }
         <app-health-metric-series-chart
           [timelineNotes]="timelineNotes()"
           [model]="model"
@@ -36,20 +62,20 @@
           [statusOverlay]="chart.statusOverlay"
           [statusDescription]="chart.statusDescription">
         </app-health-metric-series-chart>
-      @if (chart.compactHeartRate) {
+      @if (chart.compactReading) {
         @if (model.plotKind === 'point') { <p class="health-chart-evidence">{{ model.evidenceText }}</p> }
         @if (model.twoReadingComparisonText) { <p class="health-chart-evidence">{{ model.twoReadingComparisonText }}</p> }
         <button mat-button type="button" class="health-chart-details-trigger"
           [attr.aria-label]="(expandedDetails().has(model.series.id) ? 'Hide ' : 'Show ') + model.series.sourceLabel + ' recording details'"
           [attr.aria-expanded]="expandedDetails().has(model.series.id)"
           [attr.aria-controls]="'health-chart-details-' + model.series.id" (click)="toggleDetails(model.series.id)">
-          {{ expandedDetails().has(model.series.id) ? 'Hide details' : 'Show details' }}
+          {{ expandedDetails().has(model.series.id) ? 'Hide recording details' : 'Recording details' }}
           <mat-icon iconPositionEnd aria-hidden="true">{{ expandedDetails().has(model.series.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
         </button>
         <div class="health-chart-details" [id]="'health-chart-details-' + model.series.id" [hidden]="!expandedDetails().has(model.series.id)">
           <p>{{ chart.recordingDescription }}</p>
+          @if (readingNotice()) { <p>{{ readingNotice() }}</p> }
           <p>{{ model.evidenceText }}</p>
-          <p>{{ model.series.coverageText }}</p>
           <p>{{ model.series.freshnessText }}</p>
           @if (model.series.deviceLabel) { <p>Device: {{ model.series.deviceLabel }}</p> }
           @if (model.omittedPointCount > 0) {

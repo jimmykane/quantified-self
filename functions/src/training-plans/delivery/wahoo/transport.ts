@@ -1,5 +1,6 @@
+import { assessTrainingDeliveryMapping } from '../mapping';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
+import { wahooHasFractionalMinutes, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
@@ -7,7 +8,7 @@ import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryChe
   type WahooTrainingContractCheck } from '../contracts';
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { WahooTrainingHttpError, wahooId, wahooObject, type WahooTrainingClient, type WahooTrainingRequest } from './http';
-import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
+import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooDurationSeconds, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
 import { wahooArtifactGeneration, wahooPlanGeneration } from './identity';
 
 export const WAHOO_INSPECTION_POLICY: InspectionPolicy = {
@@ -108,11 +109,16 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null) {
     return assessWahooDelivery(workout, destination, zone, strength);
   }
-  private validatePrescription(operation: DeliveryOperation): void {
+  private validatePrescription(operation: DeliveryOperation, recovering = false): void {
     if (operation.kind !== 'upsert') return;
     if (!operation.workout) throw new TrainingDeliveryTransportError('terminal');
     const assessment = this.assess(operation.workout, operation.destinationKey, operation.timeZone, operation.strength);
-    if (assessment.level === 'unsupported' || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
+    // Old attempts may have created a Plan before the dated Workout rejected
+    // fractional minutes. Inspect that journal so Stop can retire/withdraw it.
+    // execute still requires current compatibility before any create or update.
+    const historicalDuration = recovering && wahooHasFractionalMinutes(operation.workout.structure)
+      && assessTrainingDeliveryMapping('wahoo', operation.workout, operation.destinationKey, operation.timeZone, operation.strength).level !== 'unsupported';
+    if ((assessment.level === 'unsupported' && !historicalDuration) || assessment.digest !== operation.digest) throw new TrainingDeliveryTransportError('terminal');
   }
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval = false): boolean {
     return !artifact.completed && (artifact.localDate >= (artifact.timeZone ? trainingDeliveryLocalDate(this.now(), artifact.timeZone) : today)
@@ -236,10 +242,14 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       || numeric(value.workout_type_location_id) !== profile.location || typeof value.provider_updated_at !== 'string'
       || Math.trunc(providerUpdatedAt / 1000) !== Math.trunc(workout.updatedAtMs / 1000)) uncertain();
   }
-  private matchesWorkout(value: Value, operation: DeliveryOperation): boolean {
+  private matchesWorkout(value: Value, operation: DeliveryOperation, recovering = false): boolean {
     const expected = wahooWorkoutFields(operation.workout!, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);
+    // Recovery may observe the frozen floating-point minutes from an older
+    // digest-bound attempt. New writes/readback require the exact decimal total.
+    const minutesMatch = numeric(value.minutes) === expected.minutes || (recovering
+      && numeric(value.minutes) === wahooDurationSeconds(operation.workout!.structure)! / 60);
     return value.name === expected.name && value.workout_token === expected.workout_token
-      && numeric(value.workout_type_id) === expected.workout_type_id && numeric(value.minutes) === expected.minutes
+      && numeric(value.workout_type_id) === expected.workout_type_id && minutesMatch
       && Date.parse(String(value.starts)) === Date.parse(expected.starts)
       && associationMatches(value, expected.plan_id);
   }
@@ -401,7 +411,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
   }
   async recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery> {
     this.validate(operation);
-    this.validatePrescription(operation);
+    this.validatePrescription(operation, true);
     const progress = operation.progress;
     if (progress === undefined) return { kind: 'uncertain' };
     if (progress === null) return { kind: operation.artifact ? 'resume' : 'not-accepted' };
@@ -442,7 +452,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       const value = await this.inspectWorkout(operation, checkpoint, guard, true);
       if (!this.canRemove(operation.artifact!, trainingDeliveryLocalDate(this.now(), operation.timeZone))) return { kind: 'resume' };
       const plan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
-      if (!plan || !this.matchesWorkout(value, operation) || !await this.association(artifact, guard)) return { kind: 'uncertain' };
+      if (!plan || !this.matchesWorkout(value, operation, true) || !await this.association(artifact, guard)) return { kind: 'uncertain' };
       this.confirmPlan(plan, operation);
       const accepted = { ...operation.artifact!, localDate: operation.workout!.localDate, timeZone: operation.timeZone,
         ids: { ...artifact.ids, association: `${id}:${artifact.ids.plan}` } };

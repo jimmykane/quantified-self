@@ -161,8 +161,8 @@
 
                     <ng-container matColumnDef="dead">
                         <th mat-header-cell *matHeaderCellDef> Dead letter </th>
-                        <td mat-cell *matCellDef="let row" [class.problem-cell]="row.dead > 0">
-                            <span>{{ row.dead | number }}</span>
+                        <td mat-cell *matCellDef="let row" [class.problem-cell]="(row.dead ?? 0) > 0">
+                            <span>{{ row.dead === null ? '—' : (row.dead | number) }}</span>
                             <span class="cell-detail">{{ row.deadLabel }}</span>
                         </td>
                     </ng-container>
@@ -179,8 +179,11 @@
                     </ng-container>
 
                     <ng-container matColumnDef="lag">
-                        <th mat-header-cell *matHeaderCellDef> Longest wait </th>
-                        <td mat-cell *matCellDef="let row">{{ row.maxLagLabel }}</td>
+                        <th mat-header-cell *matHeaderCellDef> Age / wait </th>
+                        <td mat-cell *matCellDef="let row">
+                            <span>{{ row.maxLagLabel }}</span>
+                            <span class="cell-detail">{{ row.maxLagTitle }}</span>
+                        </td>
                     </ng-container>
 
                     <ng-container matColumnDef="details">
@@ -258,7 +261,7 @@
                         <span class="queue-metric-label">{{ row.problemLabel }}</span>
                     </div>
                     <div class="queue-metric">
-                        <span class="queue-metric-value" [class.problem-cell]="row.dead > 0">{{ row.dead | number }}</span>
+                        <span class="queue-metric-value" [class.problem-cell]="(row.dead ?? 0) > 0">{{ row.dead === null ? '—' : (row.dead | number) }}</span>
                         <span class="queue-metric-label">{{ row.deadLabel }}</span>
                     </div>
                     <div class="queue-metric">
@@ -267,7 +270,7 @@
                     </div>
                     <div class="queue-metric queue-metric-wide">
                         <span class="queue-metric-value">{{ row.maxLagLabel }}</span>
-                        <span class="queue-metric-label">Longest wait</span>
+                        <span class="queue-metric-label">{{ row.maxLagTitle }}</span>
                     </div>
                 </div>
 

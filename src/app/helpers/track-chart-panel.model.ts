@@ -20,6 +20,11 @@ export interface TrackChartPanelSeries {
   streamType: string;
   displayName: string;
   unit: string;
+  /** Untimed/derived rows connect adjacent points; whiskers have no line. */
+  lineGapPolicy?: 'adjacent' | 'none';
+  lineContinuity?: import('./event-chart-line-continuity.helper').EventLineContinuitySettings;
+  /** Display-only, worker-prepared segment IDs; zero denotes an empty/invalid reading. */
+  lineSegmentIds?: Uint32Array;
   lineValues?: Float64Array;
   timeValues?: Float64Array;
   gradeColorValues?: Float64Array;

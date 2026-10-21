@@ -500,6 +500,44 @@ assessment before delivery; a local exact mapping never promises app/device rece
 evidence remain private. This is a no-wire-impact extension;
 it does not authorize a new provider action or count a planned workout as completed training.
 
+The seven approved strength aliases (Weight Training, Kettlebell, Calisthenics, Core Training, LES MILLS CORE,
+LES MILLS GRIT Strength and LES MILLS BODYPUMP) use the same validated companion when exercises are present.
+Existing strength-detail/recipe/analysis reads preserve the authored sport and complete sets/load/rest. The strict
+strength update proposal retains the existing workout's sport; canonical new strength creates keep their existing
+Strength Training default. No sport field, schema, tool, consent or provider action was added. Tool descriptions, server instructions, the built-in
+Assistant and the bundled Training/cross-domain guidance explicitly cover all eight strength names. Complete details
+require the existing strength-details read; its unavailability cannot prove that an alias is interval-only. Use QS Edit
+when the full prescription cannot be read. The existing strength preview preserves an alias on updates, while new
+creates still use Strength Training; other new strength names use the app editor. The Assistant selects the full-strength
+preview for named strength edits, preserving provider/lifecycle routing and the current-revision/advertised-tool gate.
+Alias mentions in another sport's notes retain that sport's normal editor. A missing complete-strength preview never
+falls back to a generic Training writer. These first-party routing guards change no public tool metadata, schemas,
+scopes, grants, confirmation or delivery behavior and do not require an additional contract or plugin refresh.
+The private selector excludes quoted note text from every preview-kind decision and delivery-intent check, so a note
+mentioning the library, phases, replacement or Send cannot request those actions. Removing a note remains a recipe edit.
+It also excludes explicitly excluded workouts while recognizing direct named exercise/set/repetition edits.
+It preserves the complete original prompt and all note text for the model; this
+selection context is never a replacement recipe, permission or stored value.
+Paired-quote scanning recognizes notes before or after their text, preserves actual target labels and handles ordinary
+apostrophes. Independent follow-up actions use the existing batch where expressible. Combined complete-strength
+authoring and another action instead asks which action to review first, with no substitute preview. A bounded exact
+sport-choice reply to that immediate clarification selects only the full-strength schema; it never inherits provider
+consent or Apply authority. An explicit Stop-sync request cannot attach a create-only or Send proposal as its review:
+the existing preview must contain Stop. These private guards add no public shape, metadata, scope or mutation kind.
+This metadata-only clarification retains all registered shapes, scopes, grants and native/app approval rules; its digest
+is included in the pending developer-refresh record. Server deployment, registered-app rescan and bundled-plugin refresh
+remain separate. Local bundle sync/validation uses a temporary profile and fixture app ID. Legacy generic aliases
+without companions remain readable as intervals; Garmin/COROS/Wahoo strength delivery requires complete matching
+exercise data. Malformed or foreign companions fail before exposure. Saved-workout previews validate all eight
+companion-bearing source sports before issuing a proposal, and reject strength-library updates that omit existing
+exercise data. Legacy interval aliases remain supported without companions. New cardio/mobility substitutions use existing
+mapping issue codes. Wahoo compatibility additionally reports `scheduling_duration_unavailable` when the exact total
+is not a whole number of minutes: live API probes rejected fractional minutes. Neither read nor preview rounds steps.
+The whole-minute decision uses exact stored decimal arithmetic, including repeats; binary addition residue is not
+a fractional prescription. Tiny genuine fractions remain unsupported. This changes compatibility values through the
+existing issue contract, with no metadata, schema, scope, consent or provider-action change.
+Existing owner/grant/revision-bound confirmation applies to updates and sport-profile losses.
+
 Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in
 canonical kilograms, and optional rest seconds. The old v1 recipe is a derived compatibility summary, not a complete
 prescription. The additive `get_strength_workout_details` read uses only `training-plans:read`, resolves the same

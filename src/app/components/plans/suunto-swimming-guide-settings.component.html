@@ -1,14 +1,14 @@
 <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="fieldsRegionId"
   (click)="toggle()">{{ expanded() ? 'Hide' : 'Show' }} swimming Guide screens</button>
 <section [id]="fieldsRegionId" [hidden]="!expanded()" aria-label="Suunto swimming Guide screens">
-  <p>Choose extra fields for all your future pool and open-water Guides. Order matters; Suunto adapts the layout to your watch.</p>
-  <p>The ending countdown, authored targets and instructions keep their slots. Target readings stay together; extra fields fill the remaining space, up to five fields.</p>
-  <p>These are priorities, not five guaranteed watch cells. When selected, the interval number goes in the heading, such as <strong>Rest 1/10</strong>, without using a metric slot. Previous/next planned distances share one short text field; Suunto may crop that text beside numeric readings.</p>
+  <p>Choose extra fields for future pool/open-water Guides. Order matters; Suunto adapts the watch layout.</p>
+  <p>Countdown, targets and instructions take priority. Target readings stay together; extra fields fill remaining space, up to five fields.</p>
+  <p>Counters use the heading (<strong>Rest 1/10</strong>), not a metric slot. Previous/next distances share one short text field that Suunto may crop. Choices are priorities, not guaranteed watch cells.</p>
   @if (availability(); as allocation) {
     <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" [attr.aria-controls]="availabilityRegionId"
       (click)="toggleAvailability()">{{ availabilityExpanded() ? 'Hide' : 'Show' }} field availability for this workout</button>
     <div [id]="availabilityRegionId" [hidden]="!availabilityExpanded()">
-      <p>This is the new normal-layout allocation for your current choices, not a preview of the Guide already on your watch. Included means requested from Suunto, not guaranteed visible or measured. Targets and instructions may leave fewer slots. Large Guides can use a compact fallback without interval headings or planned-distance context.</p>
+      <p>This shows the new normal layout, not the Guide on your watch. Included means requested from Suunto, not guaranteed visible or measured. Targets/notes reduce slots; large Guides may omit interval headings and planned distances.</p>
       @if (allocation.blocked) {
         <p>This recipe cannot currently be sent as a Suunto Guide. Review its compatibility before relying on a field allocation.</p>
       } @else if (allocation.compact) {
@@ -34,6 +34,9 @@
   }
   @for (section of sections(); track section.key) {
     <h4>{{ section.label }} screen</h4>
+    @if (section.key === 'restFields') {
+      <p>Last/next mean the Work blocks before/after this Rest, not measured distance. Equal repeats show the same value for both. Lap-only Work has no prescribed distance, regardless of titles/notes.</p>
+    }
     <ol>
       @for (row of section.fields; track row.index) {
         <li>
@@ -56,8 +59,8 @@
     </ol>
     <button mat-button type="button" [disabled]="saving() || section.fields.length >= 5" (click)="add(section.key)"><mat-icon>add</mat-icon>Add {{ section.label }} field</button>
   }
-  <p class="limitations">Previous/next distances are planned, not measured; manual prescriptions have no guessed distance. The interval number counts planned Work blocks, not pool lengths or recorded laps.</p>
-  <p class="limitations">The published Guide API cannot select the completed interval's pace, time, distance or stroke count for Rest. Current-lap averages reset on Lap; Rest offers planned context, current HR and optional workout totals instead of empty averages.</p>
+  <p class="limitations">Distances are planned, not measured. Work 1/10 is the first of ten Work blocks; Rest 1/10 follows it. These count Work blocks, not pool lengths or recorded laps. Suunto controls the heading's font size.</p>
+  <p class="limitations">The Guide API cannot select the completed interval's statistics for Rest. Lap averages reset on Lap; use planned context, current HR or workout totals, not previous-effort averages.</p>
   <p class="limitations">Your watch controls live pace units and sound/vibration. QS cannot force pace per 100m or a five-second beep sequence. QS Units &amp; formatting changes planned-distance text, not the watch's live pace format. Pool distance and automatic transitions wait for detected lengths; QS does not estimate them.</p>
   <p class="limitations">Generated start popups are skipped for timed swimming rests of 20 seconds or less, so they do not cover the next Work alert. Your own Rest instructions still show. This does not guarantee a sound or vibration.</p>
   <p class="limitations">To repeat a completed workout, choose Duplicate to… in its sync details or workout actions, or place a new copy from your workout library. Editing its date does not unlock the protected completed Guide. Removing a Guide in Suunto can hide it while its cloud record remains. For an eligible uncompleted workout, Send a fresh Guide offers a reviewed new identity without changing your QS workout. The earlier Guide is left untouched and may still be visible; old recordings stay intact. QS never recreates a hidden Guide automatically.</p>

@@ -23,7 +23,7 @@ import {
     STRENGTH_DETAILS_COLLECTION_ID,
     STRENGTH_DETAILS_DOCUMENT_ID,
     parseStrengthWorkoutDetailsV1,
-    strengthProjectionMatchesDetails,
+    isStrengthWorkoutSportV1, strengthProjectionMatchesDetails,
 } from '../../../shared/strength-workout';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { TrainingScheduleMutationError } from './mutation';
@@ -120,15 +120,17 @@ export async function mutateWorkoutLibraryForUser(
                     throw new TrainingScheduleMutationError('revision-conflict', 'The source workout changed. Reload it first.');
                 }
                 let strength;
-                if (workout.structure.sport === ActivityTypes.StrengthTraining) {
+                if (isStrengthWorkoutSportV1(workout.structure.sport)) {
                     const details = await transaction.get(source.ref.collection(STRENGTH_DETAILS_COLLECTION_ID)
                         .doc(STRENGTH_DETAILS_DOCUMENT_ID));
-                    if (!details.exists) throw new TrainingScheduleMutationError('failed-precondition', 'Strength details are missing.');
-                    const parsed = parseStrengthWorkoutDetailsV1(details.data());
-                    if (parsed.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, parsed)) {
-                        throw new TrainingScheduleMutationError('failed-precondition', 'Strength details do not match the workout.');
+                    if (!details.exists && workout.structure.sport === ActivityTypes.StrengthTraining) throw new TrainingScheduleMutationError('failed-precondition', 'Strength details are missing.');
+                    if (details.exists) {
+                        const parsed = parseStrengthWorkoutDetailsV1(details.data());
+                        if (parsed.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, parsed)) {
+                            throw new TrainingScheduleMutationError('failed-precondition', 'Strength details do not match the workout.');
+                        }
+                        strength = { version: parsed.version, exercises: parsed.exercises } as const;
                     }
-                    strength = { version: parsed.version, exercises: parsed.exercises } as const;
                 }
                 prescription = parseWorkoutLibraryPrescription(workout.title, workout.structure, strength);
             }
@@ -141,6 +143,9 @@ export async function mutateWorkoutLibraryForUser(
             if (previous.id !== operation.itemId) throw new Error('Workout library document ID mismatch.');
             if (previous.revision !== operation.expectedRevision) {
                 throw new TrainingScheduleMutationError('revision-conflict', 'This library workout changed. Reload it first.');
+            }
+            if (operation.kind === 'update' && previous.strength && isStrengthWorkoutSportV1(operation.structure.sport) && !operation.strength) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'This saved workout requires its complete exercise prescription.');
             }
             if (operation.kind === 'delete') {
                 // Library entries are leaf documents. Receipts and ID tombstones live under trainingPlanState.

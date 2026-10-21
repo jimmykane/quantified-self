@@ -7,6 +7,22 @@ const now = Date.parse('2026-09-14T12:00:00Z');
 function run() { return createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential', runId: '11111111-1111-4111-8111-111111111111' }, 'connection', now); }
 function dependencies(): HistoryAdvanceDependencies { return { execute: vi.fn(async () => ({ count: 1, nextStartMs: now + 1000, nextPage: 1, childPaths: [] })), observe: vi.fn(async () => 'processed'), classify: () => ({ kind: 'retry', message: 'Please retry.' }) }; }
 describe('history continuation', () => {
+  it.each([9, 18, 19])('uses the extended provider retry budget at %i failures', async retryCount => {
+    const job = run();
+    job.steps[0].retryCount = retryCount;
+    const deps = dependencies();
+    deps.execute = vi.fn().mockRejectedValue(new Error('Temporary provider failure'));
+
+    await advanceHistoryRun(job, deps, now);
+
+    expect(job.steps[0]).toMatchObject({
+      retryCount: retryCount + 1,
+      done: retryCount === 19,
+      status: retryCount === 19 ? 'failed' : 'retrying',
+    });
+    expect(job.nextAttemptAt).toBe(now + (retryCount === 19 ? 2_000 : 14_400_000));
+  });
+
   it('finishes an empty or fully persisted window and never runs it again', async () => {
     const job = run(); const deps = dependencies(); await advanceHistoryRun(job, deps, now);
     expect(job.processed).toBe(true); expect(job.steps[0].status).toBe('processed');

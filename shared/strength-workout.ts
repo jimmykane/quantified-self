@@ -5,6 +5,13 @@ import { parseWorkoutStructureV1, type WorkoutStructureV1, type WorkoutStepV1 } 
 export const STRENGTH_WORKOUT_VERSION = 1 as const;
 export const STRENGTH_DETAILS_COLLECTION_ID = 'strengthDetails';
 export const STRENGTH_DETAILS_DOCUMENT_ID = 'current';
+export const STRENGTH_WORKOUT_SPORT_ALIASES_V1 = [ActivityTypes.WeightTraining, ActivityTypes.Kettlebell,
+  ActivityTypes.Calisthenics, ActivityTypes.CoreTraining, ActivityTypes.LesMillsCore, ActivityTypes.LesMillsGritStrength,
+  ActivityTypes['LES MILLS BODYPUMP']] as const;
+export type StrengthWorkoutSportV1 = ActivityTypes.StrengthTraining | typeof STRENGTH_WORKOUT_SPORT_ALIASES_V1[number];
+export function isStrengthWorkoutSportV1(sport: unknown): sport is StrengthWorkoutSportV1 {
+  return sport === ActivityTypes.StrengthTraining || (STRENGTH_WORKOUT_SPORT_ALIASES_V1 as readonly unknown[]).includes(sport);
+}
 
 export type StrengthSetV1 = {
   id: string;
@@ -138,7 +145,8 @@ export function parseStrengthWorkoutDraftV1(value: unknown): StrengthWorkoutDraf
 }
 
 /** Compatibility-only summary. Never use it as the complete strength prescription. */
-export function projectStrengthWorkoutToV1(detailsValue: unknown): WorkoutStructureV1 {
+export function projectStrengthWorkoutToV1(detailsValue: unknown, sport: ActivityTypes = ActivityTypes.StrengthTraining): WorkoutStructureV1 {
+  if (!isStrengthWorkoutSportV1(sport)) throw new StrengthWorkoutValidationError('$.sport', 'Expected a supported strength sport.');
   const details = parseStrengthWorkoutDetailsV1(detailsValue);
   const nodes: WorkoutStepV1[] = [];
   details.exercises.forEach(exercise => exercise.sets.forEach((set, index) => {
@@ -149,11 +157,12 @@ export function projectStrengthWorkoutToV1(detailsValue: unknown): WorkoutStruct
         ending: { kind: 'time', seconds: set.restAfterSeconds }, targets: [], note: `Rest after ${exercise.name}` });
     }
   }));
-  return parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.StrengthTraining, nodes });
+  return parseWorkoutStructureV1({ version: 1, sport, nodes });
 }
 
 export function strengthProjectionMatchesDetails(structure: WorkoutStructureV1, details: StrengthWorkoutDetailsV1): boolean {
-  return JSON.stringify(parseWorkoutStructureV1(structure)) === JSON.stringify(projectStrengthWorkoutToV1(details));
+  return isStrengthWorkoutSportV1(structure.sport)
+    && JSON.stringify(parseWorkoutStructureV1(structure)) === JSON.stringify(projectStrengthWorkoutToV1(details, structure.sport));
 }
 
 export function formatStrengthLoadKg(kg: number, settings?: UserUnitSettingsInterface | null): string {

@@ -30,6 +30,7 @@ describe('route echarts data helper', () => {
     expect(result.xAxisType).toBe(XAxisTypes.Distance);
     expect(result.usesDistanceXAxis).toBe(true);
     expect(result.panels.map(panel => panel.dataType)).toEqual([DataAltitude.type, DataGrade.type]);
+    expect(result.panels.every(panel => panel.series.every(series => series.lineGapPolicy === 'adjacent'))).toBe(true);
     expect(result.panels[0].series[0].streamType).toBe(DataAltitudeSmooth.type);
     expect(getEventChartSeriesX(result.panels[0].series[0], 1)).toBe(1000);
     expect(getEventChartSeriesY(result.panels[0].series[0], 1)).toBe(110);

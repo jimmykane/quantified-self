@@ -16,7 +16,7 @@ import type { HistoryExecution } from './execution';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
-import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
+import { PROVIDER_CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
 import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '../shared/cloud-tasks';
 import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError, HistoryUnavailableError } from './execution';
@@ -228,7 +228,7 @@ export async function processConnectionHistoryRun(id: string, revision: string):
 }
 
 export const processConnectionHistoryTask = onTaskDispatched({ region, timeoutSeconds: 300, memory: '512MiB',
-  secrets: FUNCTION_SECRET_BINDINGS.processConnectionHistoryTask, retryConfig: CLOUD_TASK_RETRY_CONFIG,
+  secrets: FUNCTION_SECRET_BINDINGS.processConnectionHistoryTask, retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
   rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 } }, async request => {
   const startedAt = Date.now();
   let outcome: 'acknowledged' | 'failed' | 'expected_contention' = 'acknowledged';

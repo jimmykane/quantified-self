@@ -293,6 +293,31 @@
               <mat-slide-toggle formControlName="useAnimations" (change)="onPreferenceChange()">Enable Animations</mat-slide-toggle>
             </div>
 
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Event chart line continuity</mat-label>
+              <mat-select formControlName="eventLineContinuityMode" (selectionChange)="onLineContinuityChange()">
+                @for (option of lineContinuityOptions; track option.value) {
+                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>
+                @switch (userSettingsFormGroup.get('eventLineContinuityMode')?.value) {
+                  @case ('continuous') { Connects available readings, including across missing data. This is the default. }
+                  @case ('detect') { Estimates gaps from nearby recording intervals. Some missing readings can resemble normal sampling. }
+                  @case ('custom') { Breaks the line when the time between readings exceeds your limit. }
+                }
+                Display only; recorded data and statistics stay unchanged.
+              </mat-hint>
+            </mat-form-field>
+            @if (userSettingsFormGroup.get('eventLineContinuityMode')?.value === 'custom') {
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Maximum gap (seconds)</mat-label>
+              <input matInput type="number" formControlName="eventLineGapSeconds" min="1"
+                [max]="maxLineGapSeconds" step="1" (change)="onLineContinuityChange()">
+              <mat-error>Enter a whole number from 1 to {{ maxLineGapSeconds }}.</mat-error>
+            </mat-form-field>
+            }
+
             <div class="settings-slider-grid">
               <div class="settings-slider-block">
                 <p>Line Width</p>

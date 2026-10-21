@@ -1,10 +1,10 @@
 import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
-import { prepareTrainingLoadMetadata } from './training-load/training-load-metadata';
 import { TrainingLoadSourceWrite } from './training-load/training-load-source-write';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
+import { createFirebaseCustomToken } from './bootstrap';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
@@ -18,7 +18,7 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
-import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './shared/import-preservation';
 import {
   createMissingEventTagCatalogEntriesInTransaction,
   newlyAssignedEventTags,
@@ -358,7 +358,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   }
 
 
-  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareTrainingLoadMetadata(userID, event, async (db, transaction) => {
+  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareImportedEventWrite(userID, event, async (db, transaction) => {
     await assertHistoryWrite(transaction);
     await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
   }));
@@ -392,13 +392,14 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         docRef = docRef.collection(path[i]).doc(path[i + 1]);
       }
       const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      const isActivityDocument = path.length === 4 && path[0] === 'users' && path[2] === 'activities';
       await setEventDocumentIfUserActive(
         userID,
         `event_writer:${path.join('/')}`,
         docRef,
         data,
         undefined,
-        isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
         assertSourceWrite,
       );
     },
@@ -540,7 +541,7 @@ export async function createFirebaseAccount(serviceUserID: string) {
     }
   }
   // Create a Firebase custom auth token.
-  const token = await admin.auth().createCustomToken(uid);
+  const token = await createFirebaseCustomToken(uid);
   logger.info('Created Custom token for UID "', uid, '" Token:', token);
   return token;
 }

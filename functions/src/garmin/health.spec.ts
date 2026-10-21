@@ -551,6 +551,74 @@ describe('Garmin Health API summary mapping', () => {
     expect(replacement.input.revision.token).toBe(first.input.revision.token);
   });
 
+  describe('bounded skin-temperature duration diagnostics', () => {
+    const summary = {
+      summaryId: 'synthetic-skin-temperature', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 1_980,
+      avgDeviationCelsius: 0,
+    };
+    const secret = 'https://example.invalid/callback?token=do-not-log';
+
+    it.each([
+      [-16_920, 'negative_duration', 'number', -16_920, 'included'],
+      [-1_000_000, 'negative_duration', 'number', -1_000_000, 'included'],
+      [-1_000_001, 'negative_duration', 'number', null, 'outside_diagnostic_range'],
+      [604_801, 'out_of_range', 'number', 604_801, 'included'],
+      [1_000_001, 'out_of_range', 'number', null, 'outside_diagnostic_range'],
+      [1.5, 'not_integer', 'number', 1.5, 'included'],
+      [Number.NaN, 'non_finite', 'number', null, 'non_finite'],
+      [Number.POSITIVE_INFINITY, 'non_finite', 'number', null, 'non_finite'],
+      [Number.NEGATIVE_INFINITY, 'non_finite', 'number', null, 'non_finite'],
+      [undefined, 'invalid_type', 'undefined', null, 'non_numeric'],
+      [null, 'invalid_type', 'null', null, 'non_numeric'],
+      ['1980', 'invalid_type', 'string', null, 'non_numeric'],
+      [secret.repeat(1000), 'invalid_type', 'string', null, 'non_numeric'],
+      [{ accessToken: secret }, 'invalid_type', 'object', null, 'non_numeric'],
+      [[secret], 'invalid_type', 'array', null, 'non_numeric'],
+      [false, 'invalid_type', 'boolean', null, 'non_numeric'],
+    ])('preserves rejection and bounds the diagnostic for case %#', (value, reason, valueType, numericValue, valueDisposition) => {
+      let caught: unknown;
+      try {
+        map('skinTemp', [summary, {
+          ...summary, durationInSeconds: value, callbackURL: secret, accessToken: secret,
+        }]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).message)
+        .toBe('skinTemp[1].durationInSeconds is outside the supported numeric range.');
+      expect((caught as GarminHealthValidationError).diagnostic).toEqual({
+        summaryType: 'skinTemp', summaryIndex: 1, field: 'durationInSeconds', reason,
+        valueType, numericValue, valueDisposition, sampleOffsetSeconds: null,
+      });
+      expect(JSON.stringify(caught)).not.toContain(secret);
+      expect(JSON.stringify(caught)).not.toContain(summary.summaryId);
+      expect(JSON.stringify(caught).length).toBeLessThan(600);
+    });
+
+    it.each([0, 1_980, 604_800])('preserves accepted duration %s', durationInSeconds => {
+      const [result] = map('skinTemp', [{ ...summary, durationInSeconds }]);
+      expect(result.input.endTimeMs - result.input.startTimeMs).toBe(durationInSeconds * 1000);
+      expect(result.input.coverage?.observedDurationSeconds).toBe(durationInSeconds);
+    });
+
+    it.each([
+      ['skinTemp', { ...summary, avgDeviationCelsius: 101 }],
+      ['skinTemp', { ...summary, startTimeInSeconds: -1 }],
+      ['dailies', { ...summary, durationInSeconds: -1 }],
+    ] as const)('does not attach duration diagnostics to unrelated failures (%#)', (type, value) => {
+      let caught: unknown;
+      try {
+        map(type, [value]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).diagnostic).toBeUndefined();
+    });
+  });
+
   describe('bounded stress-validation diagnostics', () => {
     const interval = {
       summaryId: 'diagnostic-summary', calendarDate: '2025-10-09',

@@ -36,7 +36,7 @@ const standardRangeOptions: readonly ConnectionHistoryRangeOption[] = [
 ];
 /** Provider range policy shared by the connection UI and server validation. */
 export const CONNECTION_HISTORY_RANGE_OPTIONS = {
-  [ServiceNames.GarminAPI]: [...standardRangeOptions, { value: 'maximum', label: 'Maximum available (5 years)' }],
+  [ServiceNames.GarminAPI]: [...standardRangeOptions, { value: 'maximum', label: 'Maximum available (up to 5 years)' }],
   [ServiceNames.SuuntoApp]: [...standardRangeOptions, { value: 'maximum', label: 'All available history' }],
   [ServiceNames.COROSAPI]: [
     { value: '30_days', label: '30 days' },

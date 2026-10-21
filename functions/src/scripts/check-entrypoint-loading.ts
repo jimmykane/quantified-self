@@ -126,6 +126,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   eventRetry?: boolean;
   maxConcurrentDispatches?: number;
   maxDispatchesPerSecond?: number;
+  maxAttempts?: number;
   concurrency?: number;
   maxInstances?: number;
   cpu?: number;
@@ -134,21 +135,21 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   processSportsLibReparseHeavyTask: { memoryMb: 8192, timeoutSeconds: 960, trigger: 'task', cpu: 4, concurrency: 1,
     maxInstances: 1, maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 },
   processSportsLibRouteReparseTask: { memoryMb: 4096, timeoutSeconds: 1800, trigger: 'task', cpu: 2, concurrency: 1 },
-  processSleepSyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+  processSleepSyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
   ] },
-  processGarminHealthBackfillTask: {
+  processGarminHealthBackfillTask: { maxAttempts: 20,
     memoryMb: 512, timeoutSeconds: 1800, trigger: 'task',
     maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1,
     secrets: ['GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET'],
   },
-  processWorkoutTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+  processWorkoutTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
     'WAHOOAPI_ALLOWED_FILE_HOSTS',
   ] },
-  processActivitySyncTask: {
+  processActivitySyncTask: { maxAttempts: 20,
     memoryMb: 1024, timeoutSeconds: 540, trigger: 'task',
     maxConcurrentDispatches: 10, maxDispatchesPerSecond: 250,
     secrets: [
@@ -157,10 +158,10 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
       'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
     ],
   },
-  processRouteSyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+  processRouteSyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
   ] },
-  processRouteDeliverySyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+  processRouteDeliverySyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
   ] },
@@ -699,7 +700,7 @@ async function check(): Promise<void> {
           && endpoint.eventTrigger.retry === (expected.eventRetry ?? true),
         `${target} Firestore trigger changed.`);
       } else {
-        assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === 10
+        assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === (expected.maxAttempts ?? 10)
           && endpoint.taskQueueTrigger.retryConfig.maxDoublings === 4
           && JSON.stringify(endpoint.taskQueueTrigger.retryConfig.maxRetrySeconds) === 'null'
           && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
@@ -848,7 +849,7 @@ async function check(): Promise<void> {
           `${target} runtime limits changed.`);
         assert(endpoint.taskQueueTrigger?.rateLimits?.maxConcurrentDispatches === 1
           && endpoint.taskQueueTrigger.rateLimits.maxDispatchesPerSecond === 1
-          && endpoint.taskQueueTrigger.retryConfig?.maxAttempts === 10
+          && endpoint.taskQueueTrigger.retryConfig?.maxAttempts === 20
           && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
           && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14400,
         `${target} task pacing or retry policy changed.`);

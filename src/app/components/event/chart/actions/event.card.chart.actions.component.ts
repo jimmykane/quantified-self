@@ -1,4 +1,8 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import {
+  EVENT_LINE_CONTINUITY_OPTIONS, MAX_EVENT_LINE_GAP_SECONDS, isValidEventLineGapSeconds,
+  equalEventLineContinuity, resolveEventLineContinuity, type EventLineContinuityMode, type EventLineContinuitySettings,
+} from '../../../../helpers/event-chart-line-continuity.helper';
 import { ChartCursorBehaviours, XAxisTypes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
@@ -14,6 +18,8 @@ interface ChartSeriesMenuItem {
   visible: boolean;
 }
 
+let nextGapLimitID = 0;
+
 @Component({
   selector: 'app-event-card-chart-actions',
   templateUrl: './event.card.chart.actions.component.html',
@@ -24,6 +30,23 @@ interface ChartSeriesMenuItem {
 })
 
 export class EventCardChartActionsComponent {
+  private lineSettings = resolveEventLineContinuity(undefined);
+  @Input() set lineContinuity(value: EventLineContinuitySettings) {
+    const settings = resolveEventLineContinuity(value);
+    if (equalEventLineContinuity(settings, this.lineSettings)) return;
+    this.lineSettings = settings;
+    this.gapLimitDraft.set(this.lineSettings.maxGapSeconds);
+    this.gapLimitInvalid.set(false);
+  }
+  get lineContinuity(): EventLineContinuitySettings { return this.lineSettings; }
+  @Input() canChangeLineContinuity = false;
+  @Input() isSavingLineContinuity = false;
+  @Output() lineContinuityChange = new EventEmitter<EventLineContinuitySettings>();
+  readonly lineContinuityOptions = EVENT_LINE_CONTINUITY_OPTIONS;
+  readonly maxLineGapSeconds = MAX_EVENT_LINE_GAP_SECONDS;
+  readonly gapLimitDraft = signal<number | null>(10);
+  readonly gapLimitInvalid = signal(false);
+  readonly gapLimitErrorID = `event-line-gap-error-${nextGapLimitID++}`;
   @Input() user: User;
   @Input() event: EventInterface;
   @Input() xAxisType: XAxisTypes;
@@ -136,6 +159,44 @@ export class EventCardChartActionsComponent {
     }
   }
 
+  onLineContinuityModeChange(mode: EventLineContinuityMode): void {
+    if (!this.user || !this.canChangeLineContinuity || this.isSavingLineContinuity
+      || mode === this.lineContinuity.mode) return;
+    this.gapLimitDraft.set(this.lineContinuity.maxGapSeconds);
+    this.gapLimitInvalid.set(false);
+    this.lineContinuityChange.emit({ ...this.lineContinuity, mode });
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'eventLineContinuity' });
+  }
+
+  onGapLimitInput(event: Event): void {
+    if (!this.user || !this.canChangeLineContinuity || this.isSavingLineContinuity) return;
+    const value = (event.target as HTMLInputElement).valueAsNumber;
+    this.gapLimitDraft.set(Number.isFinite(value) ? value : null);
+    this.gapLimitInvalid.set(!isValidEventLineGapSeconds(value));
+  }
+
+  onGapLimitKeydown(event: KeyboardEvent): void {
+    // Let the input own editing keys, but retain the menu's normal Tab/Escape dismissal.
+    if (event.key !== 'Tab' && event.key !== 'Escape') event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.onGapLimitCommit();
+    }
+  }
+
+  onGapLimitCommit(): void {
+    const seconds = this.gapLimitDraft();
+    if (!this.user || !this.canChangeLineContinuity || this.isSavingLineContinuity
+      || this.lineContinuity.mode !== 'custom' || !isValidEventLineGapSeconds(seconds)
+      || seconds === this.lineContinuity.maxGapSeconds) return;
+    // Keep the entered draft until the parent supplies its saved/optimistic value.
+    // Resetting the native input here can leave it stale when Angular batches the
+    // optimistic update back to the same draft value. A fast rejection keeps the
+    // draft available for retry without changing the active chart preference.
+    this.lineContinuityChange.emit({ mode: 'custom', maxGapSeconds: seconds });
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'eventLineContinuity' });
+  }
+
   onDistinctLinePatternsChange(change: MatSlideToggleChange): void {
     const enabled = change.checked;
     // Keep the switch controlled by the parent even if a save fails before the next render.
@@ -177,7 +238,8 @@ export class EventCardChartActionsComponent {
   }
 
   async onXAxisTypeChange(value: XAxisTypes) {
-    if (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis) {
+    if (!this.user || this.event?.isMultiSport() || value === this.xAxisType
+      || (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis)) {
       return;
     }
     this.xAxisType = value;

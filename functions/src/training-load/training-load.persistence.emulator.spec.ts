@@ -17,6 +17,8 @@ import { prepareMergedTrainingLoad, type MergeTrainingLoadSource } from '../even
 import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { persistReparsedEvent, writeReparseStatus } from '../reparse/sports-lib-reparse.service';
 import { EventWriter, type FirestoreAdapter } from '../shared/event-writer';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from '../shared/import-preservation';
+import { TrainingLoadSourceWrite } from './training-load-source-write';
 
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
 // Contended real Firestore transactions can retry beyond the five-second unit-test budget.
@@ -56,11 +58,84 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
+  function reuploadWriter(uid: string) {
+    const guard = new TrainingLoadSourceWrite(uid, event => prepareImportedEventWrite(uid, event));
+    const setDoc = vi.fn(async (path: string[], data: unknown) => db.runTransaction(async transaction => {
+      await guard.assertCurrent(db, transaction);
+      const ref = db.doc(path.join('/')); const current = await transaction.get(ref);
+      const preserve = path[2] === 'events' ? preserveImportedEventEdits : preserveImportedActivityEdits;
+      transaction.set(ref, preserve(data as admin.firestore.DocumentData, current.data() ?? null));
+    }));
+    const writer = new EventWriter({
+      prepareTrainingLoad: guard.prepareTrainingLoad,
+      setDoc, createBlob: data => Buffer.from(data), generateID: () => randomUUID(),
+    });
+    return { writer, setDoc };
+  }
   function gate() {
     let release!: () => void;
     const promise = new Promise<void>(resolve => { release = resolve; });
     return { promise, release };
   }
+  it('reuploads a source-keyed activity without duplicating it or losing live edits and load overrides', async () => {
+    const uid = setup(); await importWorkout(uid, workout('source-keyed-id'));
+    const parent = db.doc(`users/${uid}/events/workout`);
+    const child = db.doc(`users/${uid}/activities/source-keyed-id`);
+    await parent.update({ name: 'Edited title', description: 'Edited description', tags: ['Saved tag'],
+      notes: 'Saved notes', 'stats.Feeling': 5, 'stats.Rated Perceived Exertion': 8 });
+    await child.update({ 'creator.name': 'Custom device', sourceActivityKey: 'saved-source-key' });
+    await db.doc(metadataPath(uid)).update({ controls: { 'source-keyed-id': { override: 42 } } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const parsed = workout('legacy-index-id');
+      const { writer } = reuploadWriter(uid);
+      await writer.writeAllEventData(uid, parsed);
+      const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+      expect(children.docs.map(doc => doc.id)).toEqual(['source-keyed-id']);
+      expect((await child.get()).data()).toMatchObject({ creator: { name: 'Custom device' }, sourceActivityKey: 'saved-source-key' });
+      expect((await parent.get()).data()).toMatchObject({ name: 'Edited title', description: 'Edited description', tags: ['Saved tag'],
+        notes: 'Saved notes', stats: { Feeling: 5, 'Rated Perceived Exertion': 8 } });
+      const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(metadata).toMatchObject({ sourceWritePending: false, controls: { 'source-keyed-id': { override: 42 } } });
+      expect(resolveEffectiveTrainingLoad({}, metadata)).toMatchObject({ score: 42, status: 'available' });
+    }
+  });
+  it.each(['ambiguous duplicates', 'changed leg set'])('keeps saved load available when a reupload rejects %s', async reason => {
+    const uid = setup(); await importWorkout(uid, workout('saved-leg'));
+    const metaRef = db.doc(metadataPath(uid));
+    await metaRef.update({ controls: { 'saved-leg': { override: 42 } } });
+    await refreshTrainingLoadSummary(uid, 'workout');
+    await completeTrainingLoadCacheWarmup(uid);
+    const parsed = workout('incoming-leg');
+    const parent = db.doc(`users/${uid}/events/workout`);
+    if (reason === 'ambiguous duplicates') {
+      const saved = await db.doc(`users/${uid}/activities/saved-leg`).get();
+      await db.doc(`users/${uid}/activities/duplicate-leg`).set(saved.data()!);
+    } else {
+      parsed.addActivity(workout('extra-leg', Date.UTC(2026, 0, 2, 1)).getFirstActivity());
+    }
+    const metadataBefore = await metaRef.get();
+    const parentBefore = await parent.get();
+    const activities = db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout');
+    const childrenBefore = await activities.get();
+    const cacheBefore = await readTrainingLoadSummaries(uid);
+    expect(cacheBefore?.get('workout')?.load).toMatchObject({ score: 42, status: 'available' });
+    const { writer, setDoc } = reuploadWriter(uid);
+
+    await expect(writer.writeAllEventData(uid, parsed)).rejects.toThrow('Cannot safely match');
+
+    const metadataAfter = await metaRef.get();
+    expect(metadataAfter.data()).toEqual(metadataBefore.data());
+    expect(metadataAfter.updateTime?.isEqual(metadataBefore.updateTime!)).toBe(true);
+    expect(resolveEffectiveTrainingLoad(parentBefore.data()!, metadataAfter.data() as TrainingLoadMetadata))
+      .toMatchObject({ score: 42, status: 'available' });
+    expect(await readTrainingLoadSummaries(uid)).toEqual(cacheBefore);
+    expect((await parent.get()).updateTime?.isEqual(parentBefore.updateTime!)).toBe(true);
+    expect((await activities.get()).docs.map(doc => [doc.id, doc.data()]))
+      .toEqual(childrenBefore.docs.map(doc => [doc.id, doc.data()]));
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(parsed.getActivities().map(activity => activity.getID()))
+      .toEqual(reason === 'ambiguous duplicates' ? ['incoming-leg'] : ['incoming-leg', 'extra-leg']);
+  });
   it('advances the benchmark save guard before an ordinary workout has its first report', async () => {
     const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
     const uid = setup();
@@ -79,6 +154,31 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       expect(saved).not.toHaveProperty('benchmarkResults');
       expect(saved).not.toHaveProperty('hasBenchmark');
     }
+  });
+
+  it('finalizes a real writer reparse when Firestore omits an unnamed source device', async () => {
+    const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
+    const uid = setup(); await source(uid, workout('old'));
+    const ref = db.doc(`users/${uid}/events/workout`);
+    const oldLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const unnamed = workout('unnamed');
+    delete (unnamed.getFirstActivity().creator as { name?: string }).name;
+    const parsed = mergeRecordedEvents([unnamed, workout('named', Date.UTC(2026, 0, 2, 1))], 'workout');
+    expect(parsed.toJSON().stats?.['Device Names']).toEqual([undefined, 'Test']);
+
+    // Exercise EventWriter and Firestore directly: a JSON roundtrip would turn undefined into null.
+    const result = await persistReparsedEvent(uid, 'workout', parsed, (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
+    expect(result.staleActivitiesDeleted).toBe(1);
+    expect((await ref.get()).data()).toMatchObject({ stats: { 'Device Names': ['Test'] }, benchmarkSourceWritePending: false });
+    expect((await ref.collection('metaData').doc('processing').get()).data()?.sportsLibVersion).toBe(SPORTS_LIB_VERSION);
+    const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(metadata.sourceWritePending).toBe(false);
+    expect(Object.values(metadata.legs!).map(leg => leg.activityId).sort())
+      .toEqual(parsed.getActivities().map(activity => activity.getID()).sort());
+    expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).docs.map(doc => doc.id).sort())
+      .toEqual(parsed.getActivities().map(activity => activity.getID()).sort());
+    await completeTrainingLoadCacheWarmup(uid);
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.status).toBe('available');
   });
 
   it('preserves benchmark reports and remaps participants through repeated real writer reparses', async () => {

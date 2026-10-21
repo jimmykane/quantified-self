@@ -296,10 +296,10 @@ export function serializeGarminWorkoutV1(
 
 export function serializeGarminStrengthWorkoutV1(
     detailsValue: unknown,
-    options: SerializeGarminWorkoutOptionsV1,
+    options: SerializeGarminWorkoutOptionsV1 & { sport?: ActivityTypes },
 ): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
     const details = parseStrengthWorkoutDetailsV1(detailsValue);
-    return serializeWorkout(projectStrengthWorkoutToV1(details), options, details);
+    return serializeWorkout(projectStrengthWorkoutToV1(details, options.sport), options, details);
 }
 
 function strengthNodes(details: StrengthWorkoutDetailsV1): GarminWorkoutStepV1[] {

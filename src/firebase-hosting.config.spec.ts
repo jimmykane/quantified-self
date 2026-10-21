@@ -42,6 +42,7 @@ interface AngularBuildOptions {
 }
 
 interface AngularBuildConfiguration {
+  budgets?: Array<{ type: string; maximumWarning?: string; maximumError?: string }>;
   optimization?: boolean | {
     styles?: {
       inlineCritical?: boolean;
@@ -345,9 +346,12 @@ describe('Firebase Hosting configuration', () => {
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
-    // measurement-first Heart rate source choices, plain-language Health/Sleep labels, loading states and recording details,
-    // and bounded background Training rebuilds during bulk imports/reparse.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
+    // measurement-first Heart rate choices, compact history, source comparison, visible coverage and recording details,
+    // bounded background Training rebuilds during bulk imports/reparse,
+    // browser verification recovery with bounded temporary-error retries,
+    // and display-only Raw/3s Power charts with recorded peaks and dips.
+    // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -375,19 +379,25 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
-    // Health Sources help also explains automatic retries and final failures.
+    // Health help also covers primary Heart rate choices, nightly HRV history, same-account daily averages, automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.
     // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
     // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
     // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
+    // Help distinguishes last/next planned Work distances from measured results and the Work/Rest counter.
     // Event details also distinguishes session Max HR from selected-lap peaks, including rest.
     // Event details now documents the compact TSS / Workout CTL / Day CTL strip.
     // The same-day Help revision clarifies preview timeouts, source provenance and checked/ready/excluded draft counts.
     // Account deletion now lives in the separate Data management settings section.
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-19');
+    // Single-lap tables omit the persistent Summary row; selected summaries remain available.
+    // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
+    // Unambiguous Session end segments append as Final lap rows without changing recorded data.
+    // Pool swims default to Duration and disable the Distance chart axis.
+    // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
@@ -511,6 +521,13 @@ describe('Firebase Hosting configuration', () => {
         },
       });
     }
+  });
+
+  it.each(['production', 'beta'])('retains the original total-script budget for %s', configuration => {
+    const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
+    expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13600kb',
+    });
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {

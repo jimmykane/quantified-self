@@ -32,7 +32,7 @@ import {
   DataSwimPace,
   DataSwimPaceMaxMinutesPer100Yard,
   DataSwimPaceMinutesPer100Yard,
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 
 const HEART_RATE_GROUP = new Set<string>([
   DataHeartRate.type,

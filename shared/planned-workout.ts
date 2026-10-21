@@ -346,7 +346,7 @@ export function isSwimmingWorkoutSportV1(sport?: ActivityTypes): boolean {
 }
 
 export function isRowingWorkoutSportV1(sport?: ActivityTypes): boolean {
-  return sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing;
+  return sport === ActivityTypes.Rowing || sport === ActivityTypes.IndoorRowing || sport === ActivityTypes.VirtualRowing;
 }
 
 export const INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1: WorkoutCompatibilityProfileV1 = {

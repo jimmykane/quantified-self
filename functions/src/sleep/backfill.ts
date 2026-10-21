@@ -552,10 +552,17 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
                 throw error;
             }
 
-            const errorText = getGarminBackfillErrorText(error);
             const minStartMs = extractGarminMinStartTimeMs(error);
+            const telemetry = {
+                summaryType: 'sleeps',
+                statusCode: 400,
+                recoveryAttempt: attempt + 1,
+                requestedStartMs: requestStartMs,
+                requestedEndMs: endMs,
+                providerMinimumStartMs: Number.isFinite(minStartMs) ? minStartMs : null,
+            };
             if (minStartMs === null) {
-                logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${errorText}`);
+                logger.warn('[SleepBackfill][Garmin] Provider minimum unavailable; skipping Sleep window.', telemetry);
                 return 'skipped';
             }
             if (await shouldAbortGarminSleepBackfillRequests(userID)) {
@@ -569,16 +576,27 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
             const latestRetryStartMs = requestEndMs - GARMIN_BACKFILL_SECOND_MS;
             const retryHeadroomMs = Math.min(GARMIN_SLEEP_BACKFILL_RETRY_HEADROOM_MS, Math.max(0, latestRetryStartMs - earliestRetryStartMs));
             const providerMinStartMs = await rememberGarminProviderMinBackfillStartMs(userID, context, earliestRetryStartMs + retryHeadroomMs);
-            if (!Number.isFinite(providerMinStartMs) || providerMinStartMs >= requestEndMs) {
-                logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${errorText}`);
+            if (!Number.isFinite(providerMinStartMs)) {
+                logger.warn('[SleepBackfill][Garmin] Provider minimum unavailable; skipping Sleep window.', telemetry);
+                return 'skipped';
+            }
+            if (providerMinStartMs >= requestEndMs) {
+                logger.info('[SleepBackfill][Garmin] Provider minimum adjusted.', {
+                    ...telemetry, nextStartMs: null, outcome: 'window_skipped',
+                });
                 return 'skipped';
             }
 
             requestStartMs = providerMinStartMs;
             if (attempt === GARMIN_SLEEP_BACKFILL_MAX_ATTEMPTS - 1) {
+                logger.warn('[SleepBackfill][Garmin] Minimum-start recovery limit reached.', {
+                    ...telemetry, nextStartMs: requestStartMs,
+                });
                 break;
             }
-            logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(requestStartMs).toISOString()}: ${errorText}`);
+            logger.info('[SleepBackfill][Garmin] Provider minimum adjusted.', {
+                ...telemetry, nextStartMs: requestStartMs, outcome: 'retry_inline',
+            });
         }
     }
 
@@ -1066,6 +1084,9 @@ async function enqueueHistorySleepItem(execution: HistoryExecution | undefined, 
     await execution?.beforeRequest();
     const ref = await addSleepSyncQueueItem({ ...input, ...(execution ? {
         dedupeKey: `connection-history:${execution.runId}:${input.type}:${input.rangeStartMs}:${input.rangeEndMs}`,
+        // The coordinator already bounds admission and waits for this batch.
+        // Manual bulk imports retain their scheduled dispatch behavior.
+        dispatchImmediately: true,
         preserveExisting: true,
         connectionHistoryRunId: execution.runId,
         requiredDocumentFieldValues: execution.requiredDocumentFieldValues,

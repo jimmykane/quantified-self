@@ -1,4 +1,5 @@
 import { getRejectedSwimTiming, resolveSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
+import { buildEventLineSegments, resolveEventLineContinuity, type EventLineContinuitySettings } from './event-chart-line-continuity.helper';
 import {
   ActivityInterface,
   ActivityTypeGroups,
@@ -41,7 +42,7 @@ import {
   StreamInterface,
   UserUnitSettingsInterface,
   XAxisTypes
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import type { AppEventColorService } from '../services/color/app.event.color.service';
 import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
@@ -112,6 +113,7 @@ export interface EventChartSwimLengthMarker extends EventChartMarkerBase {
 export type EventChartTimelineMarker = EventChartLapMarker | EventChartSwimLengthMarker;
 
 export interface BuildEventChartPanelsInput {
+  lineContinuity?: EventLineContinuitySettings;
   selectedActivities: ActivityInterface[];
   allActivities: ActivityInterface[];
   xAxisType: XAxisTypes;
@@ -143,6 +145,7 @@ export interface EventChartActivitySnapshot {
 }
 
 export interface EventChartPanelBuildSnapshotInput {
+  lineContinuity?: EventLineContinuitySettings;
   selectedActivities: EventChartActivitySnapshot[];
   xAxisType: XAxisTypes;
   showAllData: boolean;
@@ -227,6 +230,7 @@ interface LapDistanceLookup {
 }
 
 interface EventChartSeriesPointResult {
+  lineSegmentIds?: Uint32Array;
   lineValues: Float64Array;
   timeValues: Float64Array;
   pointCount: number;
@@ -235,6 +239,7 @@ interface EventChartSeriesPointResult {
 }
 
 interface BuildEventChartPanelsCoreInput {
+  lineContinuity?: EventLineContinuitySettings;
   selectedActivities: ActivityInterface[];
   xAxisType: XAxisTypes;
   showAllData: boolean;
@@ -246,6 +251,7 @@ interface BuildEventChartPanelsCoreInput {
 
 export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventChartPanelModel[] {
   return buildEventChartPanelsFromActivities({
+    lineContinuity: resolveEventLineContinuity(input.lineContinuity),
     selectedActivities: Array.isArray(input.selectedActivities) ? input.selectedActivities : [],
     xAxisType: input.xAxisType,
     showAllData: input.showAllData,
@@ -261,6 +267,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
 export function createEventChartPanelBuildSnapshot(input: BuildEventChartPanelsInput): EventChartPanelBuildSnapshotInput {
   const selectedActivities = Array.isArray(input.selectedActivities) ? input.selectedActivities : [];
   return {
+    lineContinuity: resolveEventLineContinuity(input.lineContinuity),
     selectedActivities: selectedActivities.map((activity) => snapshotEventChartActivity(activity, input)),
     xAxisType: input.xAxisType,
     showAllData: input.showAllData,
@@ -275,6 +282,7 @@ export function createEventChartPanelBuildSnapshot(input: BuildEventChartPanelsI
 
 export function buildEventChartPanelsFromSnapshot(input: EventChartPanelBuildSnapshotInput): EventChartPanelModel[] {
   return buildEventChartPanelsFromActivities({
+    lineContinuity: resolveEventLineContinuity(input.lineContinuity),
     selectedActivities: Array.isArray(input.selectedActivities)
       ? input.selectedActivities.map((activitySnapshot) => createSnapshotActivity(activitySnapshot))
       : [],
@@ -316,7 +324,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
     });
 
     allowedStreams.forEach((stream) => {
-      const pointResult = toSeriesPoints(activity, stream, input.xAxisType, activityCache);
+      const pointResult = toSeriesPoints(activity, stream, input.xAxisType, activityCache, input.lineContinuity);
       if (!pointResult.pointCount) {
         return;
       }
@@ -364,6 +372,8 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
         unit,
         lineValues: pointResult.lineValues,
         timeValues: pointResult.timeValues,
+        lineContinuity: input.lineContinuity,
+        lineSegmentIds: pointResult.lineSegmentIds,
         pointCount: pointResult.pointCount,
         ...(gradeColorData ? {
           gradeColorValues: gradeColorData.values,
@@ -717,6 +727,7 @@ export function collectEventChartPanelTransferables(panels: EventChartPanelModel
       appendFloat64ArrayTransferable(transferables, series.lineValues);
       appendFloat64ArrayTransferable(transferables, series.timeValues);
       appendFloat64ArrayTransferable(transferables, series.gradeColorValues);
+      if (series.lineSegmentIds?.buffer instanceof ArrayBuffer) transferables.push(series.lineSegmentIds.buffer);
     });
   });
 
@@ -805,6 +816,78 @@ export function getEventChartSeriesY(series: EventChartPanelSeries, index: numbe
 
   const value = series.lineValues[(Math.trunc(index) * 2) + 1];
   return Number.isFinite(value) ? value : null;
+}
+
+/** Display-only activity line: use the saved continuity policy without manufacturing measurements. */
+export function buildEventRecordedLineValues(series: EventChartPanelSeries): Float64Array {
+  const count = getEventChartSeriesPointCount(series);
+  // Each recorded point can need a preceding null separator for a timestamp gap.
+  const values = new Float64Array(count * 4);
+  let offset = 0;
+  let previousIndex = -1;
+  for (let index = 0; index < count; index++) {
+    const x = getEventChartSeriesX(series, index);
+    if (!Number.isFinite(x)) {
+      previousIndex = -1;
+      continue;
+    }
+    const y = getEventChartSeriesY(series, index);
+    if (y === null) continue;
+
+    if (offset && (previousIndex < 0 || !canConnectEventChartPoints(series, previousIndex, index))) {
+      values[offset++] = x;
+      values[offset++] = Number.NaN;
+    }
+    values[offset++] = x;
+    values[offset++] = y;
+    previousIndex = index;
+  }
+  return values.slice(0, offset);
+}
+
+/** Untimed routes and calculated windows can declare their own connection policy. */
+export function getEventChartLineGapPolicy(series: EventChartPanelSeries): 'recorded-time' | 'adjacent' | 'connect' | 'none' {
+  if (series.lineGapPolicy) return series.lineGapPolicy;
+  // Retain Battery's sparse display in Continuous; explicit gap choices apply to it too.
+  return `${series.streamType || ''}`.toLowerCase().includes('battery')
+    && resolveEventLineContinuity(series.lineContinuity).mode === 'continuous' ? 'connect' : 'recorded-time';
+}
+
+export function canConnectEventChartPoints(series: EventChartPanelSeries, left: number, right: number): boolean {
+  const policy = getEventChartLineGapPolicy(series);
+  if (policy === 'none') return false;
+  if (policy === 'adjacent') return right === left + 1;
+  if (policy === 'connect') return true;
+  const segments = getEventChartLineSegments(series);
+  return left >= 0 && right > left && segments[left] > 0 && segments[left] === segments[right];
+}
+
+// Legacy callers receive the same policy. Worker-built series already carry the IDs;
+// immutable legacy buffers are cached by reference, so viewport scaling never relearns cadence.
+const legacyLineSegments = new WeakMap<EventChartPanelSeries, {
+  lineValues: Float64Array | undefined; timeValues: Float64Array | undefined;
+  points: EventChartPanelSeries['points']; count: number; key: string; segments: Uint32Array;
+}>();
+
+function getEventChartLineSegments(series: EventChartPanelSeries): Uint32Array {
+  const count = getEventChartSeriesPointCount(series);
+  if (series.lineSegmentIds?.length === count) return series.lineSegmentIds;
+  const settings = resolveEventLineContinuity(series.lineContinuity);
+  const key = `${settings.mode}:${settings.maxGapSeconds}`;
+  const cached = legacyLineSegments.get(series);
+  if (cached?.lineValues === series.lineValues && cached?.timeValues === series.timeValues
+    && cached?.points === series.points && cached?.count === count && cached?.key === key) return cached.segments;
+  const times = new Float64Array(count);
+  const values = new Float64Array(count);
+  for (let index = 0; index < count; index++) {
+    const validX = Number.isFinite(getEventChartSeriesX(series, index));
+    times[index] = validX ? getEventChartSeriesTime(series, index) : Number.NaN;
+    // A bad coordinate is a hard barrier, even if it also has no metric value.
+    values[index] = validX ? getEventChartSeriesY(series, index) ?? Number.NaN : 0;
+  }
+  const segments = buildEventLineSegments(times, values, settings);
+  legacyLineSegments.set(series, { lineValues: series.lineValues, timeValues: series.timeValues, points: series.points, count, key, segments });
+  return segments;
 }
 
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {
@@ -1467,7 +1550,8 @@ function toSeriesPoints(
   activity: ActivityInterface,
   stream: StreamInterface,
   xAxisType: XAxisTypes,
-  activityCache: ActivityNumericCache
+  activityCache: ActivityNumericCache,
+  lineContinuity?: EventLineContinuitySettings,
 ): EventChartSeriesPointResult {
   const streamValues = getStreamNumericValues(stream, activityCache);
   if (!streamValues.length) {
@@ -1478,6 +1562,13 @@ function toSeriesPoints(
   const speedValues = shouldTreatAsPace
     ? getActivityStreamNumericValues(activity, DataSpeed.type, activityCache)
     : null;
+  const metricValues = shouldTreatAsPace
+    ? Float64Array.from(streamValues, (value, index) => getRenderablePaceValue(value, speedValues, index) ?? Number.NaN)
+    : streamValues;
+  // Learn sampling from the whole metric, before the Distance axis omits coordinates.
+  const sourceSegments = buildEventLineSegments(
+    getActivityAbsoluteTimes(activity, activityCache), metricValues, resolveEventLineContinuity(lineContinuity),
+  );
 
   if (xAxisType === XAxisTypes.Distance) {
     const distanceValues = getActivityDistanceValues(activity, activityCache);
@@ -1486,6 +1577,10 @@ function toSeriesPoints(
 
     const lineValues = new Float64Array(length * 2);
     const pointTimes = new Float64Array(length);
+    const pointSegments = new Uint32Array(length);
+    let segment = 0;
+    let previousSourceSegment = 0;
+    let coordinateBreak = false;
     let pointCount = 0;
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -1496,12 +1591,19 @@ function toSeriesPoints(
       const x = distanceValues[index];
       const time = absoluteTimes[index];
       if (!Number.isFinite(x) || !Number.isFinite(time)) {
+        if (typeof y === 'number' && Number.isFinite(y)) coordinateBreak = true;
         continue;
       }
       const writeOffset = pointCount * 2;
       lineValues[writeOffset] = x;
       lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
       pointTimes[pointCount] = time;
+      if (sourceSegments[index]) {
+        if (coordinateBreak || previousSourceSegment !== sourceSegments[index]) segment++;
+        pointSegments[pointCount] = segment;
+        previousSourceSegment = sourceSegments[index];
+        coordinateBreak = false;
+      }
       pointCount += 1;
       if (x < minX) {
         minX = x;
@@ -1510,7 +1612,8 @@ function toSeriesPoints(
         maxX = x;
       }
     }
-    return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
+    return { ...normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX),
+      lineSegmentIds: pointSegments.slice(0, pointCount) };
   }
 
   const preserveEnduranceGaps = ['Stamina', 'Potential Stamina', 'Estimated Sustainable Distance',
@@ -1520,6 +1623,7 @@ function toSeriesPoints(
   const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
   const lineValues = new Float64Array(length * 2);
   const pointTimes = new Float64Array(length);
+  const pointSegments = new Uint32Array(length);
   let pointCount = 0;
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -1549,6 +1653,7 @@ function toSeriesPoints(
     lineValues[writeOffset] = x;
     lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
     pointTimes[pointCount] = time;
+    pointSegments[pointCount] = sourceSegments[index];
     pointCount += 1;
     if (x < minX) {
       minX = x;
@@ -1558,7 +1663,8 @@ function toSeriesPoints(
     }
   }
 
-  return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
+  return { ...normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX),
+    lineSegmentIds: pointSegments.slice(0, pointCount) };
 }
 
 function createEmptySeriesPointResult(): EventChartSeriesPointResult {

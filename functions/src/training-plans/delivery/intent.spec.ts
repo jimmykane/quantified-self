@@ -4,10 +4,12 @@ import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display
 import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
+import { hashTrainingScheduleRequestPayload } from '../persistence';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
+import { WahooTrainingTransport } from './wahoo/transport';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
   assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery,
   assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV14ForRecovery,
@@ -24,6 +26,71 @@ const base: DeliveryContext = {
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
+  it.each([
+    [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
+    [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
+    [ActivityTypes['LES MILLS BODYPUMP'], 'Strength Training'], [ActivityTypes.VirtualRowing, 'Indoor Rowing'],
+    [ActivityTypes.Kettlebell, null], [ActivityTypes.Calisthenics, null],
+    [ActivityTypes.Yoga, null], [ActivityTypes.Pilates, null], [ActivityTypes.Stretching, null],
+    [ActivityTypes.FlexibilityTraining, 'Stretching'], [ActivityTypes.Crossfit, null],
+    [ActivityTypes['Circuit Training'], null], [ActivityTypes.Aerobics, null], [ActivityTypes.Crosstrainer, null],
+    [ActivityTypes.EllipticalTrainer, 'Crosstrainer'], [ActivityTypes.Meditation, null], [ActivityTypes.Breathwork, 'Meditation'],
+  ] as const)('reassesses unsupported %s with the approved profile and existing consent', (sport, fallback) => {
+    const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
+    const context: DeliveryContext = { ...base,
+      transport: new SuuntoGuideTransport(request, 'Quantified Self'),
+      setting: { ...base.setting!, provider: 'suunto' },
+      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport } },
+    };
+    // The previous mapper hashed the complete workout when it rejected this sport.
+    const previousDigest = hashTrainingScheduleRequestPayload({ mappingVersion: 'suunto-guides-v13',
+      destination: 'account-a', zone: 'Europe/Helsinki', owner: 'Quantified Self', workout: context.workout });
+    const previous = { connectionEpoch: 0, destinationKey: 'account-a', status: 'unsupported',
+      desired: 'preserve', desiredDigest: previousDigest, acceptedDigest: null } as DeliveryLedgerV1;
+    const before = structuredClone(context.setting);
+    const reviewed = resolveDeliveryIntent(context, previous);
+    expect(reviewed.digest).not.toBe(previous.desiredDigest);
+    if (fallback) {
+      expect(reviewed).toMatchObject({ desired: 'preserve', status: 'approval_required', approvalDigest: reviewed.digest });
+      expect(reviewed.issues).toContainEqual(expect.stringContaining(`${sport} using its ${fallback} profile`));
+    } else {
+      expect(reviewed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null, issues: [] });
+    }
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: reviewed.digest } }, previous))
+      .toMatchObject({ desired: 'present', status: 'pending', digest: reviewed.digest, approvalDigest: null });
+    expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }, previous).status).toBe('paused_pro');
+    expect(context.setting).toEqual(before);
+    expect(context.workout!.structure.sport).toBe(sport);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each(['garmin', 'wahoo'] as const)('requires mapping review for previously unsupported Virtual Rowing on %s', provider => {
+    const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
+    const context: DeliveryContext = { ...base,
+      transport: provider === 'garmin' ? new GarminTrainingTransport(request) : new WahooTrainingTransport(request),
+      setting: { ...base.setting!, provider },
+      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.VirtualRowing } },
+    };
+    const digest = context.transport!.assess(context.workout!, 'account-a', 'Europe/Helsinki').digest;
+    // Generic mappers hash the prescription even while unsupported; a status change must still be reassessed.
+    const previous = { connectionEpoch: 0, destinationKey: 'account-a', status: 'unsupported',
+      desired: 'preserve', desiredDigest: digest, acceptedDigest: null } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent(context, previous)).toMatchObject({ desired: 'preserve', status: 'approval_required',
+      digest, approvalDigest: digest });
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: digest } }, previous))
+      .toMatchObject({ desired: 'present', status: 'pending', digest });
+    expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
+    if (provider === 'wahoo') {
+      const targeted = structuredClone(context.workout!);
+      const step = targeted.structure.nodes[0];
+      if (step.kind === 'step') step.targets = [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }];
+      expect(resolveDeliveryIntent({ ...context, workout: targeted,
+        setting: { ...context.setting!, approvedDigest: digest } }, previous).status).toBe('unsupported');
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['year boundary', '2026-12-31T22:30:00Z', 'Europe/Helsinki', '2027-01-01', '2028-01-01', '2028-01-02', '2026-12-31'],
     ['leap year', '2027-12-31T22:30:00Z', 'Europe/Helsinki', '2028-01-01', '2028-12-31', '2029-01-01', '2027-12-31'],

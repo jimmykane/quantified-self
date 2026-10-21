@@ -271,8 +271,11 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
           name: 'Efficiency',
           type: 'line',
           data: points.map(point => [point.weekStartMs, point.value] as const),
-          showSymbol: false,
-          symbol: 'none',
+          // A single observed week has no segment to draw. Keep it visible.
+          showSymbol: points.length === 1,
+          symbol: points.length === 1 ? 'circle' : 'none',
+          symbolSize: 6,
+          itemStyle: { color: style.trendLineColor },
           lineStyle: {
             width: 1.3,
             color: style.trendLineColor,

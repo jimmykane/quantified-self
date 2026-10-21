@@ -1,5 +1,6 @@
 import {
   ActivityInterface,
+  ActivityTypes,
   DataDistance,
   DataStrydDistance,
   EventInterface,
@@ -71,7 +72,8 @@ export function resolveEventChartXAxisType(
 
 export function canSelectEventChartDistanceXAxis(activities: ActivityInterface[] | null | undefined): boolean {
   const selectedActivities = Array.isArray(activities) ? activities : [];
-  return !selectedActivities.some((activity) => !activityHasFiniteDistanceData(activity));
+  return !selectedActivities.some((activity) => activity?.type === ActivityTypes.Swimming
+    || !activityHasFiniteDistanceData(activity));
 }
 
 export function formatEventXAxisValue(value: number, axisType: XAxisTypes, options?: EventXAxisFormatOptions): string {

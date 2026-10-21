@@ -52,13 +52,21 @@ enqueue exception. Metrics count observations/attempts, not distinct jobs or ath
 ## Bounded observations, progress and cost
 
 Each existing scanner observes its queue **hourly**, only on its scheduled tick in the
-first ten minutes of each hour. Interval jobs can have a non-zero minute phase: the live
-activity job runs at :00/:10/etc., while the route job runs at :06/:16/etc. The Scheduler
+first ten minutes of each hour. Interval jobs can have a non-zero minute phase: the initial
+activity cadence was :00/:10/etc., while the route job runs at :06/:16/etc. The Scheduler
 event's `scheduleTime`, not the Function's wall-clock start time, owns that decision so
 late delivery does not shift the observation slot. The other five
 ten-minute ticks still run discovery and emit its existing outcome telemetry, but perform
 no monitoring queries. There is no new schedule, timer, persisted throttle or monitoring
 record. Missing/invalid scheduled time reports unavailable observation without querying.
+
+The deployed starvation fix runs the existing bounded observation **before
+discovery** on that hourly tick. A busy discovery pass can no longer consume its
+budget first. Observation failure/timeout is still unavailable, never healthy zero,
+and does not prevent discovery or replace its original error. This ordering change
+was deployed on 19 October 2026; the next natural route and normal/heavy observations
+occurred at 14:06 and 14:08 UTC respectively and were verified below. The sample describes
+existing queued work at the start of the tick, not the outcome of newly discovered work.
 
 Hourly observation still runs when **new discovery is disabled**, because turning
 discovery off does not cancel tasks already admitted. It queries only its root job
@@ -79,8 +87,11 @@ collection, not user histories, activity bodies, Storage, provider APIs or Cloud
   event/route original-file references. A changed job is unknown; missing/deleting owners,
   deleted sources or absent original-file references are excluded. No original file is read.
 - Five-second cooperative observation deadline; late reads cannot emit healthy samples or
-  start further reads. In-flight reads are not forcibly cancelled. If discovery already used
-  290 seconds, observation is skipped rather than extending the existing 300-second budget.
+  start further reads. In-flight reads are not forcibly cancelled. The starvation
+  fix gives this bounded check its turn before discovery, removing the old
+  post-discovery 290-second skip. The existing native request deadline remains 300 seconds
+  including the observation; this does not extend discovery's execution budget or solve
+  every slow discovery pass.
 - Empty queues require **one query per collection per hour**, no progress or candidate
   validation reads: 48 query-minimum document reads per day across both scanners, down
   from 720. At most five queue/progress queries and eighty candidate-validation document
@@ -129,6 +140,9 @@ conservative suppression evidence, not owner-specific completion or device evide
 
 `tools/reparse-monitoring/definitions.mjs` owns dashboard **QS Sports Lib Reprocessing**,
 ten `qs_reparse_*_v1` log metrics and seven policies under `qs-reparse-monitoring-v1`.
+The approved native-timeout correction keeps those counts and extends the existing
+scanner policy to two conditions (eight conditions overall); it was applied and
+verified on 19 October 2026.
 Native depth, HTTP-attempt and dispatch-delay charts are scoped to the three exact task
 queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 
@@ -139,7 +153,7 @@ queues in `europe-west2`. Heavy depth alone is diagnostic, never critical.
 | Normal/route no progress | Two positive hourly stalled observations per tier in three hours | Error |
 | Heavy no progress | Two six-hour-stalled hourly observations in three hours | Warning |
 | Task admission failures | Three actual enqueue exceptions per tier in one hour | Error |
-| Discovery failures | Three scanner exceptions in one hour | Error |
+| Discovery failures | Three structured exceptions per tier OR three native 5xx responses per scanner in one hour | Error |
 | Observation health | Two unavailable/unknown hourly observations per tier in three hours | Warning |
 
 Policies use a 60-second retest window, inactive missing-data evaluation and two-hour
@@ -153,6 +167,34 @@ Three-hour observation windows allow multiple hourly samples despite boundary/in
 drift. Event-driven worker/enqueue/discovery failure thresholds are unchanged.
 Multi-tier policy filters use exact `one_of` membership rather than mixed label AND/OR
 expressions, following [Monitoring filter syntax](https://docs.cloud.google.com/monitoring/api/v3/filters).
+
+The scanner policy's native-timeout correction uses the built-in
+`run.googleapis.com/request_count` metric with `response_code_class="5xx"`, scoped
+to the exact `schedulesportslibreparsescan` and `schedulesportslibroutereparsescan`
+services, this project and `europe-west2`. It includes HTTP 504 timeouts even when
+application code subsequently logs an ACK: Cloud Run can return 504 without terminating
+the container's work ([request timeout behavior](https://docs.cloud.google.com/run/docs/configuring/request-timeout)).
+The existing structured condition/name/identity remains intact. The new native condition
+sums across revisions and response codes **per scanner service**, not a nonexistent
+native `tier` label and not a combined activity/route total. Both conditions retain
+three observations in one hour, a 60-second retest, inactive missing-data handling and
+OR combination; their counts must not be added as distinct failures. One isolated
+native timeout does not meet the repeated-failure threshold.
+
+A matching native-error chart groups by service and response code. There are still
+ten log metrics and seven policies; the active dashboard/condition bundle has
+**28 queries**, versus the previously deployed 26. No metric, Function, observer,
+Firestore read/write, index, schedule, timeout, retry or worker resource is added.
+Native errors are independent of the optional hourly queue observation, so they are
+not restricted to the first ten minutes of each hour.
+
+Coverage is intentionally native **5xx request results**, not all scheduler delivery
+failures: Cloud Run's request metric excludes requests that never reach a container,
+including rejected authentication and some capacity failures
+([metric definition](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#run)).
+Use existing Cloud Scheduler execution logs to diagnose those or a missing invocation;
+do not claim idle or missing native series proves successful dispatch. No unconditional
+absence policy, broad severity matcher, new log metric or remediation is introduced.
 
 ## Verification and separately approved activation
 
@@ -212,8 +254,18 @@ upgrades, provider enablement, retention and recorded-activity projections are u
 approval on 19 October 2026. All four indexes are READY, five existing Functions are ACTIVE,
 and the dashboard, ten metrics and seven enabled policies have live API readback. No new
 Function, schedule or channel was created. Natural route-sample confirmation passed
-at 10:06 UTC; representative real-batch evidence remains in #834. Idle monitoring
-health alone does not close it.
+at 10:06 UTC and representative normal-tier processing evidence is now recorded below.
+The native scanner-timeout coverage gap discovered during the final closure check
+was subsequently corrected, applied with separate owner approval and verified by
+live readback at 12:28–12:32 UTC on 19 October 2026. #834's monitoring acceptance
+criteria are complete. Structured attempt ACKs alone still do not establish scanner
+health; see the native timeout and unavailable-sample evidence below. This correction
+required no additional Functions, index or Rules deployment.
+
+The subsequent 13:10 UTC observation-health email exposed starvation of the hourly
+check behind long discovery passes. The follow-up below corrects that placement;
+the owner-approved two-scanner deployment and next-natural-hourly verification are complete.
+The active monitoring policies remain unchanged and enabled.
 
 Read-only production preflight on 19 October 2026 found no existing reparse metric, policy
 or dashboard among 106 log metrics, 55 policies and nine dashboards. Plan-only Firestore
@@ -304,9 +356,261 @@ and the actual :06 route cadence. No schedule or observation budget changed.
   ten-minute schedules and the existing Alerts email channel remain enabled. The bounded
   post-creation log/series window contained no probe failures, worker attempts or job commits;
   absence of worker traffic during idle is not evidence of successful parsing or batch latency.
-- **#834 remains open / In progress only for representative real-batch progress, committed
+- **At the 10:10 UTC readback, #834 remained open / In progress for representative real-batch progress, committed
   outcomes and latency evidence.** Reuse natural real work when it occurs; running or
   broadening a reparse requires separate approval. No scanner/worker was manually invoked,
   no task was replayed, no reparse was enabled, no email was sent and no provider API was called.
   No cloud configuration changed during this verification. #543 is unchanged. The heartbeat
   follow-up is paused once this evidence is recorded; another idle poll cannot supply batch proof.
+
+## Representative processing proof and final closure check — 19 October 2026
+
+Bounded read-only verification of the fixed **10:45–11:52 UTC** window confirmed:
+
+- 290 normal-tier `job_commit:completed` observations after job persistence, spanning
+  11:50:07.936–11:51:59.992 UTC, and 290 normal-tier worker ACK observations.
+- All 290 worker observations carried durations, from 1,576 to 6,241 milliseconds.
+  The positive `qs_reparse_worker_latency_v1` distribution contained 290 observations;
+  positive worker-attempt and committed-outcome series were present as well. These
+  are observations, not a deduplicated count of distinct jobs or accounts.
+- Natural normal/heavy samples at 11:00:40.836 UTC and route sample at 11:06:02.177 UTC
+  had zero eligible sampled pending work, zero unknowns, no cap and no stall, with
+  positive Monitoring sample series for all three tiers. The next route sample at
+  12:06:02.883 UTC was healthy too. Normal/heavy and route workloads remain distinct;
+  this real-work evidence is normal-tier processing, not a claim of live heavy/route rewrites.
+- The targeted structured-failure query returned no exceptional observations in that
+  fixed window. All targeted queries were uncapped. The earlier broad 500-entry log
+  query was capped and was not used as a complete count or proof of absence.
+- Final configuration readback reconfirmed ten owned metrics, seven enabled policies,
+  the existing dashboard/channel and all 26 actual chart/condition queries. No cloud
+  configuration, source data, scheduler, worker, campaign or queue was changed, and
+  no email or provider call was initiated for this verification.
+
+The real-batch progress/outcome/duration evidence was therefore satisfied, but the
+12:11 UTC native-health check found a separate coverage issue that prevented closure
+at that time:
+
+- The activity scanner's 11:50 UTC scheduled request returned **HTTP 504 after
+  299.982 seconds**. Cloud Scheduler recorded **DEADLINE_EXCEEDED at 11:55:04.549 UTC**.
+- The same scanner later emitted structured `scan_attempt:acknowledged` at
+  **12:00:29.814 UTC**, with `durationMs: 628888`. Work continued after the request's
+  native deadline. A later application ACK does not erase the failed scheduled request.
+- The then-existing discovery-failure policy selected only structured `scan_attempt:failed`
+  observations. It therefore misses this proven native-timeout path. The missing
+  normal/heavy 12:00 sample must not be presented as another healthy idle observation.
+
+**Outstanding at that check (subsequently completed below):** separately approved
+application/readback of the corrected native scanner condition and matching dashboard
+chart. Exact scanner scope, sustained thresholds and upgrade identity preservation
+are covered by the regressions below.
+Do not change scanner deadlines, discovery settings, worker resources, queue concurrency,
+retry policy or the separate #543 admission-cap scope merely to silence this signal.
+No native fault was injected and no processing was manually started for these checks.
+#834 remained open / In progress until this gap was addressed and verified.
+
+## Local native-timeout correction and review — 19 October 2026
+
+The correction changes only `tools/reparse-monitoring/` definitions/tests and this
+operational documentation. It adds one native condition to the existing `scanner`
+policy and one chart without changing the existing structured condition or seven
+policy identities. Reapplication fixtures start from the deployed structured-only
+shape, append the native condition once, preserve all existing condition IDs and
+the dashboard identity, and preserve the nine other monitoring bundles and channel.
+
+Thirteen focused tests and all 101 tests across the ten monitoring bundles passed.
+Fixtures cover both scanner names, 500/502/503/504/599 results without application
+telemetry, successful/client-error exclusion, wrong projects/regions/metrics/resources,
+unrelated workers and lookalike service names. Threshold tests retain one/two-error
+non-alerting behavior, independent late ACKs, cross-revision sums and separation of
+the two scanner services. The filter evaluator now uses Logging's OR-before-AND
+precedence and supports exact Monitoring `one_of` membership rather than widening filters.
+
+Read-only Monitoring queries found the already-observed activity-scanner 504 in the
+existing native request metric. This is not a new metric waiting for ingestion and
+no fault was injected. Read-only validation at **12:20 UTC** accepted all **28 proposed
+chart/condition queries**, including the service-grouped native condition and the
+service/response-code chart. Both native queries returned a positive point for the
+recorded activity-scanner timeout in the fixed 11:40–12:15 UTC window; neither was
+truncated. This validates filters and aggregation against real metric data, not
+policy activation: the new condition and chart were **not yet applied at that check**.
+No runtime code, Firestore query or queue behavior changed, so no Functions build or
+new emulator run was required for this configuration-only correction. Existing Help,
+MCP/Assistant, Training, parser and provider contracts remain unchanged. #543 is untouched.
+
+## Approved native-timeout activation and completion — 19 October 2026
+
+With the owner's separate approval, pushed `develop` through `5ca0d21ca`, applied
+the corrected monitoring bundle and serially reapplied it. Final independent readback
+at **12:28–12:32 UTC / 15:28–15:32 Helsinki** verified:
+
+- Ten matching owned log metrics, seven enabled policies and **eight conditions**,
+  including the new native 5xx/504 condition on the existing scanner policy. All
+  28 actual chart/condition queries were accepted by Monitoring. All 20 chart queries,
+  dashboard layout and 56 policy configuration fields match the source definitions,
+  allowing API omission of empty repeated fields/default presentation fields.
+- The original dashboard, all seven policy IDs and all seven original condition IDs
+  were retained. Serial reapplication also retained the new condition ID. No metric,
+  policy, dashboard or channel was added or deleted: totals stayed at **125 metrics,
+  69 policies, 11 dashboards and four channels**. Hashes of all 115 unrelated metrics,
+  62 unrelated policies, ten unrelated dashboards and all four channels are unchanged.
+- The existing independent Alerts email channel remains enabled on every policy;
+  reuse #655's same-channel OPENED/CLOSED email proof. No test email, fault injection
+  or synthetic incident was created.
+- The native condition's real time series includes the previously observed activity
+  scanner HTTP 504. Its maximum aligned count in the bounded three-hour readback was
+  **one**, below the repeated-failure threshold of three per scanner per hour. The
+  structured scanner-failure condition had no series in that window. These results
+  validate capture and thresholds; they do not erase the failed request or claim
+  a real threshold-crossing incident/email was forced.
+- Natural activity and route requests most recently returned HTTP 200, with application
+  ACKs at **12:22:40 UTC** and **12:26:01 UTC**, respectively. The earlier normal/heavy
+  hourly observation at **12:09:52 UTC** explicitly reported unavailable after an
+  approximately 290-second scanner attempt. Both tiers have a positive observation-
+  failure series, with maximum count one each in three hours (warning requires two).
+  These are **not healthy idle samples**. Earlier verified healthy normal/heavy/route
+  samples and representative 290 normal-tier committed outcomes/durations remain the
+  live progress evidence; no live heavy/route rewrites are claimed.
+- All five existing Functions remain ACTIVE. Before/after readback matched their
+  revisions and resource controls, both enabled ten-minute schedules, all three task
+  queue controls and persisted discovery configuration. This task deployed no Function,
+  index or Rule and changed no runtime, retry, campaign, queue or provider behavior.
+
+All 101 offline monitoring tests passed before application; focused reparse tests and
+diff checks passed for these completion notes. Monitoring coverage is **covered** and
+the approved #834 acceptance criteria are satisfied. This closes the observability
+delivery, not the historical runtime timeout or unavailable observation as successful
+runs. Further runtime investigation/tuning is separate from monitoring activation;
+#543's heavy admission-cap scope/status remains unchanged. No scanner/worker was
+manually invoked, no source data was written/deleted and no provider call was made.
+
+## Hourly observation starvation follow-up — 19 October 2026
+
+The owner reported a real observation-health email at 13:10 UTC, with heavy-tier
+`qs_reparse_probe_failures_v1` count two above threshold one. Bounded, uncapped read-only
+queries at 13:24 UTC confirmed unavailable normal/heavy samples at **12:09:52** and
+**13:04:54 UTC**, following discovery attempts lasting **290,865** and **293,441 ms**.
+The old wrapper deliberately skipped its post-discovery probe at 290 seconds. Both
+requests returned HTTP 200, but neither established queue observation health. A
+separate route sample at 13:06:03 UTC was healthy. The warning accurately exposed
+two missing observations; it did not mean two recordings failed to reparse.
+
+The fix moves the same hourly read-only probe before discovery in both existing
+scanners, using the renamed internal `beforeReparseScan` wrapper. It retains:
+
+- The scheduled-time gate, all ten interval phases and late-delivery behavior; no
+  process-local throttle, new timer, persisted state or additional schedule.
+- The same five-second observation deadline, candidate/progress read caps, privacy
+  fields, deletion/source validation, idle fast path and ordinary retry exclusions.
+  Previously skipped observations now consume their intended bounded read budget;
+  this restores coverage, not a claim of zero additional reads versus skipped work.
+- Discovery after observer failure/timeout, original discovery exceptions and attempt
+  telemetry. Late read completion cannot fabricate a healthy sample or start more reads.
+- Existing 512 MiB / 300-second isolated scanners, discovery settings, worker resources,
+  native retries, indexes, Rules and all monitoring filters/thresholds/identities.
+
+The ordering regression fails on the old implementation and passes on the fix.
+Focused tests cover the three observed long durations (290,865 / 293,441 / 628,888 ms),
+five-second probe timeout/recovery, late-read suppression, entrypoint ordering, invalid
+and late scheduled time, and unchanged hourly frequency. Real demo-emulator cases
+exercise both collection profiles and verify observations precede discovery without
+job writes. Existing monitoring and lifecycle suites remain part of verification.
+
+Local verification passed: fifteen focused Functions suites / **419 tests**; the
+complete isolated `mcp-data` emulator group / **20 files, 501 tests**, including all
+14 reparse cases, with none skipped; all **101** offline monitoring tests; and all
+14 emulator-coverage guards. Functions build and final TypeScript no-emit checks,
+180-endpoint / 99-isolated-target runtime contracts, deployment-source and 70-endpoint
+secret-binding checks passed. Focused non-mutating lint had zero errors and the
+74 pre-existing legacy-spec `any` warnings; diff checks passed. Review found no
+additional issue in the changed ordering, error propagation or read boundaries.
+
+Monitoring coverage is **covered** with this runtime correction; no alert weakening
+or bundle reapplication is required. MCP/Assistant and Help review remains no impact:
+no exposed tool, schema, metric, scope, permission, consent or user action changes.
+The owner subsequently approved pushing and deploying only the two scanners, followed
+by next-natural-heartbeat verification. Deployment and remaining proof are recorded below.
+Existing three-hour warning
+counts can remain until old unavailable observations leave the window; do not clear
+or disable the policy, reset metrics, or force a run to manufacture recovery evidence.
+#543 remains unchanged; this fix does not tune discovery throughput or admission.
+
+### Approved two-scanner deployment — 19 October 2026, 16:51 Helsinki / 13:51 UTC
+
+`develop` is pushed through `f5de83391`. Firebase deployment selected exactly the two
+existing scanner Functions, and both updates completed successfully. Independent API
+readback confirmed:
+
+- `scheduleSportsLibReparseScan`: ACTIVE revision
+  `schedulesportslibreparsescan-00162-vav`.
+- `scheduleSportsLibRouteReparseScan`: ACTIVE revision
+  `schedulesportslibroutereparsescan-00113-wij`.
+- Both retain Gen2 / Node 22, 512 MiB, 300 seconds, their isolated entrypoints and all
+  prior resource/secret/service controls. The three reparse worker revisions/configurations,
+  both enabled ten-minute schedule controls, all three queue controls and persisted
+  discovery configuration are hash-verified unchanged.
+- All monitoring remains unchanged: 125 total metrics, 69 policies, 11 dashboards and
+  four channels, including ten owned reparse metrics, seven enabled policies/eight
+  conditions and all 28 valid chart/condition queries. No bundle was reapplied.
+- The deployment rebuilt Functions and reran 180-endpoint / 99-isolated-target and
+  70-secret-endpoint checks. Fresh 97-test scanner/helper verification passed; the
+  prior complete 501-test demo-emulator group covers the identical deployed commit.
+  No indexes, Rules, Hosting, workers, provider resources or other Functions were deployed.
+
+**At deployment, natural hourly verification remained, not another deployment.** Scheduler readback
+at 13:51 UTC gives the next route tick at 13:56 and activity tick at 13:58. The first
+eligible hourly slots are therefore **17:06 Helsinki / 14:06 UTC (route)** and
+**17:08 Helsinki / 14:08 UTC (normal/heavy)**. Read the live `scheduleTime` rather than
+assuming minute zero; the ten-minute cadence/control configuration has not changed.
+The earlier 17:00 activity estimate is superseded by this actual readback.
+
+The follow-up required natural `queue_sample` logs and positive sample series from these
+exact corrected revisions, followed by whole-attempt/native HTTP results and allowing
+for Monitoring ingestion.
+A positive queue-sample metric alone is insufficient because it also counts explicitly
+unavailable observations. Do not call capped/unknown samples healthy or erase the older
+three-hour warning counts. No manual scanner invocation, provider call, source write,
+queue replay, alert reset, test email or resource deletion was performed.
+
+### Next natural hourly proof — 19 October 2026, 17:13–17:14 Helsinki / 14:13–14:14 UTC
+
+Bounded read-only queries scoped to the two corrected revisions and the fixed
+14:00–14:13:27.989 UTC window verified the first eligible hourly observations:
+
+- Route emitted `queue_sample` at **14:06:02.899 UTC / 17:06:02.899 Helsinki** on
+  `schedulesportslibroutereparsescan-00113-wij`.
+- Normal and heavy emitted `queue_sample` at **14:08:01.153 UTC / 17:08:01.153 Helsinki**
+  on `schedulesportslibreparsescan-00162-vav`. All three samples had **zero eligible
+  sampled pending work, zero unknowns, no truncation and no stall**. These are explicit
+  idle observations, not an inference from absent logs or a claim of successful parsing.
+- Positive `qs_reparse_queue_samples_v1` points exist for each corresponding tier and
+  revision after its scheduled slot: route at 14:07:27.989 UTC and normal/heavy at
+  14:09:27.989 UTC. Each positive count is one observation. The actual sample logs
+  distinguish these healthy observations from unavailable events, which the sample
+  metric also counts.
+- Both natural invocations emitted whole-attempt `scan_attempt:acknowledged`: route at
+  14:06:02.900 UTC and activity at 14:08:40.049 UTC. Their native requests returned
+  **HTTP 200**, with request latencies **0.904 s** and **39.132 s**, respectively.
+  Positive native HTTP 200 request-count and structured ACK series confirm both;
+  neither is a late application ACK following a 504.
+- The narrow 200-entry Logging query and all four 100-series Monitoring queries were
+  uncapped. No `queue_sample_unavailable`, failed structured attempt, native non-200
+  response or probe-failure series was observed for these revisions in that fixed window.
+  This is scoped recovery evidence, not a global absence-of-failure claim.
+- Independent readback at 14:14 UTC reconfirmed all five Functions ACTIVE, the exact
+  deployed revisions and unchanged resource/secret/service controls, both enabled
+  ten-minute schedules, all three task-queue controls and persisted discovery settings.
+  All ten owned metrics, seven enabled policies/eight conditions, the dashboard and
+  existing independent Alerts email channel match the approved post-deployment snapshot;
+  all 28 chart/condition queries remain valid. Totals stay 125 metrics / 69 policies /
+  11 dashboards / four channels, with unchanged unrelated-resource hashes.
+
+The next-natural-heartbeat verification is complete; #834 remains **Closed / Done**.
+The earlier 12:09:52 and 13:04:54 UTC unavailable observations remain historical failures
+and may still contribute to the three-hour warning window. No incident reset, policy
+change or CLOSED email is claimed. Reuse the existing #655 same-channel email proof.
+No scanner/worker was manually invoked, source data written/deleted, provider called,
+queue replayed, configuration applied, Function deployed or test email sent during this
+verification. This confirms observation recovery, not discovery throughput or future
+deadline guarantees; #543 and MCP/Assistant/Help contracts are unchanged.
+All 13 focused offline reparse-monitoring tests and `git diff --check` passed for
+these documentation-only completion notes; no runtime code changed in this follow-up.

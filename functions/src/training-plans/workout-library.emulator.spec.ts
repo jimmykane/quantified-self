@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it } from 'vitest';
-import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { mutateTrainingScheduleForUser } from './persistence';
 import { mutateWorkoutLibraryForUser, placeWorkoutLibraryForUser } from './workout-library';
 
@@ -118,15 +118,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('workout library Firestore
         expect((await ref.collection('trainingDeliverySettings').get()).empty).toBe(true);
     });
 
-    it('places full strength prescriptions without losing exercises or sharing workout identity', async () => {
+    it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('places full %s prescriptions and saves them without losing exercises or identity', async sport => {
         const { uid, ref } = await user();
         const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat', sets: [
             { id: 'set-1', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 },
         ] }] };
-        const strengthStructure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'template', revision: 1 });
+        const strengthStructure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'template', revision: 1 }, sport);
         await mutateWorkoutLibraryForUser(uid, { mutationId: 'strength-create', operation: {
             kind: 'create', itemId: 'strength-template', title: 'Strength A', structure: strengthStructure, strength,
         } }, { db, nowMs });
+        await expect(mutateWorkoutLibraryForUser(uid, { mutationId: 'summary-only-update', operation: {
+            kind: 'update', itemId: 'strength-template', expectedRevision: 1, title: 'Keep complete strength', structure: strengthStructure,
+        } }, { db, nowMs: nowMs + 1 })).rejects.toThrow('exercise prescription');
+        expect((await ref.collection('workoutLibrary').doc('strength-template').get()).get('strength')).toEqual(strength);
         const placed = await placeWorkoutLibraryForUser(uid, {
             mutationId: 'strength-place', itemId: 'strength-template', expectedTemplateRevision: 1,
             expectedStateRevision: 0, planId: null, expectedPlanRevision: null,

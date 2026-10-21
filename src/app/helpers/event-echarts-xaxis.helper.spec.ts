@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypes, DataDistance, DataHeartRate, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypes, DataDistance, DataHeartRate, DataStrydDistance, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
 import {
   buildEventCanonicalXAxisScaleOptions,
   canSelectEventChartDistanceXAxis,
@@ -20,6 +20,38 @@ describe('event-echarts-xaxis.helper', () => {
   it('keeps configured axis for normal events', () => {
     const resolved = resolveEventChartXAxisType({ isMultiSport: () => false } as any, XAxisTypes.Duration);
     expect(resolved).toBe(XAxisTypes.Duration);
+  });
+
+  function swimWithDistance(type: ActivityTypes, distanceType = DataDistance.type): ActivityInterface {
+    return {
+      type,
+      getStream: (streamType: string) => streamType === distanceType
+        ? { getData: () => [0, 25, 50] } : null,
+    } as ActivityInterface;
+  }
+
+  it.each([DataDistance.type, DataStrydDistance.type])('disables %s as an axis for pool swimming even with recorded distance', (distanceType) => {
+    const poolSwim = swimWithDistance(ActivityTypes.Swimming, distanceType);
+
+    expect(canSelectEventChartDistanceXAxis([poolSwim])).toBe(false);
+    expect(resolveEventChartXAxisType(null, XAxisTypes.Distance, [poolSwim])).toBe(XAxisTypes.Duration);
+  });
+
+  it.each([XAxisTypes.Duration, XAxisTypes.Time])('keeps %s available for pool swimming', (axis) => {
+    expect(resolveEventChartXAxisType(null, axis, [swimWithDistance(ActivityTypes.Swimming)])).toBe(axis);
+  });
+
+  it('restricts distance only while a pool swim is selected, leaving open-water swimming unchanged', () => {
+    const poolSwim = swimWithDistance(ActivityTypes.Swimming);
+    const openWaterSwim = swimWithDistance(ActivityTypes.OpenWaterSwimming);
+
+    expect(canSelectEventChartDistanceXAxis([openWaterSwim, poolSwim])).toBe(false);
+    expect(resolveEventChartXAxisType(null, XAxisTypes.Distance, [poolSwim])).toBe(XAxisTypes.Duration);
+    expect(canSelectEventChartDistanceXAxis([openWaterSwim])).toBe(true);
+    expect(resolveEventChartXAxisType(null, XAxisTypes.Distance, [openWaterSwim])).toBe(XAxisTypes.Distance);
+    expect(resolveEventChartXAxisType(
+      { isMultiSport: () => true } as any, XAxisTypes.Distance, [poolSwim, openWaterSwim],
+    )).toBe(XAxisTypes.Time);
   });
 
   it('falls back to duration when distance is configured and a selected indoor activity has no distance stream', () => {
