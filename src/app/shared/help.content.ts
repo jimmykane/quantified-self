@@ -1261,7 +1261,7 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 In the History import tool, **History import cooldown** and **Next Available Import** describe when another activity-history request becomes available. A cooldown may continue after the activities have arrived.
 
-Manual **Suunto** and **COROS** activity imports use the same background processing as history selected when connecting. Choose your dates and start the import; you can then close the dialog or leave the app. Check **History import** in Connections for progress and **Retry failed imports** if needed. Acceptance means the request is saved, not that every activity has arrived. This action imports activities only; Sleep, Health and saved routes keep their separate controls. COROS still limits activity history to the latest three months. Older connections may retain the previous import flow until reconnected. Large ranges are processed in batches and may take longer when a provider is busy.
+Manual **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing as history selected when connecting. Choose your dates and start the import; you can then close the dialog or leave the app. Check **History import** in Connections for progress and **Retry failed imports** if needed. Acceptance means the request is saved, not that every activity has arrived. This action imports activities only; Sleep, Health and saved routes keep their separate controls. COROS still limits activity history to the latest three months. Wahoo imports eligible FIT-backed workouts one page at a time and skips workouts without a FIT file or originating from third-party fitness apps. Older connections may retain the previous import flow until reconnected. Large ranges are processed in batches and may take longer when a provider is busy.
 
 ### Garmin permissions
 
@@ -1495,7 +1495,7 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
 
-While Wahoo history is being scanned, Services shows **Import already running** and prevents another request. Closing the dialog does not cancel the import; reopening it shows the current running state. If another tab started the import before the status arrived, the duplicate request shows the same wait message. Once the scan finishes, the usual history-import cooldown applies, and queued activities continue processing in the background.
+While another Wahoo history scan or background import is active, Services shows **Import already running** and prevents another request. Closing the dialog does not cancel the import; reopening it shows the current running state. If another tab started the import before the status arrived, the duplicate request shows the same wait message. Accepted background imports show progress in Connections and wait for queued activities before reporting completion; queued activities continue processing in the background. The usual history-import cooldown still applies. Older connections may show the previous scan's queue statistics instead until reconnected.
 
 Use [Send activities](/send-activities/wahoo) for direct FIT delivery to Wahoo. During preparation QS parses the FIT on the server. Review the recording and mapped Wahoo category before confirmation. Confirmed batches continue in the background, and accepted upload IDs are checked without sending another copy. Only a confirmed processing failure offers **Retry sending**. Reconnect Wahoo if your older connection lacks workout write access.
 
@@ -1759,7 +1759,7 @@ Select **Reload page** to start a new check. Reloading does not guarantee accept
 ## Imports taking longer than expected
 
 - Garmin history imports can arrive gradually.
-- Suunto and COROS imports run in the background and can take hours or days.
+- Suunto, COROS and Wahoo imports run in the background and can take hours or days.
 - If Suunto temporarily returns an incomplete activity file, Quantified Self validates it and retries automatically instead of saving an empty activity.
 - Automatic Suunto activity imports accept files up to 128 MiB. Larger files stop automatic processing; contact support if an activity is missing for this reason.
 - Check cooldowns and connection status before retrying.

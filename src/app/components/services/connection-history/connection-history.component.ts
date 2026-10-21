@@ -88,10 +88,10 @@ export class ConnectionHistoryStatusComponent {
     const status = this.status();
     return status ? historyRangeLabel(this.service(), status.rangePreset) : '';
   });
-  // Suunto's manual picker submits local day boundaries; COROS uses UTC
+  // Suunto/Wahoo manual pickers submit local day boundaries; COROS uses UTC
   // calendar dates. Automatic connection ranges have always been UTC.
   readonly rangeTimezone = computed(() => this.status()?.rangePreset === 'custom'
-    && this.service() === ServiceNames.SuuntoApp ? undefined : 'UTC');
+    && (this.service() === ServiceNames.SuuntoApp || this.service() === ServiceNames.WahooAPI) ? undefined : 'UTC');
   readonly isAllAvailableRange = computed(() => this.status()?.rangePreset === 'maximum'
     && (this.service() === ServiceNames.SuuntoApp || this.service() === ServiceNames.WahooAPI));
   readonly summary = computed(() => {

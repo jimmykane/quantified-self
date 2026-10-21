@@ -76,15 +76,18 @@ describe('recent history option', () => {
 describe('recent history status', () => {
   const status = { runId: 'opaque', rangePreset: '30_days' as const, startMs: 1, endMs: 2, updatedAtMs: 3, active: false, canRetry: true,
     steps: [{ id: 'activities', resources: ['activities'], status: 'failed', count: 1 }] };
-  it('shows a manual selected range and retry controls without implying a connection-time preset', () => {
+  it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('shows a %s manual selected range and retry controls without implying a connection-time preset', service => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
-    fixture.componentRef.setInput('service', ServiceNames.SuuntoApp);
+    fixture.componentRef.setInput('service', service);
     fixture.componentRef.setInput('status', { ...status, rangePreset: 'custom' });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Requested range: Selected dates');
     expect(fixture.nativeElement.textContent).toContain('Retry failed imports');
     expect(fixture.nativeElement.textContent).not.toContain('30 days');
     expect(fixture.componentInstance.rangeTimezone()).toBeUndefined();
+    fixture.componentRef.setInput('status', status); fixture.detectChanges();
+    expect(fixture.componentInstance.rangeTimezone()).toBe('UTC');
+    fixture.componentRef.setInput('status', { ...status, rangePreset: 'custom' });
     fixture.componentRef.setInput('service', ServiceNames.COROSAPI); fixture.detectChanges();
     expect(fixture.componentInstance.rangeTimezone()).toBe('UTC');
     expect(haptics.success).not.toHaveBeenCalled();

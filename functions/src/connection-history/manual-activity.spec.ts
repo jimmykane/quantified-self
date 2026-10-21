@@ -34,7 +34,8 @@ const now = Date.parse('2026-10-21T12:00:00Z');
 const start = new Date('2026-09-01T21:00:00.000Z'), end = new Date('2026-10-20T20:59:59.999Z');
 const metaPath = (service: ServiceNames) => `users/owner/meta/${service}`;
 function seed(service: ServiceNames) {
-  const rootPath = `${service === ServiceNames.SuuntoApp ? 'suuntoAppAccessTokens' : 'COROSAPIAccessTokens'}/owner`;
+  const roots = { [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens', [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens', [ServiceNames.WahooAPI]: 'wahooAPIAccessTokens' };
+  const rootPath = `${roots[service as keyof typeof roots]}/owner`;
   mocks.rows.set('users/owner', { uid: 'owner' });
   mocks.rows.set(rootPath, { activeOAuthCredentialGeneration: 'credential' });
   mocks.rows.set(`${rootPath}/tokens/account`, { tokenCredentialGeneration: 'credential', accessToken: 'PRIVATE_TOKEN' });
@@ -47,7 +48,7 @@ beforeEach(() => {
   mocks.rows.clear(); mocks.rejectCommit = false; mocks.retryTransaction = false;
 });
 
-describe.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('manual activity admission for %s', service => {
+describe.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('manual activity admission for %s', service => {
   it('atomically accepts exact dates and only activities without changing the connection or credentials', async () => {
     const root = seed(service);
     const originalRoot = structuredClone(mocks.rows.get(root));
