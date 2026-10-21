@@ -91,7 +91,9 @@ contracts, permissions, plugins and Training calculations do not change. No repa
 The helper **only prints JSON containing argv arrays**. It never invokes gcloud, a shell, Firebase, a network client or
 any cloud mutation. Pass the target project and database explicitly; there is no production default. Do not pipe its
 output to a shell. Every phase, including preparation and rollback, requires field and composite snapshots captured
-immediately before planning. Keep local metadata snapshots outside Git.
+immediately before planning. Field metadata describes the requested configuration; it does not prove that the associated
+long-running operation has completed. Verify each operation completed separately, then satisfy its observation window
+before advancing. Keep local metadata snapshots outside Git.
 
 Before either phase, obtain separate approval for the exact project/database and fields. Inventory every collection
 named `events` or `activities`: a collection-group field policy applies across all owners/paths with that collection ID,
@@ -155,7 +157,8 @@ below instead of a broad `firebase deploy --only firestore` that can affect Rule
    authenticated browser/Rules coverage.
 3. After the observation gate passes, update the activities follow-up onto the current base (`both-exempt`). Capture
    both metadata files again and run the helper with `enforce-activities`. In addition to child/composite readiness, it
-   requires the explicit events exemption to have completed. Review the evidence, then merge this follow-up only after
+   requires the explicit events exemption in metadata; separately verify its operation completed and observation passed.
+   Review the evidence, then merge this follow-up only after
    separate approval. On the merged revision recapture metadata, regenerate and review/run that one parent command.
    Verify both final parent exemptions and all current event/activity composites (22 at the original audit).
    Current Hosting and Functions workflows do not deploy Firestore indexes; keep that boundary intact. Avoid concurrent

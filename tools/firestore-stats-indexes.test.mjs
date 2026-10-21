@@ -176,7 +176,7 @@ test('preparation cannot plan enforcement and events-only cannot advance activit
   }
 });
 
-test('activities enforcement requires completed events exemption; events-only preserves activities defaults', () => {
+test('activities enforcement requires explicit events exemption; events-only preserves activities defaults', () => {
   assert.throws(() => plan('enforce-activities'), /events exemption first/);
   for (const change of [
     field => { field.indexConfig.usesAncestorConfig = true; },

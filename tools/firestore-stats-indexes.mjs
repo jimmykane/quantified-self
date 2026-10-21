@@ -156,7 +156,7 @@ export function createRolloutPlan(config, phase, project, database, snapshots, s
     if (group === 'activities') {
       const events = parent('events')?.indexConfig;
       requireCondition(events && events.usesAncestorConfig !== true && !(events.indexes || []).length,
-        'Activities enforcement requires the completed explicit events exemption first');
+        'Activities enforcement requires the explicit events exemption first');
     } else if (stage === 'events-exempt') {
       const activities = parent('activities');
       requireCondition(!activities || same(apiModes(activities.indexConfig?.indexes || [], 'stats'), modes(array)),
@@ -173,7 +173,7 @@ export function createRolloutPlan(config, phase, project, database, snapshots, s
       .map(collectionGroup => ({ collectionGroup, fieldPath: 'stats', indexes: [] }));
   return {
     phase, stage, project, database,
-    notice: 'Review-only argv. Nothing is executed. Cloud changes require separate approval. Snapshots must be captured immediately before each phase.',
+    notice: 'Review-only argv. Nothing is executed. Cloud changes require separate approval. Snapshots must be captured immediately before each phase. Operation completion and observation remain manual gates.',
     commands: fields.map(field => [
       'gcloud', 'firestore', 'indexes', 'fields', 'update', field.fieldPath,
       `--collection-group=${field.collectionGroup}`, `--project=${project}`, `--database=${database}`,
