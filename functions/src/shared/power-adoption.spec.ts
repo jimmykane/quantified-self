@@ -9,6 +9,7 @@ import { parseActivityFilePayload } from './activity-file-parser';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { defaultAppliedTrainingLoadPolicy, resolveEffectiveTrainingLoad, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { reconcileTrainingLoadLegs } from '../training-load/training-load-metadata';
+import { summarizeTrainingLoad } from '../training-load/training-load-cache';
 import { hasDerivedMetricSourceChange } from '../derived-metrics/derived-metrics-source-change';
 import { buildPowerCurveMetricPayload, type DerivedTrainingActivitySource } from '../derived-metrics/derived-metrics.service';
 import { getActivityChartDataFromSources } from '../mcp/activity-chart.service';
@@ -91,10 +92,22 @@ describe('Sports Lib power adoption at QS boundaries', () => {
         const reconciled = reconcileTrainingLoadLegs(saved, [candidate]);
         expect(reconciled.legs?.stable.policy).toEqual(leg.policy);
         expect(reconciled.controls).toEqual(saved.controls);
-        const metadata = { ...saved, ...reconciled };
-        expect(resolveEffectiveTrainingLoad({}, metadata)).toMatchObject({ status: 'available', score: 0 });
-        expect(resolveEffectiveTrainingLoad({}, { ...metadata, controls: {} })).toMatchObject({ status: 'available', method: 'POWER', estimated: true });
-        expect(resolveEffectiveTrainingLoad({}, { ...metadata, excluded: true })).toMatchObject({ status: 'excluded', score: 0 });
+        const metadata = JSON.parse(JSON.stringify({ ...saved, ...reconciled })) as TrainingLoadMetadata;
+        for (const [current, expected] of [
+            [metadata, { status: 'available', score: 0, method: 'OVERRIDE', estimated: false }],
+            [{ ...metadata, controls: {} }, { status: 'available', method: 'POWER', estimated: true }],
+            [{ ...metadata, excluded: true }, { status: 'excluded', score: 0, estimated: false }],
+        ] as const) {
+            const resolved = resolveEffectiveTrainingLoad({}, current);
+            expect(resolved).toMatchObject(expected);
+            const summary = summarizeTrainingLoad('event', {}, current)!;
+            const stored = JSON.parse(JSON.stringify(summary));
+            expect(stored.load).toEqual(resolved);
+            expect(stored.legs['new-leg'].load).toEqual(resolved);
+            expect(stored).not.toHaveProperty('controls');
+            expect(stored.legs['new-leg']).not.toHaveProperty('policy');
+            expect(stored.legs['new-leg']).not.toHaveProperty('evaluations');
+        }
     });
 
     it('invalidates changed or removed saved power evidence and rebuilds curves only from the replacement', async () => {
@@ -118,10 +131,17 @@ describe('Sports Lib power adoption at QS boundaries', () => {
         expect(range.bestPoints.length).toBeGreaterThan(0);
         expect(range.bestPoints.filter((_, index) => index % 3 === 0).every(duration => duration <= 48)).toBe(true);
         expect(range.bestPoints.filter((_, index) => index % 3 === 1).every(power => power === 250)).toBe(true);
-        const noPower = { ...after, stats: {} };
-        expect(hasDerivedMetricSourceChange('activity', after, noPower)).toBe(true);
-        expect(buildPowerCurveMetricPayload([{ ...input, activityData: noPower }], start + 86_400_000)
+        // Remove only the curve: unrelated stats must not make this invalidation check pass.
+        const noCurve = structuredClone(after);
+        delete noCurve.stats[DataPowerCurve.type];
+        expect(noCurve.stats[DataPowerAvg.type]).toBe(250);
+        expect(hasDerivedMetricSourceChange('activity', after, noCurve)).toBe(true);
+        expect(buildPowerCurveMetricPayload([{ ...input, activityData: noCurve }], start + 86_400_000)
             .payload.scopes.cycling.ranges.all).toMatchObject({ matchedEventCount: 0, bestPoints: [], latestActivity: null });
+        const noWork = structuredClone(before);
+        expect(noWork.stats[DataPowerWork.type]).toBe(15);
+        delete noWork.stats[DataPowerWork.type];
+        expect(hasDerivedMetricSourceChange('activity', before, noWork)).toBe(true);
         // Reopening sanitized JSON does not recreate the original readings or absent work.
         const restored = EventImporterJSON.getActivityFromJSON(JSON.parse(JSON.stringify(after)));
         expect(restored.getAllStreams()).toHaveLength(0);
