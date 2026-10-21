@@ -846,14 +846,21 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
-        it('dispatches only available capacity from the selected batch', async () => {
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('paces the capacity-limited %s selection over 60 seconds without marking unissued children', async serviceName => {
             const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
-            const docs = [child('one'), child('two')];
+            const docs = [child('one'), child('two'), child('three'), child('four')];
             mockGetAll.mockResolvedValue(docs);
-            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS - 1);
-            await dispatchConnectionHistoryWorkoutBatch(execution(), docs.map(doc => doc.id));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
-            expect(docs[1].ref.update).not.toHaveBeenCalled();
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS - 3);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), docs.map(doc => doc.id));
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(3);
+            docs.slice(0, 3).forEach((doc, index) => {
+                expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id,
+                    expect.any(Number), index * 20, { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+                expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            });
+            expect(docs[3].ref.update).not.toHaveBeenCalled();
         });
 
         it.each([undefined, 14])('leaves the row recoverable when enqueue succeeds but marker writes fail (code=%s)', async code => {
@@ -1064,11 +1071,14 @@ describe('queue', () => {
             const { dispatchQueueItemTasks } = await import('./queue');
             const admin = await import('firebase-admin');
 
-            const mockDocs = [
-                { id: '1', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-1', userID: 'garmin-1' }) },
-                { id: '2', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-2', userID: 'garmin-2' }) },
-                { id: '3', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-3', userID: 'garmin-3' }) }
-            ];
+            const mockDocs = ['1', '2', '3'].map(id => {
+                const data = {
+                    dateCreated: Date.now(), firebaseUserID: `firebase-${id}`, processed: false,
+                    dispatchedToCloudTask: null, userID: `garmin-${id}`, userName: `suunto-${id}`,
+                    openId: `coros-${id}`, workoutSummaryID: `wahoo-${id}`, summaryUpdatedAt: 1234,
+                };
+                return { id, ref: { update: vi.fn(), get: vi.fn(async () => ({ exists: true, data: () => data })) }, data: () => data };
+            });
 
             const firestore = admin.firestore();
             const delayPerItem = Math.floor(DISPATCH_SPREAD_SECONDS / mockDocs.length);
@@ -1088,6 +1098,8 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, serviceName, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
             expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, serviceName, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
             expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, serviceName, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
+            mockDocs.forEach(doc => expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) }));
+            expect(logger.info).toHaveBeenCalledWith('Dispatched 3/3 tasks spread over 900s');
         });
 
         it('should delete user-owned queue docs instead of dispatching when account deletion is active', async () => {
