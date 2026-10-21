@@ -600,13 +600,14 @@ Continuous can span missing data without inventing a distance, tooltip reading o
 
 The Distance metric itself keeps those sparse values on Time/Duration axes and uses the same continuity setting.
 Its metric tick labels include Sports Lib's value-dependent m/Km unit, with no fixed metre heading; Stryd Distance
-uses the same rule. The user's distance preference selects one canonical/unit-variant panel, including when all
-recorded metrics are enabled. Miles retain their fixed unit heading. Unit conversion preserves nulls and real zero;
+and GNSS Distance use the same rule. The user's distance preference selects one canonical/unit-variant panel per
+distance metric, including when all recorded metrics are enabled. Miles retain their fixed unit heading. Unit conversion preserves nulls and real zero;
 range statistics use only recorded points, and zoom/overlays do not manufacture intermediate measurements.
-Saved Distance overlay keys and targets resolve to the currently available unit variant without writing settings on
-read. Exact saved keys take precedence; a user change replaces obsolete Distance aliases, including when selecting
-No overlay. This prevents a removed overlay from reappearing after a unit change. Stryd Distance and sustainable
-distance remain separate metrics; aliases cannot create a self-overlay.
+Saved Distance and GNSS Distance overlay keys and targets resolve to the currently available unit variant without
+writing settings on read. Exact saved keys take precedence; a user change replaces obsolete aliases for that distance source, including when selecting
+No overlay. This prevents a removed overlay from reappearing after a unit change. GNSS Distance remains a separate
+metric from recorded Distance, including when one overlays the other. Stryd Distance and sustainable distance also
+remain separate; aliases cannot create a self-overlay.
 
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank

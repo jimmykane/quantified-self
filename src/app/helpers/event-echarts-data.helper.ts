@@ -12,6 +12,7 @@ import {
   DataDistance,
   DataDuration,
   DataGPSAltitude,
+  DataGNSSDistance,
   DataGrade,
   DataHeartRate,
   DataHeartRateAvg,
@@ -1285,6 +1286,7 @@ function getFilteredStreams(input: {
       }
 
       switch (stream.type) {
+        case DataGNSSDistance.type:
         case SUSTAINABLE_DISTANCE_TYPE:
           return DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings).includes(stream.type);
         case DataDistance.type:

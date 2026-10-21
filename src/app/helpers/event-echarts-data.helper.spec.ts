@@ -8,6 +8,8 @@ import {
   DataCadence,
   DataDistance,
   DataDistanceMiles,
+  DataGNSSDistance,
+  DataGNSSDistanceMiles,
   DataStrydDistance,
   DataDuration,
   DataGrade,
@@ -297,6 +299,57 @@ describe('event-echarts-data.helper', () => {
         expect(computeEventPanelRangeStats({ panel, range: { start: x(40), end: x(50) },
           xAxisType: axis, gainAndLossThreshold: 1 })).toEqual([]);
       }
+      expect(activity.toJSON()).toEqual(before);
+    },
+  );
+
+  it.each([XAxisTypes.Time, XAxisTypes.Duration, XAxisTypes.Distance].flatMap(axis =>
+    [DistanceUnits.Kilometers, DistanceUnits.Miles].flatMap(units =>
+      [false, true].map(showAllData => ({ axis, units, showAllData })))))(
+    'renders one GNSS Distance panel on $axis with $units (all metrics=$showAllData)', ({ axis, units, showAllData }) => {
+      const start = Date.UTC(2026, 0, 1);
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: '', startDate: start, endDate: start + 8000, type: ActivityTypes.Running,
+        powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+        stats: {}, laps: [], events: [], intensityZones: [],
+        streams: {
+          [DataDistance.type]: [0, null, 900, null, null, null, null, null, 1800],
+          [DataGNSSDistance.type]: [0, null, 1000, null, null, null, null, null, 2000],
+          [DataHeartRate.type]: Array(9).fill(120),
+        },
+      });
+      activity.setID('sparse-gnss'); activity.addStream(activity.generateTimeStream());
+      const before = structuredClone(activity.toJSON());
+      const input = {
+        selectedActivities: [activity], allActivities: [activity], xAxisType: axis,
+        showAllData, dataTypesToUse: [DataGNSSDistance.type],
+        userUnitSettings: { ...getDefaultUserUnitSettings(), distanceUnits: units },
+        eventColorService: { getActivityColor: () => '#ff0000' } as any,
+        lineContinuity: { mode: 'custom' as const, maxGapSeconds: 2 },
+      };
+      const panels = buildEventChartPanels(input);
+      expect(buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))).toEqual(panels);
+      expect(panels).toHaveLength(showAllData ? 3 : 1);
+      const gnss = panels.filter(panel => [DataGNSSDistance.type, DataGNSSDistanceMiles.type].includes(panel.dataType));
+      expect(gnss).toHaveLength(1);
+      const panel = gnss[0];
+      const imperial = units === DistanceUnits.Miles;
+      expect(panel.dataType).toBe(imperial ? DataGNSSDistanceMiles.type : DataGNSSDistance.type);
+      expect(panel.unit).toBe(imperial ? 'mi' : '');
+      const points = eventChartSeriesToPoints(panel.series[0]);
+      const at = (second: number) => points.findIndex(point => point.time === start + second * 1000);
+      expect(points[at(0)].y).toBe(0);
+      expect(points[at(2)].y).toBeCloseTo(imperial ? 1000 / 1609 : 1000);
+      if (axis === XAxisTypes.Distance) {
+        expect(points[at(2)].x).toBe(900); // GNSS must not replace the recorded distance coordinate.
+        expect(at(1)).toBe(-1);
+      } else expect(points[at(1)].y).toBeNull();
+      expect(canConnectEventChartPoints(panel.series[0], at(0), at(2))).toBe(true);
+      expect(canConnectEventChartPoints(panel.series[0], at(2), at(8))).toBe(false);
+      const stats = computeEventPanelRangeStats({ panel, range: { start: points[at(0)].x, end: points[at(2)].x },
+        xAxisType: axis, gainAndLossThreshold: 1 });
+      const average = imperial ? new DataGNSSDistanceMiles(500 / 1609) : new DataGNSSDistance(500);
+      expect(stats[0].avg).toEqual({ value: average.getDisplayValue(), unit: average.getDisplayUnit() });
       expect(activity.toJSON()).toEqual(before);
     },
   );

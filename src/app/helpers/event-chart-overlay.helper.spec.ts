@@ -11,6 +11,8 @@ describe('event-chart-overlay.helper', () => {
     expect(getEventChartOverlaySelectionKey('Distance')).toBe('Distance');
     expect(getEventChartOverlaySelectionKey('Distance in miles')).toBe('Distance');
     expect(getEventChartOverlaySelectionKey('Distance in feet')).toBe('Distance');
+    expect(getEventChartOverlaySelectionKey('GNSS Distance')).toBe('GNSS Distance');
+    expect(getEventChartOverlaySelectionKey('GNSS Distance in miles')).toBe('GNSS Distance');
     expect(getEventChartOverlaySelectionKey('Distance (Stryd)')).toBe('Distance (Stryd)');
     expect(getEventChartOverlaySelectionKey('Estimated Sustainable Distance')).toBe('Estimated Sustainable Distance');
   });

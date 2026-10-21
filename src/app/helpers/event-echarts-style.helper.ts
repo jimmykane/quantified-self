@@ -25,6 +25,7 @@ import {
   DataEnergy,
   DataEVPE,
   DataGPSAltitude,
+  DataGNSSDistance,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedPaceMax,
   DataGradeAdjustedPaceMin,
@@ -92,7 +93,7 @@ import { AppDataColors } from '../services/color/app.data.colors';
 
 /** These canonical metre streams switch between m and Km as the displayed value changes. */
 export function hasEventChartValueDependentUnit(streamType: string): boolean {
-  return streamType === DataDistance.type || streamType === DataStrydDistance.type
+  return streamType === DataDistance.type || streamType === DataStrydDistance.type || streamType === DataGNSSDistance.type
     || streamType === SUSTAINABLE_DISTANCE_TYPE;
 }
 

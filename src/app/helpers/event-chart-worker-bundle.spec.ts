@@ -3,7 +3,8 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import {
-  ActivityTypes, DataAltitude, DataDistance, DataHeartRate, DataPower, DataSpeed, DataStrydDistance, EventImporterJSON,
+  ActivityTypes, DataAltitude, DataDistance, DataGNSSDistance, DataGNSSDistanceMiles,
+  DataHeartRate, DataPower, DataSpeed, DataStrydDistance, EventImporterJSON,
   DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
@@ -43,6 +44,7 @@ function snapshot(swimming: boolean, imperial: boolean, xAxisType: XAxisTypes): 
         { type: DataHeartRate.type, values: new Float64Array([120, 121, 122, 123]) },
         { type: DataSpeed.type, values: new Float64Array([2.5, 3, 3.5, 0]) },
         { type: DataDistance.type, values: new Float64Array([0, NaN, 6.5, 6.5]) },
+        { type: DataGNSSDistance.type, values: new Float64Array([0, NaN, 7, 7]) },
         { type: DataAltitude.type, values: new Float64Array([10, 11, 12, 13]) },
       ],
     }],
@@ -95,6 +97,10 @@ describe('compiled event chart worker', () => {
     if ('error' in response) throw new Error(response.error);
     // Compare in one realm without JSON's loss of typed arrays, NaN or undefined fields.
     expect(response.panels).toStrictEqual(structuredClone(expected));
+    const gnss = response.panels.filter(panel => [DataGNSSDistance.type, DataGNSSDistanceMiles.type].includes(panel.dataType));
+    expect(gnss).toHaveLength(1);
+    expect(gnss[0].dataType).toBe(imperial ? DataGNSSDistanceMiles.type : DataGNSSDistance.type);
+    expect(gnss[0].unit).toBe(imperial ? 'mi' : '');
     const hr = response.panels.find(panel => panel.dataType === DataHeartRate.type)!.series[0];
     const seconds = axis === XAxisTypes.Distance ? [0, 2, 3] : [0, 1, 2, 3];
     const start = input.selectedActivities[0].startTimeMs;

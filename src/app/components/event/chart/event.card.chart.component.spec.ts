@@ -14,6 +14,8 @@ import {
   DataDepth,
   DataDistance,
   DataDistanceMiles,
+  DataGNSSDistance,
+  DataGNSSDistanceMiles,
   DataHeartRate,
   DataPace,
   DataPower,
@@ -117,6 +119,7 @@ describe('EventCardChartComponent', () => {
     chartSettingsSignal.set({
       ...defaultChartSettings,
     });
+    mockUserSettingsQuery.unitSettings.set({});
     mockUserSettingsQuery.updateChartSettings.mockReset().mockResolvedValue(undefined);
     mockUserService.getUserChartDataTypesToUse.mockReset();
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
@@ -1951,6 +1954,8 @@ describe('EventCardChartComponent', () => {
   it.each([
     { saved: DataDistance.type, rendered: DataDistanceMiles.type },
     { saved: DataDistanceMiles.type, rendered: DataDistance.type },
+    { saved: DataGNSSDistance.type, rendered: DataGNSSDistanceMiles.type },
+    { saved: DataGNSSDistanceMiles.type, rendered: DataGNSSDistance.type },
   ])('restores saved $saved visibility and overlays on $rendered without writing settings', async ({ saved, rendered }) => {
     const overlays = { [saved]: DataHeartRate.type, [DataPower.type]: saved };
     chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
@@ -1968,31 +1973,60 @@ describe('EventCardChartComponent', () => {
     expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
   });
 
-  it('prefers an exact distance overlay and clears obsolete aliases when No overlay is selected', async () => {
+  it.each([
+    { canonical: DataDistance.type, miles: DataDistanceMiles.type, other: DataGNSSDistance.type },
+    { canonical: DataGNSSDistance.type, miles: DataGNSSDistanceMiles.type, other: DataDistance.type },
+  ])('clears obsolete $canonical overlay aliases when No overlay is selected', async ({ canonical, miles, other }) => {
+    mockUserSettingsQuery.unitSettings.set({ distanceUnits: DataDistanceMiles.type });
     chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: {
-      [DataDistance.type]: DataHeartRate.type, [DataDistanceMiles.type]: DataPower.type,
+      [canonical]: DataHeartRate.type, [miles]: DataPower.type,
+      [other]: DataHeartRate.type,
       [DataTemperature.type]: DataHeartRate.type,
     } });
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
-      mode: 'custom', selectionKeys: [DataDistance.type],
+      mode: 'custom', selectionKeys: [canonical],
     });
     const build = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
-      chartPanel(DataDistanceMiles.type), chartPanel(DataPower.type), chartPanel(DataHeartRate.type),
+      chartPanel(miles), chartPanel(DataPower.type), chartPanel(DataHeartRate.type),
     ] as any);
     fixture.detectChanges(); await fixture.whenStable();
     expect(component.chartPanelViews[0].selectedOverlayDataType).toBe(DataPower.type);
-    component.onPanelOverlayDataTypeChange(DataDistanceMiles.type, null);
+    component.onPanelOverlayDataTypeChange(miles, null);
     await flushOverlayPersistQueue();
-    const retained = { [DataTemperature.type]: DataHeartRate.type };
+    const retained = { [other]: DataHeartRate.type, [DataTemperature.type]: DataHeartRate.type };
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith({
       eventChartOverlayDataTypeByPrimary: retained,
     }, { force: true });
     expect(component.chartPanelViews[0].selectedOverlayDataType).toBeNull();
-    build.mockReturnValue([chartPanel(DataDistance.type), chartPanel(DataHeartRate.type)] as any);
+    build.mockReturnValue([chartPanel(canonical), chartPanel(DataHeartRate.type)] as any);
     mockUserSettingsQuery.unitSettings.set({ distanceUnits: DataDistance.type } as any);
     fixture.detectChanges(); await fixture.whenStable(); await flushMicrotasks();
-    expect(component.chartPanelViews[0].panel.dataType).toBe(DataDistance.type);
+    expect(component.chartPanelViews[0].panel.dataType).toBe(canonical);
     expect(component.chartPanelViews[0].selectedOverlayDataType).toBeNull();
+  });
+
+  it.each([
+    { primary: DataDistance.type, overlay: DataGNSSDistance.type,
+      renderedPrimary: DataDistanceMiles.type, renderedOverlay: DataGNSSDistanceMiles.type },
+    { primary: DataGNSSDistance.type, overlay: DataDistance.type,
+      renderedPrimary: DataGNSSDistanceMiles.type, renderedOverlay: DataDistanceMiles.type },
+  ])('keeps $primary and $overlay distinct when restoring overlays in miles', async ({
+    primary, overlay, renderedPrimary, renderedOverlay,
+  }) => {
+    const overlays = { [primary]: overlay };
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom', selectionKeys: [primary],
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(renderedPrimary), chartPanel(renderedOverlay),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews).toHaveLength(1);
+    expect(component.chartPanelViews[0].panel.dataType).toBe(renderedPrimary);
+    expect(component.chartPanelViews[0].overlayPanel?.dataType).toBe(renderedOverlay);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
   });
 
   it('does not overlay Distance onto itself when an obsolete unit alias resolves to the same panel', async () => {

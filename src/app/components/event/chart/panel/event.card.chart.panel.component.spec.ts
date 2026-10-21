@@ -15,6 +15,8 @@ import {
   ChartCursorBehaviours,
   DataDepth,
   DataDistance,
+  DataGNSSDistance,
+  DataGNSSDistanceMiles,
   DataStrydDistance,
   DataHeartRate,
   DataPotentialStamina,
@@ -714,7 +716,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.axisLabel?.formatter(10000)).toBe(expected);
   });
 
-  it.each([DataDistance.type, DataStrydDistance.type].flatMap(type =>
+  it.each([DataDistance.type, DataStrydDistance.type, DataGNSSDistance.type].flatMap(type =>
     [false, true].map(overlay => ({ type, overlay }))))(
     'labels $type ticks on the primary or overlay axis (overlay=$overlay)', async ({ type, overlay }) => {
       const panel = buildTestPanel(type, [0, 800, 1000, 10000]);
@@ -729,6 +731,18 @@ describe('EventCardChartPanelComponent', () => {
       expect(axis.axisLabel.formatter(10000)).toBe('10.00Km');
     },
   );
+
+  it.each([false, true])('labels imperial GNSS Distance without converting it twice (overlay=%s)', async overlay => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles };
+    const panel = buildTestPanel(DataGNSSDistanceMiles.type, [0, 6.22]);
+    panel.unit = 'mi';
+    if (overlay) component.overlayPanel = panel;
+    else component.panel = panel;
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect((overlay ? axes[1] : axes).axisLabel.formatter(6.22)).toBe('6.22');
+    expect(component['formatDataValue'](DataGNSSDistanceMiles.type, 6.22)).toBe('6.22mi');
+  });
 
   it.each([
     [false, DistanceUnits.Kilometers], [true, DistanceUnits.Kilometers],
