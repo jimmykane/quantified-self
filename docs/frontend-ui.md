@@ -136,6 +136,10 @@ or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
+### Connection feature cards
+
+Connections feature cards keep one title, description and action. They do not repeat a promotional checkmark line or a generic cooldown duration. History import keeps actual last-requested and next-available dates together as quiet metadata, with activity and Sleep/Health timings separate. A request date is not a completed-delivery date. Existing pending/error states, provider limits, eligibility checks and exact expiry timers remain unchanged; presentation reuses already-loaded metadata without new provider reads or mutations. Monitoring and MCP contracts are unchanged.
+
 ## Dialog actions and haptic ownership
 
 Use the global Material dialog surface with `mat-dialog-title`, a bounded `mat-dialog-content` scroll owner, and
