@@ -38,6 +38,8 @@
       </div>
     </div>
 
+    <ng-content select="[event-table-active-filters]"></ng-content>
+
     @if (canManageEvents && selection.selected.length > 0) {
       <div class="table-selection-toolbar" aria-live="polite">
         <div class="selection-summary">
@@ -205,6 +207,9 @@
               }
               <span class="activity-type-text">{{ row[column] }}</span>
             </span>
+            @if (hideGeneratedNames && row.Name) {
+              <span class="activity-custom-name description-text" [matTooltip]="row.Name">{{ row.Name }}</span>
+            }
             }
             @if (column === 'Shared') {
             <span class="shared-state-cell" [class.shared-state-cell--empty]="!row[column]"

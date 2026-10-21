@@ -59,6 +59,7 @@
     "/health/compare",
     "/health/compare/*",
     "/tags",
+    "/activities",
     "/calendar",
     "/calendar/day/*",
     "/training/plans/workout/*",

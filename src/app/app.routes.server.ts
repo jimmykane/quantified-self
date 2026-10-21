@@ -96,6 +96,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'health/compare',
   'health/compare/:noteId',
   'tags',
+  'activities',
   'calendar',
   'calendar/day/:date',
   'training/plans/workout/:workoutId',

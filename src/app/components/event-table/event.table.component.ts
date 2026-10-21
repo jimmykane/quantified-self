@@ -115,6 +115,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() presentation: EventTablePresentation = 'dashboard';
   @Input() showTagFilter = true;
   @Input() filterContext = '';
+  @Input() preserveSearchOnFilterChange = false;
+  @Input() hideGeneratedNames = false;
   @Input() emptyMessage = 'No activities yet';
   @Input() emptyHint = 'Import an activity or change your filters';
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
@@ -248,7 +250,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.loading();
       return;
     }
-    if (this.events && (simpleChanges.events || simpleChanges.presentation) && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
+    if (this.events && (simpleChanges.events || simpleChanges.presentation || simpleChanges.hideGeneratedNames) && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
       this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
     if (preferencesChanged) {
@@ -272,8 +274,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.applyTableFilter();
     }
     if (simpleChanges.filterContext) {
-      this.searchTerm = '';
-      this.searchSubject.next('');
+      if (!this.preserveSearchOnFilterChange) {
+        this.searchTerm = '';
+        this.searchSubject.next('');
+      }
       this.tagFilter = '';
       this.selection.clear();
       this.suppressLibraryPageFeedback = true;
@@ -1480,11 +1484,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Privacy'] = event.privacy;
     statRowElement['Shared'] = isShared ? 'Shared' : '';
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
-    statRowElement['Name'] = event.name;
+    const activityName = getTagLibraryActivityName(event);
+    statRowElement['Name'] = this.hideGeneratedNames && !activityName ? '' : event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
-    if (this.isLibraryPresentation) {
-      const name = getTagLibraryActivityName(event);
+    if (this.isLibraryPresentation || this.hideGeneratedNames) {
+      const name = activityName;
       const date = startDate ? this.datePipe.transform(startDate, 'd MMM y, HH:mm') : '';
       statRowElement['Library Activity Name'] = name;
       statRowElement['Library Activity Label'] = name || `${statRowElement['Activity Types'] || 'Activity'}${date ? ` on ${date}` : ''}`;
@@ -1521,7 +1526,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
-    statRowElement['sort.Name'] = this.isLibraryPresentation
+    statRowElement['sort.Name'] = this.isLibraryPresentation || this.hideGeneratedNames
       ? statRowElement['Library Activity Name'] || statRowElement['Activity Types'] || ''
       : event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
@@ -1621,6 +1626,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return JSON.stringify({
       dateFormat,
       presentation: this.presentation,
+      hideGeneratedNames: this.hideGeneratedNames,
       unitSettings: this.user?.settings?.unitSettings ?? null,
       removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
       removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),

@@ -3,6 +3,9 @@ import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { PROVIDER_MAX_RETRY_COUNT, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { ServiceNames, ActivityParsingOptions, EventImporterFIT, COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
+import { HistoryLifecycleChangedError, type HistoryExecution } from './connection-history/execution';
+
+const mockGetAll = vi.hoisted(() => vi.fn());
 
 const mockGetServiceConnectionMeta = vi.hoisted(() => vi.fn());
 vi.mock('./service-connection-meta', async importOriginal => ({
@@ -128,6 +131,7 @@ vi.mock('firebase-admin', () => {
     const mockFirestore = {
         collection: vi.fn(() => mockCollection),
         collectionGroup: vi.fn(() => mockCollection),
+        getAll: mockGetAll,
         batch: vi.fn(() => mockBatch),
         runTransaction: mockRunTransaction,
         recursiveDelete: mockRecursiveDelete,
@@ -416,6 +420,7 @@ function createBinaryResponse(body: Buffer, contentType = 'application/octet-str
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockGetAll.mockReset();
         mockGetServiceConnectionMeta.mockReset().mockResolvedValue(null);
         mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.TokenRefreshDeferred);
         mockDocRef.update.mockResolvedValue(undefined);
@@ -748,6 +753,159 @@ describe('queue', () => {
             );
             expect(batch.delete).toHaveBeenCalledWith(mockRef);
             expect(batch.commit).toHaveBeenCalled();
+        });
+    });
+
+    describe('dispatchConnectionHistoryWorkoutBatch', () => {
+        const execution = (serviceName = ServiceNames.SuuntoApp): HistoryExecution => ({
+            userID: 'history-user', serviceName, runId: 'history-run', providerUserId: 'history-account',
+            tokenPath: 'token', cooldownStartedAtMs: 1, requiredDocumentFieldValues: [],
+            beforeRequest: vi.fn().mockResolvedValue(undefined), inTransaction: vi.fn(), onQueued: vi.fn(),
+        });
+        function child(id: string, overrides: Record<string, unknown> = {}) {
+            const data = {
+                dateCreated: Date.now(), queueRevision: `revision-${id}`, firebaseUserID: 'history-user',
+                userName: 'history-account', openId: 'history-account', connectionHistoryRunId: 'history-run',
+                processed: false, retryCount: 0, dispatchedToCloudTask: null, ...overrides,
+            };
+            const ref = { update: vi.fn(), get: vi.fn(async () => ({ exists: true, data: () => data })) };
+            return { id, ref, exists: true, data: () => data };
+        }
+        beforeEach(() => vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0));
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('dispatches only the selected %s children with the existing 15-minute spread and revisions', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const context = execution(serviceName);
+            const docs = [child('one'), child('two'), child('three')];
+            mockGetAll.mockResolvedValue(docs);
+
+            await dispatchConnectionHistoryWorkoutBatch(context, docs.map(doc => doc.id));
+
+            expect(context.beforeRequest).toHaveBeenCalledTimes(1);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(3);
+            docs.forEach((doc, index) => {
+                expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id, expect.any(Number),
+                    index * DISPATCH_SPREAD_SECONDS / 3, { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+                expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            });
+            expect(mockCollection.where).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('preserves completed, dispatched, retrying, leased, parked, other-run/account/owner and missing %s rows', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = [
+                child('done', { processed: true }), child('issued', { dispatchedToCloudTask: Date.now() }),
+                child('retry', { retryCount: 1 }), child('leased', { processingLeaseExpiresAt: Date.now() + 60_000 }),
+                child('parked', { resultStatus: 'deferred' }), child('other-run', { connectionHistoryRunId: 'other' }),
+                child('other-account', { userName: 'other', openId: 'other' }), child('other-owner', { firebaseUserID: 'other' }),
+                { id: 'missing', exists: false, data: () => undefined },
+            ];
+            mockGetAll.mockResolvedValue(docs);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), docs.map(doc => doc.id));
+
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(mockRunTransaction).not.toHaveBeenCalled();
+        });
+
+        it('rechecks lifecycle before dispatching and leaves queue rows alone after disconnect', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const context = execution();
+            vi.mocked(context.beforeRequest).mockRejectedValue(new HistoryLifecycleChangedError());
+            await expect(dispatchConnectionHistoryWorkoutBatch(context, ['one'])).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(mockGetAll).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('honors queue capacity without scanning or modifying unrelated work', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS);
+            await dispatchConnectionHistoryWorkoutBatch(execution(), ['one']);
+            expect(mockGetAll).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('dispatches only available capacity from the selected batch', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = [child('one'), child('two')];
+            mockGetAll.mockResolvedValue(docs);
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS - 1);
+            await dispatchConnectionHistoryWorkoutBatch(execution(), docs.map(doc => doc.id));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(docs[1].ref.update).not.toHaveBeenCalled();
+        });
+
+        it.each([undefined, 14])('leaves the row recoverable when enqueue succeeds but marker writes fail (code=%s)', async code => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            doc.ref.update.mockRejectedValue(Object.assign(new Error('PRIVATE_MARKER_FAILURE'), { code }));
+            mockGetAll.mockResolvedValue([doc]);
+            await dispatchConnectionHistoryWorkoutBatch(execution(), [doc.id]);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(doc.ref.update).toHaveBeenCalledTimes(code === 14 ? 3 : 1);
+            expect(doc.data().dispatchedToCloudTask).toBeNull();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('does not dispatch a replacement %s revision if the old task name is reserved', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            doc.ref.get.mockResolvedValue({ exists: true, data: () => ({
+                ...doc.data(), queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run',
+            }) });
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(doc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('still recovers a reserved task name for the unchanged %s revision', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(doc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenLastCalledWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1, queueRevision: 'revision-one' });
+            expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it.each([false, true])('waits for every started enqueue after a partial failure (diagnostic throws=%s)', async diagnosticThrows => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = [child('failed'), child('succeeds')];
+            mockGetAll.mockResolvedValue(docs);
+            let completeEnqueue!: (value: boolean) => void;
+            vi.mocked(utils.enqueueWorkoutTask).mockRejectedValueOnce(new Error('PRIVATE_ENQUEUE_FAILURE'))
+                .mockImplementationOnce(() => new Promise(resolve => { completeEnqueue = resolve; }));
+            const warning = vi.mocked(logger.warn);
+            if (diagnosticThrows) warning.mockImplementationOnce(() => { throw new Error('PRIVATE_LOG_FAILURE'); });
+            let outcome = 'pending';
+            const pending = dispatchConnectionHistoryWorkoutBatch(execution(), docs.map(doc => doc.id))
+                .then(() => { outcome = 'completed'; }, () => { outcome = 'failed'; });
+            try {
+                await vi.waitFor(() => expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2));
+                expect(outcome).toBe('pending');
+                completeEnqueue(true);
+                await pending;
+                expect(outcome).toBe('completed');
+                expect(docs[0].ref.update).not.toHaveBeenCalled();
+                expect(docs[1].ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            } finally { completeEnqueue?.(true); await pending; warning.mockReset(); }
+        });
+
+        it('rejects oversized batches and leaves other providers untouched', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            await expect(dispatchConnectionHistoryWorkoutBatch(execution(), Array(101).fill('one'))).rejects.toThrow('Unsupported');
+            await expect(dispatchConnectionHistoryWorkoutBatch(execution(ServiceNames.WahooAPI), ['one'])).rejects.toThrow('Unsupported');
+            await expect(dispatchConnectionHistoryWorkoutBatch(execution(ServiceNames.GarminAPI), ['one'])).rejects.toThrow('Unsupported');
+            await dispatchConnectionHistoryWorkoutBatch(execution(), []);
+            expect(mockGetAll).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
     });
 
