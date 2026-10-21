@@ -1,6 +1,6 @@
 import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../garmin/health-summary-types';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
+import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryImportRange, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
@@ -26,7 +26,7 @@ export interface ConnectionHistoryRun {
   rootPath: string;
   credentialGeneration: string;
   connectionGeneration: string;
-  rangePreset: ConnectionHistoryRangePreset;
+  rangePreset: HistoryImportRange;
   startMs: number;
   endMs: number;
   dateCreated: number;

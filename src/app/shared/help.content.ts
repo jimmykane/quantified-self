@@ -1261,6 +1261,8 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 In the History import tool, **History import cooldown** and **Next Available Import** describe when another activity-history request becomes available. A cooldown may continue after the activities have arrived.
 
+Manual **Suunto** and **COROS** activity imports use the same background processing as history selected when connecting. Choose your dates and start the import; you can then close the dialog or leave the app. Check **History import** in Connections for progress and **Retry failed imports** if needed. Acceptance means the request is saved, not that every activity has arrived. This action imports activities only; Sleep, Health and saved routes keep their separate controls. COROS still limits activity history to the latest three months. Older connections may retain the previous import flow until reconnected. Large ranges are processed in batches and may take longer when a provider is busy.
+
 ### Garmin permissions
 
 In **Connections → Garmin**, **Permissions** shows each account's last-reported access for supported permissions, including **Training** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.

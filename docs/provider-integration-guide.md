@@ -1160,10 +1160,20 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
-Suunto/COROS automatic connection-history activity batches use the existing guarded workout dispatcher after durable
+Manual Suunto/COROS activity imports from updated clients now reuse the existing coordinator through the additive
+`background: true` option on their current callables. Admission atomically binds the existing account and credential/
+connection generations, exact custom dates, activity-only capability, reservation and owner-safe progress. Older
+clients and unversioned legacy connections retain the previous call path. Automatic history, Garmin/Wahoo manual
+history, and manual Sleep/Health/routes keep their scope. No provider call happens during background admission;
+the existing 100-item/60-second child path and committed outcomes control continuation. Existing progress/Retry
+UI and #847/#829 monitoring cover both starts. See [manual history admission](connection-history-import.md#manual-activity-imports-suunto-and-coros)
+for compatibility, precision, lifecycle/overlap guards, the four-function/backend-first rollout and rollback boundary.
+No new Function, queue, secret, index, Rules, MCP or Training contract is introduced.
+
+Suunto/COROS coordinator-owned activity batches use the existing guarded workout dispatcher after durable
 admission, restricted to at most 100 exact children of that run/account/owner, spread over 60 seconds. Capacity,
 revision/deletion guards and scheduled recovery remain; completed, issued, retrying, leased and parked work is not
-reopened. The coordinator still waits for its children before admitting the next window. Manual bulk activity history
+reopened. The coordinator still waits for its children before admitting the next window. Legacy manual bulk activity history
 and scheduled recovery keep their 15-minute spread; Wahoo and Garmin retain their existing dispatch paths.
 Reserved-name recovery verifies explicit queue revisions for Suunto as well as COROS; fallback diagnostic failures
 cannot invalidate admission or interrupt other started enqueues. Monitoring is

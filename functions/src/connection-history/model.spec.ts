@@ -7,6 +7,12 @@ import { CONNECTION_HISTORY_CAPABILITIES } from '../../../shared/connection-hist
 import { createHistoryRun, historyOperationKey, historyProjection, isConnectionHistoryRunId } from './model';
 
 describe('connection history contract', () => {
+  it('does not accept the manual custom-range marker as OAuth consent', () => {
+    for (const service of Object.values(ServiceNames)) {
+      expect(() => parseImportHistoryRange('custom', service)).toThrow();
+      expect(historyRangeOptions(service).some(option => String(option.value) === 'custom')).toBe(false);
+    }
+  });
   it('keeps committed operation identities stable and scoped to the exact cursor', () => {
     const run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days',
       runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root',
