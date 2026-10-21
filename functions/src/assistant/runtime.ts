@@ -3,7 +3,8 @@ import { PUBLIC_MCP_TOOL_NAMES, type PublicMcpToolName } from '../mcp/tool-outpu
 import { MCP_MANUAL_MEASUREMENT_READ_TOOLS, MCP_MANUAL_MEASUREMENT_SCHEMA, MCP_MANUAL_MEASUREMENT_INPUTS } from '../mcp/manual-measurements.schemas';
 import { resolveManualMeasurementFields } from '../mcp/manual-measurements.service';
 import type { ManualHealthMeasurementFields } from '../../../shared/manual-health';
-import { DataDuration } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDuration } from '@sports-alliance/sports-lib';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-workout';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE, TRAINING_STRENGTH_READ_GUIDANCE, TRAINING_STRENGTH_WRITE_GUIDANCE } from '../shared/training-authoring-guidance';
 import { z } from 'genkit';
 import { ZodError as McpSchemaError } from 'zod';
@@ -381,20 +382,115 @@ function canBeTrainingDeletionReply(prompt: string): boolean {
     && !removesEarlyLapPermission(prompt);
 }
 
+const TRAINING_ROUTING_ACTIONS = 'create|save|copy|duplicate|edit|update|modify|change|adjust|retarget|archive|restore|delete|remove|place|schedule|add|make|build|draft|propose|suggest|move|rename|shift|skip|pause|activate|enable|disable|stop|start|resume|retry|approve|send|sync|deliver';
+const TRAINING_ROUTING_REQUEST_PREFIX = '(?:(?:can|could|would|will)\\s+you(?:\\s+please)?\\s+|please\\s+)?';
+
+function trainingRoutingClauses(prompt: string): string[] {
+  return prompt.split(new RegExp(`[!?;\\n]+|\\.(?=\\s|$)|\\b(?:then|but|instead)\\b|(?:,\\s*|\\b(?:and|also)\\s+)(?=${TRAINING_ROUTING_REQUEST_PREFIX}(?:${TRAINING_ROUTING_ACTIONS})\\b)`, 'u'));
+}
+
+function trainingRoutingActionClause(clause: string): string {
+  return clause.trim().replace(/^please\s+/u, '')
+    .replace(/^(?:can|could|would|will)\s+you(?:\s+please)?\s+/u, '');
+}
+
 /** Routing only: never use this projection as an authored recipe, consent or model prompt. */
 function withoutWorkoutNoteContext(prompt: string): string {
-  return prompt
+  const noteQuotes: Array<{ start: number; end: number }> = [];
+  let projected = '', context = '', previousEnd = 0;
+  // Find actual paired quotes first. Apostrophes inside words are never quote
+  // delimiters, and punctuation inside quoted prose never starts a new action.
+  const word = (character: string | undefined) => character !== undefined && /[\p{L}\p{N}]/u.test(character);
+  for (let start = 0; start < prompt.length; start += 1) {
+    const opener = prompt[start], closer = ({ '"': '"', "'": "'", '“': '”', '‘': '’' } as Record<string, string>)[opener];
+    if (!closer || ((opener === "'" || opener === '‘') && word(prompt[start - 1]) && word(prompt[start + 1]))) continue;
+    let end = start + 1;
+    for (; end < prompt.length; end += 1) {
+      if (prompt[end] === '\\') { end += 1; continue; }
+      if (prompt[end] === closer
+        && !((closer === "'" || closer === '’') && word(prompt[end - 1]) && word(prompt[end + 1]))) break;
+    }
+    if (end >= prompt.length) break;
+    const gap = prompt.slice(previousEnd, start);
+    const scopeGap = gap.replace(new RegExp(`\\n(?=\\s*${TRAINING_ROUTING_REQUEST_PREFIX}(?:${TRAINING_ROUTING_ACTIONS})\\b)`, 'gu'), ';').replace(/\n/gu, ' ');
+    const clauses = trainingRoutingClauses(scopeGap);
+    context = (clauses.length > 1 ? clauses[clauses.length - 1] : context + scopeGap).slice(-500);
+    const targetLabel = /^\s*(?:workouts?|sessions?|exercises?|sets?|reps?)\b/u.test(prompt.slice(end + 1))
+      || /\b(?:workouts?|sessions?)\s+(?:named|called|for)\s*$/u.test(context);
+    const noteSuffix = /^\s+(?:to|as|from)\s+(?:(?:a|an|the|my|existing)\s+)?notes?\b/u.test(prompt.slice(end + 1));
+    const notePayload = noteSuffix || (/\bnotes?\b/u.test(context) && !targetLabel);
+    const span = prompt.slice(start, end + 1);
+    projected += gap + (notePayload ? ' '.repeat(span.length) : span);
+    if (notePayload) noteQuotes.push({ start, end: end + 1 });
+    // A quoted target's title is data too; its words cannot introduce a note
+    // antecedent for a later quoted span.
+    context += ' ';
+    previousEnd = end + 1;
+    start = end;
+  }
+  projected += prompt.slice(previousEnd);
+  return projected
     .replace(/\b(?:with\s+(?:(?:a|an|the|my|existing)\s+)?notes?\s+(?:about|saying|that|to)|(?:keep|preserve|retain)\s+(?:(?:the|my|existing)\s+)?notes?\s+(?:about|saying|that)|notes?\s*:)[^.!?;\n]*/gu,
-      (clause, offset: number, source: string) => {
-        if (/["“‘']/u.test(clause) || /^\s*["“‘']/u.test(source.slice(offset + clause.length))) return clause;
+      (clause, offset: number) => {
+        // Quoted payloads were already removed without consuming their target
+        // or any following real action. Only strip genuinely unquoted prose.
+        if (noteQuotes.some(span => span.start < offset + clause.length && span.end > offset)) return clause;
         // Preserve an independent action following an unquoted note qualifier.
-        const nextAction = /\b(?:then|but|instead)\b|\b(?:and|also)\s+(?:please\s+)?(?:create|save|copy|duplicate|edit|update|archive|restore|delete|remove|place|schedule|add|send|sync|deliver)\b/u.exec(clause);
-        return nextAction ? clause.slice(nextAction.index) : '';
-      })
-    // Quoted note content may name another workout. Keep a note-edit request's
-    // actual target and the note noun: "remove a note" must remain a recipe edit.
-    .replace(/(\bnotes?\b[^.!?;\n]{0,160}?:\s*)(?:"[^"]*"|“[^”]*”|‘(?:[^’]|’(?=\p{L}))*’|'(?:[^']|'(?=\p{L}))*')/gu, '$1')
-    .replace(/(\bnotes?(?:\s*(?::|about|saying|that))?\s*)(?:"[^"]*"|“[^”]*”|‘(?:[^’]|’(?=\p{L}))*’|'(?:[^']|'(?=\p{L}))*')/gu, '$1');
+        const clauses = trainingRoutingClauses(clause);
+        return clauses.length > 1 ? `; ${clauses.slice(1).join('; ')}` : '';
+      });
+}
+
+function strengthWorkoutRecipeContext(question: string): boolean {
+  const aliases = /\b(?:weight\s+training|kettlebells?|calisthenics|core\s+training|les\s+mills\s+(?:core|grit\s+strength|bodypump))\b/gu;
+  return new RegExp(`${aliases.source}["'“”‘’]?\\s+(?:workouts?|sessions?|exercises?|sets?|reps?)\\b`, 'u').test(question)
+    || new RegExp(`\\b(?:workouts?|sessions?)\\s+(?:named|called|for)\\s+["'“”‘’]?${aliases.source}`, 'u').test(question)
+    || /\b(?:strength|gym|resistance)\b/u.test(question.replace(aliases, ''));
+}
+
+function changesTrainingDeliverySettings(question: string): boolean {
+  return /\b(change|edit|update|modify)\s+(?:(?:the|my|existing)\s+)?(?:sync|delivery|provider)\b/u.test(question);
+}
+
+function strengthWorkoutAuthoringClause(clause: string): boolean {
+  return strengthWorkoutRecipeContext(clause)
+    && /\b(?:workouts?|sessions?|exercises?|sets?|reps?)\b/u.test(clause)
+    && !changesTrainingDeliverySettings(clause)
+    && /\b(?:create|add|make|build|draft|edit|update|modify|change|adjust|set)\b/u.test(clause);
+}
+
+function needsSeparateStrengthActions(prompt: string): boolean {
+  const question = trainingWorkoutRoutingContext(prompt.toLowerCase());
+  const clauses = trainingRoutingClauses(question).map(trainingRoutingActionClause);
+  const firstStrengthAuthor = clauses.findIndex(strengthWorkoutAuthoringClause);
+  if (firstStrengthAuthor < 0) return false;
+  if (requestsAssistantTrainingDelivery(prompt)) return true;
+  return clauses.length > 1 && clauses.some((clause, index) => index !== firstStrengthAuthor
+    && /^(?:create|add|make|build|edit|update|modify|change|move|copy|duplicate|delete|remove|rename|shift|skip|archive|pause|activate)\b/u.test(clause)
+    && /\b(?:workouts?|sessions?|plans?)\b/u.test(clause)
+    && !(/^(?:rename|move)\b/u.test(clause) && /\b(?:my|the)\s+(?:workout|session)\b/u.test(clause))
+    && !/\b(?:same|this|that)\s+(?:workout|session)\b/u.test(clause));
+}
+
+function choosesOneStrengthAction(prompt: string, history: readonly Pick<AssistantMessage, 'role' | 'text'>[]): boolean {
+  if (prompt.length > 160) return false;
+  const choice = prompt.trim().toLowerCase().replace(/[.!]$/u, '').replace(/^the\s+/u, '').replace(/\s+/gu, ' ');
+  const sport = [ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1].find(name =>
+    ['', ' workout', ' session'].some(noun => ['', ' first', ' please', ' first please']
+      .some(suffix => choice === `${name.toLowerCase()}${noun}${suffix}`)));
+  if (!sport) return false;
+  const clarification = history[history.length - 1], request = history[history.length - 2];
+  if (clarification?.role !== 'assistant' || request?.role !== 'user'
+    || !/\bwhich\b[^.!?\n]{0,80}\b(?:action|change|workout)\b[^.!?\n]{0,80}\bfirst\b/iu.test(clarification.text)
+    || !needsSeparateStrengthActions(request.text)) return false;
+  const sportPattern = new RegExp(`\\b${sport.toLowerCase().replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\b`, 'u');
+  return trainingRoutingClauses(trainingWorkoutRoutingContext(request.text.toLowerCase()))
+    .filter(clause => strengthWorkoutAuthoringClause(clause) && sportPattern.test(clause)).length === 1;
+}
+
+function requestsAssistantStopSync(prompt: string): boolean {
+  return trainingRoutingClauses(trainingWorkoutRoutingContext(prompt.toLowerCase()))
+    .some(clause => /^stop\b[^.!?;\n]{0,80}\bsync(?:ing)?\b/u.test(trainingRoutingActionClause(clause)));
 }
 
 function trainingWorkoutRoutingContext(prompt: string): string {
@@ -407,6 +503,9 @@ function trainingWorkoutRoutingContext(prompt: string): string {
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
   if (assistantRecoveryDurationSeconds(prompt) !== null) return 'preview_planned_workout_v3_change';
+  // Only an exact sport choice answering our immediate separate-actions question
+  // retains the strength schema. It inherits neither recipe values nor delivery.
+  if (choosesOneStrengthAction(prompt, history)) return 'preview_strength_workout_change';
   // A numeric answer to a direct HR clarification retains only the requested
   // recipe schema. It supplies no mutation, inferred target or Apply authority.
   if (prompt.length <= 500 && /\b\d{2,3}\s*(?:[-–—]|to)\s*\d{2,3}\b/iu.test(prompt)
@@ -439,7 +538,8 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     /\b(?:don't|do not|never|without|not)\b(?:(?!\bbut\b)[^,.!?;\n]){0,80}\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/gu,
     '',
   );
-  const editsRecipeFields = /\b(?:remove|delete|insert|add|reorder|move|swap|set|change)\s+(?:(?:the|all|my|this|that|a|an|first|second|last|hr|heart[-\s]?rate|power|speed|pace|cadence|warm[-\s]?up|cool[-\s]?down|recovery|work|rest)\s+){0,4}(?:steps?|intervals?|targets?|repeats?|notes?)\b(?!\s+(?:planned\s+)?(?:workouts?|sessions?))/iu.test(question);
+  const editsRecipeFields = /\b(?:remove|delete|insert|add|reorder|move|swap|set|change)\s+(?:(?:the|all|my|this|that|a|an|first|second|last|following|hr|heart[-\s]?rate|power|speed|pace|cadence|warm[-\s]?up|cool[-\s]?down|recovery|work|rest)\s+){0,4}(?:steps?|intervals?|targets?|repeats?|notes?)\b(?!\s+(?:planned\s+)?(?:workouts?|sessions?))/iu.test(question)
+    || /\b(?:add|remove|delete|set)\s+(?:to|as|from)\s+(?:(?:the|my)\s+)?notes?\b/u.test(question);
   if (requestsGarminReplacement(question)) {
     return 'preview_garmin_workout_replacement';
   }
@@ -473,7 +573,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     || /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change|adjust|retarget)\b/u.test(question)
     || (/\bapply\b/u.test(question) && /\b(?:hr|heart[-\s]?rate|zones?)\b/u.test(question));
   const deliveryOnly = /\b(send|sync|enable|stop|retry|approve)\b/u.test(question) && !authorsWorkout;
-  const changesDeliverySettings = /\b(change|edit|update|modify)\s+(?:(?:the|my|existing)\s+)?(?:sync|delivery|provider)\b/u.test(question);
+  const changesDeliverySettings = changesTrainingDeliverySettings(question);
   if (deliveryOnly || changesDeliverySettings) return 'preview_training_changes';
   // This selects a schema, not mutation authority or inferred HR ranges. The
   // model must still read each complete recipe and the app owns confirmation.
@@ -486,12 +586,16 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // A named strength sport must describe the workout, rather than merely
   // appear in a note for another sport. Remove alias names before checking
   // legacy strength words so GRIT Strength does not bypass that distinction.
-  const strengthAliases = /\b(?:weight\s+training|kettlebells?|calisthenics|core\s+training|les\s+mills\s+(?:core|grit\s+strength|bodypump))\b/gu;
   const strengthContext = question;
-  const namedStrengthWorkout = new RegExp(`${strengthAliases.source}["'“”‘’]?\\s+(?:workouts?|sessions?|exercises?|sets?|reps?)\\b`, 'u').test(strengthContext)
-    || new RegExp(`\\b(?:workouts?|sessions?)\\s+(?:named|called|for)\\s+["'“”‘’]?${strengthAliases.source}`, 'u').test(strengthContext);
-  const strengthRecipeContext = namedStrengthWorkout
-    || /\b(?:strength|gym|resistance)\b/u.test(strengthContext.replace(strengthAliases, ''));
+  const strengthRecipeContext = strengthWorkoutRecipeContext(strengthContext);
+  const separateRecordAction = trainingRoutingClauses(question).slice(1).map(trainingRoutingActionClause).some(clause =>
+    /^(?:edit|update|modify|change|move|copy|duplicate|delete|remove|rename|shift|skip|archive|pause|activate)\b/u.test(clause)
+      && /\b(?:workouts?|sessions?|plans?|steps?)\b/u.test(clause));
+  const separateManagedDelivery = trainingRoutingClauses(question).map(trainingRoutingActionClause).some(clause =>
+    /^(?:enable|disable|stop|start|resume|retry|approve)\b/u.test(clause)
+      && /\b(?:sync(?:ing)?|delivery|send|providers?)\b/u.test(clause));
+  if (/\b(?:create|add|build|make|draft|propose|suggest)\b/u.test(question)
+    && (separateRecordAction || separateManagedDelivery)) return 'preview_training_changes';
   if (authorsWorkout && recipeBatch && !strengthRecipeContext
     && !changesWorkoutRecords) {
     return 'preview_planned_workout_v3_changes';
@@ -548,17 +652,17 @@ export function requestsAssistantTrainingDelivery(prompt: string): boolean {
   // questions or problem reports. This is a private routing hint, not authority.
   // Keep separate actions after sentence/"then"/"but", not decimal points.
   return request.split(/[!?;\n]+|\.(?=\s|$)|\b(?:then|but)\b/u).some(part => {
-    const clause = part.trim().replace(/^please\s+/u, '')
-      .replace(/^(?:can|could|would|will)\s+you(?:\s+please)?\s+/u, '');
+    const clause = trainingRoutingActionClause(part);
     const informationOnly = /^(?:explain|describe|what|why|how|when|where|is|are|does|should)\b/u.test(clause)
       || /^(?:can|could|would)\s+(?:i|we)\b/u.test(clause)
       || /^(?:show|check|review|tell)\b[^.!?;\n]{0,120}\b(?:status|settings|permissions|support|availability|compatibility)\b/u.test(clause);
     const requestsAction = /^(?:do\s+)?(?:send|sync|deliver|enable|disable|stop|start|resume|retry|approve|change|edit|update|modify|activate|set|turn)\b/u.test(clause)
-      || /^(?:create|add|build|make|draft|propose|suggest|recommend|schedule)\b[^!?;\n]*\b(?:and|also|,)\s+(?:please\s+)?(?:send|sync|deliver)\b/u.test(clause)
+      || (/^(?:create|add|build|make|draft|propose|suggest|recommend|schedule)\b/u.test(clause)
+        && trainingRoutingClauses(clause).slice(1).some(action => /^(?:send|sync|deliver|enable|disable|stop|start|resume|retry|approve)\b/u.test(trainingRoutingActionClause(action))))
       || /^i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to\s+(?:send|sync|deliver)\b/u.test(clause)
       || /^(?:prepare|preview|propose)\b/u.test(clause)
       || /^(?:show|review)\b[^!?;\n]{0,100}\b(?:preview|proposal)\b/u.test(clause);
-    return !informationOnly && ((requestsAction && /\b(?:send|sync|deliver)\b/u.test(clause))
+    return !informationOnly && ((requestsAction && /\b(?:send|sync(?:ing)?|deliver)\b/u.test(clause))
       || requestsGarminReplacement(clause));
   });
 }
@@ -1128,6 +1232,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     && canPreviewDailyWorkout(input.prompt, input.dailyWorkoutContext)
     && input.tools.some(tool => (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name));
   const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
+  const stopSyncRequested = requestsAssistantStopSync(input.prompt);
   const trainingDeletionRequested = selectAssistantTrainingPreviewTool(input.prompt, input.history) === 'preview_training_deletion';
   const requiredDeliveryPreview = trainingDeliveryRequested
     ? input.tools.find(tool => (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))
@@ -1316,7 +1421,8 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
         }
       }
       if (tool.name === requiredDeliveryPreview?.name
-        && !(typeof output === 'object' && output !== null && 'assistantToolError' in output)) {
+        && !(typeof output === 'object' && output !== null && 'assistantToolError' in output)
+        && (!stopSyncRequested || asRecordArray(asRecord(output)?.providerPreviews).some(preview => preview.action === 'stop'))) {
         deliveryPreviewCompleted = true;
       }
       toolResponses.push({
@@ -1512,7 +1618,9 @@ export function createAssistantRuntime(
         // even though each declaration is valid. The non-selected previews stay
         // in the MCP session but never enter this turn's model request.
         const preferredTrainingPreview = selectAssistantTrainingPreviewTool(input.prompt, input.history);
-        const selectedTrainingPreview = modelToolDefinitions.some(tool => tool.name === preferredTrainingPreview)
+        const separateStrengthActions = needsSeparateStrengthActions(input.prompt);
+        const selectedTrainingPreview = separateStrengthActions ? undefined
+          : modelToolDefinitions.some(tool => tool.name === preferredTrainingPreview)
           ? preferredTrainingPreview
           : preferredTrainingPreview === 'preview_garmin_workout_replacement'
             || preferredTrainingPreview === 'preview_planned_workout_v3_changes'
@@ -1657,6 +1765,10 @@ export function createAssistantRuntime(
                 await input.assertTrainingWriteAccess!();
                 toolFailureStage = 'training_preview_validation';
                 const preview = TRAINING_ASSISTANT_PREVIEW_OUTPUT.parse(result.structuredContent);
+                if (requestsAssistantStopSync(input.prompt) && !preview.providerPreviews.some(provider => provider.action === 'stop')) {
+                  throw new AssistantRecoverableMcpToolError('invalid_request',
+                    'This request expressly stops existing sync. Prepare the exact Stop action for the current read target; a new workout or Send proposal does not satisfy it.');
+                }
                 toolFailureStage = 'training_review_loading';
                 const workoutReviews = session.getTrainingWorkoutReviews && !tool.name.startsWith('preview_saved_workout')
                   ? await session.getTrainingWorkoutReviews(preview.proposalRef, input.prompt) : [];
@@ -1776,7 +1888,9 @@ export function createAssistantRuntime(
           timeZone: input.timeZone,
           prompt: input.prompt,
           history: input.history,
-          mcpInstructions: session.instructions,
+          mcpInstructions: separateStrengthActions
+            ? `${session.instructions} This request combines complete strength authoring with another action that one strength preview cannot express. No Training preview is available for this turn. Explain that the changes need separate reviews and ask which action to review first. Do not substitute a generic recipe, Send, or another writer; do not imply either action was prepared or applied.`
+            : session.instructions,
           locationAccess,
           tools: modelTools,
           workflow,

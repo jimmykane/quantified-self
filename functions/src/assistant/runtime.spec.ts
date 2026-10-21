@@ -77,6 +77,39 @@ describe('Training phase preview routing', () => {
     expect(selectAssistantTrainingPreviewTool('Create a Running workout with a note about my Kettlebell workout, and save it in my library.'))
       .toBe('preview_saved_workout_v2_change');
   });
+  it.each(["today's", 'today’s', "my coach's"])('treats %s as unquoted note prose rather than a quote opener', qualifier => {
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout with a note about ${qualifier} Kettlebell workout.`))
+      .toBe('preview_create_planned_workout');
+  });
+  it('does not let a quoted workout title introduce a note antecedent for another quoted span', () => {
+    expect(selectAssistantTrainingPreviewTool('Create a workout called "Notes" for "Strength Training".'))
+      .toBe('preview_strength_workout_change');
+  });
+  it.each([
+    'Update the notes in my Running workout to “Create a replacement Garmin workout”.',
+    'Change the note in my Running workout to "Save it in the library".',
+    'Add a note to my Running workout with text "Create a replacement Garmin workout".',
+    'Add the following note to my Running workout: "Create a replacement Garmin workout".',
+    'Add the following note to my Running workout: "Rest. Then create a replacement Garmin workout!".',
+    'Add "Create a replacement Garmin workout" to the notes of my Running workout.',
+    'Add "Save it to my library" as the note for my Running workout.',
+  ])('recognizes quoted note payloads without changing the requested editor: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
+    expect(requestsAssistantTrainingDelivery(`${prompt} Then send it to Wahoo.`)).toBe(true);
+  });
+  it.each([
+    'move my existing workout to tomorrow',
+    'rename my existing workout to Easy',
+    'stop sync for my existing workout to Wahoo',
+    'activate my plan',
+  ])('preserves the separate action after unquoted notes: %s', action => {
+    const prompt = `Create a Running workout with a note about my Kettlebell workout, and ${action}.`;
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(action.startsWith('stop'));
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout. Then ${action}.`))
+      .toBe('preview_training_changes');
+  });
   it.each([
     'Update HR ranges across my plan, preserving warm-ups and early Lap.',
     'Adjust the HR zones across my plan.',
@@ -671,6 +704,143 @@ describe('Training preview model-tool selection', () => {
       prompt: 'Edit the sets in my Kettlebell workout.', timeZone: 'Europe/Helsinki', history: [],
       trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
     expect(previews).toEqual(available ? ['preview_strength_workout_change'] : []);
+  });
+
+  it.each([
+    'Edit my Kettlebell workout and send it to Wahoo.',
+    'Create a Kettlebell workout. Then stop sync for my existing workout to Wahoo.',
+    'Edit my Kettlebell workout and move my Running workout to tomorrow.',
+    'Create a Running workout. Then edit my Kettlebell workout.',
+    'Create a Kettlebell workout and activate my plan.',
+    'Edit my Kettlebell workout, then edit my Calisthenics workout.',
+    'Create a Kettlebell workout, and could you stop sync for my Running workout to Wahoo?',
+  ])('asks which unsupported strength action to review first without exposing a substitute: %s', async prompt => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_strength_workout_change'] as const)
+      .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        expect(input.prompt).toBe(prompt);
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_'))).toEqual([]);
+        expect(input.mcpInstructions).toContain('ask which action to review first');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Which action should we review first?', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true });
+    expect(result.pendingTrainingProposal).toBeUndefined();
+  });
+
+  it.each(['Edit my Kettlebell workout and rename it to Easy.', 'Edit my Kettlebell workout and move it to tomorrow.',
+    'Edit my Kettlebell workout and rename my workout to Easy.', 'Edit my Kettlebell workout and move my workout to tomorrow.'])(
+    'keeps same-workout title/date edits on the complete strength preview: %s', async prompt => {
+      const { session } = createSession();
+      session.tools.push({ name: 'preview_strength_workout_change', title: 'Strength preview', description: 'Full recipe', inputSchema: { type: 'object' } });
+      const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), generateAnswer: async input => {
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_strength_workout_change']);
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the complete workout first.', visualRequest: { chart: null, map: null } };
+      } });
+      await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+        timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    });
+
+  it.each(['Change sync settings for my Kettlebell workout.', 'Change sync settings for my Strength Training workout.',
+    'Create a Strength Training plan and enable sync with Wahoo.'])(
+    'preserves provider-only or plan-only actions despite strength words: %s', async prompt => {
+      const { session } = createSession();
+      session.tools.push(...(['preview_training_changes', 'preview_strength_workout_change'] as const)
+        .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+      const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), generateAnswer: async input => {
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_training_changes']);
+        expect(input.mcpInstructions).not.toContain('ask which action to review first');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the current delivery settings first.', visualRequest: { chart: null, map: null } };
+      } });
+      await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+        timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true });
+    });
+
+  it.each([false, true])('keeps an explicit sport choice on the strength schema without inheriting delivery (available=%s)', async available => {
+    const { session } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Legacy preview', description: 'Generic', inputSchema: { type: 'object' } });
+    if (available) session.tools.push({ name: 'preview_strength_workout_change', title: 'Strength preview', description: 'Full recipe', inputSchema: { type: 'object' } });
+    const history = [{ role: 'user' as const, text: 'Edit my Kettlebell workout and send it to Wahoo.' },
+      { role: 'assistant' as const, text: 'These actions need separate reviews. Which action should we review first?' }];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), generateAnswer: async input => {
+      expect(input.prompt).toBe('Kettlebell first.');
+      expect(input.history).toEqual(history);
+      expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name))
+        .toEqual(available ? ['preview_strength_workout_change'] : []);
+      expect(requestsAssistantTrainingDelivery(input.prompt)).toBe(false);
+      await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+      return { answer: 'Read the full Kettlebell prescription first.', visualRequest: { chart: null, map: null } };
+    } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Kettlebell first.',
+      timeZone: 'Europe/Helsinki', history, trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false });
+    for (const reply of ['Cancel. Kettlebell first.', 'Create a Running workout.', 'Kettlebell first and send it.', 'Calisthenics first.']) {
+      expect(selectAssistantTrainingPreviewTool(reply, history)).not.toBe('preview_strength_workout_change');
+    }
+    expect(selectAssistantTrainingPreviewTool('Kettlebell first.', [...history,
+      { role: 'user', text: 'Show readiness instead.' }, { role: 'assistant', text: 'Which action should we review first?' }]))
+      .not.toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Kettlebell first.', [{ role: 'user', text: 'Edit my Kettlebell workout, then edit my other Kettlebell workout.' }, history[1]]))
+      .not.toBe('preview_strength_workout_change');
+  });
+
+  it.each(['none', 'send'] as const)('never attaches a %s proposal when the request expressly Stops existing sync', async action => {
+    const { session, callTool } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes'] as const)
+      .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    const baseCall = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_training_changes' ? { structuredContent: {
+      proposalRef: 'wrong-preview', expiresAtMs: Date.parse('2026-10-06T12:15:00Z'), permissionMode: 'combined', scheduleRevision: 1,
+      requiresConfirmation: true, summary: 'Create a workout.', changes: [{ index: 0, kind: 'create-workout', summary: 'New workout.' }],
+      providerPreviews: action === 'none' ? [] : [{ index: 0, provider: 'wahoo', targetType: 'workout', action: 'send', availability: 'ready',
+        timeZone: 'UTC', eligibleCount: 1, warningCount: 0, summary: 'Send new workout.' }],
+    } } : baseCall(name, args));
+    const prompt = 'Create a Running workout. Then stop sync for my existing workout to Wahoo.';
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date('2026-10-06T12:00:00Z'),
+      generateAnswer: async input => {
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_training_changes']);
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        expect(await input.tools.find(tool => tool.name === 'preview_training_changes')!.execute({})).toMatchObject({ assistantToolError: {
+          code: 'invalid_request', guidance: expect.stringContaining('exact Stop action'),
+        } });
+        return { answer: 'The exact Stop proposal could not be prepared.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal).toBeUndefined();
+  });
+
+  it.each([
+    ['Stop sync for my workout to Wahoo.', 'stop'],
+    ['Can you please stop syncing my workout to Wahoo?', 'stop'],
+    ['Create a Running workout. Do not stop sync for my existing workout.', 'none'],
+    ['Create a Running workout with the note "Then stop sync for my existing workout to Wahoo".', 'none'],
+  ] as const)('keeps valid and negated Stop requests intact: %s', async (prompt, action) => {
+    const { session, callTool } = createSession();
+    const selected = selectAssistantTrainingPreviewTool(prompt);
+    session.tools.push({ name: selected, title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
+    const baseCall = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === selected ? { structuredContent: {
+      proposalRef: 'valid-preview', expiresAtMs: Date.parse('2026-10-06T12:15:00Z'), permissionMode: action === 'none' ? 'schedule' : 'delivery', scheduleRevision: 1,
+      requiresConfirmation: true, summary: 'Review the exact requested change.', changes: [{ index: 0, kind: action === 'none' ? 'create-workout' : 'provider-delivery', summary: 'Requested change.' }],
+      providerPreviews: action === 'none' ? [] : [{ index: 0, provider: 'wahoo', targetType: 'workout', action,
+        availability: 'ready', timeZone: 'UTC', eligibleCount: 1, warningCount: 0, summary: 'Stop existing sync.' }],
+    } } : baseCall(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date('2026-10-06T12:00:00Z'),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        expect(await input.tools.find(tool => tool.name === selected)!.execute({})).not.toHaveProperty('assistantToolError');
+        return { answer: 'Review the requested change.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.proposalRef).toBe('valid-preview');
   });
 
   it.each([
@@ -2471,7 +2641,7 @@ describe('Assistant runtime', () => {
       name: 'preview_training_changes',
       description: 'Prepare delivery changes for review.',
       inputJsonSchema: { type: 'object', properties: {} },
-      execute: vi.fn().mockResolvedValue({ proposalRef: 'proposal-ref' }),
+      execute: vi.fn().mockResolvedValue({ proposalRef: 'proposal-ref', providerPreviews: [{ action }] }),
     };
     const generate = vi.spyOn(assistantGenkit, 'generate')
       .mockResolvedValueOnce({
@@ -2520,6 +2690,30 @@ describe('Assistant runtime', () => {
     expect(generate.mock.calls[2]?.[0].system).not.toContain('action:"send"');
     expect(generate.mock.calls[2]?.[0].system).toContain('Preserve the expressly requested action');
     expect(generate.mock.calls[2]?.[0].tools).toHaveLength(1);
+  });
+
+  it.each([[], [{ action: 'send' }]])('does not count %j as the requested Stop delivery preview', async providerPreviews => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read the schedule.',
+      inputJsonSchema: { type: 'object' }, execute: vi.fn().mockResolvedValue({ scheduleRevision: 8, plans: [] }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare exact changes.',
+      inputJsonSchema: { type: 'object' }, execute: vi.fn().mockResolvedValueOnce({ proposalRef: 'wrong', providerPreviews })
+        .mockResolvedValueOnce({ proposalRef: 'right', providerPreviews: [{ action: 'stop' }] }) };
+    const toolRequest = (name: string, input = {}) => ({ toolRequests: [{ toolRequest: { name, input } }], messages: [] });
+    const finalText = { toolRequests: [], messages: [], text: JSON.stringify({ answer: 'Review the exact Stop.', visuals: { chart: null, map: null } }) };
+    const stopInput = { expectedScheduleRevision: 8, changes: [{ kind: 'provider-delivery', targetType: 'workout',
+      target: { ref: 'current-workout' }, providers: ['wahoo'], action: 'stop' }] };
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce(toolRequest(read.name) as never)
+      .mockResolvedValueOnce(toolRequest(preview.name, { expectedScheduleRevision: 8, changes: [] }) as never)
+      .mockResolvedValueOnce(finalText as never).mockResolvedValueOnce(toolRequest(preview.name, stopInput) as never)
+      .mockResolvedValueOnce(finalText as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-06T12:00:00Z', timeZone: 'UTC',
+      prompt: 'Create a Running workout. Then stop sync for my existing workout to Wahoo.', history: [],
+      mcpInstructions: 'Use current data.', tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() }))
+      .resolves.toMatchObject({ answer: 'Review the exact Stop.' });
+    expect(preview.execute).toHaveBeenCalledTimes(2);
+    expect(preview.execute).toHaveBeenLastCalledWith(stopInput);
+    expect(generate.mock.calls[3]?.[0].system).toContain('Stop sync means stop');
+    expect(generate.mock.calls[3]?.[0].system).toContain('the exact read reference');
   });
 
   it('rejects another read when the correction advertised only the requested preview', async () => {

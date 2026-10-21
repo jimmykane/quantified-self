@@ -518,6 +518,12 @@ mentioning the library, phases, replacement or Send cannot request those actions
 It also excludes explicitly excluded workouts while recognizing direct named exercise/set/repetition edits.
 It preserves the complete original prompt and all note text for the model; this
 selection context is never a replacement recipe, permission or stored value.
+Paired-quote scanning recognizes notes before or after their text, preserves actual target labels and handles ordinary
+apostrophes. Independent follow-up actions use the existing batch where expressible. Combined complete-strength
+authoring and another action instead asks which action to review first, with no substitute preview. A bounded exact
+sport-choice reply to that immediate clarification selects only the full-strength schema; it never inherits provider
+consent or Apply authority. An explicit Stop-sync request cannot attach a create-only or Send proposal as its review:
+the existing preview must contain Stop. These private guards add no public shape, metadata, scope or mutation kind.
 This metadata-only clarification retains all registered shapes, scopes, grants and native/app approval rules; its digest
 is included in the pending developer-refresh record. Server deployment, registered-app rescan and bundled-plugin refresh
 remain separate. Local bundle sync/validation uses a temporary profile and fixture app ID. Legacy generic aliases

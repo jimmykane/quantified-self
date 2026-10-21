@@ -1482,9 +1482,22 @@ all preview-selection decisions, including library, phase and Garmin replacement
 no provider-delivery intent. Note edits retain their target and the note noun, so removing a note cannot select workout
 deletion. Single/curly quoted notes retain apostrophes in contractions. The original prompt, constraints and requested
 note text still reach the model intact; this projection must never author or persist a prescription. Named exercise,
-set and repetition edits use the same complete
-strength preview even when the request omits the word workout. Note edits that name the real strength workout retain
+set and repetition edits use the same complete strength preview even when the request omits the word workout.
+Paired-quote scanning distinguishes apostrophes from delimiters and handles note text before or after its note label;
+quoted target titles cannot introduce a note or action for later text. Independent action clauses after unquoted note
+qualifiers remain visible, including polite requests. Note edits that name the real strength workout retain
 that target. Read-current-state, full-companion validation and app confirmation remain mandatory.
+Mixed non-strength create/lifecycle/provider requests use the existing batch only when it can express the requested
+operations. Complete-strength authoring combined with delivery or another workout's edit withholds all previews and
+asks which action to review first; one focused strength preview cannot silently stand for both. Same-workout title/date
+edits and provider-only or plan-only requests keep their existing routes. An exact, unambiguous strength sport choice
+immediately answering that question may select the complete-strength schema from the preceding compound request;
+it supplies no recipe, provider consent or Apply approval. Cancellation, intervening topics, new actions and ambiguous
+same-sport targets do not inherit that route. Other strength follow-up forms retain the existing clarification limits.
+An explicit Stop-sync request requires a returned Stop provider preview, both when checking completion of model calls
+and before attaching an app-owned pending proposal. A create-only or Send response cannot produce an Apply card for
+that Stop request. Negated and quoted Stop text does not request delivery. Public tools, schemas, grants, confirmation,
+metadata and provider actions are unchanged; these are first-party routing/proposal guards with no new plugin refresh.
 Scheduled strength editor lookups distinguish a confirmed absent alias companion from failed reads or invalid data.
 Only confirmed absence opens the original legacy interval recipe. Loading and failed lookups block calendar and
 library saves, sport conversion and interval editing; an inline error directs users to close and reopen for a fresh
