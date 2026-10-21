@@ -202,7 +202,7 @@ mat-list-item, button[mat-list-item], a[mat-list-item] {
   width: 100%;
 }
 
-[mat-list-item].sidenav-notes-item {
+[mat-list-item].sidenav-route-link {
   padding-inline-start: 16px;
   background: none;
   border: 0;
@@ -212,7 +212,7 @@ mat-list-item, button[mat-list-item], a[mat-list-item] {
 }
 
 // Match the icon spacing of the other route rows.
-.sidenav-notes-item mat-icon {
+.sidenav-route-link mat-icon {
   margin-inline: 8px 16px;
 }
 
@@ -247,6 +247,8 @@ mat-list-item:not(.theme-toggle-item):hover {
       color-mix(in srgb, var(--mat-sys-primary) 12%, transparent),
       color-mix(in srgb, var(--mat-sys-primary) 4%, transparent)) !important;
   border-left: 3px solid var(--mat-sys-primary) !important;
+  // Keep the active border inside the same 16px inset as other rows.
+  padding-inline-start: calc(16px - 3px) !important;
 }
 
 /* Ensure active state styles persist on hover */

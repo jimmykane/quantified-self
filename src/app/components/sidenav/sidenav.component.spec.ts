@@ -766,10 +766,10 @@ describe('flat sidenav style contract without fixtures', () => {
         const styles = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.scss'), 'utf8');
         expect(styles).not.toContain('.sidenav-subitem');
         expect(styles).toContain('border-left: 3px solid var(--mat-sys-primary) !important');
-        expect(styles).toContain('.sidenav-notes-item mat-icon');
+        expect(styles).toContain('.sidenav-route-link mat-icon');
         expect(styles).toContain('margin-inline: 8px 16px');
-        const notesRule = styles.slice(styles.indexOf('[mat-list-item].sidenav-notes-item {'), styles.indexOf('.sidenav-notes-item mat-icon'));
-        expect(notesRule).toContain('padding-inline-start: 16px');
+        const routeRule = styles.slice(styles.indexOf('[mat-list-item].sidenav-route-link {'), styles.indexOf('.sidenav-route-link mat-icon'));
+        expect(routeRule).toContain('padding-inline-start: 16px');
         const phoneRules = styles.slice(styles.indexOf('@include bp.xsmall'));
         expect(phoneRules).toContain('mat-list-item, button[mat-list-item], a[mat-list-item]');
         expect(phoneRules).toContain('width: calc(100% - 8px)');
