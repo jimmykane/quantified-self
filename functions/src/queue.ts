@@ -317,6 +317,8 @@ interface HistoryWorkoutBatch {
   queueItemIds: readonly string[];
 }
 
+const CONNECTION_HISTORY_DISPATCH_SPREAD_SECONDS = 60;
+
 /** Dispatch only this coordinator's bounded batch, without changing bulk import/recovery schedules. */
 export async function dispatchConnectionHistoryWorkoutBatch(execution: HistoryExecution, queueItemIds: readonly string[]): Promise<void> {
   if (![ServiceNames.SuuntoApp, ServiceNames.COROSAPI].includes(execution.serviceName) || queueItemIds.length > 100) {
@@ -357,7 +359,8 @@ async function dispatchQueueItemTasksInternal(serviceName: ServiceNames, history
 
   logger.info(`Dispatching ${querySnapshot.size} items for ${serviceName} (${pendingTasks} already pending)`);
 
-  const delayPerItem = DISPATCH_SPREAD_SECONDS / querySnapshot.size;
+  const spreadSeconds = historyBatch ? CONNECTION_HISTORY_DISPATCH_SPREAD_SECONDS : DISPATCH_SPREAD_SECONDS;
+  const delayPerItem = spreadSeconds / querySnapshot.size;
 
   const promises = querySnapshot.docs.map(async (doc, index): Promise<boolean> => {
     const delay = Math.floor(index * delayPerItem);
@@ -447,7 +450,7 @@ async function dispatchQueueItemTasksInternal(serviceName: ServiceNames, history
     return false;
   })) : promises);
   const dispatchedCount = dispatchResults.filter(Boolean).length;
-  logger.info(`Dispatched ${dispatchedCount}/${querySnapshot.size} tasks spread over ${DISPATCH_SPREAD_SECONDS}s`);
+  logger.info(`Dispatched ${dispatchedCount}/${querySnapshot.size} tasks spread over ${spreadSeconds}s`);
 }
 
 async function readHistoryWorkoutBatch(serviceName: ServiceNames, batch: HistoryWorkoutBatch, limit: number) {

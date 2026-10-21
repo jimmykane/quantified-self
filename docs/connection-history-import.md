@@ -132,11 +132,14 @@ behavior, and Garmin's separate single-task Health request pacing is unchanged.
 
 Suunto/COROS connection-history activity batches likewise dispatch promptly after their queue transaction commits
 and child paths are registered. They reuse the guarded workout dispatcher with exact batch-document reads (at most
-100), the existing capacity limit and 15-minute task spread; they do not scan or dispatch other users' work. Completed,
+100), the existing capacity limit and a **60-second history-only task spread**; they do not scan or dispatch other users' work. Completed,
 dispatched, retrying, leased, parked and different-run/account/owner rows remain unchanged. Every started enqueue
 settles before checkpointing; failures retain durable undispatched children for the half-hour safety net, without
 resetting retries or repeating admission. A batch already waiting before deployment can still wait for that scan once.
-Manual bulk activity history, Wahoo, Garmin, worker concurrency and retry/backoff settings are unchanged.
+Manual bulk activity history and scheduled recovery retain the shared 15-minute task spread. Wahoo, Garmin,
+worker concurrency and retry/backoff settings are unchanged. The coordinator still waits for all children in a window
+before admitting the next one; only newly dispatched automatic-history batches get the shorter spread. Existing tasks
+are not rescheduled or replayed, and 60 seconds is a dispatch window, not a processing-completion guarantee.
 Reserved-name recovery still requires the exact explicit queue revision, including Suunto history; a superseded
 attempt cannot advance or dispatch a replacement. Fallback diagnostics are best effort and cannot interrupt the
 wait for started enqueues or invalidate durable admission.
@@ -145,7 +148,7 @@ Monitoring is **covered/unchanged** after reviewing #829 and #847: the existing 
 worker outcomes and scheduled eligible-backlog/recovery observations still own these children. Prompt-dispatch
 fallbacks emit a fixed service-only WARNING; they are not falsely counted as scheduled-dispatch failures or imported
 activities. No monitoring configuration changes. Existing Help's background/large-import guidance remains accurate,
-and MCP/Assistant and Training contracts are unaffected. Release requires separate approval for only
+and MCP/Assistant and Training contracts are unaffected. The history-only pacing change requires separate approval for only
 `processConnectionHistoryTask`; no frontend, Rules, indexes, migration or replay is required. Rollback restores its
 previous revision while the scheduled dispatcher continues recovering durable children.
 

@@ -1161,9 +1161,10 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 ### History imports
 
 Suunto/COROS automatic connection-history activity batches use the existing guarded workout dispatcher after durable
-admission, restricted to at most 100 exact children of that run/account/owner. The existing 15-minute spread, capacity,
+admission, restricted to at most 100 exact children of that run/account/owner, spread over 60 seconds. Capacity,
 revision/deletion guards and scheduled recovery remain; completed, issued, retrying, leased and parked work is not
-reopened. Manual bulk activity history, Wahoo and Garmin retain their existing dispatch paths.
+reopened. The coordinator still waits for its children before admitting the next window. Manual bulk activity history
+and scheduled recovery keep their 15-minute spread; Wahoo and Garmin retain their existing dispatch paths.
 Reserved-name recovery verifies explicit queue revisions for Suunto as well as COROS; fallback diagnostic failures
 cannot invalidate admission or interrupt other started enqueues. Monitoring is
 **covered/unchanged** by #829's native queue, committed outcomes and scheduled eligible-backlog/recovery signals and

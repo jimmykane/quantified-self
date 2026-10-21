@@ -773,7 +773,7 @@ describe('queue', () => {
         }
         beforeEach(() => vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0));
 
-        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('dispatches only the selected %s children with the existing 15-minute spread and revisions', async serviceName => {
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('dispatches only the selected %s children with a 60-second spread and revisions', async serviceName => {
             const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
             const context = execution(serviceName);
             const docs = [child('one'), child('two'), child('three')];
@@ -785,10 +785,31 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(3);
             docs.forEach((doc, index) => {
                 expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id, expect.any(Number),
-                    index * DISPATCH_SPREAD_SECONDS / 3, { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+                    index * 20, { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
                 expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
             });
             expect(mockCollection.where).not.toHaveBeenCalled();
+            expect(logger.info).toHaveBeenCalledWith('Dispatched 3/3 tasks spread over 60s');
+        });
+
+        it.each([
+            { serviceName: ServiceNames.SuuntoApp, size: 1 },
+            { serviceName: ServiceNames.SuuntoApp, size: 100 },
+            { serviceName: ServiceNames.COROSAPI, size: 1 },
+            { serviceName: ServiceNames.COROSAPI, size: 100 },
+        ])('keeps a $size-item $serviceName history batch within one minute', async ({ serviceName, size }) => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = Array.from({ length: size }, (_, index) => child(`item-${index}`));
+            mockGetAll.mockResolvedValue(docs);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), docs.map(doc => doc.id));
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(size);
+            docs.forEach((doc, index) => {
+                expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id,
+                    expect.any(Number), Math.floor(index * 60 / size),
+                    { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+            });
         });
 
         it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('preserves completed, dispatched, retrying, leased, parked, other-run/account/owner and missing %s rows', async serviceName => {
@@ -1037,7 +1058,7 @@ describe('queue', () => {
             expect(mockDoc2.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
-        it('should apply staggered delay to dispatched tasks', async () => {
+        it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('keeps scheduled %s dispatch on the shared 15-minute spread', async serviceName => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
             const { dispatchQueueItemTasks } = await import('./queue');
@@ -1059,14 +1080,14 @@ describe('queue', () => {
                 isEqual: vi.fn(), // Fix TS error
             } as any);
 
-            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
+            await dispatchQueueItemTasks(serviceName);
 
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
-            // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
-            // Items: 0, 600, 1200
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
+            expect(DISPATCH_SPREAD_SECONDS).toBe(900);
+            // A three-item scheduled batch remains at 0, 300 and 600 seconds.
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, serviceName, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, serviceName, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, serviceName, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
         });
 
         it('should delete user-owned queue docs instead of dispatching when account deletion is active', async () => {

@@ -149,7 +149,8 @@ failures or create/delete temporary test policies without exact separate approva
 ## Diagnosis and release evidence
 
 Suunto/COROS automatic connection-history activity batches can promptly dispatch their own bounded children using
-the same guarded workout path and 15-minute spread. Coverage is **covered/unchanged**: native task depth/delay and
+the same guarded workout path with a 60-second history-only spread. Scheduled recovery and manual bulk history
+retain the shared 15-minute spread. Coverage is **covered/unchanged**: native task depth/delay and
 committed worker outcomes still apply; failed prompt enqueues leave durable rows for the existing scheduled dispatcher
 and its eligible-backlog/recovery observations. Service-only fallback warnings are diagnostic, not the versioned
 scheduled-dispatch failure metric or successful ingestion. No new monitoring resources or labels are needed. Manual
