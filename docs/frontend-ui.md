@@ -586,6 +586,15 @@ zeros and repeated distances remain valid, with the first recorded pair winning 
 cursor update. This read-only lookup preserves the source streams and works with both dense and sparse Distance
 streams, including the existing Stryd fallback.
 
+The app and Functions both install Sports Lib 23.4.0. Original-file chart hydration retains missing Distance
+readings as null instead of carrying the last distance through unrelated sensor timestamps. Real zero and repeated
+recorded distances remain valid. Distance-axis charts omit rows without an observed x coordinate; time-axis charts can
+still show their other sensor readings. The map cursor uses the aligned finite pairs above. Opening a chart does not
+rewrite recorded summaries; historical saved statistics change only through the existing original-file reparse action.
+Distance-axis lines apply the selected continuity mode to both the metric and distance recording intervals before
+coordinate filtering. Normal sparse coordinates can connect; Detect/Custom preserve breaks in either source stream.
+Continuous can span missing data without inventing a distance, tooltip reading or statistic at those missing rows.
+
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
 even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.
@@ -690,7 +699,8 @@ Production service-worker and public
 startup/prerender checks pass, as does beta's service-worker check. All 722 targeted app assertions pass, including
 the existing App Check recovery tests. Functions compilation and the MCP compatibility check also pass. Package
 verification covers ESM/CommonJS identity, TypeScript resolution and every emitted metrics-worker chunk. Both the
-app and Functions pin 23.3.0 with registry URLs and the verified release integrity in their lockfiles.
+app and Functions pinned 23.3.0 for that verification. Their current 23.4.0 pins retain registry URLs and matching
+release integrity in both lockfiles.
 
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.

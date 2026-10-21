@@ -1574,13 +1574,19 @@ function toSeriesPoints(
     const distanceValues = getActivityDistanceValues(activity, activityCache);
     const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
     const length = Math.min(streamValues.length, distanceValues.length, absoluteTimes.length);
+    // Distance can be recorded less often than the metric. Learn its cadence
+    // independently so ordinary missing coordinates do not force a line break,
+    // while Detect/Custom still respect gaps in either source stream.
+    const distanceSegments = buildEventLineSegments(
+      absoluteTimes, distanceValues, resolveEventLineContinuity(lineContinuity),
+    );
 
     const lineValues = new Float64Array(length * 2);
     const pointTimes = new Float64Array(length);
     const pointSegments = new Uint32Array(length);
     let segment = 0;
     let previousSourceSegment = 0;
-    let coordinateBreak = false;
+    let previousDistanceSegment = 0;
     let pointCount = 0;
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -1591,7 +1597,6 @@ function toSeriesPoints(
       const x = distanceValues[index];
       const time = absoluteTimes[index];
       if (!Number.isFinite(x) || !Number.isFinite(time)) {
-        if (typeof y === 'number' && Number.isFinite(y)) coordinateBreak = true;
         continue;
       }
       const writeOffset = pointCount * 2;
@@ -1599,10 +1604,10 @@ function toSeriesPoints(
       lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
       pointTimes[pointCount] = time;
       if (sourceSegments[index]) {
-        if (coordinateBreak || previousSourceSegment !== sourceSegments[index]) segment++;
+        if (previousDistanceSegment !== distanceSegments[index] || previousSourceSegment !== sourceSegments[index]) segment++;
         pointSegments[pointCount] = segment;
         previousSourceSegment = sourceSegments[index];
-        coordinateBreak = false;
+        previousDistanceSegment = distanceSegments[index];
       }
       pointCount += 1;
       if (x < minX) {

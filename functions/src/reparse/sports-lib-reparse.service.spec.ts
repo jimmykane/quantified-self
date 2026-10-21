@@ -3089,7 +3089,7 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-    it.each(['summary-only', 'single-zero', 'constant-counter', 'reset-counter', 'interior-reset', 'nonzero-resets', 'moving-counter', 'stalled-counter', 'larger-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'missing-summary-moving-counter', 'zero-summary-moving-counter', 'tcx-single-zero'] as const)(
+    it.each(['summary-only', 'single-zero', 'sparse-counter', 'constant-counter', 'reset-counter', 'interior-reset', 'nonzero-resets', 'moving-counter', 'stalled-counter', 'larger-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'missing-summary-moving-counter', 'zero-summary-moving-counter', 'tcx-single-zero'] as const)(
         'regenerate preserves the freshly parsed total independently of stream coverage: %s', async kind => {
             const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
             let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
@@ -3098,8 +3098,8 @@ describe('sports-lib-reparse.service', () => {
             const origin = new Date('2026-01-01T10:00:00Z');
             if (kind === 'tcx-single-zero') {
                 const { DOMParser } = await import('xmldom');
-                // Only the first recorded point has distance. Import backfill expands
-                // that zero across HR timestamps; it is not evidence of no travel.
+                // Only the first recorded point has distance. Later HR timestamps
+                // must retain missing distance rather than suggest no travel.
                 const xml = `<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
                     <Activities><Activity Sport="Other"><Id>${origin.toISOString()}</Id><Lap StartTime="${origin.toISOString()}">
                     <TotalTimeSeconds>60</TotalTimeSeconds><DistanceMeters>1000</DistanceMeters><Calories>7</Calories>
@@ -3126,7 +3126,8 @@ describe('sports-lib-reparse.service', () => {
                 const seconds = counters ? counters.map((_, index) => index * 60 / (counters.length - 1)) : [0, 30, 60];
                 for (const [index, second] of seconds.entries()) {
                     const counter = counters ? counters[index] : kind === 'single-zero' ? second === 0 ? 0 : undefined
-                        : kind === 'constant-counter' ? 12 : kind === 'reset-counter' ? [0, 100, 0][index]
+                        : kind === 'sparse-counter' ? [0, undefined, 1000][index]
+                            : kind === 'constant-counter' ? 12 : kind === 'reset-counter' ? [0, 100, 0][index]
                             : kind === 'moving-counter' ? [10, 60, 110][index]
                                 : kind === 'stalled-counter' ? [0, 90, 90][index]
                                     : kind === 'larger-counter' ? [0, 1000, 2000][index]
@@ -3153,6 +3154,12 @@ describe('sports-lib-reparse.service', () => {
             const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
             const recordedCounter = activity.hasStreamData(sports.DataDistance.type)
                 ? [...activity.getStreamData(sports.DataDistance.type)] : undefined;
+            if (kind === 'sparse-counter' || kind === 'single-zero' || kind === 'tcx-single-zero') {
+                expect(recordedCounter?.[0]).toBe(0);
+                expect(recordedCounter?.[30]).toBeNull();
+                expect(activity.getStreamData(sports.DataHeartRate.type)[30]).toBe(90);
+                if (kind === 'sparse-counter') expect(recordedCounter?.[60]).toBe(1000);
+            }
             const derivesDistance = kind.endsWith('-moving-counter');
             const expectedDistance = derivesDistance ? 100 : kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000;
             expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(

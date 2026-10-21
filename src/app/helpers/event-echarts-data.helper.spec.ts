@@ -185,6 +185,51 @@ describe('event-echarts-data.helper', () => {
     },
   );
 
+  it.each(['distance', 'metric'] as const)(
+    'honors continuity for normal sparse distance and a longer %s gap in synchronous and worker charts', missing => {
+      mockEventChartStreamDependencies();
+      const times = Array.from({ length: 80 }, (_, index) => index);
+      const inGap = (second: number) => second >= 40 && second < 52;
+      const values = times.map(second => missing === 'metric' && inGap(second) ? null : 100 + second);
+      const distance = times.map(second => second % 2 || (missing === 'distance' && inGap(second))
+        ? null : Math.max(0, second - 2) * 3);
+      const streams = [
+        { type: DataHeartRate.type, getData: () => values },
+        { type: XAxisTypes.Time, getData: () => times },
+        { type: DataDistance.type, getData: () => distance },
+      ];
+      const start = Date.parse('2026-01-01T00:00:00Z');
+      const activity = {
+        startDate: new Date(start), creator: { name: 'Test' }, type: ActivityTypes.Cycling,
+        getID: () => 'a', getAllStreams: () => streams,
+        getStream: (type: string) => streams.find(stream => stream.type === type),
+      } as any;
+      const before = structuredClone({ times, values, distance });
+      for (const mode of ['continuous', 'detect', 'custom'] as const) {
+        const input = { selectedActivities: [activity], allActivities: [activity],
+          xAxisType: XAxisTypes.Distance, showAllData: false, dataTypesToUse: [DataHeartRate.type],
+          userUnitSettings: {} as any, eventColorService: { getActivityColor: () => '#ff0000' } as any,
+          lineContinuity: { mode, maxGapSeconds: 2 } };
+        const synchronous = buildEventChartPanels(input)[0].series[0];
+        const worker = buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))[0].series[0];
+        expect(worker.lineSegmentIds).toEqual(synchronous.lineSegmentIds);
+        expect(worker.lineValues).toEqual(synchronous.lineValues);
+        for (const series of [synchronous, worker]) {
+          const points = eventChartSeriesToPoints(series);
+          const at = (second: number) => points.findIndex(point => point.time === start + second * 1000);
+          expect(points[0]).toMatchObject({ x: 0, y: 100 });
+          expect(points[1]).toMatchObject({ x: 0, y: 102 });
+          expect(at(1)).toBe(-1);
+          expect(canConnectEventChartPoints(series, at(0), at(2))).toBe(true);
+          expect(canConnectEventChartPoints(series, at(36), at(38))).toBe(true);
+          expect(canConnectEventChartPoints(series, at(38), at(52))).toBe(mode === 'continuous');
+          expect(canConnectEventChartPoints(series, at(52), at(54))).toBe(true);
+        }
+      }
+      expect({ times, values, distance }).toEqual(before);
+    },
+  );
+
   it('defaults legacy rendering to continuous and changes policy without mutating the readings', () => {
     const points = [100, null, null, 120, null, 130].map((y, x) => ({ x, y, time: x * 10_000 }));
     const series = {
