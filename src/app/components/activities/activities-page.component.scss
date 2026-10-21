@@ -2,7 +2,7 @@
 
 .activities-page > app-page-header { margin-bottom: 24px; }
 
-.activity-history-scope, .activity-history-status, .activity-catalog-error {
+.activity-history-status, .activity-catalog-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -11,10 +11,8 @@
   font: var(--mat-sys-body-small);
   color: var(--mat-sys-on-surface-variant);
 }
-.activity-history-scope { margin-bottom: 12px; }
 .activity-catalog-error { margin-bottom: 16px; }
-.activity-history-status { margin-top: 16px; }
-.activity-history-status > div { flex: 1 1 240px; }
+.activity-history-status { justify-content: flex-start; margin-bottom: 12px; }
 .activity-explorer-filters { display: flex; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .activity-explorer-filters mat-form-field {
   --mat-form-field-container-height: 46px;
@@ -26,11 +24,8 @@
 .activity-active-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .activity-active-filters mat-chip-set { min-width: 0; }
 .activity-active-filters mat-chip { max-width: 100%; }
-.activity-history-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.activity-history-button-content mat-icon, .activity-history-button-content mat-spinner { width: 18px; height: 18px; font-size: 18px; }
 
 @include bp.max-768 {
   .activity-explorer-filters { width: 100%; }
   .activity-explorer-filters mat-form-field { flex: 1 1 140px; width: auto; }
-  .activity-history-scope { align-items: flex-start; }
 }

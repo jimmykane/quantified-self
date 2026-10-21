@@ -146,7 +146,7 @@
           <th mat-header-cell *matHeaderCellDef>
             <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
               [indeterminate]="isLibraryPresentation ? isSelectionIndeterminate : selection.hasValue() && !isAllSelected()"
-              [aria-label]="isLibraryPresentation ? 'Select activities on this page' : 'Select all matching activities'">
+              [aria-label]="isLibraryPresentation || pagination ? 'Select activities on this page' : 'Select all matching activities'">
             </mat-checkbox>
           </th>
           }
@@ -154,7 +154,7 @@
           <th mat-header-cell *matHeaderCellDef aria-label="Activity actions"></th>
           }
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
-          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="pagination ? column !== 'Start Date' : !isColumnHeaderSortable(column)">
             <app-data-type-icon [dataType]="column" aria-hidden="true"></app-data-type-icon>
             <span class="cdk-visually-hidden">{{ isLibraryPresentation && column === 'Name' ? 'Activity' : column }}</span>
           </th>
@@ -299,7 +299,7 @@
         <tr class="mat-row activity-table-no-data-row" *matNoDataRow
           [class.activity-table-no-data-row--hidden]="!isLoading && events?.length === 0">
           <td class="mat-cell" [attr.colspan]="displayedColumns.length">
-            <span *ngIf="searchTerm">No activities match "{{searchTerm}}"</span>
+            <span *ngIf="searchTerm && !isLoading">No activities match "{{searchTerm}}"</span>
             <span *ngIf="!searchTerm && !isLoading">No activities found</span>
           </td>
         </tr>
@@ -307,7 +307,8 @@
     </div>
   </app-loading-overlay>
 
-  <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
-    [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
+  <mat-paginator (page)="pageChanges($event)" [length]="paginatorLength" [disabled]="!!pagination && isLoading"
+    [pageIndex]="pagination ? pagination.pageIndex : paginator.pageIndex"
+    [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="!pagination"
     [pageSizeOptions]="isLibraryPresentation ? [5, 10, 25, 50, 100, 250] : [10, 25, 50, 100, 250]"></mat-paginator>
 </div>

@@ -26,7 +26,7 @@ import { EventTagService } from '../../services/event-tag.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventTableModule } from '../../modules/event-table.module';
-import { EventTableComponent, type EventTableEventsChange } from '../event-table/event.table.component';
+import { EventTableComponent, type EventTableEventsChange, type EventTablePagination } from '../event-table/event.table.component';
 import { EventTableActionsComponent } from '../event-table/actions/event.table.actions.component';
 import { ActivitiesPageComponent } from './activities-page.component';
 
@@ -43,6 +43,10 @@ class EventTableStub {
   @Input() hideGeneratedNames: boolean;
   @Input() emptyMessage: string;
   @Input() emptyHint: string;
+  @Input() pagination: EventTablePagination;
+  @Output() pageRequest = new EventEmitter<{ pageIndex: number; pageSize: number; length: number }>();
+  @Output() searchChange = new EventEmitter<string>();
+  @Output() dateSortChange = new EventEmitter<'asc' | 'desc'>();
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
 }
 
@@ -51,7 +55,7 @@ function event(id: string, tags: string[], legacy = false): AppEventInterface {
 }
 const records = [event('a', ['endurance']), event('b', ['ENDURANCE'], true), event('c', ['Recovery'])];
 const cursor = { id: 'last-page-doc' } as EventQueryCursor;
-const page = (events = records.map(record => ({ ...record })), hasMore = true): GetEventsPageResult => ({ events, hasMore, source: 'server', firstCursor: cursor, lastCursor: cursor });
+const page = (events = records.map(record => ({ ...record })), hasMore = false, lastCursor = cursor): GetEventsPageResult => ({ events, hasMore, source: 'server', firstCursor: cursor, lastCursor });
 
 async function setup(tag = '', realTable = false) {
   const owner = { uid: 'owner' };
@@ -92,422 +96,233 @@ async function setup(tag = '', realTable = false) {
 async function render(context: Awaited<ReturnType<typeof setup>>) {
   context.fixture.detectChanges();
   await context.fixture.whenStable();
+  await vi.waitFor(() => expect(context.component.loading()).toBe(false));
   context.fixture.detectChanges();
 }
 
 describe('ActivitiesPageComponent', () => {
-  it('projects filters into the real events table and retains shared search when chips change', async () => {
-    const context = await setup('', true);
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([], false)));
-    await render(context);
-    const table = context.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
-    const toolbar = context.fixture.nativeElement.querySelector('.table-toolbar') as HTMLElement;
-    expect(toolbar.querySelectorAll('.activity-explorer-filters mat-select')).toHaveLength(3);
-    expect(toolbar.querySelector('input[aria-label="Search activities"]')).toBeTruthy();
-    expect(toolbar.querySelector('button[aria-label="Configure table columns"]')).toBeTruthy();
-    expect(context.fixture.nativeElement.querySelectorAll('app-event-table-actions')).toHaveLength(1);
-    expect(context.haptics.selection).not.toHaveBeenCalled();
-    table.search('Endurance');
-    context.component.selectTag('Endurance');
-    await render(context);
-    expect(table.searchTerm).toBe('Endurance');
-    expect(toolbar.querySelector('.activity-active-filters')).toBeTruthy();
-    (toolbar.querySelector('[aria-label="Remove tag filter"]') as HTMLButtonElement).click();
-    await render(context);
-    expect(context.component.selectedTag()).toBe('');
-    expect(table.searchTerm).toBe('Endurance');
-    expect(context.haptics.selection).toHaveBeenCalledTimes(2);
-    expect(context.userService.updateUserProperties).not.toHaveBeenCalled();
-    const columns = context.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
-    columns.selectedDataTypesChange.emit(['Duration', 'Distance']);
-    await render(context);
-    expect(table.selectedColumns).toEqual(['Duration', 'Distance']);
-    expect(context.userService.updateUserProperties).toHaveBeenCalledWith(context.user$.value, {
-      settings: { dashboardSettings: { tableSettings: { selectedColumns: ['Duration', 'Distance'] } } },
-    });
-  });
-
-  it('loads bounded owner history, labels partial counts, and binds the existing events table', async () => {
-    const context = await setup();
-    await render(context);
-    expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenCalledWith(context.user$.value, [], 'startDate', false, 250, { startAfterCursor: null, requireServer: true });
-    expect(context.component.complete()).toBe(false);
-    expect(context.fixture.nativeElement.textContent).toContain('Filters and search cover loaded history');
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+  it('queries the default date range and uses the full events table with one paginator', async () => {
+    const c = await setup(); await render(c);
+    const query = c.events.getEventsPageOnceByWithMeta.mock.calls[0];
+    expect(query.slice(2, 5)).toEqual(['startDate', false, 250]);
+    expect(query[1]).toEqual([]);
+    const table = c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
     expect(table.events).toEqual(records);
-    expect(table.showTagFilter).toBe(false);
-    expect(table.showActions).toBe(true);
-    expect(table.presentation).toBe('dashboard');
-    expect(table.hideGeneratedNames).toBe(true);
-    expect(table.preserveSearchOnFilterChange).toBe(true);
-    expect(context.haptics.selection).not.toHaveBeenCalled();
+    expect(table.pagination).toMatchObject({ pageIndex: 0, pageSize: 25, hasNext: false });
+    expect(table.presentation).toBe('dashboard'); expect(table.hideGeneratedNames).toBe(true);
+    expect(c.fixture.nativeElement.textContent).not.toMatch(/loaded history|Load older/);
+    expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent).toContain('All dates');
+    expect(c.haptics.selection).not.toHaveBeenCalled();
   });
 
-  it('hydrates deep links silently and filters case-insensitive canonical and legacy tags', async () => {
-    const context = await setup('ENDURANCE');
-    await render(context);
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['a', 'b']);
-    expect(context.component.selectedName()).toBe('Endurance');
-    context.component.selectTag('endurance');
-    expect(context.haptics.selection).not.toHaveBeenCalled();
-    context.component.selectTag('Recovery');
-    context.fixture.detectChanges();
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['c']);
-    expect(context.haptics.selection).toHaveBeenCalledOnce();
-    expect(context.router.navigate).toHaveBeenCalledOnce();
-    expect(context.router.navigate.mock.calls[0][1].queryParams).toMatchObject({ tag: 'Recovery' });
-    context.params$.next(convertToParamMap({ tag: 'Endurance' }));
-    expect(context.component.filteredEvents()).toHaveLength(2);
-    expect(context.haptics.selection).toHaveBeenCalledOnce();
+  it('fetches only enough results for a page and lookahead, buffers the rest and supports cached Previous', async () => {
+    const c = await setup();
+    c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
+    c.user$.value.settings.dashboardSettings.tableSettings.eventsPerPage = 10;
+    const first = Array.from({ length: 12 }, (_, i) => event('first-' + i, []));
+    const second = Array.from({ length: 16 }, (_, i) => event('second-' + i, []));
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page(first, true))).mockReturnValueOnce(of(page(second, false)));
+    await render(c);
+    expect(c.component.events()).toEqual(first.slice(0, 10));
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
+    expect(c.component.hasMore()).toBe(true);
+    c.component.onPageRequest({ pageIndex: 1, pageSize: 10, length: 11 }); await render(c);
+    expect(c.component.events()).toEqual([...first.slice(10), ...second.slice(0, 8)]);
+    expect(c.events.getEventsPageOnceByWithMeta.mock.calls[1][5].startAfterCursor).toBe(cursor);
+    c.component.onPageRequest({ pageIndex: 2, pageSize: 10, length: 21 }); await render(c);
+    expect(c.component.events()).toEqual(second.slice(8)); expect(c.component.hasMore()).toBe(false);
+    c.component.onPageRequest({ pageIndex: 1, pageSize: 10, length: 28 }); await render(c);
+    expect(c.component.events()).toHaveLength(10);
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledTimes(2);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
   });
 
-  it('forwards updated unit preferences to the same owner table without another history read or haptic', async () => {
-    const context = await setup();
-    await render(context);
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    const profile = new User('owner') as AppUserInterface;
-    const previousEventsInput = table.events;
-    profile.settings = { ...profile.settings, unitSettings: { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles } };
-    context.user$.next(profile);
-    context.fixture.detectChanges();
-    expect(context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance).toBe(table);
-    expect(table.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
-    expect(table.events).not.toBe(previousEventsInput);
-    expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
-    expect(context.haptics.selection).not.toHaveBeenCalled();
+  it('finds tags beyond the first source batch and does not show a false empty page', async () => {
+    const c = await setup('RACE'); const pending = new Subject<GetEventsPageResult>();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([event('unrelated', [])], true))).mockReturnValueOnce(pending);
+    c.fixture.detectChanges(); await Promise.resolve(); await Promise.resolve();
+    expect(c.component.loading()).toBe(true); expect(c.component.emptyMessage()).toBe('Loading activities…');
+    pending.next(page([event('older-race', ['race'], true)], false)); pending.complete(); await render(c);
+    expect(c.component.events().map(e => e.getID())).toEqual(['older-race']);
+    expect(c.events.getEventsPageOnceByWithMeta.mock.calls[0][1]).toEqual([]);
+    expect(c.component.hasMore()).toBe(false); expect(c.component.historyError()).toBe(false);
   });
 
-  it('renders the top tag selector with saved tags and gives accepted selections one haptic', async () => {
-    const context = await setup();
-    await render(context);
-    const selector = context.fixture.debugElement.query(By.css('mat-select[aria-label="Tags"]'));
-    expect(selector).toBeTruthy();
-    expect(context.fixture.nativeElement.querySelector('.tag-library-rail')).toBeNull();
-    selector.triggerEventHandler('selectionChange', { value: 'Race day' });
-    context.fixture.detectChanges();
-    expect(context.component.selectedTag()).toBe('Race day');
-    expect(context.component.emptyMessage()).toBe('No matching activities loaded yet');
-    expect(context.haptics.selection).toHaveBeenCalledOnce();
-    selector.triggerEventHandler('selectionChange', { value: 'race day' });
-    expect(context.haptics.selection).toHaveBeenCalledOnce();
-    expect(context.router.navigate.mock.calls[0][1].queryParams).toEqual({ tag: 'Race day', untagged: null, sport: null, period: null });
+  it('resets paging when tags, sports, search, date range or date order change, with silent search', async () => {
+    const c = await setup(); await render(c);
+    c.component.selectTag('endurance'); await render(c);
+    expect(c.component.events().map(e => e.getID())).toEqual(['a', 'b']);
+    c.component.selectSport('Ride'); await render(c);
+    expect(c.component.events().map(e => e.getID())).toEqual(['b']);
+    c.component.onSearchChange('missing'); await render(c);
+    expect(c.component.events()).toEqual([]); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    c.component.selectPeriod('all'); await render(c);
+    expect(c.events.getEventsPageOnceByWithMeta.mock.lastCall[1]).toEqual([]);
+    c.component.onDateSortChange('asc'); await render(c);
+    expect(c.events.getEventsPageOnceByWithMeta.mock.lastCall[3]).toBe(true);
+    const calls = c.events.getEventsPageOnceByWithMeta.mock.calls.length;
+    c.component.selectSport('Cycling'); c.component.selectTag('ENDURANCE'); c.component.onSearchChange(' MISSING '); c.component.selectPeriod('all');
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledTimes(calls);
+    expect(c.component.pageIndex()).toBe(0);
   });
 
-  it('combines rendered sport and date filters with tags and clears filters through the chip toolbar', async () => {
-    const context = await setup('Endurance');
-    await render(context);
-    context.fixture.debugElement.query(By.css('mat-select[aria-label="Sport"]')).triggerEventHandler('selectionChange', { value: 'Cycling' });
-    context.fixture.debugElement.query(By.css('mat-select[aria-label="Date range"]')).triggerEventHandler('selectionChange', { value: 'week' });
-    context.fixture.detectChanges();
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['b']);
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    expect(JSON.parse(table.filterContext)).toMatchObject({ tag: 'Endurance', sport: 'Cycling', period: 'week' });
-    const clear = [...context.fixture.nativeElement.querySelectorAll('.activity-active-filters button')].find((button: HTMLButtonElement) => button.textContent.includes('Clear filters')) as HTMLButtonElement;
-    clear.click();
-    context.fixture.detectChanges();
-    expect(context.component.filteredEvents()).toHaveLength(3);
-    expect(context.component.hasFilters()).toBe(false);
-    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
-    context.component.clearFilters();
-    context.component.selectSport('');
-    context.component.selectPeriod('all');
-    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+  it('keeps Untagged separate from literal tag names and restores links without feedback', async () => {
+    const c = await setup();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValue(of(page([event('empty', []), event('named', ['__none'])])));
+    await render(c);
+    c.component.selectTag(c.component.untaggedOption); await render(c);
+    expect(c.component.events().map(e => e.getID())).toEqual(['empty']);
+    c.component.selectTag('__none'); await render(c);
+    expect(c.component.events().map(e => e.getID())).toEqual(['named']);
+    c.params$.next(convertToParamMap({ untagged: '1', period: 'all' })); await render(c);
+    expect(c.component.events().map(e => e.getID())).toEqual(['empty']);
+    expect(c.haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps untagged selection separate from every literal tag name and restores URL filters silently', async () => {
-    const context = await setup();
-    await render(context);
-    context.component.events.update(events => [...events, event('untagged', []), event('named', ['__none'])]);
-    context.component.selectTag(context.component.untaggedOption);
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['untagged']);
-    expect(context.router.navigate.mock.calls[0][1].queryParams).toMatchObject({ tag: null, untagged: '1' });
-    context.component.selectTag('__none');
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['named']);
-    context.params$.next(convertToParamMap({ tag: 'ENDURANCE', sport: 'Cycling', period: 'week' }));
-    context.fixture.detectChanges();
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['b']);
-    expect(context.component.tagFilterValue()).toBe('Endurance');
-    expect(context.haptics.selection).toHaveBeenCalledTimes(2);
-    context.params$.next(convertToParamMap({ untagged: '1' }));
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['untagged']);
-    expect(context.haptics.selection).toHaveBeenCalledTimes(2);
-  });
-
-  it('omits generated comparisons from activity history while retaining the server cursor', async () => {
-    const context = await setup();
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([...records, { ...event('comparison', ['Race']), isMerge: true }])));
-    await render(context);
-    expect(context.component.events()).toHaveLength(3);
-    await context.component.loadOlderActivities();
-    expect(context.events.getEventsPageOnceByWithMeta.mock.calls[1][5].startAfterCursor).toBe(cursor);
-  });
-
-  it('hydrates legacy sport links into the canonical selector and keeps equivalent choices silent', async () => {
-    const context = await setup();
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([
+  it('hydrates canonical sport aliases and offers sports absent from the current page', async () => {
+    const c = await setup();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValue(of(page([
       { ...event('run', []), getActivityTypesAsArray: () => ['Run'] },
       { ...event('running', []), getActivityTypesAsArray: () => ['Running'] },
-      { ...event('ride', []), getActivityTypesAsArray: () => ['Ride'] },
-    ], false)));
-    context.params$.next(convertToParamMap({ sport: 'Run' }));
-    await render(context);
-    expect(context.component.selectedSport()).toBe('Running');
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['run', 'running']);
-    expect(context.fixture.nativeElement.querySelector('mat-select[aria-label="Sport"]').textContent).toContain('Running');
-    context.component.selectSport('run');
-    expect(context.haptics.selection).not.toHaveBeenCalled();
-    context.component.selectSport('Ride');
-    expect(context.component.selectedSport()).toBe('Cycling');
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['ride']);
-    expect(context.router.navigate.mock.calls[0][1].queryParams).toMatchObject({ sport: 'Cycling' });
-    expect(context.haptics.selection).toHaveBeenCalledOnce();
+    ])));
+    c.params$.next(convertToParamMap({ sport: 'run' })); await render(c);
+    expect(c.component.selectedSport()).toBe('Running'); expect(c.component.events()).toHaveLength(2);
+    expect(c.component.sports()).toContain('Cycling');
+    c.component.selectSport('Run'); expect(c.haptics.selection).not.toHaveBeenCalled();
   });
 
-  it('advances the seven-day window at midnight without refetching or feedback and cleans up its clock', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date(2026, 9, 21, 23, 59, 30));
-    const context = await setup();
+  it('de-duplicates source pages and excludes generated comparisons while advancing source cursors', async () => {
+    const c = await setup();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([records[0], { ...event('comparison', []), isMerge: true }], true)))
+      .mockReturnValueOnce(of(page([records[0], records[1]], false)));
+    await render(c); expect(c.component.events().map(e => e.getID())).toEqual(['a', 'b']);
+    expect(c.events.getEventsPageOnceByWithMeta.mock.calls[1][5].startAfterCursor).toBe(cursor);
+  });
+
+  it('stops an invalid repeated cursor and permits retry instead of looping', async () => {
+    const c = await setup();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([], true))).mockReturnValueOnce(of(page([], true)));
+    await render(c); expect(c.component.historyError()).toBe(true);
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledTimes(2);
+    await c.component.retryActivities(); await render(c);
+    expect(c.component.events()).toEqual(records); expect(c.component.historyError()).toBe(false);
+  });
+
+  it('keeps the current page on Next failure and retries the requested next page with one feedback', async () => {
+    const c = await setup();
+    c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
+    c.user$.value.settings.dashboardSettings.tableSettings.eventsPerPage = 10;
+    const first = Array.from({ length: 11 }, (_, i) => event('first-' + i, []));
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page(first, true))).mockReturnValueOnce(throwError(() => new Error('offline')));
+    await render(c); c.component.onPageRequest({ pageIndex: 1, pageSize: 10, length: 11 }); await render(c);
+    expect(c.component.pageIndex()).toBe(0); expect(c.component.events()).toEqual(first.slice(0, 10));
+    expect(c.component.historyError()).toBe(true); expect(c.haptics.error).toHaveBeenCalledOnce();
+    await c.component.retryActivities(); await render(c);
+    expect(c.component.pageIndex()).toBe(1); expect(c.component.events()[0]).toEqual(first[10]);
+    expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventsPageOnceByWithMeta.mock.lastCall[5].startAfterCursor).toBe(cursor);
+  });
+
+  it('rejects stale date-query results and owner data, including a replacement session for the same UID', async () => {
+    const c = await setup(); const pending = new Subject<GetEventsPageResult>();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending); c.fixture.detectChanges();
+    c.component.selectPeriod('year'); await render(c);
+    pending.next(page([event('stale-date', ['Private'])])); pending.complete(); await render(c);
+    expect(c.component.events().map(e => e.getID())).not.toContain('stale-date');
+    const ownerPending = new Subject<GetEventsPageResult>(); c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(ownerPending);
+    c.component.refresh();
+    c.auth.currentUser = { uid: 'owner' }; c.authState$.next(c.auth.currentUser); await render(c);
+    ownerPending.next(page([event('old-session', ['Private'])])); ownerPending.complete(); await render(c);
+    expect(c.component.events().map(e => e.getID())).not.toContain('old-session');
+  });
+
+  it('discards late reads after teardown and never requests another source page', async () => {
+    const c = await setup(); const pending = new Subject<GetEventsPageResult>();
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending); c.fixture.detectChanges(); c.fixture.destroy();
+    pending.next(page([event('after-destroy', [])], true)); pending.complete(); await Promise.resolve(); await Promise.resolve();
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce(); expect(c.component.events()).toEqual([]);
+  });
+
+  it('requeries confirmed edits and deletions and fences any read started before the write', async () => {
+    const c = await setup('Endurance'); await render(c);
+    const pending = new Subject<GetEventsPageResult>(); c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending); c.component.refresh();
+    const saved = { ...event('b', ['New label']), name: 'Fresh title' };
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([saved, records[2]])));
+    c.component.onEventsChange({ userID: 'owner', updatedTags: { b: ['New label'] }, deletedEventIDs: ['a'] }); await render(c);
+    pending.next(page(records)); pending.complete(); await render(c);
+    expect(c.component.events()).toEqual([]); expect(c.component.library().map(t => t.name)).toContain('New label');
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([saved])));
+    c.component.selectTag('New label'); await render(c);
+    expect(c.component.events()[0]?.name).toBe('Fresh title');
+  });
+
+  it('ignores detached table mutations after account changes', async () => {
+    const c = await setup(); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    c.auth.currentUser = { uid: 'other' }; c.authState$.next(c.auth.currentUser); c.user$.next(new User('other') as AppUserInterface); await render(c);
+    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['Private tag'] }, deletedEventIDs: ['b'] }); await render(c);
+    expect(c.component.events()).toEqual(records); expect(c.component.library().map(t => t.name)).not.toContain('Private tag');
+  });
+
+  it('keeps the table instance on unit preference changes without refetching', async () => {
+    const c = await setup(); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    const previousEvents = table.events;
+    const profile = new User('owner') as AppUserInterface;
+    profile.settings = { unitSettings: { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles } } as AppUserInterface['settings'];
+    c.user$.next(profile); await render(c);
+    expect(c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance).toBe(table);
+    expect(table.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
+    expect(table.events).not.toBe(previousEvents);
+    expect(table.events).toEqual(previousEvents);
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
+  });
+
+  it('retries catalog errors and retains catalog results through date changes', async () => {
+    const c = await setup(); c.catalog.listAllTags.mockRejectedValueOnce(new Error('offline')); await render(c);
+    expect(c.component.catalogError()).toBe(true); c.component.retryCatalog(); await render(c);
+    expect(c.catalog.listAllTags).toHaveBeenLastCalledWith('owner', true);
+    c.component.selectPeriod('year'); await render(c);
+    expect(c.component.library().map(t => t.name)).toContain('Race day');
+    expect(c.catalog.listAllTags).toHaveBeenCalledTimes(2);
+  });
+
+  it('rolls a relative range forward at midnight silently and cleans up its clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] }); vi.setSystemTime(new Date(2026, 9, 21, 23, 59, 30));
+    const c = await setup();
     try {
-      context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([
-        { ...event('oldest', []), startDate: new Date(2026, 9, 15, 12) },
-        { ...event('recent', []), startDate: new Date(2026, 9, 21, 12) },
-        { ...event('next-day', []), startDate: new Date(2026, 9, 22, 12) },
-      ], false)));
-      context.params$.next(convertToParamMap({ period: 'week' }));
-      await render(context);
-      const refresh = vi.spyOn(context.component, 'refreshLocalDay');
-      expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['oldest', 'recent']);
-      await vi.advanceTimersByTimeAsync(60_000);
-      context.fixture.detectChanges();
-      expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['recent', 'next-day']);
-      expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
-      expect(context.haptics.selection).not.toHaveBeenCalled();
-      expect(context.router.navigate).not.toHaveBeenCalled();
-      expect(refresh).toHaveBeenCalledOnce();
-      context.fixture.destroy();
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(refresh).toHaveBeenCalledOnce();
-    } finally {
-      context.fixture.destroy();
-      vi.useRealTimers();
-    }
+      c.params$.next(convertToParamMap({ period: 'week' }));
+      await render(c); const clock = vi.spyOn(c.component, 'refreshLocalDay');
+      await vi.advanceTimersByTimeAsync(60_000); await render(c);
+      expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledTimes(2);
+      expect(c.events.getEventsPageOnceByWithMeta.mock.lastCall[1]).toEqual([
+        { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 9, 16) },
+        { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 9, 23) },
+      ]);
+      expect(c.haptics.selection).not.toHaveBeenCalled();
+      c.fixture.destroy(); await vi.advanceTimersByTimeAsync(60_000); expect(clock).toHaveBeenCalledOnce();
+    } finally { c.fixture.destroy(); vi.useRealTimers(); }
   });
 
-  it('refreshes the seven-day window immediately on focus and returning from a hidden tab', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date(2026, 9, 21, 23, 59, 30));
-    const context = await setup();
-    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-    try {
-      context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([
-        { ...event('oldest', []), startDate: new Date(2026, 9, 15, 12) },
-        { ...event('recent', []), startDate: new Date(2026, 9, 21, 12) },
-      ], false)));
-      context.params$.next(convertToParamMap({ period: 'week' }));
-      await render(context);
-      expect(context.component.filteredEvents()).toHaveLength(2);
-      visibility.mockReturnValue('hidden');
-      vi.setSystemTime(new Date(2026, 9, 22, 0, 0, 1));
-      document.dispatchEvent(new Event('visibilitychange'));
-      expect(context.component.filteredEvents()).toHaveLength(2);
-      visibility.mockReturnValue('visible');
-      document.dispatchEvent(new Event('visibilitychange'));
-      expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['recent']);
-      vi.setSystemTime(new Date(2026, 9, 28, 0, 0, 1));
-      window.dispatchEvent(new Event('focus'));
-      expect(context.component.filteredEvents()).toHaveLength(0);
-      expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenCalledOnce();
-      expect(context.haptics.selection).not.toHaveBeenCalled();
-    } finally {
-      context.fixture.destroy();
-      visibility.mockRestore();
-      vi.useRealTimers();
-    }
-  });
-
-  it('appends older pages, de-duplicates records, and only then reports complete empty membership', async () => {
-    const context = await setup('Race day');
-    await render(context);
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([records[0], event('older', ['Recovery'])], false)));
-    await context.component.loadOlderActivities();
-    context.fixture.detectChanges();
-    expect(context.events.getEventsPageOnceByWithMeta.mock.calls[1][5]).toEqual({ startAfterCursor: cursor, requireServer: true });
-    expect(context.component.events()).toHaveLength(4);
-    expect(context.component.complete()).toBe(true);
-    expect(context.component.emptyMessage()).toBe('No activities with this tag');
-    expect(context.fixture.nativeElement.textContent).toContain('All activity history loaded');
-    await context.component.loadOlderActivities();
-    expect(context.haptics.selection).toHaveBeenCalledOnce();
-  });
-
-  it('keeps loaded rows and the cursor after failure, permits retry, and silences initial hydration errors', async () => {
-    const context = await setup();
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(throwError(() => new Error('offline')));
-    await render(context);
-    expect(context.haptics.error).not.toHaveBeenCalled();
-    await context.component.loadOlderActivities();
-    expect(context.component.events()).toEqual(records);
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(throwError(() => new Error('offline')));
-    await context.component.loadOlderActivities();
-    expect(context.component.historyError()).toBe(true);
-    expect(context.component.events()).toEqual(records);
-    expect(context.haptics.error).toHaveBeenCalledOnce();
-    await context.component.loadOlderActivities();
-    expect(context.events.getEventsPageOnceByWithMeta.mock.calls[3][5].startAfterCursor).toBe(cursor);
-    expect(context.component.historyError()).toBe(false);
-  });
-
-  it('rejects late history and catalog results after an account change or teardown', async () => {
-    const context = await setup();
-    const latePage = new Subject<GetEventsPageResult>();
-    let resolveTags: (value: string[]) => void;
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(latePage);
-    context.catalog.listAllTags.mockReturnValueOnce(new Promise<string[]>(resolve => { resolveTags = resolve; }));
-    context.fixture.detectChanges();
-    const oldTable = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance;
-    context.auth.currentUser = { uid: 'other' };
-    context.authState$.next(context.auth.currentUser);
-    context.user$.next(new User('other') as AppUserInterface);
-    await render(context);
-    expect(context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance).not.toBe(oldTable);
-    latePage.next(page([event('old-private', ['Private tag'])], false));
-    resolveTags(['Private tag']);
-    await render(context);
-    expect(context.component.events().map(value => value.getID())).not.toContain('old-private');
-    expect(context.component.library().map(tag => tag.name)).not.toContain('Private tag');
+  it('projects filters into the real table and connects the debounced search and page events', async () => {
+    const c = await setup('', true); c.events.getEventsPageOnceByWithMeta.mockReturnValue(of(page([]))); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    expect(c.fixture.nativeElement.querySelectorAll('mat-paginator')).toHaveLength(1);
+    expect(table.data.paginator).toBeNull(); expect(table.data.sort).toBeNull();
+    expect(c.fixture.nativeElement.querySelector('.table-toolbar button[aria-label="Configure table columns"]')).toBeTruthy();
     const pending = new Subject<GetEventsPageResult>();
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending);
-    const request = context.component.loadOlderActivities();
-    context.fixture.destroy();
-    pending.next(page([event('after-destroy', ['Private tag'])], false));
-    await request;
-    expect(context.component.events().map(value => value.getID())).not.toContain('after-destroy');
-  });
-
-  it('reconciles tag edits and row deletion while preserving unrelated activities', async () => {
-    const context = await setup('Endurance');
-    await render(context);
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['New tag'] }, deletedEventIDs: ['b'] });
-    context.fixture.detectChanges();
-    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'c']);
-    expect(context.component.filteredEvents()).toHaveLength(0);
-    expect(context.component.library().find(tag => tag.name === 'New tag')?.count).toBe(1);
-    expect(context.component.library().find(tag => tag.name === 'Endurance')?.count).toBe(0);
-    expect(context.haptics.selection).not.toHaveBeenCalled();
-  });
-
-  it('retains observed zero-count labels when an earlier catalog read finishes after a tag edit', async () => {
-    const context = await setup();
-    let resolveTags: (value: string[]) => void;
-    context.catalog.listAllTags.mockReturnValueOnce(new Promise<string[]>(resolve => { resolveTags = resolve; }));
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([event('legacy', ['Legacy label'], true)], false)));
-    context.fixture.detectChanges();
-    await Promise.resolve();
-    context.component.onEventsChange({ userID: 'owner', updatedTags: { legacy: [] }, deletedEventIDs: [] });
-    expect(context.component.library().find(tag => tag.name === 'Legacy label')?.count).toBe(0);
-    resolveTags(['Race day']);
-    await render(context);
-    expect(context.component.library().find(tag => tag.name === 'Legacy label')?.count).toBe(0);
-    expect(context.component.library().find(tag => tag.name === 'Race day')?.count).toBe(0);
-    expect(context.haptics.selection).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { label: 'replaced tags', savedTags: ['New tag'] },
-    { label: 'cleared tags', savedTags: [] },
-  ])('does not replay a stale refresh snapshot over confirmed edits or deletions ($label)', async ({ savedTags }) => {
-    const context = await setup('Endurance');
-    await render(context);
-    const pending = new Subject<GetEventsPageResult>();
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending);
-    context.component.refresh();
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    table.eventsChange.emit({ userID: 'owner', updatedTags: { b: savedTags }, deletedEventIDs: ['a'] });
-    const refreshed = { ...event('b', ['ENDURANCE'], true), name: 'Fresh server name' };
-    pending.next(page([event('a', ['Endurance']), refreshed, event('c', ['Recovery'])], true));
-    pending.complete();
-    await render(context);
-    expect(context.component.events().map(value => value.getID())).toEqual(['b', 'c']);
-    expect(context.component.events()[0].tags).toEqual(savedTags);
-    expect(context.component.events()[0].benchmarkReviewTags).toBeUndefined();
-    expect(context.component.events()[0].name).toBe('Fresh server name');
-    expect(context.component.filteredEvents()).toHaveLength(0);
-    expect(context.component.library().find(tag => tag.name === 'Endurance')?.count).toBe(0);
-    if (savedTags.length) expect(context.component.library().find(tag => tag.name === 'New tag')?.count).toBe(1);
-    // A later read starts after the confirmed write and can supply newer tags.
-    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([event('b', ['Outdoors'])], false)));
-    await context.component.loadOlderActivities();
-    expect(context.component.events()[0].tags).toEqual(['Outdoors']);
-  });
-
-  it('keeps newly saved labels visible when their edited activity is outside the currently loaded history', async () => {
-    const context = await setup();
-    await render(context);
-    context.component.onEventsChange({ userID: 'owner', updatedTags: { 'not-loaded': ['New saved label'] }, deletedEventIDs: [] });
-    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'b', 'c']);
-    expect(context.component.library().find(tag => tag.name === 'New saved label')?.count).toBe(0);
-    expect(context.haptics.selection).not.toHaveBeenCalled();
-  });
-
-  it('reconciles a late mutation after changing tags without inferring deletion from the new visible subset', async () => {
-    const context = await setup('Endurance');
-    await render(context);
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    context.component.selectTag('Recovery');
-    // The old table input can still be present until Angular renders the route change.
-    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['New tag'] }, deletedEventIDs: ['b'] });
-    context.fixture.detectChanges();
-    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'c']);
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['c']);
-    context.component.selectTag('New tag');
-    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['a']);
-  });
-
-  it('applies only confirmed tag fields to a fresh event instance and retains its newer metadata', async () => {
-    const context = await setup('Endurance');
-    await render(context);
-    const refreshed = { ...event('a', ['endurance']), name: 'Newer name', benchmarkReviewTags: ['Legacy'] };
-    context.component.events.set([refreshed, ...context.component.events().slice(1)]);
-    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['Recovery'] }, deletedEventIDs: [] });
-    expect(context.component.events()[0]).toBe(refreshed);
-    expect(context.component.events()[0].name).toBe('Newer name');
-    expect(context.component.events()[0].tags).toEqual(['Recovery']);
-    expect(context.component.events()[0].benchmarkReviewTags).toBeUndefined();
-  });
-
-  it('ignores an old table callback before Angular tears it down after an account switch', async () => {
-    const context = await setup();
-    await render(context);
-    const oldTable = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    context.auth.currentUser = { uid: 'other' };
-    context.authState$.next(context.auth.currentUser);
-    context.user$.next(new User('other') as AppUserInterface);
-    await Promise.resolve();
-    // New owner data can be ready before the old table's output is detached.
-    expect(context.component.user().uid).toBe('other');
-    expect(context.component.events()).toHaveLength(3);
-    oldTable.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['Private tag'] }, deletedEventIDs: ['b'] });
-    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'b', 'c']);
-    expect(context.component.events()[0].tags).toEqual(['endurance']);
-    expect(context.component.library().map(tag => tag.name)).not.toContain('Private tag');
-  });
-
-  it('retries catalog errors and refreshes from the newest page without changing the selected tag', async () => {
-    const context = await setup('Recovery');
-    context.catalog.listAllTags.mockRejectedValueOnce(new Error('offline'));
-    await render(context);
-    expect(context.component.catalogError()).toBe(true);
-    expect(context.component.library().find(tag => tag.name === 'Recovery')?.count).toBe(1);
-    context.component.retryCatalog();
-    await render(context);
-    expect(context.catalog.listAllTags).toHaveBeenLastCalledWith('owner', true);
-    expect(context.component.catalogError()).toBe(false);
-    context.component.refresh();
-    await render(context);
-    expect(context.events.getEventsPageOnceByWithMeta).toHaveBeenLastCalledWith(context.user$.value, [], 'startDate', false, 250, { startAfterCursor: null, requireServer: true });
-    expect(context.component.selectedTag()).toBe('Recovery');
-    expect(context.haptics.selection).toHaveBeenCalledTimes(2);
+    c.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending);
+    table.search('Endurance'); c.fixture.detectChanges();
+    expect(c.component.loading()).toBe(true);
+    expect(c.fixture.nativeElement.textContent).not.toContain('No activities match');
+    pending.next(page([])); pending.complete(); await render(c);
+    expect(c.component.searchTerm()).toBe('Endurance');
+    expect(c.events.getEventsPageOnceByWithMeta).toHaveBeenCalledTimes(2);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    c.component.selectTag('Endurance'); await render(c);
+    expect(table.searchTerm).toBe('Endurance');
+    const columns = c.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
+    columns.selectedDataTypesChange.emit(['Duration', 'Distance']); await render(c);
+    expect(c.userService.updateUserProperties).toHaveBeenCalled();
   });
 });

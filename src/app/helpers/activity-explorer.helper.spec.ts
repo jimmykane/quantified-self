@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
+import { activityExplorerDateRange, activityExplorerMatchesSearch, activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
 
 const now = new Date(2026, 9, 21, 12);
 const filters: ActivityExplorerFilters = { tag: '', untagged: false, sport: '', period: 'all' };
@@ -8,6 +8,20 @@ const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20
 });
 
 describe('Activity explorer loaded-history filters', () => {
+  it('searches activity titles, descriptions, tags and canonical sports before paging', () => {
+    const record = { ...event(['Race'], ['Run']), name: 'Morning hills', description: 'Forest loop' };
+    for (const text of ['hills', 'FOREST', 'race', 'Running', 'missing, hills', '']) expect(activityExplorerMatchesSearch(record, text)).toBe(true);
+    expect(activityExplorerMatchesSearch(record, 'swimming')).toBe(false);
+    expect(activityExplorerSports([], '', true)).toContain('Running');
+  });
+  it('defines familiar date ranges with an inclusive first day and exclusive tomorrow', () => {
+    expect(activityExplorerDateRange('all', now)).toBeNull();
+    expect(activityExplorerDateRange('month', now)).toEqual({ start: new Date(2026, 8, 22), end: new Date(2026, 9, 22) });
+    expect(activityExplorerDateRange('quarter', now)).toEqual({ start: new Date(2026, 6, 24), end: new Date(2026, 9, 22) });
+    expect(activityExplorerDateRange('year', new Date(2026, 11, 31, 23))).toEqual({ start: new Date(2026, 0, 1), end: new Date(2027, 0, 1) });
+    const records = [event([], ['Running'], new Date(2026, 8, 21)), event([], ['Running'], new Date(2026, 8, 22))];
+    expect(filterActivityExplorerEvents(records, { ...filters, period: 'month' }, now)).toEqual([records[1]]);
+  });
   it('starts with all loaded events and combines tag and sport filters without changing the source', () => {
     const records = [event(['Endurance']), event(['ENDURANCE'], ['Cycling']), event(['Recovery'])];
     expect(filterActivityExplorerEvents(records, filters, now)).toEqual(records);
