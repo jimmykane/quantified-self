@@ -618,6 +618,12 @@ describe('help.content', () => {
       'Virtual Rowing', 'Kettlebell', 'Calisthenics']) expect(content).toContain(`**${sport}**`);
     expect(content).toContain('Garmin and Wahoo use their existing Strength/Gym workflows after profile review');
     expect(content).toContain('full-strength delivery to Garmin/Wahoo requires the complete exercise prescription');
+    expect(content).toContain('**Interval summary only**; choose **Edit** for the full workout and any saved lifting loads');
+    expect(content).toContain('Older interval-only workouts keep their existing previews');
+    expect(content).toContain('all normal scheduled-workout reads return a compatibility summary');
+    expect(content).toContain('complete-strength preview preserves the sport name on updates');
+    expect(content).toContain('The complete-strength preview creates new scheduled workouts as **Strength Training**');
+    expect(content).toContain('use the QS editor to create another strength sport');
     expect(content).toContain('Suunto uses native Kettlebell/Calisthenics recommendations');
     expect(content).toContain('The manual interval editor keeps its current sport choices');
     for (const sport of ['Yoga', 'Pilates', 'Stretching', 'Flexibility Training', 'Crossfit', 'Circuit Training', 'Aerobics',

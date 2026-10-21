@@ -1,5 +1,5 @@
 import { AddressInfo } from 'node:net';
-import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
+import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE, TRAINING_STRENGTH_READ_GUIDANCE, TRAINING_STRENGTH_WRITE_GUIDANCE } from '../shared/training-authoring-guidance';
 import { createServer as createHttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
@@ -10,6 +10,7 @@ import addFormats from 'ajv-formats';
 import * as logger from 'firebase-functions/logger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { RefinedTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-workout';
 import { TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY, TRAINING_WRITE_INPUTS } from './training-plans.schemas';
 import { McpDataError } from './data.service';
 import {
@@ -967,6 +968,29 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   }, 15_000);
 
+  it('describes complete strength alias reads and preserves the existing strength-create shape', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite] }, 'https://quantified-self.io');
+    const client = new Client({ name: 'strength-guidance-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport); await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      const details = tools.find(tool => tool.name === 'get_strength_workout_details')!;
+      for (const sport of ['Strength Training', ...STRENGTH_WORKOUT_SPORT_ALIASES_V1]) expect(details.description).toContain(sport);
+      expect(details.description).toContain('an unavailable read does not establish that details are absent');
+      for (const name of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3']) {
+        expect(tools.find(tool => tool.name === name)?.description).toContain('exercise-aware strength aliases');
+      }
+      const preview = tools.find(tool => tool.name === 'preview_strength_workout_change')!;
+      expect(preview.description).toContain('Updates retain the existing strength sport name');
+      expect(preview.description).toContain('new creates use Strength Training');
+      expect(JSON.stringify(preview.inputSchema)).not.toContain('"sport"');
+    } finally {
+      await client.close(); await server.close();
+    }
+  });
+
   it('advertises canonical workout authoring guidance only when Training writes are available', async () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: {
       name: 'preview_planned_workout_v3_changes', arguments: { expectedScheduleRevision: 1, changes: [] },
@@ -993,6 +1017,8 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
     expect(writeInstructions).toContain('Construct non-strength workout recipes using stable unique node IDs');
     expect(writeInstructions).toContain('Use get_planned_workout_v3 for the complete non-strength recipe');
+    expect(writeInstructions).toContain(TRAINING_STRENGTH_READ_GUIDANCE);
+    expect(writeInstructions).toContain(TRAINING_STRENGTH_WRITE_GUIDANCE);
     expect(writeInstructions).toContain('use preview_planned_workout_v3_change');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
@@ -1019,6 +1045,8 @@ describe('MCP HTTP scope enforcement', () => {
     expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    expect(readInstructionsOnly).toContain(TRAINING_STRENGTH_READ_GUIDANCE);
+    expect(readInstructionsOnly).not.toContain(TRAINING_STRENGTH_WRITE_GUIDANCE);
     expect(readInstructionsOnly).not.toContain('Construct workout recipes');
     expect(readInstructionsOnly).toContain('No planning edits or provider actions are available');
 

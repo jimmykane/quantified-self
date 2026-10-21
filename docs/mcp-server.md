@@ -504,7 +504,15 @@ The seven approved strength aliases (Weight Training, Kettlebell, Calisthenics, 
 LES MILLS GRIT Strength and LES MILLS BODYPUMP) use the same validated companion when exercises are present.
 Existing strength-detail/recipe/analysis reads preserve the authored sport and complete sets/load/rest. The strict
 strength update proposal retains the existing workout's sport; canonical new strength creates keep their existing
-Strength Training default. No sport field, schema, tool, consent or provider action was added. Legacy generic aliases
+Strength Training default. No sport field, schema, tool, consent or provider action was added. Tool descriptions, server instructions, the built-in
+Assistant and the bundled Training/cross-domain guidance explicitly cover all eight strength names. Complete details
+require the existing strength-details read; its unavailability cannot prove that an alias is interval-only. Use QS Edit
+when the full prescription cannot be read. The existing strength preview preserves an alias on updates, while new
+creates still use Strength Training; other new strength names use the app editor. The Assistant selects the full-strength
+preview for named strength edits, preserving provider/lifecycle routing and the current-revision/advertised-tool gate.
+This metadata-only clarification retains all registered shapes, scopes, grants and native/app approval rules; its digest
+is included in the pending developer-refresh record. Server deployment, registered-app rescan and bundled-plugin refresh
+remain separate. Local bundle sync/validation uses a temporary profile and fixture app ID. Legacy generic aliases
 without companions remain readable as intervals; Garmin/COROS/Wahoo strength delivery requires complete matching
 exercise data. Malformed or foreign companions fail before exposure. Saved-workout previews validate all eight
 companion-bearing source sports before issuing a proposal, and reject strength-library updates that omit existing

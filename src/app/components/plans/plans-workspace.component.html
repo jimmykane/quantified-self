@@ -977,6 +977,9 @@
                 }
               </div>
                 <div class="workout-row-meta workout-prescription-summary">{{ row.prescriptionSummary }}</div>
+                @if (row.mayHaveStrengthDetails) {
+                  <div class="workout-row-meta strength-summary-hint">Interval summary only. Choose Edit for the full workout and any saved lifting loads.</div>
+                }
                 <ol class="workout-summary">
                   @for (summary of row.summary; track $index) {
                     <li>{{ summary }}</li>

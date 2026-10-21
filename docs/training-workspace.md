@@ -1406,7 +1406,11 @@ only synthetic rendered markup at 320px and desktop widths in light/dark; physic
 and the **Show profile** disclosure on saved scheduled and library workouts. Saved inspection consumes the complete
 canonical recipe independently of the narrower manual editor: relative snapshots,
 two simultaneous targets, and manual/kJ/repetition endings remain readable. Strength retains its exercise editor;
-the v1 strength compatibility summary is not presented as a complete exercise profile.
+the v1 strength compatibility summary is not presented as a complete exercise profile. Scheduled cards for all eight
+approved strength names label the steps **Interval summary only** and direct athletes to **Edit** for the complete
+workout and any saved lifting loads. This is a sport-based reminder, not a claim that a companion exists: legacy
+interval-only aliases keep their chart and instructions. Browsing does not fetch companions or add per-card reads;
+the existing revision/owner-guarded editor lookup validates them only when Edit is opened.
 
 `workout-profile.helper.ts` shapes presentation only. The horizontal axis is explicitly step order with equal widths,
 never elapsed time or distance. The shared prescription analyzer now supplies canonical timing and coverage for
@@ -1454,7 +1458,17 @@ Accepted selection owns haptics; raw chart pointer feedback is disabled to avoid
 tests cover silent hydration/context changes, selection and disposal; browser checks use synthetic recipes, not private
 exports. Physical vibration still needs device verification.
 
-MCP impact: no schema, scope, consent, recipe variant, projection, provider action, plugin guidance or mutation change.
+The strength-alias guidance follow-up updates MCP tool descriptions/server instructions, built-in Assistant guidance
+and the bundled Training/cross-domain skills. All eight names direct readers to the complete strength-details tool;
+an unavailable read must not be treated as proof of a legacy interval-only workout. Existing alias updates preserve
+the authored sport; the unchanged strict strength-create schema still creates Strength Training, so other new strength
+names use the app editor. Named strength recipe edits select the existing complete-strength preview; provider/lifecycle
+requests retain their existing routes, and write guidance remains gated on the advertised preview after the successful
+current-schedule read. No tools, schemas, scopes, consent, read fields, mutation kinds or provider actions are added.
+The pending metadata digest records a developer refresh; deployed-server update, registered-app rescan and bundle
+refresh remain separate release steps. Local bundle validation/sync uses only a temporary profile with a fixture app ID.
+
+The original interval-renderer change has no schema, scope, consent, recipe variant, projection, provider action or mutation impact.
 Focused `get_planned_workout`/`get_planned_workout_v2` regressions retain exact mixed distance/HR and untargeted
 60/75/90-second fixtures, two saved-reference targets, a valid zero-percent relative pace range, canonical ordering and
 scope/connection isolation. Presentation

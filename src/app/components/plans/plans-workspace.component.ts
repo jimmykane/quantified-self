@@ -149,6 +149,7 @@ interface WorkoutRow {
   completion: TrainingWorkoutCompletionV1 | null;
   summary: string[];
   prescriptionSummary: string;
+  mayHaveStrengthDetails: boolean;
   actionBusy: boolean;
   historyScope: TrainingScheduleRevisionScope;
 }
@@ -534,6 +535,7 @@ export class PlansWorkspaceComponent {
         : workout.planId === selectedPlanId)
       .map(workout => ({
         workout,
+        mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
         prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
           this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
         completion: this.completions().find(completion => completion.workoutId === workout.id) ?? null,
@@ -563,6 +565,7 @@ export class PlansWorkspaceComponent {
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
     workout,
+    mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
     prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
       this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
     completion: null,

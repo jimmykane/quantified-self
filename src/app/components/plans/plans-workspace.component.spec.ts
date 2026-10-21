@@ -16,7 +16,7 @@ import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, AppThemes, DataDistance, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
-import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
+import { projectStrengthWorkoutToV1, STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
 import dayjs from 'dayjs';
@@ -2850,6 +2850,50 @@ describe('PlansWorkspaceComponent', () => {
           expect.objectContaining({ ending: { kind: 'time', seconds: 30 } })],
       })] }), structure: expect.objectContaining({ sport }),
     }) }));
+  });
+
+  it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('labels the %s scheduled preview and opens its full exercise details from Edit', async sport => {
+    const details = { version: 1 as const, workoutId: 'standalone-workout', revision: 1,
+      exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
+    schedule.workouts = schedule.workouts.map(workout => workout.id === details.workoutId
+      ? { ...workout, structure: projectStrengthWorkoutToV1(details, sport) } : workout);
+    getStrengthDetails.mockResolvedValue(details);
+    setRouteState({ mode: 'browse', scope: 'standalone' });
+    const fixture = await renderPlans();
+    const row = fixture.nativeElement.querySelector('[data-workout-id="standalone-workout"]') as HTMLElement;
+    expect(row.querySelector('.strength-summary-hint')?.textContent).toContain('Interval summary only. Choose Edit for the full workout and any saved lifting loads.');
+    expect(row.querySelector('app-workout-profile') !== null).toBe(sport !== ActivityTypes.StrengthTraining);
+    expect(getStrengthDetails).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    row.querySelector<HTMLButtonElement>('[aria-label="Edit workout"]')!.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.editorIsStrength()).toBe(true);
+    expect(fixture.componentInstance.editor()?.value.sport).toBe(sport);
+    expect(fixture.componentInstance.editor()?.strength?.exercises).toEqual(details.exercises);
+    expect(fixture.nativeElement.textContent).toContain('Exercises and sets');
+    expect(getStrengthDetails).toHaveBeenCalledWith('planning-user', details.workoutId,
+      ...(sport === ActivityTypes.StrengthTraining ? [] : [true]));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy strength-name interval previews available without claiming exercise details exist', async () => {
+    const workout = schedule.workouts.find(item => item.id === 'standalone-workout')!;
+    const legacy = { ...workout, structure: { ...workout.structure, sport: ActivityTypes.WeightTraining } };
+    schedule.workouts = [legacy, { ...workout, id: 'ordinary-running', title: 'Ordinary running' }];
+    setRouteState({ mode: 'browse', scope: 'standalone' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelectorAll('.strength-summary-hint')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[data-workout-id="ordinary-running"] .strength-summary-hint')).toBeNull();
+    const profile = fixture.debugElement.queryAll(By.directive(WorkoutProfileComponent))
+      .map(element => element.componentInstance as WorkoutProfileComponent)
+      .find(component => component.structure()?.sport === ActivityTypes.WeightTraining)!;
+    profile.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expect(profile.model()?.structure).toEqual(legacy.structure);
+    expect(profile.steps()).toHaveLength(1);
+    expect(getStrengthDetails).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('loads a strength companion before editing and rejects a missing companion', async () => {

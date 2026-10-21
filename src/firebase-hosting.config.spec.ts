@@ -396,6 +396,7 @@ describe('Firebase Hosting configuration', () => {
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.
     // Pool swims default to Duration and disable the Distance chart axis.
+    // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

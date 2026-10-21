@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "3fe3218f997b9f31b5cab5a8a42e0f4bcb95a13193a3c96b7213ff2d762a0ce2",
+  "candidateSha256": "88029cf32adfb125637df385dfdfa7833c55f3c6430df105bdff22239aa741d3",
   "lifecycleAction": "developer-refresh",
-  "summary": "Adopt Sports Lib 23.0.0's 284-type catalog in existing exact sport enums, retaining strict validation and 16 KiB focused previews for both grants. Preserve replacement, prescription analysis, reflections, phases, recipe checks, title recovery, HR previews, sync guidance, v2 endurance, EnergySense and Garmin sleep HR. Registered schemas/history, scopes, Apply grants and phase authority stay unchanged; RPE stays in Edit details. Deployment, rescan and bundled sync remain separate.",
+  "summary": "Adopt Sports Lib 23.0.0's 284-sport catalog, strict enums and 16 KiB previews. Retain pending replacement, analysis, reflections, phases, recipe/title checks, HR previews, sync, v2 endurance, EnergySense and Garmin sleep HR changes. Clarify complete strength-alias reads/updates and canonical strength creates. Registered schemas/history, grants and approvals stay unchanged; RPE stays in Edit details. Deployment, app rescan and plugin refresh remain separate.",
   "rescanRequired": true
 }
