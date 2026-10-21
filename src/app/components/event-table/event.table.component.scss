@@ -312,6 +312,15 @@
 }
 
 /* Standardize cell behavior */
+.event-table-header {
+  // App container tokens are translucent; sticky content needs a solid surface.
+  background: var(--mat-sys-surface-bright);
+}
+
+.event-table-header > th {
+  opacity: 1;
+}
+
 .mat-mdc-header-cell,
 .mat-mdc-cell {
   white-space: nowrap !important;
