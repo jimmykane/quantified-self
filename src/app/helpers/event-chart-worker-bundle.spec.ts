@@ -40,7 +40,7 @@ function snapshot(swimming: boolean, imperial: boolean, xAxisType: XAxisTypes): 
         { type: DataPower.type, values: new Float64Array([0, 100, NaN, 300]) },
         { type: DataHeartRate.type, values: new Float64Array([120, 121, 122, 123]) },
         { type: DataSpeed.type, values: new Float64Array([2.5, 3, 3.5, 0]) },
-        { type: DataDistance.type, values: new Float64Array([0, 3, 6.5, 6.5]) },
+        { type: DataDistance.type, values: new Float64Array([0, NaN, 6.5, 6.5]) },
         { type: DataAltitude.type, values: new Float64Array([10, 11, 12, 13]) },
       ],
     }],

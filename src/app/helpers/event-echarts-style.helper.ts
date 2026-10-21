@@ -85,9 +85,16 @@ import {
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/metrics';
+import { SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
 import { isInverseMetric } from '@shared/metric-semantics';
 import { AppColors } from '../services/color/app.colors';
 import { AppDataColors } from '../services/color/app.data.colors';
+
+/** These canonical metre streams switch between m and Km as the displayed value changes. */
+export function hasEventChartValueDependentUnit(streamType: string): boolean {
+  return streamType === DataDistance.type || streamType === DataStrydDistance.type
+    || streamType === SUSTAINABLE_DISTANCE_TYPE;
+}
 
 const ALTITUDE_GROUP = new Set<string>([
   DataAltitude.type,

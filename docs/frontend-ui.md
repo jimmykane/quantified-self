@@ -595,6 +595,12 @@ Distance-axis lines apply the selected continuity mode to both the metric and di
 coordinate filtering. Normal sparse coordinates can connect; Detect/Custom preserve breaks in either source stream.
 Continuous can span missing data without inventing a distance, tooltip reading or statistic at those missing rows.
 
+The Distance metric itself keeps those sparse values on Time/Duration axes and uses the same continuity setting.
+Its metric tick labels include Sports Lib's value-dependent m/Km unit, with no fixed metre heading; Stryd Distance
+uses the same rule. The user's distance preference selects one canonical/unit-variant panel, including when all
+recorded metrics are enabled. Miles retain their fixed unit heading. Unit conversion preserves nulls and real zero;
+range statistics use only recorded points, and zoom/overlays do not manufacture intermediate measurements.
+
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
 even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.

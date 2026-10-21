@@ -1,4 +1,3 @@
-import { SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
 import {
   AfterViewInit,
   ChangeDetectorRef,
@@ -48,6 +47,7 @@ import {
   canConnectEventChartPoints,
   getEventChartLineGapPolicy,
 } from '../../../../helpers/event-echarts-data.helper';
+import { hasEventChartValueDependentUnit } from '../../../../helpers/event-echarts-style.helper';
 import { isEventLapTypeAllowed } from '../../../../helpers/event-lap-type.helper';
 import {
   buildEventCanonicalXAxisScaleOptions,
@@ -1197,7 +1197,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: options.axisLabelFontSize,
         margin: this.isMobile ? 8 : 10,
-        formatter: (value: number) => this.formatDataValue(panel.dataType, value, panel.dataType === SUSTAINABLE_DISTANCE_TYPE)
+        formatter: (value: number) => this.formatDataValue(panel.dataType, value, hasEventChartValueDependentUnit(panel.dataType))
       }
     };
   }

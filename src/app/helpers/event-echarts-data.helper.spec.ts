@@ -7,6 +7,8 @@ import {
   DataAltitude,
   DataCadence,
   DataDistance,
+  DataDistanceMiles,
+  DataStrydDistance,
   DataDuration,
   DataGrade,
   DataGradeAdjustedPace,
@@ -48,6 +50,7 @@ import {
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
 import type { EventChartPanelSeries } from './event-echarts-data.helper';
+import { computeEventPanelRangeStats } from './event-echarts-range-stats.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
 
 it('places a shared multisport lap at its actual ending leg even when it is that leg\'s sole lap', () => {
@@ -229,6 +232,90 @@ describe('event-echarts-data.helper', () => {
       expect({ times, values, distance }).toEqual(before);
     },
   );
+
+  it.each([XAxisTypes.Time, XAxisTypes.Duration, XAxisTypes.Distance].flatMap(axis =>
+    [DistanceUnits.Kilometers, DistanceUnits.Miles].flatMap(units =>
+      [false, true].map(showAllData => ({ axis, units, showAllData })))))(
+    'plots recorded Distance on $axis with $units (all metrics=$showAllData) without filling holes or losing zero', ({ axis, units, showAllData }) => {
+      const start = Date.UTC(2026, 0, 1);
+      const distance = Array.from({ length: 80 }, (_, second) =>
+        second % 2 || (second >= 40 && second < 52) ? null : Math.max(0, second - 2) * 100);
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: '', startDate: start, endDate: start + 79_000, type: ActivityTypes.Running,
+        powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+        stats: {}, laps: [], events: [], intensityZones: [],
+        streams: { [DataDistance.type]: distance, [DataHeartRate.type]: distance.map(() => 120) },
+      });
+      activity.setID('sparse-distance');
+      activity.addStream(activity.generateTimeStream());
+      const before = structuredClone(activity.toJSON());
+      for (const mode of ['continuous', 'detect', 'custom'] as const) {
+        const input = {
+          selectedActivities: [activity], allActivities: [activity], xAxisType: axis,
+          showAllData, dataTypesToUse: [DataDistance.type],
+          userUnitSettings: { ...getDefaultUserUnitSettings(), distanceUnits: units },
+          eventColorService: { getActivityColor: () => '#ff0000' } as any,
+          lineContinuity: { mode, maxGapSeconds: 2 },
+        };
+        const panels = buildEventChartPanels(input);
+        const workerPanels = buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input));
+        expect(workerPanels).toEqual(panels);
+        expect(panels).toHaveLength(showAllData ? 2 : 1);
+        const distancePanels = panels.filter(panel => panel.dataType !== DataHeartRate.type);
+        expect(distancePanels).toHaveLength(1); // No duplicate canonical/miles chart.
+        const panel = distancePanels[0];
+        expect(panel.dataType).toBe(units === DistanceUnits.Miles ? DataDistanceMiles.type : DataDistance.type);
+        expect(panel.unit).toBe(units === DistanceUnits.Miles ? 'mi' : '');
+        const series = panel.series[0];
+        const points = eventChartSeriesToPoints(series);
+        const at = (second: number) => points.findIndex(point => point.time === start + second * 1000);
+        expect(points[at(0)].y).toBe(0);
+        expect(points[at(2)].y).toBe(0);
+        expect(points[at(4)].y).toBeCloseTo(units === DistanceUnits.Miles ? 200 / 1609 : 200);
+        if (axis === XAxisTypes.Distance) {
+          expect(at(1)).toBe(-1);
+          expect(at(42)).toBe(-1);
+          expect(points[at(4)].x).toBe(200); // Coordinates remain canonical metres in both unit modes.
+        } else {
+          expect(points[at(1)].y).toBeNull();
+          expect(points[at(42)].y).toBeNull();
+        }
+        expect(canConnectEventChartPoints(series, at(0), at(2))).toBe(true);
+        expect(canConnectEventChartPoints(series, at(36), at(38))).toBe(true);
+        expect(canConnectEventChartPoints(series, at(38), at(52))).toBe(mode === 'continuous');
+        expect(canConnectEventChartPoints(series, at(52), at(54))).toBe(true);
+        const line = Array.from(buildEventRecordedLineValues(series));
+        expect(line.filter((value, index) => index % 2 && !Number.isFinite(value))).toHaveLength(mode === 'continuous' ? 0 : 1);
+        const x = (second: number) => axis === XAxisTypes.Time ? start + second * 1000
+          : axis === XAxisTypes.Distance ? (second - 2) * 100 : second;
+        const stats = computeEventPanelRangeStats({ panel, range: { start: x(0), end: x(4) },
+          xAxisType: axis, gainAndLossThreshold: 1 });
+        expect(stats).toHaveLength(1);
+        const stat = units === DistanceUnits.Miles ? new DataDistanceMiles(200 / 3 / 1609) : new DataDistance(200 / 3);
+        expect(stats[0].avg).toEqual({ value: stat.getDisplayValue(), unit: stat.getDisplayUnit() });
+        expect(computeEventPanelRangeStats({ panel, range: { start: x(40), end: x(50) },
+          xAxisType: axis, gainAndLossThreshold: 1 })).toEqual([]);
+      }
+      expect(activity.toJSON()).toEqual(before);
+    },
+  );
+
+  it('uses value-dependent units for the Stryd distance panel too', () => {
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, laps: [], events: [], intensityZones: [],
+      streams: { [DataStrydDistance.type]: [0, null, 1000] },
+    });
+    activity.setID('stryd'); activity.addStream(activity.generateTimeStream());
+    const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+      showAllData: false, dataTypesToUse: [DataStrydDistance.type], userUnitSettings: getDefaultUserUnitSettings(),
+      eventColorService: { getActivityColor: () => '#ff0000' } as any };
+    for (const panels of [buildEventChartPanels(input), buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))]) {
+      expect(panels[0].unit).toBe('');
+      expect(eventChartSeriesToPoints(panels[0].series[0]).filter(point => point.y !== null).map(point => point.y)).toEqual([0, 1000]);
+    }
+  });
 
   it('defaults legacy rendering to continuous and changes policy without mutating the readings', () => {
     const points = [100, null, null, 120, null, 130].map((y, x) => ({ x, y, time: x * 10_000 }));

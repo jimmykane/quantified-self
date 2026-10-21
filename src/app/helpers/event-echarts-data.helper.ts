@@ -47,6 +47,7 @@ import type { AppEventColorService } from '../services/color/app.event.color.ser
 import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
+  hasEventChartValueDependentUnit,
   isEventPaceStreamType,
   resolveEventColorGroupKey,
   resolveEventSeriesColor
@@ -337,7 +338,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       );
       // Metric distance uses Sports Lib's value-dependent m/Km display. Its axis
       // includes the unit on each tick, so a fixed '(m)' heading would be misleading.
-      const unit = stream.type === SUSTAINABLE_DISTANCE_TYPE ? '' : streamDataClass.unit || '';
+      const unit = hasEventChartValueDependentUnit(stream.type) ? '' : streamDataClass.unit || '';
 
       if (!panelsMap.has(stream.type)) {
         panelsMap.set(stream.type, {
@@ -1232,7 +1233,7 @@ function getFilteredStreams(input: {
     .getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, input.userUnitSettings)
     .indexOf(DataGradeAdjustedSpeed.type) === -1;
   const shouldRemoveDistance = DynamicDataLoader
-    .getNonUnitBasedDataTypes(input.showAllData, input.dataTypesToUse)
+    .getUnitBasedDataTypesFromDataType(DataDistance.type, input.userUnitSettings)
     .indexOf(DataDistance.type) === -1;
   const shouldRemoveDepth = DynamicDataLoader
     .getUnitBasedDataTypesFromDataType(DataDepth.type, input.userUnitSettings)

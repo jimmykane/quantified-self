@@ -15,6 +15,7 @@ import {
   ChartCursorBehaviours,
   DataDepth,
   DataDistance,
+  DataStrydDistance,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
@@ -699,9 +700,9 @@ describe('EventCardChartPanelComponent', () => {
   );
 
   it.each([
-    [DistanceUnits.Kilometers, '10.00'],
-    [DistanceUnits.Miles, '6.22'],
-  ] as const)('formats preview axis values for %s without repeating the unit', async (distanceUnits, expected) => {
+    [DistanceUnits.Kilometers, '10.00Km'],
+    [DistanceUnits.Miles, '6.22mi'],
+  ] as const)('labels preview Distance ticks with their actual %s unit', async (distanceUnits, expected) => {
     component.previewMode = true;
     component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
     component.panel = buildTestPanel(DataDistance.type, [0, 10000]);
@@ -712,6 +713,22 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.yAxis?.axisLabel?.formatter(10000)).toBe(expected);
   });
+
+  it.each([DataDistance.type, DataStrydDistance.type].flatMap(type =>
+    [false, true].map(overlay => ({ type, overlay }))))(
+    'labels $type ticks on the primary or overlay axis (overlay=$overlay)', async ({ type, overlay }) => {
+      const panel = buildTestPanel(type, [0, 800, 1000, 10000]);
+      if (overlay) component.overlayPanel = panel;
+      else component.panel = panel;
+      await renderComponent();
+      const axes = getRenderedOption()?.yAxis;
+      const axis = overlay ? axes[1] : axes;
+      expect(axis.axisLabel.formatter(0)).toBe('0.0m');
+      expect(axis.axisLabel.formatter(800)).toBe('800.0m');
+      expect(axis.axisLabel.formatter(1000)).toBe('1.00Km');
+      expect(axis.axisLabel.formatter(10000)).toBe('10.00Km');
+    },
+  );
 
   it.each([
     [false, DistanceUnits.Kilometers], [true, DistanceUnits.Kilometers],
@@ -796,7 +813,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.axisLabel?.formatter(100)).toBe('100');
   });
 
-  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type].flatMap(streamType =>
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type, DataDistance.type].flatMap(streamType =>
     (['legacy', 'packed'] as const).flatMap(format => [false, true].map(overlay => ({ streamType, format, overlay })))))(
     'connects two-second recorded readings with real line breaks, no dots and unchanged data ($streamType, $format, overlay=$overlay)',
     async ({ streamType, format, overlay }) => {
@@ -921,7 +938,7 @@ describe('EventCardChartPanelComponent', () => {
     }
   );
 
-  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type].flatMap(streamType =>
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type, DataDistance.type].flatMap(streamType =>
     (['legacy', 'packed'] as const).flatMap(format => [false, true].flatMap(overlay => [XAxisTypes.Duration, XAxisTypes.Time, XAxisTypes.Distance].map(axis => ({ streamType, format, overlay, axis }))))))(
     'keeps connected recorded segments inside the vertical scale through zoom cycles ($streamType, $format, overlay=$overlay, $axis)',
     ({ streamType, format, overlay, axis }) => {
