@@ -321,6 +321,7 @@ interface DashboardTileSectionViewModel {
   icon: string;
   columns: number;
   hasActivityCalendar: boolean;
+  hasHealthCharts: boolean;
   tiles: DashboardTileViewModel[];
   cells: DashboardTileSectionCellViewModel[];
   trailingPlaceholders: number[];
@@ -2469,6 +2470,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           ...definition,
           columns: sectionColumns,
           hasActivityCalendar: this.hasActivityCalendarTile(sectionTiles),
+          hasHealthCharts: sectionTiles.some(tile => !!dashboardHealthMetric(tile)),
           tiles: sectionTiles,
           cells: sectionCells,
           trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
@@ -2486,6 +2488,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         ...section,
         columns: sectionColumns,
         hasActivityCalendar: this.hasActivityCalendarTile(section.tiles),
+        hasHealthCharts: section.tiles.some(tile => !!dashboardHealthMetric(tile)),
         cells: sectionCells,
         trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
       };

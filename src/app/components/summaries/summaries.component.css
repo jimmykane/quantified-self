@@ -684,6 +684,13 @@ app-tile-map {
   overflow: visible;
 }
 
+@media (max-width: 767px) {
+  .dashboard-health-cell app-tile-chart.dashboard-health-chart {
+    height: auto;
+    min-height: 100%;
+  }
+}
+
 section {
   margin-bottom: 1.25rem;
   margin-top: 0.75rem;
