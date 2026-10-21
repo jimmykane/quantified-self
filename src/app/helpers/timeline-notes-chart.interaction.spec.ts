@@ -14,8 +14,9 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
   let host: HTMLDivElement | undefined;
   afterEach(() => { chart?.dispose(); host?.remove(); vi.restoreAllMocks(); });
 
-  it.each([160, 320, 1000].flatMap(width => [false, true].flatMap(dark => ['time', 'category'].map(axis => ({ width, dark, axis })))))(
-    'keeps edge note titles inside both rendered grids ($width, dark: $dark, $axis)', async ({ width, dark, axis }) => {
+  it.each([160, 320, 1000].flatMap(width => [false, true].flatMap(dark => ['time', 'category']
+    .flatMap(axis => [false, true].map(inverse => ({ width, dark, axis, inverse }))))))(
+    'keeps edge note titles inside both rendered grids ($width, dark: $dark, $axis, inverse: $inverse)', async ({ width, dark, axis, inverse }) => {
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
         measureText: (text: string) => ({ width: text.length * 6 }),
       } as never);
@@ -38,7 +39,7 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
       const option = { animation: false,
         grid: [{ left: 32, right: 16, top: 15, height: 100, outerBoundsMode: 'none' },
           { left: 32, right: 16, top: 155, height: 100, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' }],
-        xAxis, yAxis: [0, 1].map(gridIndex => ({ min: 0, max: 100, gridIndex })),
+        xAxis, yAxis: [0, 1].map(gridIndex => ({ min: 0, max: 100, gridIndex, inverse })),
         series: [0, 1].map(index => ({ type: 'line', xAxisIndex: index, yAxisIndex: index,
           data: axis === 'time' ? [[dates[0], 50], [dates[1], 50]] : [50, 50] })),
       };
@@ -53,6 +54,7 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
         bounds.applyTransform(title.getComputedTransform());
         expect(bounds.x).toBeGreaterThanOrEqual(32);
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 16);
+        expect(option.grid.some(grid => bounds.y >= grid.top && bounds.y + bounds.height <= grid.top + grid.height)).toBe(true);
       }
       controller.dispose();
     });

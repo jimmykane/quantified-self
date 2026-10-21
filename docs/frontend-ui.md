@@ -733,6 +733,7 @@ option and registration. Explicit time bounds avoid traversing samples during ov
 Form, Forecast and the four Training trend adapters share this path, without chart-local fetches or haptics.
 
 Timeline note titles face into the available chart space, including each Form grid and Sleep/weekly category bands.
+Titles stay inside the bottom of the plot on normal and reversed value axes, including swim pace charts.
 Their width is bounded and truncated with an ellipsis; the native marker tooltip retains the full title. After
 ECharts finishes layout, the shared host refines placement using `convertToPixel`, which accounts for automatic axis
 label margins. A geometry key prevents repeated patches; only marker series are merged, preserving readings, zoom,

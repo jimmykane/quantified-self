@@ -23,7 +23,7 @@ export interface TimelineNoteAxisHints {
   /** Health preserves the recorded timezone nearest each timestamp. */
   offsetSeconds?: (timestampMs: number) => number;
 }
-interface Axis { type?: string; min?: unknown; max?: unknown; data?: unknown[]; gridIndex?: number; boundaryGap?: boolean; axisLabel?: { color?: string } }
+interface Axis { type?: string; min?: unknown; max?: unknown; data?: unknown[]; gridIndex?: number; boundaryGap?: boolean; inverse?: boolean; axisLabel?: { color?: string } }
 interface Series { name?: string; xAxisIndex?: number; yAxisIndex?: number; data?: unknown[] }
 interface NoteOverlaySeries { id: string; [key: string]: unknown }
 interface NoteGroup { startDate: string; endDate: string; notes: TimelineNote[] }
@@ -64,7 +64,7 @@ function projection(axis: Axis, series: Series[], hints: TimelineNoteAxisHints):
     } };
 }
 
-function noteLabelLayout(option: Option, axis: Axis, fraction: number, chartWidth: number, maxWidth: number, markerPixel?: number) {
+function noteLabelLayout(option: Option, axis: Axis, fraction: number, chartWidth: number, maxWidth: number, inverseY: boolean, markerPixel?: number) {
   const grids = Array.isArray(option.grid) ? option.grid : [option.grid];
   const grid = grids[axis.gridIndex ?? 0];
   const pixels = (value: unknown, fallback: number): number => {
@@ -79,8 +79,11 @@ function noteLabelLayout(option: Option, axis: Axis, fraction: number, chartWidt
   const rightSpace = Math.max(0, plotWidth - anchor - 6);
   const faceLeft = plotWidth > 0 ? rightSpace < maxWidth && leftSpace > rightSpace : fraction > 0.5;
   return {
+    // Reversed value axes start at the top. Keep titles at the plot's bottom endpoint;
+    // native insideEnd placement reverses the horizontal distance from that endpoint.
+    position: inverseY ? 'insideEndTop' as const : 'insideStartTop' as const,
     align: faceLeft ? 'right' as const : 'left' as const,
-    distance: [faceLeft ? -6 : 6, 6],
+    distance: [(faceLeft ? -6 : 6) * (inverseY ? -1 : 1), 6],
     width: plotWidth > 0 ? Math.min(maxWidth, faceLeft ? leftSpace : rightSpace) : maxWidth,
   };
 }
@@ -107,6 +110,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
   option: Option; range: TimelineNoteRange | null; groups: Map<string, readonly TimelineNote[]>; overlays: NoteOverlaySeries[]; layoutKey: string;
 } {
   const axes: Axis[] = option.xAxis ? (Array.isArray(option.xAxis) ? option.xAxis : [option.xAxis]) as Axis[] : [];
+  const yAxes: Axis[] = option.yAxis ? (Array.isArray(option.yAxis) ? option.yAxis : [option.yAxis]) as Axis[] : [];
   const originalSeries = (Array.isArray(option.series) ? option.series : option.series ? [option.series] : []) as Series[];
   const groups = new Map<string, readonly TimelineNote[]>();
   const overlays: NoteOverlaySeries[] = [];
@@ -115,6 +119,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
   axes.forEach((axis, axisIndex) => {
     const matchingSeries = originalSeries.filter(series => (series.xAxisIndex ?? 0) === axisIndex);
     if (!matchingSeries.length) return;
+    const yAxisIndex = matchingSeries[0].yAxisIndex ?? 0;
     const projected = projection(axis, matchingSeries, hints);
     if (!projected) return;
     range = range ? { startDate: range.startDate < projected.range.startDate ? range.startDate : projected.range.startDate,
@@ -160,13 +165,13 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       const startsBeforeWindow = group.notes.some(note => note.startDate < projected.range.startDate);
       const hasOpenEnd = group.notes.some(note => note.endDate === null || note.endDate > projected.range.endDate);
       const labelLayout = noteLabelLayout(option, axis, projected.fraction(start), chartWidth,
-        style.isCompactLayout ? 100 : 160, markerPixel?.(axisIndex, start));
+        style.isCompactLayout ? 100 : 160, yAxes[yAxisIndex]?.inverse === true, markerPixel?.(axisIndex, start));
       layouts.push([axisIndex, start, labelLayout]);
       markers.push({ name, xAxis: start,
         symbol: showPeriod ? startsBeforeWindow ? 'emptyCircle' : 'arrow' : 'circle',
         symbolRotate: showPeriod && !startsBeforeWindow ? -90 : 0, symbolSize: showPeriod ? 10 : 8,
         lineStyle: { opacity: showPeriod ? 0.45 : 0.2, color, type: 'dotted' }, itemStyle: { color },
-        label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1,
+        label: { show: true, rotate: 0, opacity: 1,
           ...labelLayout,
           // A callback keeps literal title text such as {b} out of ECharts' template interpolation.
           formatter: () => label, overflow: 'truncate', ellipsis: '…',
@@ -178,7 +183,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 } }, { xAxis: group.end }]);
     });
     if (markers.length) overlays.push({ id: `timeline-note-overlay-${axisIndex}`, name: '', type: 'line', data: [],
-      xAxisIndex: axisIndex, yAxisIndex: matchingSeries[0].yAxisIndex ?? 0, animation: false,
+      xAxisIndex: axisIndex, yAxisIndex, animation: false,
       markLine: { silent: false, symbol: ['circle', 'none'], symbolSize: 8, data: markers },
       // Period fills must not intercept axis tooltips or taps intended for metric readings.
       // Note tooltips remain on the title and boundary markers.
