@@ -395,8 +395,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       : 0;
     const leaseExpiry = typeof expiresAt === 'number' && Number.isFinite(expiresAt) ? expiresAt : 0;
     const remainingMs = Math.max(leaseExpiry, retryAllowedAtMs) - Date.now();
-    this.isActivityHistoryImportRunning.set(!!this.userMetaForService?.connectionHistoryImport?.active
-      || !!this.backgroundActivityImport()?.active || remainingMs > 0);
+    const usesBackgroundActivityHistory = this.serviceName === ServiceNames.SuuntoApp
+      || this.serviceName === ServiceNames.COROSAPI;
+    this.isActivityHistoryImportRunning.set((usesBackgroundActivityHistory
+      && (!!this.userMetaForService?.connectionHistoryImport?.active || !!this.backgroundActivityImport()?.active))
+      || remainingMs > 0);
     if (remainingMs <= 0 || this.isDestroyed) return;
     this.activityHistoryLeaseTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
       this.activityHistoryLeaseTimer = null;
@@ -481,7 +484,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         ...(cooldownMs !== null ? { nextAllowedAtMs: Date.now() + cooldownMs } : {}),
       });
       if (!this.isCurrentView(userID, serviceName, generation)) return;
-      this.importInitiated.emit(result);
+      // The parent treats this event as a legacy scan result and resets import counts.
+      // Background acceptance must retain server-owned progress and cooldown metadata.
+      if (!result?.historyImport) this.importInitiated.emit(result);
 
       // Store result for display (COROS/Suunto return stats, Garmin doesn't)
       if (result?.historyImport) {

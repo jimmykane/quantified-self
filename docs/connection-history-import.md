@@ -128,6 +128,9 @@ Retrying an older failed run cannot replace a newer active run's projection, eve
 Restored children use `dispatchedToCloudTask: null`, matching all canonical dispatchers' unissued-task state.
 The UI follows the live projection after acceptance, keeps pending state across dialog reopening, and discards
 its optimistic receipt after a connection change. Progress and owner retry reuse the existing Connections panel.
+Background acceptance does not emit the legacy scan-result event or reset live import counts/cooldown metadata.
+The new coordinator-active form lock applies only to Suunto/COROS; Garmin/Wahoo retain their existing lease and
+contention-buffer behavior, with reservations still enforced by the server.
 
 Compatibility is deliberate: omitted/false `background` retains the old callable contract, and a new client can
 still read an old backend's stats response. Existing connections without account/generation metadata use the old

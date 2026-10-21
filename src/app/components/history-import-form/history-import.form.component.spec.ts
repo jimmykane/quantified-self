@@ -210,6 +210,31 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.disabled).toBe(true);
         });
 
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps live %s counts when background acceptance arrives after the metadata update', async provider => {
+            await reopen(provider);
+            const history = { runId: 'manual-run', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
+                active: true, canRetry: false, steps: [{ id: 'activities', resources: ['activities'], status: 'queued', count: 0 }] };
+            let resolve!: (result: unknown) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise(yes => resolve = yes));
+            // Existing parent consumers interpret this event as a completed legacy
+            // scan and replace the displayed cooldown count with response stats.
+            const legacyScanResult = vi.fn(() => fixture.componentRef.setInput('userMetaForService', {
+                ...component.userMetaForService, didLastHistoryImport: Date.now(), processedActivitiesFromLastHistoryImportCount: 0,
+            }));
+            component.importInitiated.subscribe(legacyScanResult);
+            const submission = submit('activity');
+            const importStartedAt = Date.now() - 1000;
+            fixture.componentRef.setInput('userMetaForService', { didLastHistoryImport: importStartedAt,
+                processedActivitiesFromLastHistoryImportCount: 100,
+                connectionHistoryImport: { ...history, active: false, steps: [{ ...history.steps[0], status: 'processed', count: 100 }] } });
+            fixture.detectChanges();
+            resolve({ historyImport: history }); await submission; fixture.detectChanges();
+            expect(legacyScanResult).not.toHaveBeenCalled();
+            expect(component.userMetaForService).toMatchObject({ didLastHistoryImport: importStartedAt, processedActivitiesFromLastHistoryImportCount: 100 });
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('New import available on');
+        });
+
         it('restores background failures from metadata and directs the owner to the existing retry control', async () => {
             await reopen();
             fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'failed-manual', rangePreset: 'custom',
@@ -229,6 +254,18 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.disabled).toBe(true);
             expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('Import already running');
             expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.GarminAPI, ServiceNames.WahooAPI])('does not apply the new coordinator lock to legacy %s manual imports', async provider => {
+            await reopen(provider);
+            fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'automatic', rangePreset: '30_days', active: true } });
+            fixture.detectChanges();
+            expect(component.isActivityHistoryImportRunning()).toBe(false);
+            expect(component.formGroup.enabled).toBe(true);
+            const emit = vi.spyOn(component.importInitiated, 'emit');
+            await submit('activity');
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+            expect(emit).toHaveBeenCalledTimes(1);
         });
 
         it('discards an old optimistic background receipt after reconnecting the same account', async () => {
