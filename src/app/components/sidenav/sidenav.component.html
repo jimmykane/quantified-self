@@ -51,6 +51,12 @@
       <mat-icon>calendar_month</mat-icon>
       <span>Calendar</span>
     </mat-list-item>
+
+    <a mat-list-item routerLinkActive="active" ariaCurrentWhenActive="page" routerLink="/activities"
+      (click)="sideNav.close()">
+      <mat-icon matListItemIcon aria-hidden="true">list_alt</mat-icon>
+      <span matListItemTitle>Activities</span>
+    </a>
   </div>
 
   <div role="group" aria-labelledby="sidenav-training-health-heading">
@@ -94,8 +100,6 @@
       }
     </mat-list-item>
   </div>
-
-  <!-- Activities is temporarily omitted from navigation; /activities remains available. -->
 
   <div role="group" aria-labelledby="sidenav-explore-heading">
     <div id="sidenav-explore-heading" class="sidenav-section-header">Explore</div>

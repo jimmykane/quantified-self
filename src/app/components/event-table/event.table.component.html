@@ -36,6 +36,12 @@
         }
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
+      @if (canManageEvents && !isLibraryPresentation) {
+        <div class="table-toolbar-actions">
+          <app-event-table-actions [selectedDataTypes]="selectedColumns" icon="tune"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        </div>
+      }
     </div>
 
     <ng-content select="[event-table-active-filters]"></ng-content>
@@ -131,7 +137,7 @@
     [hasError]="!isLoading && this.events && this.events.length === 0" [allowErrorPassthrough]="true"
     [errorMessage]="emptyMessage" [errorHint]="emptyHint"
     [errorIcon]="'directions_run'" [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="12px">
-    <div class="table-wrapper qs-scrollbar">
+    <div class="table-wrapper qs-scrollbar" tabindex="0" role="region" aria-label="Activity table">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
         [matSortDirection]="tableSortDirection" matSortDisableClear>
         @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
@@ -145,12 +151,7 @@
           </th>
           }
           @if (isLast && showRowActions) {
-          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="isLibraryPresentation || !canManageEvents ? 'Activity actions' : null">
-            @if (canManageEvents && !isLibraryPresentation) {
-            <app-event-table-actions [selectedDataTypes]="selectedColumns"
-              (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
-            }
-          </th>
+          <th mat-header-cell *matHeaderCellDef aria-label="Activity actions"></th>
           }
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">

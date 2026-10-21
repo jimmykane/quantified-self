@@ -34,7 +34,7 @@
               @for (tag of library(); track tag.key) { <mat-option [value]="tag.name">{{ tag.name }}</mat-option> }
             </mat-select>
           </mat-form-field>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
             <mat-label>Date range</mat-label>
             <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value)" aria-label="Date range">
               <mat-option value="all">All loaded history</mat-option>

@@ -385,6 +385,12 @@ describe('EventTableComponent', () => {
         expect(filtersRow).toBeTruthy();
         expect(searchField).toBeTruthy();
         expect(mainRow.contains(filtersRow)).toBe(true);
+        component.showActions = true;
+        fixture.detectChanges();
+        expect(mainRow.querySelector('.table-toolbar-actions app-event-table-actions')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('th app-event-table-actions')).toBeNull();
+        const scrollRegion = fixture.nativeElement.querySelector('[role="region"][aria-label="Activity table"]') as HTMLElement;
+        expect(scrollRegion.getAttribute('tabindex')).toBe('0');
     });
 
     it('allows a parent tag selector without leaving a hidden table tag filter active', () => {
@@ -674,7 +680,7 @@ describe('EventTableComponent', () => {
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
         );
-        expect(template).toContain("[attr.aria-label]=\"isLibraryPresentation || !canManageEvents ? 'Activity actions' : null\"");
+        expect(template).toContain('aria-label="Activity actions"');
         expect(fixture.nativeElement.querySelector('app-event-table-actions')).toBeNull();
         expect(component.showRowActions).toBe(true);
 
@@ -897,6 +903,9 @@ describe('EventTableComponent', () => {
         await component.selectedColumnsChange(['Name', 'Start Date']);
 
         expectDashboardSettingsWrite({ tableSettings: { selectedColumns: ['Name', 'Start Date'] } });
+        mockUserService.updateUserProperties.mockClear();
+        await component.selectedColumnsChange(['Name', 'Start Date']);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
     it('should persist sort changes without writing unrelated user settings', async () => {

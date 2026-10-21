@@ -1241,6 +1241,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isBrowsePresentation) {
       return;
     }
+    if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
+      return;
+    }
     if (this.isLibraryPresentation) {
       // Material's selected-options order can change as choices are toggled.
       this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));

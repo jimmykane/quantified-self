@@ -27,6 +27,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventTableModule } from '../../modules/event-table.module';
 import { EventTableComponent, type EventTableEventsChange } from '../event-table/event.table.component';
+import { EventTableActionsComponent } from '../event-table/actions/event.table.actions.component';
 import { ActivitiesPageComponent } from './activities-page.component';
 
 @Component({ selector: 'app-event-table', standalone: true, template: '<ng-content select="[event-table-filters]"></ng-content><ng-content select="[event-table-active-filters]"></ng-content>' })
@@ -103,7 +104,8 @@ describe('ActivitiesPageComponent', () => {
     const toolbar = context.fixture.nativeElement.querySelector('.table-toolbar') as HTMLElement;
     expect(toolbar.querySelectorAll('.activity-explorer-filters mat-select')).toHaveLength(3);
     expect(toolbar.querySelector('input[aria-label="Search activities"]')).toBeTruthy();
-    expect(context.fixture.nativeElement.querySelector('app-event-table-actions')).toBeTruthy();
+    expect(toolbar.querySelector('button[aria-label="Configure table columns"]')).toBeTruthy();
+    expect(context.fixture.nativeElement.querySelectorAll('app-event-table-actions')).toHaveLength(1);
     expect(context.haptics.selection).not.toHaveBeenCalled();
     table.search('Endurance');
     context.component.selectTag('Endurance');
@@ -116,6 +118,13 @@ describe('ActivitiesPageComponent', () => {
     expect(table.searchTerm).toBe('Endurance');
     expect(context.haptics.selection).toHaveBeenCalledTimes(2);
     expect(context.userService.updateUserProperties).not.toHaveBeenCalled();
+    const columns = context.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
+    columns.selectedDataTypesChange.emit(['Duration', 'Distance']);
+    await render(context);
+    expect(table.selectedColumns).toEqual(['Duration', 'Distance']);
+    expect(context.userService.updateUserProperties).toHaveBeenCalledWith(context.user$.value, {
+      settings: { dashboardSettings: { tableSettings: { selectedColumns: ['Duration', 'Distance'] } } },
+    });
   });
 
   it('loads bounded owner history, labels partial counts, and binds the existing events table', async () => {

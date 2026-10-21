@@ -97,7 +97,8 @@ describe('help.content', () => {
   });
   it('explains the activity explorer, full shared table, partial history and saved filters', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    for (const phrase of ['[Activities](/activities)', 'same full events table as Calendar', '**Search activities**',
+    for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
+      'column picker beside the filters', 'scroll inside the table',
       '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
       'cover only loaded activities', 'shared table preferences', 'may still have older activities',
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
