@@ -43,7 +43,7 @@
             <mat-form-field class="activity-custom-date-field" [formGroup]="customDateForm" appearance="outline" subscriptSizing="dynamic">
               <mat-label>Custom dates</mat-label>
               <mat-date-range-input [rangePicker]="customPicker" (click)="customPicker.open()" (keydown.enter)="applyCustomRange()">
-                <input matStartDate formControlName="start" placeholder="Start date" aria-label="Start date">
+                <input #customStartDate matStartDate formControlName="start" placeholder="Start date" aria-label="Start date">
                 <input matEndDate formControlName="end" placeholder="End date" aria-label="End date">
               </mat-date-range-input>
               <mat-datepicker-toggle class="activity-custom-calendar-toggle" matIconSuffix [for]="customPicker"></mat-datepicker-toggle>
@@ -60,7 +60,7 @@
           } @else {
             <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
               <mat-label>Date range</mat-label>
-              <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
+              <mat-select #datePresets [value]="period()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
                 @for (period of periods; track period.value) {
                   <mat-option [value]="period.value">
                     @if (period.value === 'all') { <mat-icon aria-hidden="true">warning_amber</mat-icon> }

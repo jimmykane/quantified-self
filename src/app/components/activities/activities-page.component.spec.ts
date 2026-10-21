@@ -282,6 +282,33 @@ describe('ActivitiesPageComponent', () => {
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'month', start: null, end: null });
   });
 
+  it('keeps keyboard focus on the date control when entering, clearing or canceling a custom range', async () => {
+    const c = await setup(); await render(c);
+    const presets = c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]') as HTMLElement;
+    presets.focus(); presets.click(); await render(c);
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const customOption = Array.from(overlay.querySelectorAll<HTMLElement>('[role="option"]'))
+      .find(option => option.textContent?.trim() === 'Custom dates')!;
+    customOption.click(); await render(c);
+    const start = c.fixture.nativeElement.querySelector('input[aria-label="Start date"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(start);
+    start.focus(); start.click(); await render(c);
+    const cancel = overlay.querySelector<HTMLButtonElement>('button[matDateRangePickerCancel]')!;
+    cancel.focus(); cancel.click(); await render(c);
+    expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]'));
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+
+    c.component.selectPeriod('custom'); await render(c);
+    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') });
+    c.component.applyCustomRange(); await render(c);
+    const clear = c.fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]') as HTMLButtonElement;
+    clear.focus(); clear.click(); await render(c);
+    expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]'));
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
+    expect(c.events.getEventCountBy).not.toHaveBeenCalled();
+    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+  });
+
   it('hydrates saved custom dates silently and queries once when only their bounds change', async () => {
     const c = await setup('Endurance');
     const query = { tag: 'Endurance', period: 'custom', start: '2026-09-03', end: '2026-09-04' };

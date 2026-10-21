@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnInit, afterNextRender, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, Injector, OnInit, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -42,7 +42,10 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
+  private readonly datePresets = viewChild<MatSelect>('datePresets');
+  private readonly customStartDate = viewChild<ElementRef<HTMLInputElement>>('customStartDate');
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
   private owner: FirebaseUserType | null = null;
   private generation = 0;
@@ -204,6 +207,7 @@ export class ActivitiesPageComponent implements OnInit {
       this.closeAllDatesWarning();
       this.resetCustomDateForm();
       this.customRangeOpen.set(true);
+      this.focusDateControl();
       this.haptics.selection();
       return;
     }
@@ -259,6 +263,7 @@ export class ActivitiesPageComponent implements OnInit {
     if (!this.showCustomRange()) return;
     this.customRangeOpen.set(false);
     this.resetCustomDateForm();
+    if (this.period() !== 'custom') this.focusDateControl();
     this.haptics.selection();
   }
 
@@ -267,8 +272,18 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   clearCustomRange(): void {
-    if (this.period() === 'custom') this.selectPeriod(this.defaultPeriod);
+    if (this.period() === 'custom') {
+      this.selectPeriod(this.defaultPeriod);
+      this.focusDateControl();
+    }
     else this.cancelCustomRange();
+  }
+
+  private focusDateControl(): void {
+    afterNextRender(() => {
+      this.datePresets()?.focus();
+      this.customStartDate()?.nativeElement.focus();
+    }, { injector: this.injector });
   }
 
   private resetCustomDateForm(): void {
