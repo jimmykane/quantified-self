@@ -9,12 +9,43 @@ export const ACTIVITY_EXPLORER_PERIODS = [
   { value: 'week', label: 'Last 7 days' },
   { value: 'quarter', label: 'Last 90 days' },
   { value: 'year', label: 'This year' },
+  { value: 'custom', label: 'Custom dates' },
   { value: 'all', label: 'All dates' },
 ] as const;
 export type ActivityExplorerPeriod = typeof ACTIVITY_EXPLORER_PERIODS[number]['value'];
 
-export function activityExplorerDateRange(period: ActivityExplorerPeriod, now: Date): { start: Date; end: Date } | null {
+export interface ActivityExplorerCustomDates {
+  startDate: string;
+  endDate: string;
+}
+
+function parseLocalDate(value: unknown): Date | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(0);
+  date.setFullYear(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+}
+
+export function normalizeActivityExplorerCustomDates(startDate: unknown, endDate: unknown): ActivityExplorerCustomDates | null {
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  return start && end && start <= end ? { startDate: startDate as string, endDate: endDate as string } : null;
+}
+
+export function activityExplorerDateRange(
+  period: ActivityExplorerPeriod, now: Date, customDates?: ActivityExplorerCustomDates | null,
+): { start: Date; end: Date } | null | undefined {
   if (period === 'all') return null;
+  if (period === 'custom') {
+    const dates = normalizeActivityExplorerCustomDates(customDates?.startDate, customDates?.endDate);
+    if (!dates) return undefined;
+    const start = parseLocalDate(dates.startDate)!;
+    const end = parseLocalDate(dates.endDate)!;
+    end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
   const end = new Date(now);
   end.setHours(0, 0, 0, 0);
   end.setDate(end.getDate() + 1);
@@ -34,6 +65,7 @@ export interface ActivityExplorerFilters {
   untagged: boolean;
   sport: string;
   period: ActivityExplorerPeriod;
+  customDates?: ActivityExplorerCustomDates | null;
 }
 
 export function normalizeActivityExplorerSport(value: string): string {
@@ -51,7 +83,8 @@ export function activityExplorerSports(events: readonly ActivityExplorerEvent[],
 export function filterActivityExplorerEvents<T extends ActivityExplorerEvent>(
   events: readonly T[], filters: ActivityExplorerFilters, now = new Date(),
 ): T[] {
-  const range = activityExplorerDateRange(filters.period, now);
+  const range = activityExplorerDateRange(filters.period, now, filters.customDates);
+  if (range === undefined) return [];
   const sport = normalizeActivityExplorerSport(filters.sport);
   return filterEventsByTag(events, filters.tag).filter(event => (
     (!filters.untagged || getEventTags(event).length === 0)

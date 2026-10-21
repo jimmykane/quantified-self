@@ -4,10 +4,14 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSelect, MatSelectChange } from '@angular/material/select';
+import { DateAdapter } from '@angular/material/core';
+import { MatDateRangeInput, MatDateRangePicker } from '@angular/material/datepicker';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { ActivatedRoute, Router, UrlTree, convertToParamMap } from '@angular/router';
 import { By } from '@angular/platform-browser';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
+import dayjs, { type Dayjs } from 'dayjs';
 import { ActivityTypes, DataActivityTypes, DataDeviceNames, DataDistance, EventImporterJSON, FileType, Privacy, DistanceUnits, User, type EventInterface } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
@@ -110,7 +114,10 @@ async function setup(tag = '', realTable = false) {
 async function render(context: Awaited<ReturnType<typeof setup>>) {
   context.fixture.detectChanges();
   await context.fixture.whenStable();
-  await vi.waitFor(() => expect(context.component.loading()).toBe(false));
+  await vi.waitFor(() => {
+    expect(context.component.loading()).toBe(false);
+    expect(context.component.catalogLoading()).toBe(false);
+  });
   context.fixture.detectChanges();
 }
 
@@ -150,6 +157,149 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.filteredEvents()).toEqual([]);
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
     expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
+  });
+
+  it('applies one bounded custom range only after submitting both dates, with inclusive results', async () => {
+    const c = await setup(); await render(c);
+    c.component.selectPeriod('custom'); await render(c);
+    expect(c.component.period()).toBe('month'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Custom dates');
+    expect(c.fixture.nativeElement.querySelector('form[aria-label="Custom activity dates"]')).not.toBeNull();
+    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); await render(c);
+    expect(c.fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+    c.component.applyCustomRange(); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') }); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    const data = [
+      { ...event('before', []), startDate: new Date(2026, 8, 2, 23, 59, 59, 999) },
+      { ...event('first', []), startDate: new Date(2026, 8, 3) },
+      { ...event('last', []), startDate: new Date(2026, 8, 4, 23, 59, 59, 999) },
+      { ...event('after', []), startDate: new Date(2026, 8, 5) },
+    ];
+    c.events.getEventsBy.mockReturnValue(of(data));
+    c.fixture.nativeElement.querySelector('form[aria-label="Custom activity dates"]').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventsBy).toHaveBeenLastCalledWith(c.user$.value, [
+      { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 8, 3).getTime() },
+      { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 8, 5).getTime() },
+    ], 'startDate', false, 0);
+    expect(c.component.filteredEvents().map(event => event.getID())).toEqual(['first', 'last']);
+    expect(c.router.navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
+      queryParams: expect.objectContaining({ period: 'custom', start: '2026-09-03', end: '2026-09-04' }),
+    }));
+    expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    c.component.applyCustomRange(); c.component.selectPeriod('custom'); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
+    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+  });
+
+  it('validates typed custom dates without queries or typing feedback and cancels without changing the range', async () => {
+    const c = await setup(); await render(c); c.component.selectPeriod('custom'); await render(c);
+    const range = c.fixture.debugElement.query(By.directive(MatDateRangeInput));
+    const adapter = range.injector.get(DateAdapter) as DateAdapter<Dayjs>;
+    const type = (label: string, value: string) => {
+      const input = c.fixture.nativeElement.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('blur'));
+    };
+    type('Start date', adapter.format(dayjs('2026-09-03'), 'L'));
+    type('End date', 'invalid'); await render(c);
+    expect(c.component.customDateForm.invalid).toBe(true);
+    expect(c.fixture.nativeElement.querySelector('mat-error').textContent).toContain('Enter valid dates');
+    type('End date', adapter.format(dayjs('2026-09-02'), 'L')); await render(c);
+    c.component.applyCustomRange(); expect(c.component.customDateForm.hasError('dateOrder')).toBe(true);
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    c.component.cancelCustomRange(); await render(c);
+    expect(c.component.period()).toBe('month'); expect(c.component.showCustomRange()).toBe(false);
+    expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 30 days');
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('supports selecting both dates in the calendar without a query until Apply', async () => {
+    const c = await setup(); await render(c); c.component.selectPeriod('custom'); await render(c);
+    c.component.customDateForm.reset({ start: null, end: null });
+    const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
+    picker.startAt = dayjs('2026-09-01');
+    const adapter = c.fixture.debugElement.query(By.directive(MatDateRangeInput)).injector.get(DateAdapter) as DateAdapter<Dayjs>;
+    c.fixture.nativeElement.querySelector('mat-datepicker-toggle button').click(); await render(c);
+    expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelector('mat-calendar')).not.toBeNull();
+    const clickDate = (date: string) => {
+      const label = adapter.format(dayjs(date), 'LL');
+      const cell = Array.from(overlay.querySelectorAll<HTMLElement>('[aria-label]')).find(element => element.getAttribute('aria-label') === label);
+      expect(cell, `Calendar date ${label}`).toBeDefined(); cell!.click();
+    };
+    clickDate('2026-09-03'); await render(c);
+    expect(c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD')).toBe('2026-09-03');
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    clickDate('2026-09-04'); await render(c);
+    expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-04');
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    const apply = c.fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(apply.disabled).toBe(false); apply.click(); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventsBy.mock.lastCall[1][1].value).toBe(new Date(2026, 8, 5).getTime());
+    expect(c.haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('hydrates saved custom dates silently and queries once when only their bounds change', async () => {
+    const c = await setup('Endurance');
+    const query = { tag: 'Endurance', period: 'custom', start: '2026-09-03', end: '2026-09-04' };
+    c.params$.next(convertToParamMap(query)); await render(c);
+    expect(c.component.period()).toBe('custom'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventsBy.mock.lastCall[1]).toEqual([
+      { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 8, 3).getTime() },
+      { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 8, 5).getTime() },
+    ]);
+    expect(c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD')).toBe(query.start);
+    c.params$.next(convertToParamMap(query)); await render(c); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.params$.next(convertToParamMap({ ...query, end: '2026-09-05' })); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventsBy.mock.lastCall[1][1].value).toBe(new Date(2026, 8, 6).getTime());
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    c.component.customDateForm.controls.end.setValue(dayjs('2026-09-09')); c.component.customDateForm.markAsDirty();
+    c.component.cancelCustomRange(); await render(c);
+    expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-05');
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    c.component.selectTag('Race day'); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    c.component.selectPeriod('week'); await render(c);
+    expect(c.component.customDates()).toBeNull(); expect(c.component.showCustomRange()).toBe(false);
+    expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'week', start: null, end: null });
+  });
+
+  it.each([
+    { period: 'custom' },
+    { period: 'custom', start: '2026-10-02', end: '2026-10-01' },
+    { period: 'custom', start: '2026-02-30', end: '2026-03-01' },
+  ])('falls back to the bounded default for an invalid custom link: %j', async query => {
+    const c = await setup(); c.params$.next(convertToParamMap(query)); await render(c);
+    expect(c.component.period()).toBe('month'); expect(c.component.customDates()).toBeNull();
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.router.navigate.mock.lastCall[1]).toMatchObject({ replaceUrl: true, queryParams: { period: 'month', start: null, end: null } });
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('keeps fixed custom bounds across midnight and does not discard unsubmitted edits on a tag URL update', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 21, 23, 59));
+    try {
+      const c = await setup();
+      const query = { period: 'custom', start: '2026-10-01', end: '2026-10-21' };
+      c.params$.next(convertToParamMap(query)); await render(c);
+      c.component.customDateForm.controls.end.setValue(dayjs('2026-10-25')); c.component.customDateForm.markAsDirty();
+      c.params$.next(convertToParamMap({ ...query, tag: 'Endurance' })); await render(c);
+      expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-10-25');
+      vi.setSystemTime(new Date(2026, 9, 22, 0, 1)); c.component.refreshLocalDay(); await render(c);
+      expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+      c.component.clearFilters(); await render(c);
+      expect(c.component.period()).toBe('month'); expect(c.component.customDates()).toBeNull();
+      expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
   });
 
   it('places All dates last and keeps the displayed range and query until confirmation', async () => {

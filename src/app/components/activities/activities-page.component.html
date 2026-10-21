@@ -41,8 +41,8 @@
           </mat-form-field>
           <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
             <mat-label>Date range</mat-label>
-            <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
-              <mat-select-trigger>{{ periodLabel() }}</mat-select-trigger>
+            <mat-select [value]="rangeSelectorValue()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
+              <mat-select-trigger>{{ rangeSelectorLabel() }}</mat-select-trigger>
               @for (period of periods; track period.value) {
                 <mat-option [value]="period.value">
                   @if (period.value === 'all') { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
@@ -58,6 +58,24 @@
               @for (sport of sports(); track sport) { <mat-option [value]="sport">{{ sport }}</mat-option> }
             </mat-select>
           </mat-form-field>
+          @if (showCustomRange()) {
+            <form class="activity-custom-range" [formGroup]="customDateForm" (ngSubmit)="applyCustomRange()" aria-label="Custom activity dates">
+              <mat-form-field class="activity-custom-date-field" appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Custom dates</mat-label>
+                <mat-date-range-input [rangePicker]="customPicker">
+                  <input matStartDate formControlName="start" placeholder="Start date" aria-label="Start date">
+                  <input matEndDate formControlName="end" placeholder="End date" aria-label="End date">
+                </mat-date-range-input>
+                <mat-datepicker-toggle appHapticTap matIconSuffix [for]="customPicker"></mat-datepicker-toggle>
+                <mat-date-range-picker #customPicker></mat-date-range-picker>
+                <mat-hint>Both dates are included. Choose dates, then Apply.</mat-hint>
+                <mat-error>Enter valid dates with the end on or after the start.</mat-error>
+              </mat-form-field>
+              <button mat-flat-button type="submit" [disabled]="customDateForm.invalid || (period() === 'custom' && customDateForm.pristine)">Apply</button>
+              <button mat-button type="button" (click)="cancelCustomRange()"
+                [disabled]="!customRangeOpen() && customDateForm.pristine">Cancel</button>
+            </form>
+          }
         </div>
         @if (hasFilters()) {
           <div event-table-active-filters class="activity-active-filters">
@@ -68,7 +86,9 @@
                 </mat-chip>
               }
               @if (period() !== defaultPeriod) {
-                <mat-chip (removed)="selectPeriod(defaultPeriod)">{{ periodLabel() }}
+                <mat-chip (removed)="selectPeriod(defaultPeriod)">
+                  @if (period() === 'custom') { {{ customDates()?.startDate | date:'mediumDate' }} – {{ customDates()?.endDate | date:'mediumDate' }} }
+                  @else { {{ periodLabel() }} }
                   <button matChipRemove aria-label="Remove date filter"><mat-icon>cancel</mat-icon></button>
                 </mat-chip>
               }

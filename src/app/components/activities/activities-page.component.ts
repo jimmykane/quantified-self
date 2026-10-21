@@ -1,17 +1,19 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnInit, afterNextRender, computed, inject, signal } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
 import { combineLatest, Subscription, take } from 'rxjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
 import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
-import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerSport, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
+import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, normalizeActivityExplorerSport, type ActivityExplorerCustomDates, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { ConfirmationDialogComponent, type ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
@@ -58,6 +60,18 @@ export class ActivitiesPageComponent implements OnInit {
   readonly defaultPeriod: ActivityExplorerPeriod = 'month';
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
+  readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
+  readonly customRangeOpen = signal(false);
+  readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
+  readonly rangeSelectorValue = computed(() => this.customRangeOpen() ? 'custom' : this.period());
+  readonly rangeSelectorLabel = computed(() => this.customRangeOpen() ? 'Custom dates' : this.periodLabel());
+  readonly customDateForm = new FormGroup({
+    start: new FormControl<Dayjs | null>(null, Validators.required),
+    end: new FormControl<Dayjs | null>(null, Validators.required),
+  }, { validators: control => {
+    const { start, end } = control.value;
+    return start?.isValid() && end?.isValid() && end.isBefore(start, 'day') ? { dateOrder: true } : null;
+  } });
   readonly untagged = signal(false);
   readonly untaggedOption = { untagged: true } as const;
   readonly loading = signal(false);
@@ -71,6 +85,7 @@ export class ActivitiesPageComponent implements OnInit {
   readonly sports = computed(() => activityExplorerSports(this.events(), this.selectedSport(), true));
   readonly filters = computed(() => ({
     tag: this.selectedTag(), untagged: this.untagged(), sport: this.selectedSport(), period: this.period(),
+    customDates: this.period() === 'custom' ? this.customDates() : null,
   }));
   readonly filterContext = computed(() => JSON.stringify(this.filters()));
   readonly hasFilters = computed(() => !!this.selectedTag() || this.untagged() || !!this.selectedSport() || this.period() !== this.defaultPeriod);
@@ -96,7 +111,7 @@ export class ActivitiesPageComponent implements OnInit {
     const next = new Date().setHours(0, 0, 0, 0);
     if (next === this.localDayStartMs()) return;
     this.localDayStartMs.set(next);
-    if (this.user() && this.period() !== 'all') this.loadHistory();
+    if (this.user() && this.period() !== 'all' && this.period() !== 'custom') this.loadHistory();
   }
 
   @HostListener('document:visibilitychange')
@@ -117,16 +132,26 @@ export class ActivitiesPageComponent implements OnInit {
       this.selectedTag.set(tag);
       this.untagged.set(!tag && params.get('untagged') === '1');
       this.selectedSport.set(normalizeActivityExplorerSport((params.get('sport') || '').trim().slice(0, 100)));
-      const period = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
+      const requestedPeriod = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
+      const customDates = requestedPeriod === 'custom' ? normalizeActivityExplorerCustomDates(params.get('start'), params.get('end')) : null;
+      const period = requestedPeriod === 'custom' && !customDates ? this.defaultPeriod : requestedPeriod;
       this.urlPeriod = period;
       if (period === 'all' && this.period() !== 'all') {
         this.confirmAllDates();
         return;
       }
       this.closeAllDatesWarning();
+      const rangeChanged = previousPeriod !== period || (period === 'custom'
+        && (customDates?.startDate !== this.customDates()?.startDate || customDates?.endDate !== this.customDates()?.endDate));
+      this.customDates.set(customDates);
       this.period.set(period);
-      if (previousPeriod !== this.period() && this.user()) this.loadHistory();
+      if (rangeChanged) {
+        this.customRangeOpen.set(false);
+        if (period === 'custom') this.resetCustomDateForm();
+      }
+      if (rangeChanged && this.user()) this.loadHistory();
       else this.refreshLocalDay();
+      if (requestedPeriod === 'custom' && !customDates) this.updateUrl(true);
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([profile, owner]) => {
@@ -136,6 +161,8 @@ export class ActivitiesPageComponent implements OnInit {
           return;
         }
         this.closeAllDatesWarning();
+        this.customRangeOpen.set(false);
+        if (this.period() === 'custom') this.resetCustomDateForm();
         if (this.period() === 'all') this.period.set(this.defaultPeriod);
         this.owner = owner;
         this.user.set(nextUser);
@@ -174,7 +201,19 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   selectPeriod(period: ActivityExplorerPeriod, select?: MatSelect): void {
-    if (period === this.period()) return;
+    if (period === 'custom') {
+      if (this.showCustomRange()) return;
+      this.closeAllDatesWarning();
+      this.resetCustomDateForm();
+      this.customRangeOpen.set(true);
+      this.haptics.selection();
+      return;
+    }
+    if (period === this.period()) {
+      if (this.customRangeOpen()) this.cancelCustomRange();
+      return;
+    }
+    this.customRangeOpen.set(false);
     if (period === 'all') {
       // Keep the displayed range consistent with its data while awaiting confirmation.
       if (select) select.value = this.period();
@@ -183,20 +222,52 @@ export class ActivitiesPageComponent implements OnInit {
     }
     this.closeAllDatesWarning();
     this.period.set(period);
+    this.customDates.set(null);
     this.loadHistory(true);
     this.filtersChanged();
   }
 
   clearFilters(): void {
     this.closeAllDatesWarning();
+    this.customRangeOpen.set(false);
     if (!this.hasFilters()) return;
     this.selectedTag.set('');
     this.untagged.set(false);
     this.selectedSport.set('');
     const periodChanged = this.period() !== this.defaultPeriod;
     this.period.set(this.defaultPeriod);
+    this.customDates.set(null);
     if (periodChanged) this.loadHistory(true);
     this.filtersChanged();
+  }
+
+  applyCustomRange(): void {
+    this.customDateForm.markAllAsTouched();
+    if (this.customDateForm.invalid || !this.user() || this.owner !== this.auth.currentUser) return;
+    const { start, end } = this.customDateForm.getRawValue();
+    const dates = normalizeActivityExplorerCustomDates(start?.format('YYYY-MM-DD'), end?.format('YYYY-MM-DD'));
+    if (!dates) return;
+    this.customRangeOpen.set(false);
+    this.customDateForm.markAsPristine();
+    if (this.period() === 'custom' && dates.startDate === this.customDates()?.startDate && dates.endDate === this.customDates()?.endDate) return;
+    this.closeAllDatesWarning();
+    this.customDates.set(dates);
+    this.period.set('custom');
+    this.loadHistory(true);
+    this.filtersChanged();
+  }
+
+  cancelCustomRange(): void {
+    if (!this.showCustomRange() || (!this.customRangeOpen() && this.customDateForm.pristine)) return;
+    this.customRangeOpen.set(false);
+    this.resetCustomDateForm();
+    this.haptics.selection();
+  }
+
+  private resetCustomDateForm(): void {
+    const now = new Date(this.localDayStartMs());
+    const range = activityExplorerDateRange(this.period(), now, this.customDates()) || activityExplorerDateRange(this.defaultPeriod, now)!;
+    this.customDateForm.reset({ start: dayjs(range.start), end: dayjs(range.end).subtract(1, 'day') });
   }
 
   private filtersChanged(): void {
@@ -225,6 +296,7 @@ export class ActivitiesPageComponent implements OnInit {
       if (this.user()?.uid !== user.uid || this.owner !== owner || owner !== this.auth.currentUser) return;
       if (confirmed === true) {
         this.period.set('all');
+        this.customDates.set(null);
         this.loadHistory(true);
         // ConfirmationDialogComponent owns feedback for its confirmation button.
         this.updateUrl();
@@ -249,6 +321,8 @@ export class ActivitiesPageComponent implements OnInit {
       queryParams: {
         tag: this.selectedTag() || null, untagged: this.untagged() ? '1' : null,
         sport: this.selectedSport() || null, period: this.period(), order: null,
+        start: this.period() === 'custom' ? this.customDates()?.startDate : null,
+        end: this.period() === 'custom' ? this.customDates()?.endDate : null,
       },
       queryParamsHandling: 'merge',
       replaceUrl,
@@ -329,7 +403,11 @@ export class ActivitiesPageComponent implements OnInit {
     this.loading.set(!!user);
     if (!user) return;
     const generation = this.generation;
-    const range = activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()));
+    const range = activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates());
+    if (range === undefined) {
+      this.loading.set(false);
+      return;
+    }
     // Match Dashboard's stored numeric date bounds and full selected-range query.
     const where = range ? [
       { fieldPath: 'startDate', opStr: '>=', value: range.start.getTime() },

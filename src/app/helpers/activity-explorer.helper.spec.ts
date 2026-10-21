@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
+import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, type ActivityExplorerFilters } from './activity-explorer.helper';
 
 const now = new Date(2026, 9, 21, 12);
 const filters: ActivityExplorerFilters = { tag: '', untagged: false, sport: '', period: 'all' };
@@ -11,11 +11,52 @@ describe('Activity explorer date-range filters', () => {
   it('places All dates after every bounded date range', () => {
     expect(ACTIVITY_EXPLORER_PERIODS.at(-1)).toEqual({ value: 'all', label: 'All dates' });
     for (const period of ACTIVITY_EXPLORER_PERIODS.slice(0, -1)) {
-      expect(activityExplorerDateRange(period.value, now)).not.toBeNull();
+      expect(activityExplorerDateRange(period.value, now, { startDate: '2026-10-01', endDate: '2026-10-21' })).toBeTruthy();
     }
   });
   it('offers canonical sports beyond the current range', () => {
     expect(activityExplorerSports([], '', true)).toContain('Running');
+  });
+  it('includes both custom dates and uses the next local midnight as its exclusive bound', () => {
+    const customDates = { startDate: '2026-10-24', endDate: '2026-10-25' };
+    expect(activityExplorerDateRange('custom', now, customDates)).toEqual({
+      start: new Date(2026, 9, 24), end: new Date(2026, 9, 26),
+    });
+    const records = [
+      event([], ['Running'], new Date(2026, 9, 23, 23, 59, 59)),
+      event([], ['Running'], new Date(2026, 9, 24)),
+      event([], ['Running'], new Date(2026, 9, 25, 23, 59, 59, 999)),
+      event([], ['Running'], new Date(2026, 9, 26)),
+    ];
+    expect(filterActivityExplorerEvents(records, { ...filters, period: 'custom', customDates }, now)).toEqual(records.slice(1, 3));
+    expect(activityExplorerDateRange('custom', now, { startDate: '2024-02-29', endDate: '2024-02-29' }))
+      .toEqual({ start: new Date(2024, 1, 29), end: new Date(2024, 2, 1) });
+  });
+
+  it('preserves local day boundaries across both daylight-saving transitions', () => {
+    const previousTimezone = process.env.TZ;
+    process.env.TZ = 'Europe/Helsinki';
+    try {
+      const autumn = activityExplorerDateRange('custom', now, { startDate: '2026-10-24', endDate: '2026-10-25' })!;
+      const spring = activityExplorerDateRange('custom', now, { startDate: '2026-03-28', endDate: '2026-03-29' })!;
+      expect(autumn.start).toEqual(new Date(2026, 9, 24)); expect(autumn.end).toEqual(new Date(2026, 9, 26));
+      expect(spring.start).toEqual(new Date(2026, 2, 28)); expect(spring.end).toEqual(new Date(2026, 2, 30));
+      expect(autumn.end.getTime() - autumn.start.getTime()).toBe(49 * 60 * 60 * 1000);
+      expect(spring.end.getTime() - spring.start.getTime()).toBe(47 * 60 * 60 * 1000);
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTimezone;
+    }
+  });
+
+  it.each([
+    [null, null], ['2026-10-01', null], ['2026-10-22', '2026-10-21'],
+    ['2026-02-29', '2026-03-01'], ['2026-13-01', '2026-13-02'],
+    ['2026-10-01T00:00:00Z', '2026-10-21'], ['2026-1-1', '2026-10-21'],
+  ])('rejects invalid or incomplete custom dates (%s, %s) without treating them as All dates', (startDate, endDate) => {
+    expect(normalizeActivityExplorerCustomDates(startDate, endDate)).toBeNull();
+    expect(activityExplorerDateRange('custom', now)).toBeUndefined();
+    expect(filterActivityExplorerEvents([event([])], { ...filters, period: 'custom' }, now)).toEqual([]);
   });
   it('defines familiar date ranges with an inclusive first day and exclusive tomorrow', () => {
     expect(activityExplorerDateRange('all', now)).toBeNull();
