@@ -282,7 +282,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(overlay.data).toEqual([]);
     expect(overlay.markLine!.data[0].tooltip.formatter()).toContain('Travel');
     // Notes use native tooltips; editing stays in the keyboard-accessible workspace manager.
-    expect(chart.on).not.toHaveBeenCalled();
+    expect(chart.on.mock.calls).toEqual([['finished', expect.any(Function)]]);
     expect(context.select).not.toHaveBeenCalled();
 
     fixture.componentRef.setInput('timelineNotes', { ...context, notes: [] });
@@ -293,7 +293,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(context.reportRange).toHaveBeenCalledOnce();
     expect(context.select).not.toHaveBeenCalled();
     fixture.destroy();
-    expect(chart.off).not.toHaveBeenCalled();
+    expect(chart.off.mock.calls).toEqual([['finished', chart.on.mock.calls[0][1]]]);
     expect(context.reportRange).toHaveBeenLastCalledWith(expect.anything(), null);
   });
 });
