@@ -1,0 +1,95 @@
+<section class="qs-workspace-page activities-page">
+  <app-page-header title="Activities" leadingIcon="list_alt" subtitle="Your activity history, with tags when you need them.">
+    <button pageHeaderTitleActions mat-icon-button aria-label="Refresh activities" (click)="refresh()"
+      [disabled]="loading() || catalogLoading() || !user()">
+      @if (loading() || catalogLoading()) { <mat-spinner diameter="20" aria-label="Refreshing activities"></mat-spinner> }
+      @else { <mat-icon>refresh</mat-icon> }
+    </button>
+  </app-page-header>
+
+  @if (user()) {
+    <div class="activity-history-scope" aria-live="polite">
+      <span>{{ events().length }} activities loaded</span>
+      <span>{{ complete() ? 'All activity history loaded' : 'Filters and search cover loaded history' }}</span>
+    </div>
+    @if (catalogError()) {
+      <div class="activity-catalog-error" role="alert">
+        <span>Saved tags could not be loaded. Tags from loaded activities are still available.</span>
+        <button mat-button (click)="retryCatalog()" [disabled]="catalogLoading()">Try again</button>
+      </div>
+    }
+    @for (tableUser of tableUsers(); track tableUser.uid) {
+      <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true" presentation="dashboard"
+        [isLoading]="loading() && !historyLoaded()" [showTagFilter]="false"
+        [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
+        [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
+        (eventsChange)="onEventsChange($event)">
+        <div event-table-filters class="activity-explorer-filters">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Tags</mat-label>
+            <mat-select [value]="tagFilterValue()" (selectionChange)="selectTag($event.value)" aria-label="Tags">
+              <mat-option value="">All tags</mat-option>
+              <mat-option [value]="untaggedOption">Untagged</mat-option>
+              @if (catalogLoading() && !library().length) { <mat-option disabled>Loading tags…</mat-option> }
+              @for (tag of library(); track tag.key) { <mat-option [value]="tag.name">{{ tag.name }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Date range</mat-label>
+            <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value)" aria-label="Date range">
+              <mat-option value="all">All loaded history</mat-option>
+              <mat-option value="week">Last 7 days</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Sport</mat-label>
+            <mat-select [value]="selectedSport()" (selectionChange)="selectSport($event.value)" aria-label="Sport">
+              <mat-option value="">All sports</mat-option>
+              @for (sport of sports(); track sport) { <mat-option [value]="sport">{{ sport }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+        </div>
+        @if (hasFilters()) {
+          <div event-table-active-filters class="activity-active-filters">
+            <mat-chip-set aria-label="Active activity filters">
+              @if (selectedTag() || untagged()) {
+                <mat-chip (removed)="selectTag('')"><mat-icon matChipAvatar>sell</mat-icon>{{ untagged() ? 'Untagged' : selectedName() }}
+                  <button matChipRemove aria-label="Remove tag filter"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+              @if (period() !== 'all') {
+                <mat-chip (removed)="selectPeriod('all')">Last 7 days
+                  <button matChipRemove aria-label="Remove date filter"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+              @if (selectedSport()) {
+                <mat-chip (removed)="selectSport('')">{{ selectedSport() }}
+                  <button matChipRemove aria-label="Remove sport filter"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+            </mat-chip-set>
+            <button mat-button (click)="clearFilters()">Clear filters</button>
+          </div>
+        }
+      </app-event-table>
+    }
+    @if (!complete()) {
+      <div class="activity-history-status" aria-live="polite">
+        <div>
+          @if (loading()) { <span>Loading {{ historyLoaded() ? 'older' : 'recent' }} activities…</span> }
+          @else if (historyError()) { <span role="alert">Activities could not be loaded. Loaded activities remain available.</span> }
+          @else if (hasMore()) { <span>Older history is available. Load more activities to search further back.</span> }
+        </div>
+        @if (hasMore()) {
+          <button mat-stroked-button (click)="loadOlderActivities()" [disabled]="loading()">
+            <span class="activity-history-button-content">
+              @if (loading()) { <mat-spinner diameter="18" aria-label="Loading activities"></mat-spinner> }
+              @else { <mat-icon>history</mat-icon> }
+              <span>{{ historyError() ? 'Try again' : 'Load older activities' }}</span>
+            </span>
+          </button>
+        }
+      </div>
+    }
+  }
+</section>
