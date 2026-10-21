@@ -1,3 +1,4 @@
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { By } from '@angular/platform-browser';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { DateAdapter } from '@angular/material/core';
@@ -19,7 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { EventSearchComponent, Search } from './event-search.component';
-import { ActivityTypesFilterMenuComponent } from '../activity-types-filter-menu/activity-types-filter-menu.component';
+import { ActivityTypesMultiSelectComponent } from '../activity-types-multi-select/activity-types-multi-select.component';
 import { MaterialModule } from '../../modules/material.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -28,12 +29,15 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   selector: 'app-merged-filter-test-host',
   standalone: false,
   template: `<app-event-search class="table-toolbar-layout compact-filter-layout"
-    [compact]="true" [toolbarRangeLayout]="true" [selectedDateRange]="range"
-    [startOfTheWeek]="weekStart" [selectedActivityTypes]="[]" [showMergedEventsToggle]="true"
+    [compact]="true" [toolbarRangeLayout]="toolbar" [selectedDateRange]="range"
+    [startOfTheWeek]="weekStart" [selectedActivityTypes]="sports" [availableActivityTypes]="availableSports" [showMergedEventsToggle]="true"
     [includeMergedEvents]="includeMerged" [mergedEventsToggleDisabled]="disabled"
     (searchChange)="onSearch($event)"></app-event-search>`,
 })
 class MergedFilterTestHost {
+  toolbar = true;
+  sports: ActivityTypes[] = [];
+  availableSports?: ActivityTypes[];
   range = DateRanges.thisWeek;
   weekStart = DaysOfTheWeek.Monday;
   includeMerged = true;
@@ -55,9 +59,10 @@ describe('Merged toolbar filter rendering', () => {
   beforeEach(async () => {
     haptics.selection.mockClear();
     await TestBed.configureTestingModule({
-      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesFilterMenuComponent],
+      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesMultiSelectComponent],
       imports: [ActivityFilterPickerComponent, MergedActivitiesToggleComponent, CommonModule, ReactiveFormsModule, NoopAnimationsModule, MaterialModule, AppChartSharedModule],
-      providers: [{ provide: AppHapticsService, useValue: haptics }],
+      providers: [{ provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } }],
     }).compileComponents();
   });
 
@@ -115,6 +120,24 @@ describe('Merged toolbar filter rendering', () => {
     expect(fixture.componentInstance.requests).toHaveLength(2);
     expect(fixture.componentInstance.requests[1].dateRange).toBe(DateRanges.lastThirtyDays);
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+  });
+
+  it('uses the same sport picker in the My Tracks layout and preserves available and selected no-match sports', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance; host.toolbar = false;
+    host.sports = [ActivityTypes.Running]; host.availableSports = [ActivityTypes.Cycling];
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input[aria-label="Sports"]') as HTMLInputElement;
+    expect(trigger).toBeTruthy(); trigger.click(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect([...overlay.querySelectorAll('mat-list-option')].map(option => option.getAttribute('aria-label'))).toEqual(['Cycling', 'Running']);
+    expect(host.requests).toEqual([]); expect(haptics.selection).toHaveBeenCalledOnce();
+    (overlay.querySelector('[aria-label="Cycling"]') as HTMLElement).click(); await settle();
+    expect(host.requests).toEqual([expect.objectContaining({ activityTypes: [ActivityTypes.Running, ActivityTypes.Cycling], dateRange: DateRanges.thisWeek })]);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(host.requests).toHaveLength(1);
   });
 
   it('follows parent preferences silently and accepts one action after being enabled', async () => {

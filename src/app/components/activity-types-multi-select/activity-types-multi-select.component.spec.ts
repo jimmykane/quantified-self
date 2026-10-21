@@ -1,163 +1,92 @@
 import { TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
-import { ReactiveFormsModule } from '@angular/forms';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { MatCheckbox, MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatIconModule } from '@angular/material/icon';
-import { MatButtonModule } from '@angular/material/button';
-import { AppUserService } from '../../services/app.user.service';
-import { AppHapticsService } from '../../services/app.haptics.service';
-import { SimpleChange } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypesMultiSelectComponent } from './activity-types-multi-select.component';
 import { CompatibleTrainingActivityTypes } from '@shared/activity-type-compatibility';
+import { ActivityTypesMultiSelectComponent } from './activity-types-multi-select.component';
+import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 describe('ActivityTypesMultiSelectComponent', () => {
-  function createComponent(): ActivityTypesMultiSelectComponent {
-    const component = new ActivityTypesMultiSelectComponent({} as any);
-    component.ngOnInit();
-    return component;
-  }
-
-  it('does not reset the form control for equivalent selected activity inputs', () => {
-    const component = createComponent();
-    const setValueSpy = vi.spyOn(component.activityTypesControl, 'setValue');
-
-    component.selectedActivityTypes = [ActivityTypes.Running];
-    component.ngOnChanges({
-      selectedActivityTypes: new SimpleChange(undefined, [ActivityTypes.Running], true),
-    });
-
-    component.selectedActivityTypes = [ActivityTypes.Running];
-    component.ngOnChanges({
-      selectedActivityTypes: new SimpleChange([ActivityTypes.Running], [ActivityTypes.Running], false),
-    });
-
-    expect(setValueSpy).toHaveBeenCalledTimes(1);
-    expect(setValueSpy).toHaveBeenCalledWith(expect.any(Array), { emitEvent: false });
-  });
-
-  it('clears stale selected models when selected activity inputs become empty', () => {
-    const component = createComponent();
-
-    component.selectedActivityTypes = [ActivityTypes.Running];
-    component.ngOnChanges({
-      selectedActivityTypes: new SimpleChange(undefined, [ActivityTypes.Running], true),
-    });
-
-    component.selectedActivityTypes = [];
-    component.ngOnChanges({
-      selectedActivityTypes: new SimpleChange([ActivityTypes.Running], [], false),
-    });
-
-    expect(component.selectedActivityTypesSelectionModel).toEqual([]);
-    expect(component.activityTypesSelectionModelList.some(model => model.selected)).toBe(false);
-  });
-
-  it('clears local selected models immediately when the clear action is used', () => {
-    const component = createComponent();
-    const emittedValues: ActivityTypes[][] = [];
-    component.selectedActivityTypesChange.subscribe(value => emittedValues.push(value));
-
-    component.selectedActivityTypes = [ActivityTypes.Running];
-    component.ngOnChanges({
-      selectedActivityTypes: new SimpleChange(undefined, [ActivityTypes.Running], true),
-    });
-
-    component.clearSelection();
-
-    expect(component.selectedActivityTypes).toEqual([]);
-    expect(component.selectedActivityTypesSelectionModel).toEqual([]);
-    expect(component.activityTypesSelectionModelList.some(model => model.selected)).toBe(false);
-    expect(component.activityTypesControl.value).toEqual([]);
-    expect(emittedValues).toEqual([[]]);
-  });
-  it('keeps subsets exact until an explicit family checkbox change, with one haptic owner', () => {
+  const create = () => {
     const selection = vi.fn();
-    const component = new ActivityTypesMultiSelectComponent({} as any, { selection } as unknown as AppHapticsService);
-    component.ngOnInit();
-    component.selectedActivityTypes = [ActivityTypes.Cycling];
-    component.availableActivityTypes = [ActivityTypes.Cycling, ActivityTypes.MountainBiking];
-    component.ngOnChanges({ selectedActivityTypes: new SimpleChange([], component.selectedActivityTypes, true) });
-    expect(component.selectedActivityTypes).toEqual([ActivityTypes.Cycling]);
-    expect(component.activityFamilyOptions[0].partial).toBe(true);
-    expect(selection).not.toHaveBeenCalled();
-    component.toggleFamily(component.activityFamilyOptions[0], true);
-    expect(component.selectedActivityTypes).toEqual([ActivityTypes.Cycling, ActivityTypes.MountainBiking]);
-    expect(selection).toHaveBeenCalledTimes(1);
-    component.toggleFamily(component.activityFamilyOptions[0], true);
-    expect(selection).toHaveBeenCalledTimes(1);
-    component.disabled = true;
-    component.clearSelection();
-    component.toggleFamily(component.activityFamilyOptions[0], false);
-    expect(selection).toHaveBeenCalledTimes(1);
+    const component = new ActivityTypesMultiSelectComponent({ selection } as unknown as AppHapticsService);
+    const emitted: ActivityTypes[][] = [];
+    component.selectedActivityTypesChange.subscribe(value => emitted.push(value));
+    return { component, selection, emitted };
+  };
+
+  it('hydrates exact subsets and aliases silently and offers supported catalog types', () => {
+    const c = create(); c.component.selectedActivityTypes = ['cycling' as ActivityTypes]; c.component.ngOnChanges();
+    expect(c.component.selectedActivityTypes).toEqual([ActivityTypes.Cycling]);
+    expect(c.component.options.some(option => option.value === ActivityTypes.Snorkeling)).toBe(true);
+    expect(c.component.options.some(option => option.value === ActivityTypes.Mermaiding)).toBe(true);
+    c.component.ngOnChanges(); expect(c.emitted).toEqual([]); expect(c.selection).not.toHaveBeenCalled();
   });
 
-  it('offers no family shortcut for an empty available context while retaining selected individual types', () => {
-    const component = createComponent();
-    component.availableActivityTypes = [];
-    component.selectedActivityTypes = [ActivityTypes.Running];
-    component.ngOnChanges({ selectedActivityTypes: new SimpleChange([], component.selectedActivityTypes, true), availableActivityTypes: new SimpleChange(null, [], true) });
-    expect(component.activityFamilyOptions).toEqual([]);
-    expect(component.filter('').map(model => model.activityType)).toEqual([ActivityTypes.Running]);
+  it('retains selected no-match sports and catalog bridges, with no families for an empty context', () => {
+    const c = create(); c.component.availableActivityTypes = [];
+    c.component.selectedActivityTypes = [CompatibleTrainingActivityTypes.RoadRunning]; c.component.ngOnChanges();
+    expect(c.component.options.map(option => option.value)).toEqual([CompatibleTrainingActivityTypes.RoadRunning]);
+    expect(c.component.shortcuts).toEqual([]); expect(c.emitted).toEqual([]); expect(c.selection).not.toHaveBeenCalled();
+    c.component.selectSports([]);
+    expect(c.component.options).toEqual([]); expect(c.emitted).toEqual([[]]); expect(c.selection).toHaveBeenCalledOnce();
   });
 
-  it('hydrates and removes an exact catalog bridge without silently expanding its family', () => {
+  it('limits context choices, preserves active no-match choices and ignores invalid new sports', () => {
+    const c = create(); c.component.availableActivityTypes = [ActivityTypes.Cycling];
+    c.component.selectedActivityTypes = [ActivityTypes.Running]; c.component.ngOnChanges();
+    expect(c.component.options.map(option => option.value)).toEqual([ActivityTypes.Cycling, ActivityTypes.Running]);
+    c.component.selectSports([ActivityTypes.Yoga]);
+    expect(c.component.selectedActivityTypes).toEqual([]); expect(c.emitted).toEqual([[]]);
+    expect(c.component.options.map(option => option.value)).toEqual([ActivityTypes.Cycling]);
+  });
+
+  it('accepts changed multi-selections once, clears immediately and ignores disabled actions', () => {
+    const c = create(); c.component.ngOnChanges();
+    c.component.selectSports([ActivityTypes.Running, ActivityTypes.Cycling]);
+    c.component.selectSports([ActivityTypes.Cycling, ActivityTypes.Running]);
+    expect(c.emitted).toEqual([[ActivityTypes.Running, ActivityTypes.Cycling]]); expect(c.selection).toHaveBeenCalledOnce();
+    c.component.selectSports([]); expect(c.component.selectedActivityTypes).toEqual([]); expect(c.selection).toHaveBeenCalledTimes(2);
+    c.component.disabled = true; c.component.selectSports([ActivityTypes.Running]); expect(c.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains locked sports through clearing and ignores unchanged input hydration', () => {
+    const c = create(); c.component.lockedActivityTypes = [ActivityTypes.Diving];
+    c.component.selectedActivityTypes = [ActivityTypes.Running]; c.component.ngOnChanges();
+    expect(c.component.selectedActivityTypes).toEqual([ActivityTypes.Running, ActivityTypes.Diving]);
+    expect(c.component.options.find(option => option.value === ActivityTypes.Diving)?.disabled).toBe(true);
+    expect(c.emitted).toEqual([]); c.component.selectSports([]);
+    expect(c.emitted).toEqual([[ActivityTypes.Diving]]); c.component.selectSports([]); c.component.ngOnChanges();
+    expect(c.selection).toHaveBeenCalledOnce();
+  });
+
+  it('uses the shared dialog, sport icons, search and semantic family checkbox events', async () => {
     const selection = vi.fn();
-    const component = new ActivityTypesMultiSelectComponent({} as any, { selection } as unknown as AppHapticsService);
-    component.ngOnInit();
-    let visibleTypes: string[] = [];
-    const subscription = component.filteredActivityTypes.subscribe(models => {
-      visibleTypes = models.map(model => model.activityType);
-    });
-    const emit = vi.spyOn(component.selectedActivityTypesChange, 'emit');
-    const savedType = CompatibleTrainingActivityTypes.RoadRunning;
-    component.selectedActivityTypes = [savedType];
-    component.availableActivityTypes = [];
-    component.ngOnChanges({ selectedActivityTypes: new SimpleChange([], [savedType], true) });
-
-    expect(component.selectedActivityTypes).toEqual([savedType]);
-    expect(visibleTypes).toEqual([savedType]);
-    expect(component.displayFn(component.selectedActivityTypesSelectionModel)).toBe(savedType);
-    expect(component.activityFamilyOptions).toEqual([]);
-    expect(emit).not.toHaveBeenCalled();
-    expect(selection).not.toHaveBeenCalled();
-
-    component.ngOnChanges({ selectedActivityTypes: new SimpleChange([savedType], [savedType], false) });
-    expect(emit).not.toHaveBeenCalled();
-    const savedModel = component.selectedActivityTypesSelectionModel[0];
-    component.toggleSelection(savedModel);
-    expect(component.selectedActivityTypes).toEqual([]);
-    expect(visibleTypes).toEqual([]);
-    expect(emit).toHaveBeenCalledExactlyOnceWith([]);
-    expect(selection).toHaveBeenCalledTimes(1);
-    subscription.unsubscribe();
-  });
-
-  it('renders Material family checkboxes and updates exact choices through their semantic change event', async () => {
-    const selection = vi.fn();
-    await TestBed.configureTestingModule({
-      declarations: [ActivityTypesMultiSelectComponent],
-      imports: [ReactiveFormsModule, MatAutocompleteModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatIconModule, MatButtonModule],
-      providers: [{ provide: AppUserService, useValue: {} }, { provide: AppHapticsService, useValue: { selection } }],
-    }).compileComponents();
+    TestBed.configureTestingModule({ declarations: [ActivityTypesMultiSelectComponent], imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [
+      { provide: AppHapticsService, useValue: { selection } },
+      { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+    ] });
     const fixture = TestBed.createComponent(ActivityTypesMultiSelectComponent);
     fixture.componentRef.setInput('selectedActivityTypes', [ActivityTypes.Running]);
     fixture.componentRef.setInput('availableActivityTypes', [ActivityTypes.Running, ActivityTypes.Treadmill]);
-    fixture.detectChanges();
-    const checkbox = fixture.debugElement.query(By.directive(MatCheckbox));
-    expect(checkbox.componentInstance.indeterminate).toBe(true);
-    expect(fixture.nativeElement.querySelector('[role="group"]').getAttribute('aria-label')).toBe('Activity families');
-    checkbox.triggerEventHandler('change', { checked: true });
-    fixture.detectChanges();
-    expect(checkbox.componentInstance.checked).toBe(true);
-    expect(checkbox.componentInstance.indeterminate).toBe(false);
+    const emit = vi.spyOn(fixture.componentInstance.selectedActivityTypesChange, 'emit');
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle(); expect(selection).not.toHaveBeenCalled();
+    const trigger = fixture.nativeElement.querySelector('input') as HTMLInputElement; trigger.focus(); trigger.click(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelector('input[aria-label="Search sports"]')).toBeTruthy();
+    expect(overlay.querySelectorAll('app-activity-type-icon')).toHaveLength(2);
+    const family = overlay.querySelector('mat-checkbox input') as HTMLInputElement;
+    expect(family.indeterminate).toBe(true); family.click(); await settle();
     expect(fixture.componentInstance.selectedActivityTypes).toEqual([ActivityTypes.Running, ActivityTypes.Treadmill]);
-    expect(selection).toHaveBeenCalledTimes(1);
-    fixture.destroy();
+    expect(emit).toHaveBeenCalledOnce(); expect(selection).toHaveBeenCalledTimes(2);
+    expect(family.checked).toBe(true); expect(family.indeterminate).toBe(false);
+    const clear = [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Clear selection')!;
+    clear.click(); await settle(); expect(trigger.value).toBe('All sports'); expect(emit).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(document.activeElement).toBe(trigger);
   });
-
 });
