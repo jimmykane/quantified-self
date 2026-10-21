@@ -815,8 +815,9 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 ### Event chart defaults and controls
 
-- In Event details, if any selected activity does not include distance data, the chart automatically falls back to a **Duration** x-axis.
+- In Event details, if **Distance** is selected but any selected activity does not include distance data, the chart uses **Duration** instead.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
+- **Pool swimming** defaults to **Duration**, with **Time** also available. **Distance** is disabled even when distance is recorded. A saved Distance choice uses Duration for the swim without changing your preference for other sports. Open-water swimming can still use Distance when recorded.
 - **Default chart metrics** in **Settings -> Charts** are your global allow-list for automatic chart visibility. Sport recommendations choose the first up to three relevant recorded metrics from those defaults; missing metrics are skipped without adding unrelated charts. Swimming, rowing, canoeing, kayaking, paddling, and stand-up paddling use **Stroke Rate** rather than Cadence when that stream is recorded.
 - The chart option **Include all recorded metrics** makes other chartable streams, such as Temperature, available in **Visible charts**. It adds choices but does not show them automatically. Merged events and benchmark comparisons always make all recorded chartable metrics available so every source can be inspected.
 - **Visible charts** groups sport recommendations before other available metrics. Its context note explains that recommendations combine the selected sport, recorded metrics, and your Default chart metrics. Showing or hiding a chart creates a custom override for that event and selected-sport combination.

@@ -953,6 +953,54 @@ describe('EventCardChartComponent', () => {
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
   });
 
+  it.each([
+    [undefined, XAxisTypes.Duration],
+    [XAxisTypes.Distance, XAxisTypes.Duration],
+    [XAxisTypes.Duration, XAxisTypes.Duration],
+    [XAxisTypes.Time, XAxisTypes.Time],
+  ])('renders pool swimming with saved axis %s as %s without changing preferences or haptics', async (savedAxis, expectedAxis) => {
+    chartSettingsSignal.set({ ...defaultChartSettings, xAxisType: savedAxis });
+    const streams = [
+      { type: DataHeartRate.type, getData: () => [100, 110, 105] },
+      { type: DataDistance.type, getData: () => [0, 25, 50] },
+      { type: XAxisTypes.Time, getData: () => [0, 30, 60] },
+    ];
+    const activity = {
+      type: ActivityTypes.Swimming,
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'pool-swim',
+      getAllStreams: () => streams,
+      getStream: (type: string) => streams.find(stream => stream.type === type),
+    } as any;
+    fixture.componentRef.setInput('event', {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'swim-event',
+    });
+    fixture.componentRef.setInput('selectedActivities', [activity]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.renderedXAxisType).toBe(expectedAxis);
+    expect(component.displayedXAxisType).toBe(expectedAxis);
+    expect(component.canSelectDistanceXAxis).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
+    expect(eventDataHelper.buildEventLapMarkers).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+    // Browsing another sport restores the original preference, not the swim fallback.
+    if (savedAxis === XAxisTypes.Distance) {
+      const openWaterSwim = { ...activity, type: ActivityTypes.OpenWaterSwimming, getID: () => 'open-water-swim' };
+      fixture.componentRef.setInput('selectedActivities', [openWaterSwim]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(component.renderedXAxisType).toBe(XAxisTypes.Distance);
+      expect(component.canSelectDistanceXAxis).toBe(true);
+      expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    }
+  });
+
   it('falls back to duration axis when a selected diving activity has heart rate but no distance stream', async () => {
     chartSettingsSignal.set({
       ...chartSettingsSignal(),

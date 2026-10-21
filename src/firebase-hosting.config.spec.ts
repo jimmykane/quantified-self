@@ -351,7 +351,7 @@ describe('Firebase Hosting configuration', () => {
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -395,7 +395,8 @@ describe('Firebase Hosting configuration', () => {
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-20');
+    // Pool swims default to Duration and disable the Distance chart axis.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

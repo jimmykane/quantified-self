@@ -32,6 +32,14 @@ describe('help.content', () => {
       expect(copy).toContain(phrase);
     }
   });
+  it('explains pool-swimming axis choices and preserves distance preferences for other sports', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Pool swimming** defaults to **Duration**, with **Time** also available',
+      '**Distance** is disabled even when distance is recorded', 'without changing your preference for other sports',
+      'Open-water swimming can still use Distance when recorded']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains bounded bulk Training refreshes without promising instant edit results', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(copy).toContain('background rebuild may wait up to two minutes');
@@ -1862,7 +1870,7 @@ describe('help.content', () => {
   it('should document duration fallback for any activity without distance data', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('if any selected activity does not include distance data');
+    expect(gettingStartedSection?.content).toContain('if **Distance** is selected but any selected activity does not include distance data');
   });
 
   it('should document non-merged event heart-rate and power zone line and fill coloring', () => {

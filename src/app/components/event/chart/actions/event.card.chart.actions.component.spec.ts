@@ -339,6 +339,27 @@ describe('EventCardChartActionsComponent', () => {
     expect(distanceOption?.disabled).toBe(true);
   });
 
+  it('renders disabled Distance with Duration and Time enabled in the axis menu', async () => {
+    component.canSelectDistanceXAxis = false;
+    const emit = vi.spyOn(component.xAxisTypeChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const axisList = Array.from(overlay.querySelectorAll('app-menu-radio-list'))
+      .find(list => list.textContent?.includes('X Axis'))!;
+    const option = (label: string) => Array.from(axisList.querySelectorAll('button'))
+      .find(button => button.querySelector('span')?.textContent?.trim() === label)!;
+    hapticsServiceMock.selection.mockClear();
+
+    expect(option('Duration').disabled).toBe(false);
+    expect(option('Duration').textContent).toContain('radio_button_checked');
+    expect(option('Time').disabled).toBe(false);
+    expect(option('Distance').disabled).toBe(true);
+    option('Distance').click();
+    expect(emit).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    option('Time').click();
+    expect(emit).toHaveBeenCalledExactlyOnceWith(XAxisTypes.Time);
+  });
+
   it('ignores distance x-axis changes when distance is unavailable', async () => {
     component.canSelectDistanceXAxis = false;
     component.xAxisType = XAxisTypes.Duration;
