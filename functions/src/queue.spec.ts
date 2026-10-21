@@ -861,6 +861,45 @@ describe('queue', () => {
             expect(doc.ref.update).not.toHaveBeenCalled();
         });
 
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI].flatMap(serviceName =>
+            ['completed', 'replaced'].map(transition => ({ serviceName, transition }))))(
+            'does not mark $serviceName history dispatched after it was $transition during enqueue', async ({ serviceName, transition }) => {
+                const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+                const doc = child('one');
+                mockGetAll.mockResolvedValue([doc]);
+                const changed = { ...doc.data(), ...(transition === 'completed'
+                    ? { processed: true }
+                    : { queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run' }) };
+                vi.mocked(utils.enqueueWorkoutTask).mockImplementationOnce(async () => {
+                    doc.ref.get.mockResolvedValue({ exists: true, data: () => changed });
+                    return true;
+                });
+
+                await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+                expect(utils.enqueueWorkoutTask).toHaveBeenCalledExactlyOnceWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                    { recoveryTaskKey: 0, queueRevision: 'revision-one' });
+                expect(doc.ref.update).not.toHaveBeenCalled();
+            });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('preserves a replacement %s revision after recovery enqueue succeeds', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            const replacement = { ...doc.data(), queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run' };
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false).mockImplementationOnce(async () => {
+                doc.ref.get.mockResolvedValue({ exists: true, data: () => replacement });
+                return true;
+            });
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenLastCalledWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1, queueRevision: 'revision-one' });
+            expect(doc.ref.update).toHaveBeenCalledExactlyOnceWith({ dispatchRecoveryGeneration: 1 });
+        });
+
         it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('still recovers a reserved task name for the unchanged %s revision', async serviceName => {
             const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
             const doc = child('one');
