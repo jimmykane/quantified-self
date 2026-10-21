@@ -1,7 +1,7 @@
 import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
-import { readAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
+import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, readAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 
 /**
  * Logger adapter interface for cross-environment compatibility.
@@ -192,8 +192,11 @@ export class EventWriter {
                 if (sourceActivityKey) {
                     activityJSON.sourceActivityKey = sourceActivityKey;
                 }
-                const ascentCorrection = readAscentCorrection((activity as AscentCorrectedActivity).ascentCorrection);
-                if (ascentCorrection) activityJSON.ascentCorrection = ascentCorrection;
+                for (const metric of ACTIVITY_ELEVATION_METRICS) {
+                    const { field } = activityElevationMetric(metric);
+                    const correction = readAscentCorrection((activity as AscentCorrectedActivity)[field]);
+                    if (correction) activityJSON[field] = correction;
+                }
 
 
                 const activityPath = ['users', userID, 'activities', <string>activity.getID()];

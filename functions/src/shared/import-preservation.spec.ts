@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
-import { DataAscent, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { EventWriter, type FirestoreAdapter } from './event-writer';
 import { prepareImportedEventWrite, prepareReparsedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './import-preservation';
 
@@ -58,9 +58,10 @@ describe('shared import preservation', () => {
   it.each(['pending', 'finalized', 'legacy'])('recovers corrected activities from an interrupted reparse: %s', async phase => {
     const parsed = EventImporterJSON.getEventFromJSON({ name: 'Run', startDate: 1700000000000, endDate: 1700003600000,
       activities: [{ ...activity().toJSON(), streams: [], laps: [], intensityZones: [] }], stats: {} }).setID('event');
+    parsed.getFirstActivity().addStat(new DataDescent(400));
     parsed.getFirstActivity().setID('retry-id'); parsed.getFirstActivity().addStat(new DataAscent(300));
-    store('saved-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
-    store('partial-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 } });
+    store('saved-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 }, descentCorrection: { value: 80, sourceValue: 120 } });
+    store('partial-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 }, descentCorrection: { value: 80, sourceValue: 320 } });
     state.parent = { benchmarkSourceWritePending: true };
     const legs = { original: { activityId: phase === 'finalized' ? 'partial-id' : 'saved-id' } };
     state.metadata = { sourceWritePending: phase !== 'finalized', [phase === 'legacy' ? 'legacyLegs' : 'legs']: legs };
@@ -70,6 +71,8 @@ describe('shared import preservation', () => {
     expect(state.collection).not.toHaveBeenCalled();
     expect(parsed.getFirstActivity()).toHaveProperty('ascentCorrection', { value: 75, sourceValue: 300 });
     expect(parsed.getStat(DataAscent.type).getValue()).toBe(75);
+    expect(parsed.getFirstActivity()).toHaveProperty('descentCorrection', { value: 80, sourceValue: 400 });
+    expect(parsed.getStat(DataDescent.type).getValue()).toBe(80);
   });
 
   it.each([false, true])('rejects ambiguous completed sources or foreign recovery references (recovering: %s)', async recovering => {
@@ -80,13 +83,18 @@ describe('shared import preservation', () => {
     expect(state.commit).not.toHaveBeenCalled();
   });
 
+  it('rejects silently dropping a saved descent correction', () => {
+    expect(() => preserveImportedActivityEdits({ stats: { Descent: 300 } }, { descentCorrection: { value: 80, sourceValue: 120 } }))
+      .toThrow('descent correction was not safely matched');
+  });
+
   it('keeps new-import IDs unchanged and scopes/masks the existing-activity read', async () => {
     const parsed = activity();
     await prepareImportedEventWrite('owner', event([parsed]), authorize);
     expect(parsed.getID()).toBe('legacy-0');
     expect(state.collection).toHaveBeenCalledWith('users/owner/activities');
     expect(state.where).toHaveBeenCalledWith('eventID', '==', 'event');
-    expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance', 'ascentCorrection');
+    expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance', 'ascentCorrection', 'descentCorrection');
     expect(state.limit).toHaveBeenCalledWith(101);
     expect(state.get.mock.invocationCallOrder.at(-1)).toBeLessThan(state.commit.mock.invocationCallOrder[0]);
   });

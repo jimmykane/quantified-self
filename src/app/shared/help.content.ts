@@ -1218,17 +1218,17 @@ When sending routes, provider sport profiles can be broader than your saved QS s
 
 ## Reprocessing a single activity
 
-### Correct an activity's ascent
+### Correct an activity's ascent or descent
 
-Open the activity action menu (**⋮**) and choose **Edit ascent**. If the recording contains several activities,
-select the activity to correct. Enter its total ascent and choose **Save**. The recording total and dashboard
+Open the activity action menu (**⋮**) and choose **Edit ascent / descent**. If the recording contains several activities,
+select the activity to correct, then choose **Ascent** or **Descent**. Enter its total and choose **Save**. The recording total and dashboard
 summaries update together. **Edited** identifies a saved correction; **Imported** shows the source value.
-**Reset to imported value** prepares a reset, which is applied only when you choose Save.
+**Reset to imported value** prepares a reset for the selected metric, which is applied only when you choose Save. Ascent and descent corrections are independent.
 
 Corrections survive reloads, source-file reimports, statistics regeneration, and provider history imports when the
 activity can be matched safely. A new import updates the value available for reset without replacing your correction.
-If the recording changed while the editor was open, reload ascent before saving. Comparisons and Diving terrain
-summaries cannot be edited. This corrects Quantified Self ascent totals, not the altitude chart, laps, original file,
+If the recording changed while the editor was open, reload elevation before saving. Comparisons and Diving terrain
+summaries cannot be edited. This corrects Quantified Self ascent and descent totals, not the altitude chart, laps, original file,
 or the activity in Suunto.
 
 From an activity action menu you can also:

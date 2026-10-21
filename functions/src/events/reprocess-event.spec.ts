@@ -5,6 +5,7 @@ const hoisted = vi.hoisted(() => {
     const mockDoc = vi.fn(() => ({ get: mockGet }));
     const mockReparseEventFromOriginalFiles = vi.fn();
     const mockUpdateActivityAscent = vi.fn();
+    const mockUpdateActivityElevation = vi.fn();
     let onCallOptions: unknown = null;
 
     return {
@@ -12,6 +13,7 @@ const hoisted = vi.hoisted(() => {
         mockDoc,
         mockReparseEventFromOriginalFiles,
         mockUpdateActivityAscent,
+        mockUpdateActivityElevation,
         getOnCallOptions: () => onCallOptions,
         setOnCallOptions: (options: unknown) => {
             onCallOptions = options;
@@ -54,6 +56,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
 
 import { reprocessEvent } from './reprocess-event';
 vi.mock('./activity-ascent.service', () => ({
+    updateActivityElevation: (...args: unknown[]) => hoisted.mockUpdateActivityElevation(...args),
     updateActivityAscent: (...args: unknown[]) => hoisted.mockUpdateActivityAscent(...args),
 }));
 
@@ -103,6 +106,22 @@ describe('reprocessEvent', () => {
         await expect(reprocessEvent({ ...request, data: { ...request.data, expectedOwner: 'u1', stats: {} } } as any))
             .rejects.toMatchObject({ code: 'invalid-argument' });
         expect(hoisted.mockUpdateActivityAscent).not.toHaveBeenCalled();
+    });
+
+    it('routes descent through the owner-bound elevation service and rejects expanded requests', async () => {
+        const edit = { activityId: 'leg', metric: 'descent', value: 75, expectedSourceFingerprint: 'a'.repeat(64), expectedCorrection: null };
+        const saved = { activityId: 'leg', metric: 'descent', value: 75, eventValue: 75, correction: { value: 75, sourceValue: 100 } };
+        const request = { auth: { uid: 'u1' }, app: { appId: 'app-id' },
+            data: { eventId: 'event-1', mode: 'correct_elevation', expectedOwner: 'u1', edit } };
+        hoisted.mockUpdateActivityElevation.mockResolvedValueOnce(saved);
+        expect(await reprocessEvent(request as any)).toEqual({ eventId: 'event-1', mode: 'correct_elevation', status: 'completed', elevation: saved });
+        expect(hoisted.mockUpdateActivityElevation).toHaveBeenCalledWith('u1', 'event-1', edit);
+        await expect(reprocessEvent({ ...request, data: { ...request.data, expectedOwner: 'other' } } as any))
+            .rejects.toMatchObject({ code: 'permission-denied' });
+        await expect(reprocessEvent({ ...request, data: { ...request.data, stats: {} } } as any))
+            .rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(hoisted.mockUpdateActivityElevation).toHaveBeenCalledOnce();
+        expect(hoisted.mockReparseEventFromOriginalFiles).not.toHaveBeenCalled();
     });
 
     it('should reject requests without app check', async () => {

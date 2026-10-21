@@ -16,9 +16,9 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
-  it('explains ascent correction, reviewed reset and source preservation', () => {
+  it('explains independent ascent/descent correction, reviewed reset and source preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
-    for (const phrase of ['**Edit ascent**', '**Reset to imported value**', '**Edited**',
+    for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',
       'without replacing your correction', 'not the altitude chart, laps, original file']) expect(copy).toContain(phrase);
   });
   it('explains browser verification cooldowns and recovery without resetting account data', () => {

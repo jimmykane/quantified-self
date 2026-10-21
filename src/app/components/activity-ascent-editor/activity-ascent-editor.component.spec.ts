@@ -37,19 +37,19 @@ describe('ActivityAscentEditorComponent', () => {
     const fixture = await render(units);
     expect(fixture.nativeElement.textContent).toContain('Edited');
     expect(fixture.nativeElement.textContent).toContain('250 m');
-    expect(fixture.componentInstance.unit).toBe('m');
+    expect(fixture.componentInstance.unit()).toBe('m');
     expect(fixture.nativeElement.querySelector('input').value).toBe('75');
     expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
   });
   it('rejects negative/empty input and saves zero with one selection and success feedback', async () => {
-    const saved = { activityId: 'hike', ascent: 0, eventAscent: 0, correction: { value: 0, sourceValue: 250 } };
+    const saved = { activityId: 'hike', metric: 'ascent', value: 0, eventValue: 0, correction: { value: 0, sourceValue: 250 } };
     save.mockResolvedValueOnce(saved);
     const fixture = await render(), component = fixture.componentInstance;
     component.edit(-1); expect(component.canSave()).toBe(false);
     component.edit(null); expect(component.canSave()).toBe(false);
     component.edit(0); expect(haptics.selection).not.toHaveBeenCalled();
     await component.save();
-    expect(save).toHaveBeenCalledWith('owner', 'event', row, 0);
+    expect(save).toHaveBeenCalledWith('owner', 'event', row, 0, 'ascent');
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
     expect(ref.close).toHaveBeenCalledWith(saved);
   });
@@ -58,7 +58,7 @@ describe('ActivityAscentEditorComponent', () => {
     component.restore();
     expect(component.value()).toBe(250); expect(save).not.toHaveBeenCalled();
     await component.save();
-    expect(save).toHaveBeenCalledWith('owner', 'event', row, null);
+    expect(save).toHaveBeenCalledWith('owner', 'event', row, null, 'ascent');
   });
   it('keeps the editor open with the entered value when a stale save fails', async () => {
     save.mockRejectedValue(new Error('The activity changed. Reload it before saving ascent.'));
@@ -102,4 +102,31 @@ describe('ActivityAscentEditorComponent', () => {
     expect(component.rows()).toEqual([]); expect(haptics.success).not.toHaveBeenCalled();
     expect(ref.close).toHaveBeenCalledWith();
   });
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('loads and resets descent independently with %s preferences', async units => {
+    const descent = { ...row, value: 80, correction: { value: 80, sourceValue: 300 } };
+    const fixture = await render(units), component = fixture.componentInstance;
+    load.mockResolvedValueOnce([descent]);
+    component.selectMetric('descent'); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(load).toHaveBeenLastCalledWith('owner', 'event', 'descent');
+    expect(component.value()).toBe(80); expect(component.unit()).toBe('m');
+    expect(fixture.nativeElement.querySelector('input').getAttribute('aria-label')).toBe('Descent');
+    expect(fixture.nativeElement.textContent).toContain('300 m');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.restore(); expect(component.value()).toBe(300);
+    await component.save(); expect(save).toHaveBeenCalledWith('owner', 'event', descent, null, 'descent');
+  });
+  it('clears unsaved ascent when changing metrics and blocks switching during a pending save', async () => {
+    const fixture = await render(), component = fixture.componentInstance;
+    component.edit(50);
+    load.mockResolvedValueOnce([{ ...row, value: 300, correction: null }]);
+    component.selectMetric('descent'); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.value()).toBe(300); expect(component.canSave()).toBe(false);
+    let finish!: () => void;
+    save.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    component.edit(0); const pending = component.save();
+    component.selectMetric('ascent'); expect(component.metric()).toBe('descent');
+    finish(); await pending;
+    expect(save).toHaveBeenCalledWith('owner', 'event', expect.objectContaining({ value: 300 }), 0, 'descent');
+  });
+
 });

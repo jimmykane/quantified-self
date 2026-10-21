@@ -9,7 +9,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
-import { applySavedActivityAscent, type ActivityAscentUpdate } from '@shared/activity-ascent';
+import { applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
@@ -64,18 +64,18 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         data: { eventId, user: owner }, width: '480px', maxWidth: 'calc(100vw - 32px)',
       });
       opened = true;
-      this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityAscentUpdate | undefined) => {
+      this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityElevationUpdate | undefined) => {
         this.ascentEditorOpen = false;
         if (!saved || !isCurrent()) return;
-        applySavedActivityAscent(event, saved);
+        applySavedActivityElevation(event, saved);
         this.ascentChanged.emit(event);
         this.changeDetectorRef.markForCheck();
       });
     } catch (error) {
-      this.logger.error('Could not open the ascent editor', error);
+      this.logger.error('Could not open the elevation editor', error);
       if (isCurrent()) {
         this.hapticsService.error();
-        this.snackBar.open('Could not open ascent editing. Try again.', undefined, { duration: 3500 });
+        this.snackBar.open('Could not open elevation editing. Try again.', undefined, { duration: 3500 });
       }
     } finally { if (!opened) this.ascentEditorOpen = false; }
   }

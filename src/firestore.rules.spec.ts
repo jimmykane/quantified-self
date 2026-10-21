@@ -2604,18 +2604,22 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').get());
         });
 
-        it('denies direct creation or replacement of server-owned ascent corrections', async () => {
-            const db = testEnv.authenticatedContext(userId).firestore();
-            await testEnv.withSecurityRulesDisabled(async context => {
-                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({ type: 'Running' });
-                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
-                    type: 'Running', eventID: 'original_event', stats: { Ascent: 100 },
+        it.each([['ascentCorrection', 'Ascent'], ['descentCorrection', 'Descent']])(
+            'denies direct creation, replacement and removal of server-owned %s', async (field, metric) => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const path = `users/${userId}/activities/${activityId}`;
+                const source = { type: 'Running', eventID: 'original_event', stats: { [metric]: 100 } };
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({ type: 'Running' });
+                    await context.firestore().doc(path).set(source);
                 });
+                await assertFails(db.doc(path).update({ [field]: { value: 50, sourceValue: 100 }, [`stats.${metric}`]: 50 }));
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).update({ [field]: { value: 50, sourceValue: 100 } });
+                });
+                await assertFails(db.doc(path).update({ [field]: { value: 25, sourceValue: 100 } }));
+                await assertFails(db.doc(path).set(source));
             });
-            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
-                ascentCorrection: { value: 50, sourceValue: 100 }, 'stats.Ascent': 50,
-            }));
-        });
 
         it('should deny user from writing to another users activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();

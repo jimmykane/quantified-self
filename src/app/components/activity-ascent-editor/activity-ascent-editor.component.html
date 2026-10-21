@@ -1,7 +1,14 @@
-<h2 mat-dialog-title>Edit ascent</h2>
+<h2 mat-dialog-title>Edit ascent / descent</h2>
 <mat-dialog-content>
+  <mat-form-field appearance="outline">
+    <mat-label>Metric</mat-label>
+    <mat-select aria-label="Elevation metric" [value]="metric()" (selectionChange)="selectMetric($event.value)" [disabled]="busy() || loading()">
+      <mat-option value="ascent">Ascent</mat-option>
+      <mat-option value="descent">Descent</mat-option>
+    </mat-select>
+  </mat-form-field>
   @if (loading()) {
-    <mat-spinner diameter="28" aria-label="Loading ascent"></mat-spinner>
+    <mat-spinner diameter="28" aria-label="Loading elevation"></mat-spinner>
   } @else if (selected(); as row) {
     @if (rows().length > 1) {
       <mat-form-field appearance="outline">
@@ -11,23 +18,23 @@
         </mat-select>
       </mat-form-field>
     }
-    <p>Correct the total vertical metres climbed. Your original recording stays available.</p>
+    <p>Correct the total {{ metric() }}. Your original recording stays available.</p>
     <mat-form-field appearance="outline">
-      <mat-label>Ascent @if (row.correction) { · Edited }</mat-label>
+      <mat-label>{{ metricLabel() }} @if (row.correction) { · Edited }</mat-label>
       <input matInput type="number" min="0" [max]="max" step="any" [ngModel]="value()"
-        (ngModelChange)="edit($event)" [disabled]="busy() || reset()" aria-label="Ascent">
-      <span matTextSuffix>{{ unit }}</span>
+        (ngModelChange)="edit($event)" [disabled]="busy() || reset()" [attr.aria-label]="metricLabel()">
+      <span matTextSuffix>{{ unit() }}</span>
       <mat-hint>Imported: {{ sourceText() }}</mat-hint>
     </mat-form-field>
     @if (row.correction) {
       <button mat-button type="button" (click)="restore()" [disabled]="busy() || reset()">Reset to imported value</button>
     }
-    @if (reset()) { <p role="status">Save to restore the latest imported ascent.</p> }
+    @if (reset()) { <p role="status">Save to restore the latest imported {{ metric() }}.</p> }
     <p>The correction applies to Quantified Self summaries. It does not change the altitude chart, original file, or Suunto activity.</p>
   } @else if (!error()) { <p>No editable activity is available in this recording.</p> }
   @if (error()) {
     <p role="alert">{{ error() }}</p>
-    <button mat-button type="button" (click)="retry()" [disabled]="busy() || loading()">Reload ascent</button>
+    <button mat-button type="button" (click)="retry()" [disabled]="busy() || loading()">Reload elevation</button>
   }
 </mat-dialog-content>
 <mat-dialog-actions align="end">
@@ -35,7 +42,7 @@
   <button mat-flat-button type="button" (click)="save()" [disabled]="!canSave()">
     <span class="action-content">
       <span class="action-icon">
-        @if (busy()) { <mat-spinner diameter="20" aria-label="Saving ascent"></mat-spinner> }
+        @if (busy()) { <mat-spinner diameter="20" aria-label="Saving elevation"></mat-spinner> }
       </span>
       <span>Save</span>
     </span>

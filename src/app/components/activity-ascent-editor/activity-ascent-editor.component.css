@@ -1,4 +1,5 @@
 mat-form-field { display: block; width: 100%; }
 mat-dialog-content { max-width: 30rem; }
+mat-dialog-content > mat-form-field:first-child { margin-top: 8px; }
 .action-content { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .action-icon { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }

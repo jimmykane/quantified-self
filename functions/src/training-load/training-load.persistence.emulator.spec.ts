@@ -19,8 +19,8 @@ import { persistReparsedEvent, writeReparseStatus } from '../reparse/sports-lib-
 import { EventWriter, type FirestoreAdapter } from '../shared/event-writer';
 import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from '../shared/import-preservation';
 import { TrainingLoadSourceWrite } from './training-load-source-write';
-import { DataAscent } from '@sports-alliance/sports-lib';
-import { updateActivityAscent } from '../events/activity-ascent.service';
+import { DataAscent, DataDescent } from '@sports-alliance/sports-lib';
+import { updateActivityAscent, updateActivityElevation } from '../events/activity-ascent.service';
 import { trainingLoadSourceFingerprint } from './training-load-source-fingerprint';
 
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
@@ -186,6 +186,92 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       await expect(updateActivityAscent(uid, 'workout', await ascentRequest(uid))).rejects.toMatchObject({ code: 'failed-precondition' });
       expect((await db.doc(`users/${uid}/activities/leg`).get()).data()?.stats.Ascent).toBe(75);
     } finally { await db.doc(`userDeletionTombstones/${uid}`).delete(); }
+  });
+  function elevationWorkout(id = 'leg', descent: number | null = 120, ascent = 100) {
+    const event = ascentWorkout(id, ascent);
+    if (descent !== null) { event.getFirstActivity().addStat(new DataDescent(descent)); event.addStat(new DataDescent(descent)); }
+    return event;
+  }
+  async function descentRequest(uid: string, value: number | null = 80, activityId = 'leg') {
+    const data = (await db.doc(`users/${uid}/activities/${activityId}`).get()).data()!;
+    return { activityId, metric: 'descent', value, expectedSourceFingerprint: trainingLoadSourceFingerprint(data),
+      expectedCorrection: data.descentCorrection ?? null };
+  }
+  it('saves zero descent, rejects stale requests, and resets it without changing ascent or saved load', async () => {
+    const uid = setup(); await importWorkout(uid, elevationWorkout());
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    const original = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    const request = await descentRequest(uid, 0);
+    expect(await updateActivityElevation(uid, 'workout', request)).toEqual({ activityId: 'leg', metric: 'descent',
+      value: 0, eventValue: 0, correction: { value: 0, sourceValue: 120 } });
+    await expect(updateActivityElevation(uid, 'workout', request)).rejects.toMatchObject({ code: 'aborted' });
+    const child = db.doc(`users/${uid}/activities/leg`), parent = db.doc(`users/${uid}/events/workout`);
+    expect((await child.get()).data()).toMatchObject({ stats: { Ascent: 75, Descent: 0 },
+      ascentCorrection: { value: 75, sourceValue: 100 }, descentCorrection: { value: 0, sourceValue: 120 } });
+    const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(resolveEffectiveTrainingLoad({}, saved)).toEqual(resolveEffectiveTrainingLoad({}, original));
+    expect(saved.parentFingerprint).toBe(trainingLoadSourceFingerprint((await parent.get()).data()!));
+    expect(saved.legs?.leg.sourceFingerprint).toBe(trainingLoadSourceFingerprint((await child.get()).data()!));
+    expect(await updateActivityElevation(uid, 'workout', await descentRequest(uid, null)))
+      .toEqual({ activityId: 'leg', metric: 'descent', value: 120, eventValue: 120, correction: null });
+    expect((await child.get()).data()).not.toHaveProperty('descentCorrection');
+    expect((await parent.get()).data()?.stats).toMatchObject({ Ascent: 75, Descent: 120 });
+  });
+  it('restores missing imported descent and preserves the ascent correction', async () => {
+    const uid = setup(); await importWorkout(uid, elevationWorkout('leg', null));
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    await updateActivityElevation(uid, 'workout', await descentRequest(uid));
+    expect(await updateActivityElevation(uid, 'workout', await descentRequest(uid, null)))
+      .toEqual({ activityId: 'leg', metric: 'descent', value: null, eventValue: null, correction: null });
+    const child = (await db.doc(`users/${uid}/activities/leg`).get()).data()!;
+    expect(child.stats).not.toHaveProperty('Descent'); expect(child).not.toHaveProperty('descentCorrection');
+    expect(child.ascentCorrection).toEqual({ value: 75, sourceValue: 100 });
+  });
+  it('preserves both corrections across repeated imports and resets descent to its newest source value', async () => {
+    const uid = setup(); await importWorkout(uid, elevationWorkout());
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    await updateActivityElevation(uid, 'workout', await descentRequest(uid));
+    for (let index = 0; index < 2; index++) await reuploadWriter(uid).writer.writeAllEventData(uid, elevationWorkout('incoming-id', 300, 250));
+    const child = db.doc(`users/${uid}/activities/leg`);
+    expect((await child.get()).data()).toMatchObject({ stats: { Ascent: 75, Descent: 80 },
+      ascentCorrection: { value: 75, sourceValue: 250 }, descentCorrection: { value: 80, sourceValue: 300 } });
+    await updateActivityElevation(uid, 'workout', await descentRequest(uid, null));
+    expect((await child.get()).data()?.stats).toMatchObject({ Ascent: 75, Descent: 300 });
+  });
+  it('retains descent saved during parsing when reparse changes activity IDs', async () => {
+    const uid = setup(); await importWorkout(uid, elevationWorkout());
+    const parent = await db.doc(`users/${uid}/events/workout`).get();
+    const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    await updateActivityElevation(uid, 'workout', await descentRequest(uid));
+    await persistReparsedEvent(uid, 'workout', elevationWorkout('reparsed-id', 300), parent.data()!, children.docs, '23.3.0');
+    expect((await db.doc(`users/${uid}/activities/reparsed-id`).get()).data()).toMatchObject({ stats: { Ascent: 100, Descent: 80 },
+      descentCorrection: { value: 80, sourceValue: 300 } });
+    expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats.Descent).toBe(80);
+  });
+  it.each(['parent write', 'after finalization'])('retains both corrections after reparse interruption at %s', async phase => {
+    const uid = setup(); await importWorkout(uid, elevationWorkout());
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    await updateActivityElevation(uid, 'workout', await descentRequest(uid));
+    const parent = await db.doc(`users/${uid}/events/workout`).get();
+    const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const write = EventWriter.prototype.writeAllEventData;
+    const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
+      if (phase === 'parent write') {
+        const adapter = (this as unknown as { adapter: FirestoreAdapter }).adapter;
+        const setDoc = adapter.setDoc;
+        adapter.setDoc = (path, data) => path[2] === 'events' ? Promise.reject(new Error('interrupted elevation reparse')) : setDoc(path, data);
+      }
+      await write.apply(this, args); throw new Error('interrupted elevation reparse');
+    });
+    try {
+      await expect(persistReparsedEvent(uid, 'workout', elevationWorkout('partial-id', 300, 250), parent.data()!, children.docs, '23.3.0'))
+        .rejects.toThrow('interrupted elevation reparse');
+    } finally { spy.mockRestore(); }
+    await persistReparsedEvent(uid, 'workout', elevationWorkout('retry-id', 400, 350), parent.data()!, children.docs, '23.3.0');
+    const saved = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    expect(saved.docs.map(doc => doc.id)).toEqual(['retry-id']);
+    expect(saved.docs[0].data()).toMatchObject({ stats: { Ascent: 75, Descent: 80 },
+      ascentCorrection: { value: 75, sourceValue: 350 }, descentCorrection: { value: 80, sourceValue: 400 } });
   });
   it('reuploads a source-keyed activity without duplicating it or losing live edits and load overrides', async () => {
     const uid = setup(); await importWorkout(uid, workout('source-keyed-id'));

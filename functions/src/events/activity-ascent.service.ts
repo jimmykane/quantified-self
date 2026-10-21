@@ -1,9 +1,8 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { DataAscent } from '@sports-alliance/sports-lib';
-import { isTerrainAscentActivity, readActivityAscent, readAscentCorrection, validActivityAscent,
-  type ActivityAscentEdit, type ActivityAscentUpdate } from '../../../shared/activity-ascent';
+import { activityElevationMetric, isTerrainAscentActivity, readActivityAscent, readAscentCorrection, validActivityAscent,
+  type ActivityAscentEdit, type ActivityAscentUpdate, type ActivityElevationEdit, type ActivityElevationUpdate } from '../../../shared/activity-ascent';
 import { isBenchmarkEvent } from '../../../shared/event-classification';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -32,13 +31,36 @@ export function validateActivityAscentEdit(eventId: string, input: unknown): Act
   return data as ActivityAscentEdit;
 }
 
+/** Strict app-only elevation contract; the legacy ascent request stays supported. */
+export function validateActivityElevationEdit(eventId: string, input: unknown): ActivityElevationEdit {
+  const data = input as Partial<ActivityElevationEdit> | null;
+  if (!data || typeof data !== 'object' || Array.isArray(data)
+    || (data.metric !== 'ascent' && data.metric !== 'descent')
+    || Object.keys(data).some(key => !['activityId', 'metric', 'value', 'expectedSourceFingerprint', 'expectedCorrection'].includes(key)))
+    throw new HttpsError('invalid-argument', 'Enter a valid ascent or descent correction.');
+  validateActivityAscentEdit(eventId, { activityId: data.activityId, ascent: data.value,
+    expectedSourceFingerprint: data.expectedSourceFingerprint, expectedCorrection: data.expectedCorrection });
+  return data as ActivityElevationEdit;
+}
+
+export async function updateActivityAscent(uid: string, eventId: string, request: unknown): Promise<ActivityAscentUpdate> {
+  const { ascent, ...input } = validateActivityAscentEdit(eventId, request);
+  const saved = await saveActivityElevation(uid, eventId, { ...input, metric: 'ascent', value: ascent });
+  return { activityId: saved.activityId, ascent: saved.value, eventAscent: saved.eventValue, correction: saved.correction };
+}
+
+export function updateActivityElevation(uid: string, eventId: string, request: unknown): Promise<ActivityElevationUpdate> {
+  return saveActivityElevation(uid, eventId, validateActivityElevationEdit(eventId, request));
+}
+
 /**
  * Reuses the activity-processing callable because source fingerprints and the Training cache are server-owned.
  * One transaction checks the live source reservation, saves the activity and parent total, and certifies unchanged
  * load evaluations against the new summary. A client-only stat patch cannot update that private cache safely.
  */
-export async function updateActivityAscent(uid: string, eventId: string, request: unknown): Promise<ActivityAscentUpdate> {
-  const input = validateActivityAscentEdit(eventId, request);
+async function saveActivityElevation(uid: string, eventId: string, input: ActivityElevationEdit): Promise<ActivityElevationUpdate> {
+  const { metric } = input;
+  const { type, field } = activityElevationMetric(metric);
   const db = admin.firestore();
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metadataRef = eventRef.collection('metaData').doc('trainingLoad');
@@ -51,42 +73,42 @@ export async function updateActivityAscent(uid: string, eventId: string, request
     const metadata = metadataDoc.data() as TrainingLoadMetadata | undefined;
     if (isBenchmarkEvent(parentData)) throw new HttpsError('failed-precondition', 'Comparison recordings are read-only.');
     if (metadata?.sourceWritePending || parentData.benchmarkSourceWritePending)
-      throw new HttpsError('failed-precondition', 'The recording is updating. Reload it before editing ascent.');
+      throw new HttpsError('failed-precondition', `The recording is updating. Reload it before editing ${metric}.`);
     const children = await transaction.get(db.collection(`users/${uid}/activities`).where('eventID', '==', eventId).limit(101));
     if (children.size > 100) throw new HttpsError('failed-precondition', 'This recording has too many activities to edit.');
     const target = children.docs.find(child => child.id === input.activityId);
     if (!target) throw new HttpsError('not-found', 'This activity no longer belongs to the recording.');
     const source = target.data();
-    if (!isTerrainAscentActivity(source.type)) throw new HttpsError('failed-precondition', 'Terrain ascent is unavailable for this activity.');
-    const correction = readAscentCorrection(source.ascentCorrection);
+    if (!isTerrainAscentActivity(source.type)) throw new HttpsError('failed-precondition', `Terrain ${metric} is unavailable for this activity.`);
+    const correction = readAscentCorrection(source[field]);
     if (trainingLoadSourceFingerprint(source) !== input.expectedSourceFingerprint
       || JSON.stringify(correction) !== JSON.stringify(readAscentCorrection(input.expectedCorrection)))
-      throw new HttpsError('aborted', 'The activity changed. Reload it before saving ascent.');
-    const original = correction ? correction.sourceValue : readActivityAscent(source.stats);
-    if (input.ascent === null && !correction) return { activityId: target.id, ascent: original,
-      eventAscent: readActivityAscent(parentData.stats), correction: null };
+      throw new HttpsError('aborted', `The activity changed. Reload it before saving ${metric}.`);
+    const original = correction ? correction.sourceValue : readActivityAscent(source.stats, metric);
+    if (input.value === null && !correction) return { activityId: target.id, metric, value: original,
+      eventValue: readActivityAscent(parentData.stats, metric), correction: null };
     if (metadata?.parentFingerprint && metadata.parentFingerprint !== trainingLoadSourceFingerprint(parentData))
-      throw new HttpsError('failed-precondition', 'The recording is updating. Reload it before editing ascent.');
+      throw new HttpsError('failed-precondition', `The recording is updating. Reload it before editing ${metric}.`);
     const byId = new Map(children.docs.map(child => [child.id, child]));
     for (const leg of Object.values(metadata?.legs ?? {})) {
       if (!leg.activityId) continue;
       const child = byId.get(leg.activityId);
       if (!child || (leg.sourceFingerprint && leg.sourceFingerprint !== trainingLoadSourceFingerprint(child.data())))
-        throw new HttpsError('failed-precondition', 'The recording is updating. Reload it before editing ascent.');
+        throw new HttpsError('failed-precondition', `The recording is updating. Reload it before editing ${metric}.`);
     }
     const nextStats = stats(source);
-    const value = input.ascent === null ? original : input.ascent;
-    if (value === null) delete nextStats[DataAscent.type];
-    else nextStats[DataAscent.type] = value;
-    const nextCorrection = input.ascent === null ? null : { value: input.ascent, sourceValue: original };
-    const nextSource: admin.firestore.DocumentData = { ...source, stats: nextStats, ascentCorrection: nextCorrection };
+    const value = input.value === null ? original : input.value;
+    if (value === null) delete nextStats[type];
+    else nextStats[type] = value;
+    const nextCorrection = input.value === null ? null : { value: input.value, sourceValue: original };
+    const nextSource: admin.firestore.DocumentData = { ...source, stats: nextStats, [field]: nextCorrection };
     const nextChildren = children.docs.map(child => ({ id: child.id, updateTime: child.updateTime,
       data: () => child.id === target.id ? nextSource : child.data() }));
-    const ascents = nextChildren.filter(child => isTerrainAscentActivity(child.data().type))
-      .map(child => readActivityAscent(child.data().stats)).filter((value): value is number => value !== null);
+    const elevations = nextChildren.filter(child => isTerrainAscentActivity(child.data().type))
+      .map(child => readActivityAscent(child.data().stats, metric)).filter((value): value is number => value !== null);
     const parentStats = stats(parentData);
-    if (ascents.length) parentStats[DataAscent.type] = ascents.reduce((total, value) => total + value, 0);
-    else delete parentStats[DataAscent.type];
+    if (elevations.length) parentStats[type] = elevations.reduce((total, value) => total + value, 0);
+    else delete parentStats[type];
     const nextParent = { ...parentData, stats: parentStats };
     let nextMetadata = metadata;
     if (metadata) {
@@ -100,10 +122,10 @@ export async function updateActivityAscent(uid: string, eventId: string, request
     const cache = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId, summarizeTrainingLoad(eventId,
       nextParent, nextMetadata ?? null, nextChildren.map(child => ({ id: child.id, ...child.data() }))));
     transaction.update(target.ref, sanitizeActivityFirestoreWritePayload({ stats: nextStats,
-      ascentCorrection: nextCorrection ?? FieldValue.delete() }));
+      [field]: nextCorrection ?? FieldValue.delete() }));
     transaction.update(eventRef, sanitizeEventFirestoreWritePayload({ stats: parentStats }));
     if (nextMetadata) transaction.set(metadataRef, nextMetadata);
     cache.write();
-    return { activityId: target.id, ascent: value, eventAscent: readActivityAscent(parentStats), correction: nextCorrection };
+    return { activityId: target.id, metric, value, eventValue: readActivityAscent(parentStats, metric), correction: nextCorrection };
   });
 }

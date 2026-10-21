@@ -1,5 +1,5 @@
 import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
-import { applyActivityAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
+import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, applyActivityAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -546,7 +546,10 @@ async function loadSourceEvent(
     const activity = EventImporterJSON
       .getActivityFromJSON(toActivityJSON(docSnapshot))
       .setID(docSnapshot.id);
-    applyActivityAscentCorrection(activity as AscentCorrectedActivity, docSnapshot.data()?.ascentCorrection);
+    for (const metric of ACTIVITY_ELEVATION_METRICS) {
+      const { field } = activityElevationMetric(metric);
+      applyActivityAscentCorrection(activity as AscentCorrectedActivity, docSnapshot.data()?.[field], false, metric);
+    }
 
     const creatorName = `${docSnapshot.data()?.creator?.name ?? ''}`.trim();
     if (creatorName && (activity as any).creator) {

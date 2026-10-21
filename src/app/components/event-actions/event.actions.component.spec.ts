@@ -225,7 +225,7 @@ describe('EventActionsComponent', () => {
         expect(mockDialog.open).not.toHaveBeenCalled();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
-    it('applies committed ascent without replacing hydrated activities or reading a cached snapshot', async () => {
+    it.each(['ascent', 'descent'])('applies committed %s without replacing hydrated activities or reading a cached snapshot', async metric => {
         const changed = vi.spyOn(component.ascentChanged, 'emit');
         component.user = { uid: 'test-user' } as any;
         const activity = { getID: () => 'hike', addStat: vi.fn(), removeStat: vi.fn() };
@@ -234,13 +234,13 @@ describe('EventActionsComponent', () => {
         const closed = new Subject<unknown>();
         mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
         await component.editAscent();
-        closed.next({ activityId: 'hike', ascent: 75, eventAscent: 275, correction: { value: 75, sourceValue: 100 } });
+        closed.next({ activityId: 'hike', metric, value: 75, eventValue: 275, correction: { value: 75, sourceValue: 100 } });
         await Promise.resolve();
         expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
         expect(component.event.clearActivities).not.toHaveBeenCalled();
         expect(component.event.getActivities()[0]).toBe(activity);
         expect(activity.addStat.mock.calls[0][0].getValue()).toBe(75);
-        expect(activity).toHaveProperty('ascentCorrection', { value: 75, sourceValue: 100 });
+        expect(activity).toHaveProperty(`${metric}Correction`, { value: 75, sourceValue: 100 });
         expect((component.event.addStat as any).mock.calls[0][0].getValue()).toBe(275);
         expect(changed).toHaveBeenCalledExactlyOnceWith(component.event);
     });
@@ -253,7 +253,7 @@ describe('EventActionsComponent', () => {
         await component.editAscent();
         const nextEvent = { getID: () => eventId, clearActivities: vi.fn(), addActivities: vi.fn(), addStat: vi.fn() };
         component.event = nextEvent as any;
-        closed.next({ activityId: 'hike', ascent: 75, eventAscent: 75, correction: null });
+        closed.next({ activityId: 'hike', metric: 'ascent', value: 75, eventValue: 75, correction: null });
         await Promise.resolve();
         expect(nextEvent.clearActivities).not.toHaveBeenCalled();
         expect(nextEvent.addStat).not.toHaveBeenCalled();

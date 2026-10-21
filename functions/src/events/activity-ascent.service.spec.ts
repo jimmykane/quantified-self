@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateActivityAscentEdit } from './activity-ascent.service';
+import { validateActivityAscentEdit, validateActivityElevationEdit } from './activity-ascent.service';
 
 describe('activity ascent edit validation', () => {
   const request = { activityId: 'activity', ascent: 0, expectedSourceFingerprint: 'a'.repeat(64), expectedCorrection: null };
@@ -19,4 +19,17 @@ describe('activity ascent edit validation', () => {
   it('rejects event path traversal', () => {
     expect(() => validateActivityAscentEdit('event/activities/other', request)).toThrow();
   });
+});
+
+describe('activity elevation edit validation', () => {
+  const request = { activityId: 'leg', metric: 'descent', value: 0,
+    expectedSourceFingerprint: 'a'.repeat(64), expectedCorrection: null };
+  it.each(['ascent', 'descent'])('accepts a bounded %s correction and explicit reset', metric => {
+    expect(validateActivityElevationEdit('event', { ...request, metric })).toEqual({ ...request, metric });
+    expect(validateActivityElevationEdit('event', { ...request, metric, value: null }).value).toBeNull();
+  });
+  it.each([{ metric: 'Distance' }, { metric: undefined }, { value: -1 }, { value: Infinity }, { value: '10' },
+    { value: 1000001 }, { expectedCorrection: undefined }, { stats: {} }, { ascent: 100 }, { activityId: 'a/b' }])('rejects expanded or invalid elevation edits: %s', patch => {
+      expect(() => validateActivityElevationEdit('event', { ...request, ...patch })).toThrow();
+    });
 });

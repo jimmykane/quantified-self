@@ -7,7 +7,7 @@ import { resolveActivityIdentityAssignments, type ActivityIdentityLike } from '.
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import type { PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
-import { applyActivityAscentCorrection, applyCorrectedEventAscent, isTerrainAscentActivity, readAscentCorrection,
+import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, applyActivityAscentCorrection, applyCorrectedEventAscent, isTerrainAscentActivity, readAscentCorrection,
   type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 
 export const IMPORTED_EVENT_EDIT_FIELDS = ['name', 'description', 'privacy', 'notes', 'rpe', 'feeling'] as const;
@@ -30,8 +30,11 @@ export function preserveImportedEventEdits(incoming: admin.firestore.DocumentDat
 }
 
 export function preserveImportedActivityEdits(incoming: admin.firestore.DocumentData, existing: admin.firestore.DocumentData | null): admin.firestore.DocumentData {
-  if (readAscentCorrection(existing?.ascentCorrection) && !readAscentCorrection(incoming.ascentCorrection))
-    throw new Error('A saved ascent correction was not safely matched. Reload the recording before reimporting.');
+  for (const metric of ACTIVITY_ELEVATION_METRICS) {
+    const { field } = activityElevationMetric(metric);
+    if (readAscentCorrection(existing?.[field]) && !readAscentCorrection(incoming[field]))
+      throw new Error(`A saved ${metric} correction was not safely matched. Reload the recording before reimporting.`);
+  }
   const name = getActivityCreatorNameCarryover(existing?.creator?.name, incoming.creator?.name);
   return sanitizeActivityFirestoreWritePayload({ ...incoming,
     ...(name ? { creator: { ...incoming.creator, name } } : {}),
@@ -42,20 +45,21 @@ export function preserveImportedActivityEdits(incoming: admin.firestore.Document
 /** Bind corrections only to strict source identities, never the device-name fallback. */
 function prepareAscentCarryover(event: EventInterface,
   documents: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>): () => void {
-  const corrected = documents.map((document, index) => ({ index, correction: readAscentCorrection(document.data().ascentCorrection) }))
-    .filter(item => item.correction !== null);
+  const corrected = documents.flatMap((document, index) => ACTIVITY_ELEVATION_METRICS.map(metric => ({
+    index, metric, correction: readAscentCorrection(document.data()[activityElevationMetric(metric).field]),
+  }))).filter(item => item.correction !== null);
   if (!corrected.length) return () => undefined;
   const matches = resolveActivityIdentityAssignments(documents.map(document => storedIdentity(document.data())),
     event.getActivities() as ActivityIdentityLike[], { requireStrictMatch: true });
   const assignments = corrected.map(item => {
     const match = [...matches.assignments].find(([, existingIndex]) => existingIndex === item.index);
     if (!match || !isTerrainAscentActivity(event.getActivities()[match[0]].type))
-      throw new Error('Cannot safely match a saved ascent correction. Reset it before changing the source activities.');
-    return { parsedIndex: match[0], correction: item.correction };
+      throw new Error(`Cannot safely match a saved ${item.metric} correction. Reset it before changing the source activities.`);
+    return { parsedIndex: match[0], metric: item.metric, correction: item.correction };
   });
   return () => {
-    assignments.forEach(({ parsedIndex, correction }) =>
-      applyActivityAscentCorrection(event.getActivities()[parsedIndex] as AscentCorrectedActivity, correction, true));
+    assignments.forEach(({ parsedIndex, metric, correction }) =>
+      applyActivityAscentCorrection(event.getActivities()[parsedIndex] as AscentCorrectedActivity, correction, true, metric));
     applyCorrectedEventAscent(event);
   };
 }
@@ -134,7 +138,7 @@ async function prepareImportedActivityIdentities(
   const parent = await transaction.get(db.doc(`users/${uid}/events/${eventId}`));
   const metadata = await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`));
   const snapshot = await transaction.get(db.collection(`users/${uid}/activities`).where('eventID', '==', eventId)
-    .select('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance', 'ascentCorrection').limit(101));
+    .select('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance', 'ascentCorrection', 'descentCorrection').limit(101));
   if (snapshot.size > 100) throw new Error('Import supports at most 100 stored activities per event.');
   const documents = snapshot.docs;
   const applyAscent = prepareAscentCarryover(event, documents);

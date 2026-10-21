@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypes, DataAscent, DataDistance, EventImporterJSON } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataAscent, DataDescent, DataDistance, EventImporterJSON } from '@sports-alliance/sports-lib';
 import { applyActivityAscentCorrection, applyCorrectedEventAscent, readAscentCorrection,
-  applySavedActivityAscent, carryActivityAscentCorrection, type AscentCorrectedActivity, validActivityAscent } from '@shared/activity-ascent';
+  applySavedActivityElevation, applySavedActivityAscent, carryActivityAscentCorrection, type AscentCorrectedActivity, validActivityAscent } from '@shared/activity-ascent';
 
 describe('activity ascent corrections', () => {
   function activity(ascent = 100): AscentCorrectedActivity {
@@ -65,4 +65,46 @@ describe('activity ascent corrections', () => {
     carryActivityAscentCorrection(existing, replacement);
     expect(replacement.getStat(DataAscent.type)?.getValue()).toBe(75);
   });
+  it('keeps ascent and descent corrections independent through fresh parsing and hydration', () => {
+    const original = activity(); original.addStat(new DataDescent(120));
+    applyActivityAscentCorrection(original, { value: 75, sourceValue: 100 });
+    applyActivityAscentCorrection(original, { value: 80, sourceValue: 120 }, false, 'descent');
+    const parsed = activity(250); parsed.addStat(new DataDescent(300));
+    applyActivityAscentCorrection(parsed, original.ascentCorrection, true);
+    applyActivityAscentCorrection(parsed, original.descentCorrection, true, 'descent');
+    expect(parsed.ascentCorrection).toEqual({ value: 75, sourceValue: 250 });
+    expect(parsed.descentCorrection).toEqual({ value: 80, sourceValue: 300 });
+    const hydrated = activity(250); hydrated.addStat(new DataDescent(300));
+    carryActivityAscentCorrection(parsed, hydrated);
+    expect(hydrated.getStat(DataAscent.type)?.getValue()).toBe(75);
+    expect(hydrated.getStat(DataDescent.type)?.getValue()).toBe(80);
+    expect(hydrated.descentCorrection?.sourceValue).toBe(300);
+  });
+  it('patches and resets descent without replacing activities or changing ascent', () => {
+    const parent = EventImporterJSON.getEventFromJSON({ name: 'Workout', startDate: 0, endDate: 3600000, stats: {}, activities: [] });
+    const target = activity(); target.setID('leg'); parent.addActivity(target); parent.addStat(new DataAscent(100));
+    applySavedActivityElevation(parent, { activityId: 'leg', metric: 'descent', value: 0, eventValue: 0,
+      correction: { value: 0, sourceValue: null } });
+    expect(target.descentCorrection).toEqual({ value: 0, sourceValue: null });
+    expect(parent.getStat(DataDescent.type)?.getValue()).toBe(0);
+    applyCorrectedEventAscent(parent);
+    expect(parent.getStat(DataDescent.type)?.getValue()).toBe(0);
+    applySavedActivityElevation(parent, { activityId: 'leg', metric: 'descent', value: null, eventValue: null, correction: null });
+    expect(parent.getActivities()[0]).toBe(target);
+    expect(target.getStat(DataDescent.type)).toBeFalsy(); expect(parent.getStat(DataDescent.type)).toBeFalsy();
+    expect(target.descentCorrection).toBeUndefined();
+    expect(parent.getStat(DataAscent.type)?.getValue()).toBe(100);
+  });
+
+  it('carries a descent-only correction without requiring an ascent correction', () => {
+    const original = activity(); original.addStat(new DataDescent(120));
+    applyActivityAscentCorrection(original, { value: 80, sourceValue: 120 }, false, 'descent');
+    const parsed = activity(250); parsed.addStat(new DataDescent(300));
+    carryActivityAscentCorrection(original, parsed);
+    expect(parsed.descentCorrection).toEqual({ value: 80, sourceValue: 120 });
+    expect(parsed.getStat(DataDescent.type)?.getValue()).toBe(80);
+    expect(parsed.getStat(DataAscent.type)?.getValue()).toBe(250);
+    expect(parsed.ascentCorrection).toBeUndefined();
+  });
+
 });
