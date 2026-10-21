@@ -41,12 +41,13 @@
       @if (loading()) { <p role="status">Loading choices…</p> }
       <mat-selection-list [multiple]="true" [aria-label]="label()" (selectionChange)="changeSelection($event)">
         @for (option of visibleOptions(); track option.value) {
-          <mat-list-option class="activity-picker-option" [value]="option.value" [selected]="option.selected" [disabled]="disabled() || option.disabled" [attr.aria-label]="option.label">
+          <mat-list-option class="activity-picker-option" [value]="option.value" [selected]="option.selected" [disabled]="disabled() || option.disabled" [attr.aria-label]="option.label"
+            [attr.aria-describedby]="option.description ? dialogId + '-option-description-' + $index : null">
             @if (option.activityType) {
               <app-activity-type-icon matListItemIcon [activityType]="option.activityType" size="20px"></app-activity-type-icon>
             } @else if (option.icon) { <mat-icon matListItemIcon>{{ option.icon }}</mat-icon> }
             <span matListItemTitle class="activity-picker-option-label">{{ option.label }}</span>
-            @if (option.description) { <span matListItemLine class="activity-picker-option-label">{{ option.description }}</span> }
+            @if (option.description) { <span matListItemLine class="activity-picker-option-label" [id]="dialogId + '-option-description-' + $index">{{ option.description }}</span> }
           </mat-list-option>
         }
       </mat-selection-list>

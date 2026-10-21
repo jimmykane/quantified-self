@@ -845,6 +845,11 @@ describe('Activity filter picker Material integration', () => {
     const overlay = TestBed.inject(OverlayContainer).getContainerElement();
     expect(overlay.querySelector('[aria-label="Cycling"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(overlay.textContent).toContain('Required exclusion');
+    const lockedOption = overlay.querySelector('[aria-label="Cycling"]')!;
+    const descriptionId = lockedOption.getAttribute('aria-describedby');
+    expect(descriptionId).toBeTruthy();
+    expect(document.getElementById(descriptionId!)?.textContent).toBe('Required exclusion');
+    expect(overlay.querySelector('[aria-label="Running"]')?.hasAttribute('aria-describedby')).toBe(false);
     fixture.componentInstance.search.set('run'); await settle();
     fixture.componentInstance.clearSelection(); await settle();
     expect(selected).toHaveBeenLastCalledWith(['Cycling']);
