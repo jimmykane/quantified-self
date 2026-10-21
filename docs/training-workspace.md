@@ -2379,6 +2379,41 @@ show **Upcoming status incomplete**, not an allegedly complete total. Read/crypt
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
 
+#### Reconciliation database work
+
+Each reconciliation transaction attempt owns one `ReconciliationReads` instance for its exact owner and page.
+It reuses provider connection authority once per provider and document snapshots by exact path, including absent
+documents. Shared plan/settings, scope, strength, Suunto owner preferences, verification requests and past-cleanup
+markers retain their existing validation. A new page or Firestore transaction retry creates a fresh cache. Delivery,
+recovery and inspection workers retain their independent per-request admission checks and current-state reads.
+
+Reconciliation compares the final ledger after verification staging against its previous value. A genuine state
+change or a newer workout, inherited setting or workout-override timestamp still advances `updatedAtMs`; the app's
+and MCP's current-source acknowledgement therefore remains intact even when an edit produces identical provider
+content. An unchanged scan preserves that timestamp and skips the private ledger write. Both strict public projections
+are read before writing so missing, stale or malformed views are repaired independently. An unchanged status or
+verification projection is left untouched; verification availability changes still update its projection. Unsupported
+inspection retains its existing next-check timestamp while the capability remains unavailable. Actual remote-check
+timestamps continue to come from inspection evidence.
+
+This trades two projection reads per considered identity for up to three avoided writes on an unchanged pass.
+The deterministic 25-workout/single-plan/four-provider fixture reduces connection resolutions from 100 to 4 and
+context document reads from 425 to 131. Those document counts exclude connection internals, ledger/projection reads
+and queue overhead; they are local operation counts, not measured production CPU or monetary savings. Both current
+workout and historical-ledger phases, 25-item pages, 30-minute recovery, delivery/verification enqueueing, Retry-After,
+leases, revisions, consent and deletion fences retain their existing behavior.
+
+MCP impact review: no wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
+change. Existing strict sync reads use the same source-freshness acknowledgement and private-field exclusions; no
+new planning read or bundled-plugin update is needed. Help's delivery and Check instructions remain applicable.
+Monitoring decision: **unchanged**. The existing provider outcomes, dispatch/backlog and unavailable-observation
+coverage still observes the same queues, worker events and committed outcomes. Read-only production review on
+21 October 2026 found fourteen `qs_training_*_v1` metrics, six enabled Training alert policies and the QS Training
+Delivery dashboard. Queue-health age derives from queue writes, so skipping ledger/projection writes does not change
+its age signal. Verification covers read counts, fresh transaction attempts, unchanged document update times,
+projection repair, identical-content edit acknowledgement and due-check recovery, plus the existing delivery
+emulator lifecycle suite. Source verification authorizes no deployment or monitoring configuration change.
+
 #### Server-confirmed sync settings and current revisions (#812)
 
 Delivery presence, exact per-provider settings, bounded statuses/checks, inherited plan settings and workout overrides

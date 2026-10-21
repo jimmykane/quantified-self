@@ -6,6 +6,7 @@ import { deliverySettingsId, TRAINING_DELIVERY_SETTINGS } from '../../../../shar
 import { DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE } from './contracts';
 import type { DeliveryLedgerV1, PastCleanupAuthorization } from './contracts';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import type { DeliveryDocumentReader } from './reconciliation-reads';
 
 const PAST_CLEANUP = 'pastCleanup';
 
@@ -36,7 +37,7 @@ function stillDeleted(authorization: PastCleanupAuthorization, workout: Schedule
   return !workout || (workout.lifecycle === 'deleted' && workout.deletedAtMs === authorization.deletedAtMs);
 }
 
-export async function readPastCleanupAuthorization(tx: Transaction, db: Firestore, uid: string,
+export async function readPastCleanupAuthorization(tx: DeliveryDocumentReader, db: Firestore, uid: string,
   ledger: DeliveryLedgerV1 | null, workout: ScheduledWorkoutV1 | null): Promise<PastCleanupAuthorization | null> {
   if (!ledger?.actual && !ledger?.repair?.original) return null;
   if (workout?.lifecycle === 'deleted' || !workout) {

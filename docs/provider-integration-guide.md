@@ -172,6 +172,12 @@ verification projection is separate from strict delivery status v1; private evid
 and participate in recursive account cleanup. See [remote verification and repair](training-workspace.md#remote-verification-and-repair-703)
 for the full policy, request accounting, privacy, diagnostics and rollout contract.
 
+Training reconciliation reuses shared database reads within one owner/page/transaction attempt and skips unchanged
+ledger and public-projection writes. It still acknowledges newer source edits, repairs missing/stale projections and
+stages due delivery/verification work. Provider-request authority, correction/recovery coverage and polling schedules
+remain unchanged. See [reconciliation database work](training-workspace.md#reconciliation-database-work) for the
+bounded cache, read/write tradeoff, tests and unchanged MCP/monitoring coverage decision.
+
 | Provider | Inspection foundation | Repair gate |
 | --- | --- | --- |
 | Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A positive read of both verifies the cloud copy, not watch receipt. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. An owner-account #769 probe returned 404 for both retained IDs while another QS Workout read returned 200; the orphan Schedule POST was rejected and no new association appeared. | Schedule-only automatic repair still requires two unchanged authoritative observations at least 15 minutes apart. A complete missing-Workout observation is non-authoritative but projects needs-attention, not synced. #769 adds a separately reviewed app-only replacement for paired not-found records, warning of possible duplicates and independently rechecking before POST. A surviving Schedule is not enabled for manual root replacement. Automatic root recreation stays disabled; uncertain root POST acceptance blocks Retry and another replacement. Functions/frontend release and live replacement proof remain separate. |
