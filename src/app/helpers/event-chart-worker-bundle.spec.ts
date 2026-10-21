@@ -117,6 +117,25 @@ describe('compiled event chart worker', () => {
     expect(transferables.every(buffer => buffer instanceof ArrayBuffer && buffer.byteLength === 0)).toBe(true);
   });
 
+  it('keeps recorded pace values and gaps when converting units inside the compiled worker', () => {
+    const input = snapshot(false, true, XAxisTypes.Duration);
+    input.selectedActivities[0].streams.push({ type: 'Pace', values: new Float64Array([120, NaN, 150, 0]) });
+    input.dataTypesToUse = ['Pace'];
+    const original = structuredClone(input);
+    const instance = worker();
+    instance.send({ requestID: 74, input });
+    const response = instance.messages[0].response;
+    if ('error' in response) throw new Error(response.error);
+    const pace = response.panels.find(panel => panel.dataType === PaceUnits.MinutesPerMile)!;
+    const values = eventChartSeriesToPoints(pace.series[0]).map(point => point.y);
+    // Recorded pace is 2:00 and 2:30 /km; the conflicting Speed stream must not replace it.
+    expect(values[0]).toBeCloseTo(120 * 1.609344);
+    expect(values[1]).toBeNull();
+    expect(values[2]).toBeCloseTo(150 * 1.609344);
+    expect(values[3]).toBeNull(); // Existing zero-speed pace policy is unchanged.
+    expect(input).toEqual(original);
+  });
+
   it.each(['continuous', 'detect', 'custom'] as const)('transfers the saved %s policy and display segment IDs', mode => {
     const input = snapshot(false, false, XAxisTypes.Duration);
     input.lineContinuity = { mode, maxGapSeconds: 1 };

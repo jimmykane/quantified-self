@@ -1231,9 +1231,11 @@ function getFilteredStreams(input: {
   const whitelistedUnitTypes = [...new Set([...recordedUnitTypes, ...configuredTypes])];
   const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
 
+  // Convert recorded metrics first. Derived pace must not replace a recorded pace's values or gaps.
+  const convertedStreams = createMissingEventChartUnitStreams(recordedStreams, whitelistedUnitTypes);
   const generatedStreams = ActivityUtilities
     .createUnitStreamsFromStreams(
-      recordedStreams.filter(stream => !retainEventChartSourceValues(stream.type)),
+      recordedStreams.filter(stream => !retainEventChartSourceValues(stream.type)).concat(convertedStreams),
       input.activityType,
       whitelistedUnitTypes,
       {
@@ -1241,10 +1243,7 @@ function getFilteredStreams(input: {
         includeUnitVariants: true,
       }
     );
-  // Sports Lib's derived-metric path can omit unit variants of the original stream (e.g. grade-adjusted speed).
-  const mergedStreams = generatedStreams.concat(
-    createMissingEventChartUnitStreams(recordedStreams, generatedStreams, whitelistedUnitTypes), recordedStreams,
-  );
+  const mergedStreams = generatedStreams.concat(convertedStreams, recordedStreams);
   const deduplicated = dedupeByType(mergedStreams);
 
   return deduplicated

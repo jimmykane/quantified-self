@@ -36,9 +36,9 @@ export function getEventChartUnitTypes(types: string[], settings: UserUnitSettin
 
 /** Unit conversion of recorded values is valid even when the sport cannot derive that metric. */
 export function createMissingEventChartUnitStreams(
-  recorded: StreamInterface[], generated: StreamInterface[], allowedTypes: string[],
+  recorded: StreamInterface[], allowedTypes: string[],
 ): StreamInterface[] {
-  const existing = new Set([...recorded, ...generated].map(stream => stream.type));
+  const existing = new Set(recorded.map(stream => stream.type));
   const allowed = new Set(allowedTypes);
   const result: StreamInterface[] = [];
   for (const stream of recorded) {

@@ -610,9 +610,11 @@ Distinct sources such as Stryd Distance, Step Length and Jump Distance retain th
 values, with conversion at display time: Sports Lib's shared generic miles/feet identifiers cannot merge them into
 recorded Distance or one another. Unique unit variants, including GNSS Distance, retain their selected unit panel.
 Duplicate raw stream selection happens before unit conversion, so each unit uses the same selected source. Empty
-stream placeholders cannot block conversion from valid recorded samples. Existing converted streams with finite
-readings, including zero, retain their own gaps. Conversion preserves nulls and real zero; range statistics use only
-recorded points, and zoom/overlays do not manufacture intermediate measurements.
+stream placeholders cannot block conversion from valid recorded samples. Recorded pace, swim pace and grade-adjusted
+pace are converted before deriving missing metrics from speed; changing units must not replace recorded pace values
+or fill their gaps. Existing converted streams with finite readings, including zero, retain their own gaps. Conversion
+preserves nulls and real zero; range statistics use only recorded points, and zoom/overlays do not manufacture
+intermediate measurements.
 
 Saved overlay keys and targets resolve to the current unit variant without writing settings on read. Exact saved
 choices take precedence, even when their target is unavailable. Alias migration requires a single available variant

@@ -526,6 +526,42 @@ describe('event-echarts-data.helper', () => {
     expect(activity.toJSON()).toEqual(before);
   });
 
+  it.each([
+    { type: 'Pace', speedType: 'Speed', sport: ActivityTypes.Running },
+    { type: 'Swim Pace', speedType: 'Speed', sport: ActivityTypes.Swimming },
+    { type: 'Grade Adjusted Pace', speedType: 'Grade Adjusted Speed', sport: ActivityTypes.Running },
+  ].flatMap(test => ['recorded', 'empty', 'absent', 'converted'].flatMap(source =>
+    [false, true].map(showAllData => ({ ...test, source, showAllData })))))(
+    'preserves the $source $type source and missing-only derivation (all=$showAllData)', ({ type, speedType, sport, source, showAllData }) => {
+      const settings = normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile],
+        swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+      const variant = DynamicDataLoader.getUnitBasedDataTypesFromDataType(type, settings)[0];
+      const convert = DynamicDataLoader.dataTypeUnitGroups[type][variant];
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: '', startDate: 0, endDate: 2000, type: sport,
+        powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+        stats: {}, events: [], laps: [], intensityZones: [],
+        streams: { [speedType]: [1, 1, 2],
+          ...(source === 'absent' ? {} : { [type]: source === 'empty' ? [null, null, null] : [120, null, 150] }),
+          ...(source === 'converted' ? { [variant]: [5, null, 6] } : {}),
+        },
+      });
+      activity.setID('recorded-pace'); activity.addStream(new Stream(XAxisTypes.Time, [0, 1, 2]));
+      const before = structuredClone(activity.toJSON());
+      const derived = type === 'Swim Pace' ? [100, 100, 50] : [1000, 1000, 500];
+      const expected = source === 'converted' ? [5, null, 6] : source === 'recorded'
+        ? [convert(120), null, convert(150)] : derived.map(convert);
+      const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+        showAllData, dataTypesToUse: [type], userUnitSettings: settings,
+        eventColorService: { getActivityColor: () => '#ff0000' } as any };
+      for (const panels of [buildEventChartPanels(input), buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))]) {
+        const panel = panels.find(panel => panel.dataType === variant)!;
+        expect(eventChartSeriesToPoints(panel.series[0]).map(point => point.y)).toEqual(expected);
+      }
+      expect(activity.toJSON()).toEqual(before);
+    },
+  );
+
   it.each([false, true])('keeps distance sources distinct in miles (all=%s)', showAllData => {
     const sources = { Distance: [0, null, 1609], 'Distance (Stryd)': [0, null, 3218],
       'Step Length': [1, null, 2], 'Jump Distance': [10, null, 20] };
