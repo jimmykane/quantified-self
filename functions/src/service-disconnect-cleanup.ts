@@ -56,6 +56,23 @@ export function stageServiceDisconnectCleanup(
 
 class CleanupSuperseded extends Error {}
 
+const CLEANUP_ERROR_CODES = [
+  'unknown', 'cancelled', 'unknown', 'invalid-argument', 'deadline-exceeded', 'not-found',
+  'already-exists', 'permission-denied', 'resource-exhausted', 'failed-precondition',
+  'aborted', 'out-of-range', 'unimplemented', 'internal', 'unavailable', 'data-loss', 'unauthenticated',
+];
+
+function cleanupErrorCode(error: unknown): string {
+  try {
+    // Never invoke a getter or log arbitrary codes, exception text or nested causes.
+    const code = error && typeof error === 'object'
+      ? Object.getOwnPropertyDescriptor(error, 'code')?.value : undefined;
+    return typeof code === 'number' && Number.isInteger(code) && code > 0 && code < CLEANUP_ERROR_CODES.length
+      ? CLEANUP_ERROR_CODES[code]
+      : typeof code === 'string' && CLEANUP_ERROR_CODES.includes(code) ? code : 'unknown';
+  } catch { return 'unknown'; }
+}
+
 function sameLifecycle(root: admin.firestore.DocumentSnapshot, task: CleanupTask): boolean {
   // The original explicit disconnect may already have removed its empty root.
   if (!root.exists) return true;
@@ -209,26 +226,31 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
   } catch (error) {
     // A replaced lifecycle retires only this operation's task. Transient errors
     // retain the page cursor and lease delay, so the scheduler retries it forever.
-    const retained = await db.runTransaction(async transaction => {
+    const disposition = await db.runTransaction(async transaction => {
       const [snapshot, root, deletion] = await Promise.all([
         transaction.get(ref), transaction.get(getServiceTokenRootDocumentRef(task.userID, task.config.serviceName)),
         getUserDeletionGuardStateInTransaction(db, transaction, task.userID),
       ]);
-      if (snapshot.data()?.lease !== lease) return false;
+      if (snapshot.data()?.lease !== lease) return 'lease_changed';
       // Account deletion does not supersede the remaining cleanup obligation.
       if (!deletion.shouldSkip && !sameLifecycle(root, task)) {
         transaction.delete(ref); // Leaf task.
-        return false;
+        return 'connection_changed';
       }
-      return true;
+      return 'retained';
     });
-    cleanupObservation('operational', cleanupProvider(task.config.serviceName), !retained ? 'superseded'
-      : error instanceof CleanupSuperseded ? 'deferred' : 'retry', 'operational',
+    const retained = disposition === 'retained';
+    const outcome = !retained ? 'superseded' : error instanceof CleanupSuperseded ? 'deferred' : 'retry';
+    cleanupObservation('operational', cleanupProvider(task.config.serviceName), outcome, 'operational',
     retained && !(error instanceof CleanupSuperseded) ? cleanupAge(task.cutoffAt) : undefined);
-    logger.warn('[ExplicitDisconnectCleanup] Page deferred or superseded.', {
-      serviceName: task.config.serviceName,
-      reason: error instanceof CleanupSuperseded ? 'lifecycle_or_document_changed' : 'cleanup_retry',
-    });
+    try {
+      const log = outcome === 'retry' ? logger.warn : logger.info;
+      log('[ExplicitDisconnectCleanup] Cleanup page outcome.', {
+        cleanupJobId: ref.id, serviceName: task.config.serviceName, outcome,
+        reason: !retained ? disposition : error instanceof CleanupSuperseded ? 'lifecycle_or_document_changed' : 'cleanup_retry',
+        errorCode: cleanupErrorCode(error),
+      });
+    } catch { /* Diagnostics must not change cleanup or retry behavior. */ }
   }
 }
 
