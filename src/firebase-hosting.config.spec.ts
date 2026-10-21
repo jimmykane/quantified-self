@@ -277,6 +277,8 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/tags')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/activities')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/activities/unknown')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/health/compare')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note/extra')).toBe(false);
@@ -413,6 +415,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tags</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/activities</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');

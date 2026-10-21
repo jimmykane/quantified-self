@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { Location } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, combineLatest, firstValueFrom, of } from 'rxjs';
@@ -8,7 +7,9 @@ import type { AppEventInterface } from '@shared/app-event.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
-import { buildEventTagLibrary, filterEventsByTag } from '../../helpers/event-tag-library.helper';
+import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
+import { activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
+import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { EventTableModule } from '../../modules/event-table.module';
 import { SharedModule } from '../../modules/shared.module';
@@ -23,14 +24,14 @@ interface PendingPageChanges {
 }
 
 @Component({
-  selector: 'app-tags-page',
+  selector: 'app-activities-page',
   standalone: true,
   imports: [SharedModule, EventTableModule],
-  templateUrl: './tags-page.component.html',
-  styleUrls: ['./tags-page.component.scss'],
+  templateUrl: './activities-page.component.html',
+  styleUrls: ['./activities-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TagsPageComponent implements OnInit {
+export class ActivitiesPageComponent implements OnInit {
   private readonly auth = inject(AppAuthService);
   private readonly eventService = inject(AppEventService);
   private readonly catalog = inject(EventTagCatalogService);
@@ -38,7 +39,6 @@ export class TagsPageComponent implements OnInit {
   private readonly logger = inject(LoggerService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly location = inject(Location);
   private readonly destroyRef = inject(DestroyRef);
   private owner: FirebaseUserType | null = null;
   private generation = 0;
@@ -49,7 +49,10 @@ export class TagsPageComponent implements OnInit {
   readonly events = signal<AppEventInterface[]>([]);
   readonly catalogTags = signal<string[]>([]);
   readonly selectedTag = signal('');
-  readonly tagSearch = signal('');
+  readonly selectedSport = signal('');
+  readonly period = signal<ActivityExplorerPeriod>('all');
+  readonly untagged = signal(false);
+  readonly untaggedOption = { untagged: true } as const;
   readonly loading = signal(false);
   readonly catalogLoading = signal(false);
   readonly historyLoaded = signal(false);
@@ -57,26 +60,34 @@ export class TagsPageComponent implements OnInit {
   readonly historyError = signal(false);
   readonly catalogError = signal(false);
   readonly library = computed(() => buildEventTagLibrary(this.events(), this.catalogTags(), this.selectedTag()));
-  readonly allActivitiesHref = this.location.prepareExternalUrl('/tags');
-  readonly visibleTags = computed(() => this.library()
-    .filter(tag => tag.key.includes(this.tagSearch().trim().toLowerCase()))
-    .map(tag => ({ ...tag, href: this.location.prepareExternalUrl(`/tags?tag=${encodeURIComponent(tag.name)}`) })));
   readonly selectedKey = computed(() => this.selectedTag().toLowerCase());
-  readonly selectedName = computed(() => this.library().find(tag => tag.key === this.selectedKey())?.name || this.selectedTag() || 'All activities');
+  readonly selectedName = computed(() => this.library().find(tag => tag.key === this.selectedKey())?.name || this.selectedTag());
+  readonly tagFilterValue = computed(() => this.untagged() ? this.untaggedOption : this.selectedName());
+  readonly sports = computed(() => activityExplorerSports(this.events(), this.selectedSport()));
+  readonly filters = computed(() => ({
+    tag: this.selectedTag(), untagged: this.untagged(), sport: this.selectedSport(), period: this.period(),
+  }));
+  readonly filterContext = computed(() => JSON.stringify(this.filters()));
+  readonly hasFilters = computed(() => !!this.selectedTag() || this.untagged() || !!this.selectedSport() || this.period() !== 'all');
   // A fresh owner input also refreshes the shared table's unit-aware row cache.
-  readonly filteredEvents = computed(() => this.user() ? filterEventsByTag(this.events(), this.selectedTag()) : []);
+  readonly filteredEvents = computed(() => this.user() ? filterActivityExplorerEvents(this.events(), this.filters()) : []);
   readonly complete = computed(() => this.historyLoaded() && !this.hasMore() && !this.historyError());
   readonly emptyMessage = computed(() => this.complete()
-    ? this.selectedTag() ? 'No activities with this tag' : 'No activities yet'
+    ? this.selectedSport() || this.period() !== 'all' ? 'No activities match these filters'
+      : this.untagged() ? 'No untagged activities' : this.selectedTag() ? 'No activities with this tag' : 'No activities yet'
     : 'No matching activities loaded yet');
   readonly emptyHint = computed(() => this.complete()
-    ? this.selectedTag() ? 'Add this tag to an activity to see it here.' : 'Import an activity to get started.'
+    ? this.hasFilters() ? 'Clear a filter to see more activities.' : 'Import an activity to get started.'
     : 'Load older activities to look further back in your history.');
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => { this.generation += 1; this.pendingPageChanges = null; });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
-      this.selectedTag.set(normalizeEventTagSuggestions([params.get('tag')])[0] || '');
+      const tag = normalizeEventTagSuggestions([params.get('tag')])[0] || '';
+      this.selectedTag.set(tag);
+      this.untagged.set(!tag && params.get('untagged') === '1');
+      this.selectedSport.set((params.get('sport') || '').trim().slice(0, 100));
+      this.period.set(params.get('period') === 'week' ? 'week' : 'all');
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([profile, owner]) => {
@@ -95,22 +106,46 @@ export class TagsPageComponent implements OnInit {
       });
   }
 
-  selectTag(tag: string): void {
-    const next = normalizeEventTagSuggestions([tag])[0] || '';
-    if (next.toLowerCase() === this.selectedKey()) return;
+  selectTag(tag: string | typeof this.untaggedOption): void {
+    const untagged = typeof tag !== 'string';
+    const next = untagged ? '' : normalizeEventTagSuggestions([tag])[0] || '';
+    if (next.toLowerCase() === this.selectedKey() && untagged === this.untagged()) return;
     this.selectedTag.set(next);
+    this.untagged.set(untagged);
+    this.filtersChanged();
+  }
+
+  selectSport(sport: string): void {
+    if (sport === this.selectedSport()) return;
+    this.selectedSport.set(sport);
+    this.filtersChanged();
+  }
+
+  selectPeriod(period: ActivityExplorerPeriod): void {
+    if (period === this.period()) return;
+    this.period.set(period);
+    this.filtersChanged();
+  }
+
+  clearFilters(): void {
+    if (!this.hasFilters()) return;
+    this.selectedTag.set('');
+    this.untagged.set(false);
+    this.selectedSport.set('');
+    this.period.set('all');
+    this.filtersChanged();
+  }
+
+  private filtersChanged(): void {
     this.haptics.selection();
-    void this.router.navigate([], { relativeTo: this.route, queryParams: { tag: next || null }, queryParamsHandling: 'merge' });
-  }
-
-  onTagSearchInput(event: Event): void {
-    this.tagSearch.set((event.target as HTMLInputElement).value);
-  }
-
-  navigateToTag(tag: string, event: MouseEvent): void {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    this.selectTag(tag);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        tag: this.selectedTag() || null, untagged: this.untagged() ? '1' : null,
+        sport: this.selectedSport() || null, period: this.period() === 'all' ? null : this.period(),
+      },
+      queryParamsHandling: 'merge',
+    });
   }
 
   async loadOlderActivities(): Promise<void> {
@@ -165,7 +200,6 @@ export class TagsPageComponent implements OnInit {
     this.pendingPageChanges = null;
     this.events.set([]);
     this.catalogTags.set([]);
-    this.tagSearch.set('');
     this.loading.set(false);
     this.catalogLoading.set(false);
     this.historyLoaded.set(false);
@@ -193,7 +227,7 @@ export class TagsPageComponent implements OnInit {
     } catch (error) {
       if (!this.isCurrent(generation, user.uid)) return;
       this.catalogError.set(true);
-      this.logger.warn('[TagsPage] Could not load saved tags', error);
+      this.logger.warn('[ActivitiesPage] Could not load saved tags', error);
     } finally {
       if (this.isCurrent(generation, user.uid)) this.catalogLoading.set(false);
     }
@@ -215,6 +249,7 @@ export class TagsPageComponent implements OnInit {
       if ('error' in page) throw page.error;
       const eventsByID = new Map(this.events().map(event => [event.getID(), event]));
       page.events.forEach(event => {
+        if (!isNormalActivityEvent(event)) return;
         const eventID = event.getID();
         if (pendingChanges.deletedIDs.has(eventID)) return;
         const savedTags = pendingChanges.updatedTags.get(eventID);
@@ -231,7 +266,7 @@ export class TagsPageComponent implements OnInit {
     } catch (error) {
       if (!this.isCurrent(generation, user.uid)) return;
       this.historyError.set(true);
-      this.logger.warn('[TagsPage] Could not load activities', error);
+      this.logger.warn('[ActivitiesPage] Could not load activities', error);
       if (feedback) this.haptics.error();
     } finally {
       if (this.isCurrent(generation, user.uid)) {

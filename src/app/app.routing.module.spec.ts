@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Route } from '@angular/router';
+import { type Route, provideRouter, Router } from '@angular/router';
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { assistantGuard } from './authentication/assistant.guard';
@@ -15,6 +18,10 @@ import {
 } from './components/features/workout-data-comparison-page.paths';
 import { PublicPricingComponent } from './components/public-pricing/public-pricing.component';
 import { PricingComponent } from './components/pricing/pricing.component';
+import { ActivitiesPageComponent } from './components/activities/activities-page.component';
+
+@Component({ standalone: true, template: '' })
+class ActivityRouteStub {}
 
 const publicLayoutRoute = appRoutes.find(route => route.path === '' && Array.isArray(route.children));
 const routes = [
@@ -44,13 +51,25 @@ async function resolvedRouteData(route: Route | undefined): Promise<Record<strin
 }
 
 describe('AppRoutingModule routes', () => {
-  it('keeps the Tags library authenticated, lazy loaded, and outside the public layout', async () => {
-    const route = appRoutes.find(route => route.path === 'tags');
+  it('keeps Activities authenticated, lazy loaded, and outside the public layout', async () => {
+    const route = appRoutes.find(route => route.path === 'activities');
     expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
-    expect(route?.data).toMatchObject({ title: 'Tags', preload: true, robots: 'noindex, follow' });
-    expect((await route?.loadComponent?.())?.name).toContain('TagsPageComponent');
-    expect(publicLayoutRoute?.children?.some(route => route.path === 'tags')).toBe(false);
+    expect(route?.data).toMatchObject({ title: 'Activities', preload: true, robots: 'noindex, follow' });
+    expect(await route?.loadComponent?.()).toBe(ActivitiesPageComponent);
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'activities')).toBe(false);
   });
+  it('redirects old tag links to Activities while preserving filters and fragments', async () => {
+    const legacy = appRoutes.find(route => route.path === 'tags')!;
+    expect(legacy).toMatchObject({ pathMatch: 'full', redirectTo: 'activities' });
+    TestBed.configureTestingModule({ providers: [provideRouter([legacy, { path: 'activities', component: ActivityRouteStub }])] });
+    await RouterTestingHarness.create('/tags?tag=Race%20day&sport=Running#history');
+    const router = TestBed.inject(Router);
+    const url = router.parseUrl(router.url);
+    expect(url.root.children['primary'].segments.map(segment => segment.path)).toEqual(['activities']);
+    expect(url.queryParams).toEqual({ tag: 'Race day', sport: 'Running' });
+    expect(url.fragment).toBe('history');
+  });
+
   it('disables shell cross-fades for public layout navigation', () => {
     expect(publicLayoutRoute?.data?.['disableRouteAnimation']).toBe(true);
     expect(publicLayoutRoute?.children?.some(route => route.path === 'help')).toBe(true);

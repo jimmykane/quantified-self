@@ -1,4 +1,8 @@
 {
+  "src/app/components/activities/activities-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Activities route with TestBed to verify Material filter bindings, projected shared-table controls, query hydration, paginated owner changes, DestroyRef teardown and haptic ownership."
+  },
   "src/app/components/activity-send/activity-send-page.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
@@ -54,10 +58,6 @@
   "src/app/components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the real sentence-only Dashboard rail to verify owner-fenced bounded reads, signal bindings, note visibility, local-day rollover and listener teardown."
-  },
-  "src/app/components/tags/tags-page.component.spec.ts": {
-    "environment": "angular",
-    "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."
   },
   "src/app/components/timeline-notes/timeline-note-comparison-page.component.spec.ts": {
     "environment": "angular",
