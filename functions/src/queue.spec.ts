@@ -846,21 +846,56 @@ describe('queue', () => {
             expect(doc.data().dispatchedToCloudTask).toBeNull();
         });
 
-        it('waits for other started enqueues after a partial failure and leaves the failed row undispatched', async () => {
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('does not dispatch a replacement %s revision if the old task name is reserved', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            doc.ref.get.mockResolvedValue({ exists: true, data: () => ({
+                ...doc.data(), queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run',
+            }) });
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(doc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('still recovers a reserved task name for the unchanged %s revision', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(doc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenLastCalledWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1, queueRevision: 'revision-one' });
+            expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it.each([false, true])('waits for every started enqueue after a partial failure (diagnostic throws=%s)', async diagnosticThrows => {
             const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
             const docs = [child('failed'), child('succeeds')];
             mockGetAll.mockResolvedValue(docs);
             let completeEnqueue!: (value: boolean) => void;
             vi.mocked(utils.enqueueWorkoutTask).mockRejectedValueOnce(new Error('PRIVATE_ENQUEUE_FAILURE'))
                 .mockImplementationOnce(() => new Promise(resolve => { completeEnqueue = resolve; }));
-            let finished = false;
-            const pending = dispatchConnectionHistoryWorkoutBatch(execution(), docs.map(doc => doc.id)).then(() => { finished = true; });
-            await vi.waitFor(() => expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2));
-            expect(finished).toBe(false);
-            completeEnqueue(true);
-            await pending;
-            expect(docs[0].ref.update).not.toHaveBeenCalled();
-            expect(docs[1].ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            const warning = vi.mocked(logger.warn);
+            if (diagnosticThrows) warning.mockImplementationOnce(() => { throw new Error('PRIVATE_LOG_FAILURE'); });
+            let outcome = 'pending';
+            const pending = dispatchConnectionHistoryWorkoutBatch(execution(), docs.map(doc => doc.id))
+                .then(() => { outcome = 'completed'; }, () => { outcome = 'failed'; });
+            try {
+                await vi.waitFor(() => expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2));
+                expect(outcome).toBe('pending');
+                completeEnqueue(true);
+                await pending;
+                expect(outcome).toBe('completed');
+                expect(docs[0].ref.update).not.toHaveBeenCalled();
+                expect(docs[1].ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            } finally { completeEnqueue?.(true); await pending; warning.mockReset(); }
         });
 
         it('rejects oversized batches and leaves other providers untouched', async () => {

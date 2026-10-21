@@ -359,7 +359,8 @@ async function addHistoryToQueueOperation(
             if (error instanceof HistoryLifecycleChangedError) throw error;
             // Admission is durable. Do not reset rows or restart provider history
             // after a dispatch/read failure; the existing dispatcher recovers them.
-            logger.warn('[ConnectionHistory] Activity batch dispatch deferred to scheduled recovery.', { service: serviceName });
+            try { logger.warn('[ConnectionHistory] Activity batch dispatch deferred to scheduled recovery.', { service: serviceName }); }
+            catch { /* A diagnostic failure cannot invalidate durable admission. */ }
           }
         }
         processedBatchesCount++;

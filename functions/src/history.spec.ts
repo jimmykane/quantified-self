@@ -5,6 +5,7 @@ import { HistoryLifecycleChangedError, HistoryWindowTooLargeError, type HistoryE
 import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
+import * as logger from 'firebase-functions/logger';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoisted mocks (Vitest requirement)
@@ -378,20 +379,19 @@ describe('history', () => {
                 committed = true;
                 return result;
             });
-            hoisted.dispatchConnectionHistoryWorkoutBatch.mockImplementation(async (context, ids) => {
-                expect(committed).toBe(true);
-                expect(context).toBe(execution);
-                expect(ids).toHaveLength(1);
-                expect(hoisted.batchSetMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-                    connectionHistoryRunId: execution.runId, firebaseUserID: 'uid', processed: false,
-                }));
-                expect(execution.onQueued).toHaveBeenCalledTimes(1);
+            let dispatchObservation: { committed: boolean; registeredChildren: number } | undefined;
+            hoisted.dispatchConnectionHistoryWorkoutBatch.mockImplementation(async () => {
+                dispatchObservation = { committed, registeredChildren: vi.mocked(execution.onQueued).mock.calls.length };
             });
 
             const result = await history.addHistoryToQueue('uid', serviceName, new Date('2026-09-01'), new Date('2026-09-02'), { execution, maxItems: 100 });
 
             expect(result.successCount).toBe(1);
-            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).toHaveBeenCalledTimes(1);
+            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).toHaveBeenCalledExactlyOnceWith(execution, [expect.any(String)]);
+            expect(dispatchObservation).toEqual({ committed: true, registeredChildren: 1 });
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                connectionHistoryRunId: execution.runId, firebaseUserID: 'uid', processed: false,
+            }));
         });
 
         it('leaves failed automatic dispatch durably admitted for scheduled recovery', async () => {
@@ -415,6 +415,19 @@ describe('history', () => {
 
             await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), { execution, maxItems: 100 }))
                 .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+        });
+
+        it('does not turn durable admission into a retry when the fallback diagnostic throws', async () => {
+            const execution = automaticExecution();
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            hoisted.dispatchConnectionHistoryWorkoutBatch.mockRejectedValue(new Error('PRIVATE_ENQUEUE_FAILURE'));
+            const warning = vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('PRIVATE_LOG_FAILURE'); });
+            try {
+                await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), { execution, maxItems: 100 }))
+                    .resolves.toMatchObject({ successCount: 1, failureCount: 0 });
+                expect(execution.onQueued).toHaveBeenCalledTimes(1);
+            } finally { warning.mockReset(); }
         });
 
         it('does not dispatch after automatic admission fails', async () => {

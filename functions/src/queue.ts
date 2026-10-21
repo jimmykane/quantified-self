@@ -442,7 +442,8 @@ async function dispatchQueueItemTasksInternal(serviceName: ServiceNames, history
   // Finish every started enqueue before the coordinator checkpoints its child paths.
   // Failed immediate attempts keep their durable rows for the scheduled safety net.
   const dispatchResults = await Promise.all(historyBatch ? promises.map(promise => promise.catch(() => {
-    logger.warn('[ConnectionHistory] Activity dispatch deferred to scheduled recovery.', { service: serviceName });
+    try { logger.warn('[ConnectionHistory] Activity dispatch deferred to scheduled recovery.', { service: serviceName }); }
+    catch { /* Diagnostics must not interrupt other enqueues or durable admission. */ }
     return false;
   })) : promises);
   const dispatchedCount = dispatchResults.filter(Boolean).length;
@@ -1691,8 +1692,10 @@ async function advanceWorkoutQueueDispatchRecoveryGeneration(
       }
 
       const currentQueueItem = queueItemSnapshot.data() as Partial<QueueItemInterface>;
+      // Suunto history also has explicit revisions; a reserved old task name
+      // cannot authorize advancing or dispatching its replacement.
       if ((currentQueueItem as { processed?: unknown }).processed === true
-        || (serviceName === ServiceNames.COROSAPI
+        || ((serviceName === ServiceNames.COROSAPI || normalizeQueueRevision(queueItem.queueRevision) !== null)
           && !workoutQueueGenerationMatches(queueItem, currentQueueItem as Record<string, unknown>))
         || currentQueueItem.dispatchedToCloudTask !== null && currentQueueItem.dispatchedToCloudTask !== undefined) {
         return { status: 'not_current' as const };

@@ -137,6 +137,9 @@ dispatched, retrying, leased, parked and different-run/account/owner rows remain
 settles before checkpointing; failures retain durable undispatched children for the half-hour safety net, without
 resetting retries or repeating admission. A batch already waiting before deployment can still wait for that scan once.
 Manual bulk activity history, Wahoo, Garmin, worker concurrency and retry/backoff settings are unchanged.
+Reserved-name recovery still requires the exact explicit queue revision, including Suunto history; a superseded
+attempt cannot advance or dispatch a replacement. Fallback diagnostics are best effort and cannot interrupt the
+wait for started enqueues or invalidate durable admission.
 
 Monitoring is **covered/unchanged** after reviewing #829 and #847: the existing native workout queue, committed
 worker outcomes and scheduled eligible-backlog/recovery observations still own these children. Prompt-dispatch
