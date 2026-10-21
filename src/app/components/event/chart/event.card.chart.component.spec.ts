@@ -1327,14 +1327,19 @@ describe('EventCardChartComponent', () => {
     expect(component.fillOpacity).toBe(0);
   });
 
-  it('pushes cursor updates to map service for distance mode', async () => {
+  it.each([
+    { label: 'dense distance', distance: [0, 100, 200], time: [0, 10, 20], target: 120, seconds: 10 },
+    { label: 'leading distance gaps', distance: [null, null, 0, 10], time: [0, 1, 2, 3], target: 0, seconds: 2 },
+    { label: 'missing paired time', distance: [0, 100, 200], time: [0, null, 20], target: 110, seconds: 20 },
+    { label: 'no valid distance-time pair', distance: [null, 100], time: [0, null], target: 100, seconds: null },
+  ])('syncs $label to the map using only recorded pairs', async ({ distance, time, target, seconds }) => {
     chartSettingsSignal.set({
       ...chartSettingsSignal(),
       xAxisType: XAxisTypes.Distance,
     });
 
-    const distanceStream = { getData: () => [0, 100, 200] };
-    const timeStream = { getData: () => [0, 10, 20] };
+    const distanceStream = { getData: () => distance };
+    const timeStream = { getData: () => time };
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
       getID: () => 'a1',
@@ -1358,14 +1363,21 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    component.onPanelCursorPositionChange(120);
+    component.onPanelCursorPositionChange(target);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    expect(mockActivityCursorService.setCursor).toHaveBeenCalledWith({
-      activityID: 'a1',
-      time: activity.startDate.getTime() + 10 * 1000,
-      byChart: true,
-    });
+    if (seconds === null) {
+      expect(mockActivityCursorService.setCursor).not.toHaveBeenCalled();
+    } else {
+      expect(mockActivityCursorService.setCursor).toHaveBeenCalledExactlyOnceWith({
+        activityID: 'a1',
+        time: activity.startDate.getTime() + seconds * 1000,
+        byChart: true,
+      });
+    }
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockHaptics.error).not.toHaveBeenCalled();
   });
 
   it('falls back to Stryd distance when Distance lookup throws while syncing cursor to map', async () => {

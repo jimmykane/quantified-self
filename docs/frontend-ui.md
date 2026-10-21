@@ -580,6 +580,12 @@ Distance axes. Display buffers contain only original finite coordinates plus nul
 intensity-zone styling, overlays, and comparison activities retain the same connection decisions and original values.
 Each activity has its own series; preferences never connect separate activities.
 
+Distance-axis hover-to-map synchronization selects the nearest finite distance/time pair at its original stream
+index. Missing readings, invalid values and unpaired timestamps do not become zero or shift later samples; genuine
+zeros and repeated distances remain valid, with the first recorded pair winning a tie. No usable pair means no map
+cursor update. This read-only lookup preserves the source streams and works with both dense and sparse Distance
+streams, including the existing Stryd fallback.
+
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
 even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.

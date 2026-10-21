@@ -67,6 +67,7 @@ import {
   EventChartRange,
   normalizeEventRange,
   resolveEventChartXAxisType,
+  resolveEventDistanceCursorSeconds,
 } from '../../../helpers/event-echarts-xaxis.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
@@ -1420,27 +1421,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const distanceStream = this.getActivityStream(activity, DataDistance.type)
       || this.getActivityStream(activity, DataStrydDistance.type);
     const timeStream = this.getActivityStream(activity, XAxisTypes.Time);
-    const distanceValues = this.toNumericArray(distanceStream?.getData());
-    const timeValues = this.toNumericArray(timeStream?.getData());
-
-    const length = Math.min(distanceValues.length, timeValues.length);
-    if (!length) {
-      return null;
-    }
-
-    let closestIndex = 0;
-    let smallestDelta = Number.POSITIVE_INFINITY;
-
-    for (let index = 0; index < length; index += 1) {
-      const delta = Math.abs(targetDistance - distanceValues[index]);
-      if (delta < smallestDelta) {
-        smallestDelta = delta;
-        closestIndex = index;
-      }
-    }
-
-    const seconds = timeValues[closestIndex];
-    if (!Number.isFinite(seconds)) {
+    const seconds = resolveEventDistanceCursorSeconds(
+      distanceStream?.getData(), timeStream?.getData(), targetDistance,
+    );
+    if (seconds === null) {
       return null;
     }
 
@@ -1465,13 +1449,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     const streams = activity.getAllStreams?.() || [];
     return streams.find((stream) => stream?.type === streamType) || null;
-  }
-
-  private toNumericArray(value: unknown): number[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((item) => Number(item));
   }
 
   private loading(): void {
