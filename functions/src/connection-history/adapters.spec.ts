@@ -108,10 +108,17 @@ describe('shared history adapter contracts', () => {
     mocks.garmin.mockRejectedValueOnce(new HistoryUnavailableError('Unavailable Sleep range', job.endMs + 1000));
     await expect(executeHistoryOperation(job, step, execution)).rejects.toThrow('Unavailable Sleep range');
   });
-  it('resumes Wahoo one page at a time with cumulative counts and a fixed range', async () => {
+  it.each(['30_days', 'custom'] as const)('resumes Wahoo %s history one page at a time with cumulative counts and a fixed range', async rangePreset => {
     const job = run(ServiceNames.WahooAPI); job.steps[0].page = 3; job.steps[0].count = 100; mocks.wahoo.mockResolvedValue({ successCount: 50, nextPage: 4 });
+    job.rangePreset = rangePreset;
+    if (rangePreset === 'custom') {
+      job.startMs = Date.parse('2026-10-01T21:00:00.000Z'); job.endMs = Date.parse('2026-10-02T20:59:59.999Z');
+    }
     expect(await executeHistoryOperation(job, job.steps[0], execution)).toEqual({ count: 50, nextStartMs: job.startMs, nextPage: 4 });
     expect(mocks.wahoo).toHaveBeenCalledWith('owner', new Date(job.startMs), new Date(job.endMs), { execution, singlePage: true, page: 3, processedCountOffset: 100 });
+    mocks.wahoo.mockResolvedValueOnce({ successCount: 1 });
+    const completed = await executeHistoryOperation(job, job.steps[0], execution);
+    expect(completed.nextStartMs).toBeGreaterThan(job.endMs);
   });
   it.each([ServiceNames.SuuntoApp, ServiceNames.GarminAPI, ServiceNames.COROSAPI])('reuses Sleep/Health operations with explicit ranges and capability scope for %s', async service => {
     const job = run(service); const fn = service === ServiceNames.SuuntoApp ? mocks.suunto : service === ServiceNames.GarminAPI ? mocks.garmin : mocks.coros;

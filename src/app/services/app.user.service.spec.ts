@@ -2609,6 +2609,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addWahooAPIHistoryToQueue', {
                     startDate: startDate.toISOString(),
                     endDate: endDate.toISOString(),
+                    background: true,
                 }, { canExecute: expect.any(Function) });
             });
         });

@@ -2,6 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { withHistoryExecution } from '../connection-history/context';
 import type { HistoryExecution } from '../connection-history/execution';
+import { startManualActivityHistory } from '../connection-history/manual-activity';
+import { enforceAppCheck, hasProAccess } from '../utils';
+import { getNextAllowedHistoryImportDate } from '../history';
+import { SERVICE_NAME } from './constants';
+
+vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
+vi.mock('firebase-functions/v2/https', async importOriginal => ({
+  ...await importOriginal<typeof import('firebase-functions/v2/https')>(),
+  onCall: (_options: unknown, handler: unknown) => handler,
+}));
 
 const firestoreMocks = vi.hoisted(() => {
   const metaRef = { path: 'users/user-1/meta/Wahoo API' };
@@ -93,6 +103,7 @@ vi.mock('./account', () => ({
 }));
 
 import {
+  addWahooAPIHistoryToQueue,
   finishWahooHistoryLease,
   importWahooHistory,
   selectWahooHistoryPage,
@@ -303,6 +314,93 @@ describe('importWahooHistory account fencing', () => {
       },
     });
     historyMocks.upsertWahooWorkoutQueueItem.mockResolvedValue({ queued: true });
+    vi.mocked(startManualActivityHistory).mockReset();
+    vi.mocked(enforceAppCheck).mockReset();
+    vi.mocked(hasProAccess).mockResolvedValue(true);
+    vi.mocked(getNextAllowedHistoryImportDate).mockResolvedValue(null);
+  });
+
+  describe('manual history callable', () => {
+    const data = { startDate: '2026-07-10T21:00:00.000Z', endDate: '2026-07-18T20:59:59.999Z', background: true };
+    type TestRequest = { auth: { uid: string } | null; app: { appId: string }; data: unknown };
+    const request = (): TestRequest => ({ auth: { uid: 'user-1' }, app: { appId: 'test-app' }, data: { ...data } });
+    const invoke = addWahooAPIHistoryToQueue as unknown as (request: TestRequest) => Promise<unknown>;
+
+    it('accepts exact selected dates without fetching credentials, scanning Wahoo or queuing workouts', async () => {
+      const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
+      vi.mocked(startManualActivityHistory).mockResolvedValue(projection);
+      await expect(invoke(request())).resolves.toEqual({ result: 'History import accepted', historyImport: projection });
+      expect(startManualActivityHistory).toHaveBeenCalledWith('user-1', SERVICE_NAME, new Date(data.startDate), new Date(data.endDate));
+      expect(enforceAppCheck).toHaveBeenCalledOnce();
+      expect(hasProAccess).toHaveBeenCalledWith('user-1');
+      expect(historyMocks.getActiveWahooTokenSnapshot).not.toHaveBeenCalled();
+      expect(historyMocks.requestWahooAPI).not.toHaveBeenCalled();
+      expect(historyMocks.upsertWahooWorkoutQueueItem).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, false, true])('preserves legacy stats for background=%s when no coordinator is admitted', async background => {
+      vi.mocked(startManualActivityHistory).mockResolvedValue(null);
+      const input = { ...request(), data: { ...data, background } };
+      await expect(invoke(input)).resolves.toMatchObject({
+        result: 'Wahoo history items added to queue', stats: { successCount: 1, pagesFetched: 1 },
+      });
+      expect(startManualActivityHistory).toHaveBeenCalledTimes(background === true ? 1 : 0);
+      expect(getNextAllowedHistoryImportDate).toHaveBeenCalledWith('user-1', SERVICE_NAME);
+      expect(historyMocks.requestWahooAPI).toHaveBeenCalledOnce();
+    });
+
+    it.each(['already-exists', 'permission-denied', 'failed-precondition'] as const)('does not fall back after an admission %s error', async code => {
+      const error = new HttpsError(code, 'Admission rejected');
+      vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+      await expect(invoke(request())).rejects.toBe(error);
+      expect(historyMocks.requestWahooAPI).not.toHaveBeenCalled();
+    });
+
+    it.each(['app-check', 'auth', 'pro'])('requires %s before background admission', async guard => {
+      const input = request();
+      if (guard === 'app-check') vi.mocked(enforceAppCheck).mockImplementation(() => { throw new HttpsError('unauthenticated', 'App Check required'); });
+      if (guard === 'auth') input.auth = null;
+      if (guard === 'pro') vi.mocked(hasProAccess).mockResolvedValue(false);
+      await expect(invoke(input)).rejects.toMatchObject({ code: guard === 'pro' ? 'permission-denied' : 'unauthenticated' });
+      expect(startManualActivityHistory).not.toHaveBeenCalled();
+      expect(historyMocks.requestWahooAPI).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { ...data, background: 'true' }, { ...data, startDate: 'invalid' },
+      { ...data, endDate: '2026-07-01' }, {},
+    ])('rejects invalid input before admission', async invalidData => {
+      await expect(invoke({ ...request(), data: invalidData })).rejects.toMatchObject({ code: 'invalid-argument' });
+      expect(startManualActivityHistory).not.toHaveBeenCalled();
+      expect(historyMocks.requestWahooAPI).not.toHaveBeenCalled();
+    });
+  });
+
+  it('queues one bounded page per coordinator step and resumes with the same exact range', async () => {
+    const start = new Date('2026-07-10T21:00:00.000Z'), end = new Date('2026-07-18T20:59:59.999Z');
+    const execution = { runId: 'manual-run', beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() } as unknown as HistoryExecution;
+    historyMocks.generateIDFromParts.mockImplementation(async parts => parts.join('-'));
+    historyMocks.requestWahooAPI.mockResolvedValueOnce({ data: {
+      workouts: Array.from({ length: 100 }, (_, index) => workout(index + 1, end.toISOString())), total: 104,
+    } });
+    const first = await importWahooHistory('user-1', start, end, { execution, singlePage: true });
+    expect(first).toMatchObject({ successCount: 100, pagesFetched: 1, nextPage: 2 });
+    expect(historyMocks.requestWahooAPI).toHaveBeenCalledOnce();
+    expect(execution.onQueued).toHaveBeenCalledTimes(100);
+    historyMocks.requestWahooAPI.mockResolvedValueOnce({ data: { workouts: [
+      workout(101, start.toISOString()), workout(102, start.toISOString(), { file: false }),
+      workout(103, start.toISOString(), { fitnessAppID: 1001 }), workout(104, new Date(start.getTime() - 1).toISOString()),
+    ], total: 104 } });
+    const second = await importWahooHistory('user-1', start, end, { execution, singlePage: true, page: first.nextPage, processedCountOffset: first.successCount });
+    expect(second).toMatchObject({ successCount: 1, skippedCount: 2, pagesFetched: 1 });
+    expect(second.nextPage).toBeUndefined();
+    expect(historyMocks.requestWahooAPI).toHaveBeenLastCalledWith('access-token', '/v1/workouts?page=2&per_page=100');
+    expect(historyMocks.upsertWahooWorkoutQueueItem).toHaveBeenCalledTimes(101);
+    expect(historyMocks.upsertWahooWorkoutQueueItem).toHaveBeenLastCalledWith(expect.objectContaining({
+      workoutID: '101', firebaseUserID: 'user-1', fromHistory: true, connectionHistoryRunId: 'manual-run',
+    }), 'deferred', expect.any(Function));
+    expect(execution.beforeRequest).toHaveBeenCalledTimes(2);
+    expect(execution.onQueued).toHaveBeenLastCalledWith('wahooAPIWorkoutQueue/wahoo-user-1-101');
   });
 
   it('stops before queue insertion when the Wahoo account changes after a page fetch', async () => {

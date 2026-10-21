@@ -6,11 +6,17 @@ import { activityHistoryNextAllowedAt } from '../../../shared/history-import.con
 import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, HistoryLifecycleChangedError } from './execution';
 import { CONNECTION_HISTORY_COLLECTION, createHistoryRun, historyProjection } from './model';
 
-type ManualHistoryService = ServiceNames.SuuntoApp | ServiceNames.COROSAPI;
+type ManualHistoryService = ServiceNames.SuuntoApp | ServiceNames.COROSAPI | ServiceNames.WahooAPI;
+const TOKEN_COLLECTIONS: Record<ManualHistoryService, string> = {
+  [ServiceNames.SuuntoApp]: SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME,
+  [ServiceNames.COROSAPI]: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME,
+  [ServiceNames.WahooAPI]: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
+};
 
 /** Admission only: provider work is owned by the existing durable coordinator.
  * Unversioned legacy connections retain their existing callable implementation.
@@ -24,8 +30,7 @@ export async function startManualActivityHistory(
   }
   const db = admin.firestore();
   const metaRef = db.doc(`users/${userID}/meta/${serviceName}`);
-  const rootRef = db.collection(serviceName === ServiceNames.SuuntoApp
-    ? SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME : COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(userID);
+  const rootRef = db.collection(TOKEN_COLLECTIONS[serviceName]).doc(userID);
   const runId = randomUUID();
   return db.runTransaction(async tx => {
     const deletion = await getUserDeletionGuardStateInTransaction(db, tx, userID);

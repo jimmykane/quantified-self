@@ -174,8 +174,8 @@ describe('HistoryImportFormComponent', () => {
                 : component.onSleepBackfill(new Event('click'));
         }
 
-        it('retains background acceptance across reopen and unlocks only after live completion', async () => {
-            await reopen();
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('retains %s background acceptance across reopen and unlocks only after live completion', async provider => {
+            await reopen(provider);
             const history = { runId: 'manual-run', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
                 active: true, canRetry: false, steps: [{ id: 'activities', resources: ['activities'], status: 'queued', count: 0 }] };
             mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ historyImport: history });
@@ -184,7 +184,7 @@ describe('HistoryImportFormComponent', () => {
             expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History import in progress');
             expect(fixture.nativeElement.textContent).not.toContain('0 activities scheduled');
             expect(component.formGroup.disabled).toBe(true);
-            await reopen();
+            await reopen(provider);
             await submit('activity');
             expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
             expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History import in progress');
@@ -197,8 +197,8 @@ describe('HistoryImportFormComponent', () => {
             expect(haptics.success).toHaveBeenCalledTimes(1); // Acceptance only; background updates are silent.
         });
 
-        it('shows the next allowed import after background completion while the cooldown is active', async () => {
-            await reopen();
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('shows the next allowed %s import after background completion while the cooldown is active', async provider => {
+            await reopen(provider);
             fixture.componentRef.setInput('userMetaForService', { didLastHistoryImport: Date.now(),
                 processedActivitiesFromLastHistoryImportCount: 100,
                 connectionHistoryImport: { runId: 'finished-manual', rangePreset: 'custom', active: false,
@@ -210,7 +210,7 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.disabled).toBe(true);
         });
 
-        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps live %s counts when background acceptance arrives after the metadata update', async provider => {
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('keeps live %s counts when background acceptance arrives after the metadata update', async provider => {
             await reopen(provider);
             const history = { runId: 'manual-run', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
                 active: true, canRetry: false, steps: [{ id: 'activities', resources: ['activities'], status: 'queued', count: 0 }] };
@@ -235,8 +235,8 @@ describe('HistoryImportFormComponent', () => {
             expect(fixture.nativeElement.textContent).toContain('New import available on');
         });
 
-        it('restores background failures from metadata and directs the owner to the existing retry control', async () => {
-            await reopen();
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('restores %s background failures from metadata and directs the owner to the existing retry control', async provider => {
+            await reopen(provider);
             fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'failed-manual', rangePreset: 'custom',
                 active: false, canRetry: true, updatedAtMs: Date.now(), steps: [{ id: 'activities', status: 'failed', count: 12 }] } });
             fixture.detectChanges();
@@ -246,8 +246,8 @@ describe('HistoryImportFormComponent', () => {
             expect(haptics.success).not.toHaveBeenCalled();
         });
 
-        it('blocks a new manual request while an automatic coordinator is active even without a manual lease', async () => {
-            await reopen();
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('blocks a new %s manual request while an automatic coordinator is active even without a manual lease', async provider => {
+            await reopen(provider);
             fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'automatic', rangePreset: '30_days', active: true } });
             fixture.detectChanges();
             await submit('activity');
@@ -256,8 +256,8 @@ describe('HistoryImportFormComponent', () => {
             expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
         });
 
-        it.each([ServiceNames.GarminAPI, ServiceNames.WahooAPI])('does not apply the new coordinator lock to legacy %s manual imports', async provider => {
-            await reopen(provider);
+        it('does not apply the new coordinator lock to legacy Garmin manual imports', async () => {
+            await reopen(ServiceNames.GarminAPI);
             fixture.componentRef.setInput('userMetaForService', { connectionHistoryImport: { runId: 'automatic', rangePreset: '30_days', active: true } });
             fixture.detectChanges();
             expect(component.isActivityHistoryImportRunning()).toBe(false);
@@ -268,8 +268,8 @@ describe('HistoryImportFormComponent', () => {
             expect(emit).toHaveBeenCalledTimes(1);
         });
 
-        it('discards an old optimistic background receipt after reconnecting the same account', async () => {
-            await reopen();
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('discards an old optimistic %s background receipt after reconnecting the same account', async provider => {
+            await reopen(provider);
             fixture.componentRef.setInput('userMetaForService', { connectionStateGeneration: 'old' }); fixture.detectChanges();
             mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ historyImport: {
                 runId: 'old-run', rangePreset: 'custom', active: true, steps: [], updatedAtMs: Date.now(),

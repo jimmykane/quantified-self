@@ -75,7 +75,7 @@ The current providers are intentionally not identical:
 | Garmin   | Activity/sleep import, production Health import/backfill, route delivery, and activity delivery to Suunto/Wahoo/COROS | Garmin Health uses one canonical Ping/Pull ingress for Sleep plus ten Health summary families; callback URLs are short-lived credentials. Every eligible connected Pro user's history request adds a durable, paced all-family Health cursor while the independent rollback switch is enabled. Summary Resender is reserved for bounded recovery. Activity-history requests show their active lease in Services. Garmin Connect route delivery requires Course Import permission. |
 | Suunto   | Activity/sleep/route import, production 24/7 Health, plus activity and saved-route source/destination workflows | Health independently reconciles Activity, daily statistics, and Recovery for active connected accounts in windows of at most 28 days using signed webhook refetches, bounded polling, and history work. New route-inclusive connection history also imports the entire saved Suunto route library independently of the selected date range. Suunto receives GPX routes; activities can flow to Wahoo/COROS, while saved routes can flow to Garmin/Wahoo/COROS through shared queues. |
 | COROS    | Activity plus daily Health/Sleep import; asynchronous activity upload; activity delivery to/from supported providers; direct/saved GPX route delivery | Exactly one active COROS account is used. Daily Health reuses the Sleep poll/history queue, preserves aggregate Sleep through references, and stores bounded detailed HRV in Health. Activity upload is initialized then polled by 64-bit ID. Route push accepts bike/running GPX metadata and is available to eligible connected Pro users through one shared production-wide rollout gate. |
-| Wahoo    | Pro activity import, FIT activity delivery, direct/saved route delivery, and Training workout delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained FITs can sync to Suunto/COROS. Connected Pro users can explicitly deliver QS-authored workouts as separate app-owned Plans and dated Workouts within a saved-zone seven-day horizon; exact returned Workout/Plan/token evidence can link the imported activity, while Wahoo-owned plans remain out of scope. |
+| Wahoo    | Pro activity import, FIT activity delivery, direct/saved route delivery, and Training workout delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; manual activity history reuses the paged connection-history coordinator. Retained FITs can sync to Suunto/COROS. Connected Pro users can explicitly deliver QS-authored workouts as separate app-owned Plans and dated Workouts within a saved-zone seven-day horizon; exact returned Workout/Plan/token evidence can link the imported activity, while Wahoo-owned plans remain out of scope. |
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
@@ -1166,14 +1166,18 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
-Manual Suunto/COROS activity imports from updated clients now reuse the existing coordinator through the additive
+Manual Suunto/COROS/Wahoo activity imports from updated clients now reuse the existing coordinator through the additive
 `background: true` option on their current callables. Admission atomically binds the existing account and credential/
 connection generations, exact custom dates, activity-only capability, reservation and owner-safe progress. Older
-clients and unversioned legacy connections retain the previous call path. Automatic history, Garmin/Wahoo manual
+clients and unversioned legacy connections retain the previous call path. Automatic history, Garmin manual
 history, and manual Sleep/Health/routes keep their scope. No provider call happens during background admission;
-the existing 100-item/60-second child path and committed outcomes control continuation. Existing progress/Retry
-UI and #847/#829 monitoring cover both starts. See [manual history admission](connection-history-import.md#manual-activity-imports-suunto-and-coros)
-for compatibility, precision, lifecycle/overlap guards, the four-function/backend-first rollout and rollback boundary.
+the existing bounded child path and committed outcomes control continuation. Suunto/COROS retain their 60-second
+dispatch spread; Wahoo uses one 100-workout page per step, its existing deferred dispatch and exact date filtering.
+Wahoo's no-FIT/third-party exclusions and pinned-account checks before/after each page and inside queue writes remain.
+Existing progress/Retry UI and #847/#829 monitoring cover both starts. See
+[manual history admission](connection-history-import.md#manual-activity-imports-suunto-coros-and-wahoo)
+for compatibility, precision, lifecycle/overlap guards, backend-first rollout and rollback boundary. After the shared
+manual coordinator support is deployed, Wahoo adds only `addWahooAPIHistoryToQueue` plus the frontend release.
 No new Function, queue, secret, index, Rules, MCP or Training contract is introduced.
 
 Suunto/COROS coordinator-owned activity batches use the existing guarded workout dispatcher after durable

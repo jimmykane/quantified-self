@@ -14,7 +14,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
   afterEach(async () => { vi.restoreAllMocks(); await mocks.db.terminate(); });
   const start = new Date('2026-10-01T00:00:00Z'), end = new Date('2026-10-02T23:59:59.999Z');
   async function seed(service: ServiceNames) {
-    const root = `${service === ServiceNames.SuuntoApp ? 'suuntoAppAccessTokens' : 'COROSAPIAccessTokens'}/owner`;
+    const roots = { [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens', [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens', [ServiceNames.WahooAPI]: 'wahooAPIAccessTokens' };
+    const root = `${roots[service as keyof typeof roots]}/owner`;
     const meta = mocks.db.doc(`users/owner/meta/${service}`);
     const batch = mocks.db.batch();
     batch.set(mocks.db.doc('users/owner'), { uid: 'owner' });
@@ -23,7 +24,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     batch.set(meta, { connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: 'account' });
     await batch.commit(); return meta;
   }
-  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('admits only one of two concurrent %s requests with its matching reservation and projection', async service => {
+  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('admits only one of two concurrent %s requests with its matching reservation and projection', async service => {
     const meta = await seed(service);
     const results = await Promise.allSettled([
       startManualActivityHistory('owner', service, start, end), startManualActivityHistory('owner', service, start, end),

@@ -1404,7 +1404,7 @@ export class AppUserService implements OnDestroy {
         break;
       case ServiceNames.WahooAPI:
         functionName = 'addWahooAPIHistoryToQueue';
-        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString(), background: true };
         break;
       default:
         throw new Error(`Service ${serviceName} not supported for history import`);
