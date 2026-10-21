@@ -28,7 +28,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { from, of, Subject } from 'rxjs';
-import { User, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
+import { User, DataAscent, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
 import { Auth } from 'app/firebase/auth';
@@ -1050,6 +1050,30 @@ describe('EventTableComponent', () => {
         expect((component.data.data[1] as any).Name).toBe('Mutated Event 2');
         expect((component.data.data[1] as any).Privacy).toBe('private');
         expect((component.data.data[1] as any)['Has Benchmark']).toBeTruthy();
+    });
+
+    it.each([0, 250, null])('refreshes saved ascent in cached rows and preserves selection: %s', value => {
+        const event = component.events[0];
+        let ascent: DataAscent | null = new DataAscent(100);
+        vi.spyOn(event, 'getStatsAsArray').mockImplementation(() => ascent ? [ascent] : []);
+        (component as any).processChanges('ascent_initial');
+        const previousRows = [...component.data.data];
+        expect(previousRows[0].Ascent).toBe('100 m');
+        component.selection.select(previousRows[0], previousRows[1]);
+        ascent = value === null ? null : new DataAscent(value);
+        component.refreshSavedAscent(event);
+        expect(component.data.data[0].Ascent).toBe(value === null ? '' : `${value} m`);
+        expect(component.data.data[1]).toBe(previousRows[1]);
+        expect(component.selection.selected.map(row => row.Event.getID())).toEqual(['event1', 'event2']);
+    });
+    it('ignores a saved-ascent callback for an event instance replaced by newer input', () => {
+        const rows = [...component.data.data];
+        const previous = component.events[0];
+        component.events = [new MockEvent('event1') as any, ...component.events.slice(1)];
+        const rebuild = vi.spyOn(component, 'getStatsRowElement');
+        component.refreshSavedAscent(previous);
+        expect(rebuild).not.toHaveBeenCalled();
+        expect(component.data.data).toEqual(rows);
     });
 
     it('should support comma-separated search terms', () => {

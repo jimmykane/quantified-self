@@ -353,6 +353,7 @@ describe('Firebase Hosting configuration', () => {
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
+    // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

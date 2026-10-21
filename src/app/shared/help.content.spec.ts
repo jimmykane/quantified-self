@@ -16,6 +16,11 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains ascent correction, reviewed reset and source preservation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    for (const phrase of ['**Edit ascent**', '**Reset to imported value**', '**Edited**',
+      'without replacing your correction', 'not the altitude chart, laps, original file']) expect(copy).toContain(phrase);
+  });
   it('explains browser verification cooldowns and recovery without resetting account data', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     expect(copy).toContain('Temporary verification service errors retry automatically after short pauses');
