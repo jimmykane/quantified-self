@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, type ActivityExplorerFilters } from './activity-explorer.helper';
+import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, normalizeActivityExplorerSports, type ActivityExplorerFilters } from './activity-explorer.helper';
 
 const now = new Date(2026, 9, 21, 12);
-const filters: ActivityExplorerFilters = { tag: '', untagged: false, sport: '', period: 'all' };
+const filters: ActivityExplorerFilters = { tags: [], untagged: false, sports: [], period: 'all' };
 const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20)) => ({
   tags, startDate: date, getActivityTypesAsArray: () => sports,
 });
@@ -15,7 +15,7 @@ describe('Activity explorer date-range filters', () => {
     }
   });
   it('offers canonical sports beyond the current range', () => {
-    expect(activityExplorerSports([], '', true)).toContain('Running');
+    expect(activityExplorerSports([], [], true)).toContain('Running');
   });
   it('includes both custom dates and uses the next local midnight as its exclusive bound', () => {
     const customDates = { startDate: '2026-10-24', endDate: '2026-10-25' };
@@ -69,7 +69,7 @@ describe('Activity explorer date-range filters', () => {
   it('starts with all loaded events and combines tag and sport filters without changing the source', () => {
     const records = [event(['Endurance']), event(['ENDURANCE'], ['Cycling']), event(['Recovery'])];
     expect(filterActivityExplorerEvents(records, filters, now)).toEqual(records);
-    expect(filterActivityExplorerEvents(records, { ...filters, tag: 'endurance', sport: 'Running' }, now)).toEqual([records[0]]);
+    expect(filterActivityExplorerEvents(records, { ...filters, tags: ['endurance'], sports: ['Running'] }, now)).toEqual([records[0]]);
     expect(records).toHaveLength(3);
     expect(records[0].tags).toEqual(['Endurance']);
   });
@@ -79,7 +79,7 @@ describe('Activity explorer date-range filters', () => {
     const legacy = { ...event([]), tags: undefined, benchmarkReviewTags: ['Race'] };
     const cleared = { ...event([]), benchmarkReviewTags: ['Old label'] };
     expect(filterActivityExplorerEvents([untagged, legacy, cleared], { ...filters, untagged: true }, now)).toEqual([untagged, cleared]);
-    expect(filterActivityExplorerEvents([legacy], { ...filters, tag: 'race' }, now)).toEqual([legacy]);
+    expect(filterActivityExplorerEvents([legacy], { ...filters, tags: ['race'] }, now)).toEqual([legacy]);
   });
 
   it('uses seven local calendar days, including today, with exclusive tomorrow and valid dates', () => {
@@ -96,24 +96,33 @@ describe('Activity explorer date-range filters', () => {
 
   it('matches individual sports in multi-sport events and retains an unloaded selected sport', () => {
     const records = [event([], ['Running', 'Cycling']), event([], ['Swimming'])];
-    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Cycling' }, now)).toEqual([records[0]]);
-    expect(activityExplorerSports(records, 'Rowing')).toEqual(['Cycling', 'Rowing', 'Running', 'Swimming']);
-    expect(activityExplorerSports([], 'Rowing')).toEqual(['Rowing']);
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['Cycling'] }, now)).toEqual([records[0]]);
+    expect(activityExplorerSports(records, ['Rowing'])).toEqual(['Cycling', 'Rowing', 'Running', 'Swimming']);
+    expect(activityExplorerSports([], ['Rowing'])).toEqual(['Rowing']);
   });
 
   it('matches legacy sport aliases using the same canonical names as the table', () => {
     const records = [event([], ['Run']), event([], ['Running']), event([], ['Ride']), event([], ['Cycling']), event([], ['trail_running'])];
-    expect(activityExplorerSports(records, 'run')).toEqual(['Cycling', 'Running', 'Trail Running']);
-    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Running' }, now)).toEqual(records.slice(0, 2));
-    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Ride' }, now)).toEqual(records.slice(2, 4));
-    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'TrailRunning' }, now)).toEqual([records[4]]);
+    expect(activityExplorerSports(records, ['run'])).toEqual(['Cycling', 'Running', 'Trail Running']);
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['Running'] }, now)).toEqual(records.slice(0, 2));
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['Ride'] }, now)).toEqual(records.slice(2, 4));
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['TrailRunning'] }, now)).toEqual([records[4]]);
     expect(records[0].getActivityTypesAsArray()).toEqual(['Run']);
+  });
+
+  it('matches any selected sport and any selected tag, including Untagged, without duplicating multisport events', () => {
+    const records = [event(['Endurance'], ['Run', 'Cycling']), event(['Race'], ['Swimming']), event([], ['Cycling']), event(['Recovery'], ['Rowing'])];
+    expect(filterActivityExplorerEvents(records, { ...filters, tags: ['endurance', 'race'], sports: ['Running', 'Swimming'] }, now)).toEqual(records.slice(0, 2));
+    expect(filterActivityExplorerEvents(records, { ...filters, tags: ['ENDURANCE'], untagged: true, sports: ['Cycling'] }, now)).toEqual([records[0], records[2]]);
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['Run', 'Ride'] }, now)).toEqual([records[0], records[2]]);
+    expect(normalizeActivityExplorerSports(['Run', 'Running', 'Ride', '  Custom sport  '])).toEqual(['Custom sport', 'Cycling', 'Running']);
+    expect(activityExplorerSports([], ['Rowing', 'Run'])).toEqual(['Rowing', 'Running']);
   });
 
   it('preserves unrecognized recorded sports and keeps exact canonical sports distinct', () => {
     const records = [event([], ['Custom sport']), event([], ['GravelCycling']), event([], ['Cycling'])];
     expect(activityExplorerSports(records)).toEqual(['Custom sport', 'Cycling', 'Gravel Cycling']);
-    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Gravel Cycling' }, now)).toEqual([records[1]]);
-    expect(filterActivityExplorerEvents(records, { ...filters, sport: 'Custom sport' }, now)).toEqual([records[0]]);
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['Gravel Cycling'] }, now)).toEqual([records[1]]);
+    expect(filterActivityExplorerEvents(records, { ...filters, sports: ['Custom sport'] }, now)).toEqual([records[0]]);
   });
 });

@@ -39,6 +39,7 @@ import { EventTableComponent, type EventTableEventsChange } from '../event-table
 import { EventTableActionsComponent } from '../event-table/actions/event.table.actions.component';
 import { ActivitiesPageComponent } from './activities-page.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 
 @Component({ selector: 'app-event-table', standalone: true, template: '<ng-content select="[event-table-filters]"></ng-content><ng-content select="[event-table-active-filters]"></ng-content>' })
 class EventTableStub {
@@ -96,9 +97,9 @@ async function setup(tag = '', realTable = false) {
       { provide: ActivatedRoute, useValue: { queryParamMap: params$ } },
       { provide: Router, useValue: router },
       { provide: LoggerService, useValue: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } },
+      { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456', getGradientForActivityTypeGroup: () => 'none' } },
       ...(realTable ? [
         { provide: AppUserService, useValue: userService },
-        { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456', getGradientForActivityTypeGroup: () => 'none' } },
         ...[AppEventMergeService, AppEventReprocessService, AppEventSharingService, CalendarDayDetailsNavigationService, AppFileService, AppOriginalFileDownloadService,
           AppProcessingService, AppBenchmarkFlowService, AppAnalyticsService, EventTagService]
           .map(provide => ({ provide, useValue: {} })),
@@ -145,18 +146,61 @@ describe('ActivitiesPageComponent', () => {
 
   it('filters tags, sports and untagged locally without starting new queries', async () => {
     const c = await setup(); await render(c);
-    c.component.selectTag('ENDURANCE'); await render(c);
+    c.component.selectTags(['ENDURANCE']); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['a', 'b']);
-    c.component.selectSport('Ride'); await render(c);
+    c.component.selectSports(['Ride']); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['b']);
-    c.component.selectSport('Cycling'); c.component.selectTag('endurance');
+    c.component.selectSports(['Cycling']); c.component.selectTags(['endurance']);
     expect(c.haptics.selection).toHaveBeenCalledTimes(2);
     c.component.clearFilters(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.filteredEvents()).toHaveLength(3);
-    c.component.selectTag(c.component.untaggedOption); await render(c);
+    c.component.selectTags([], true); await render(c);
     expect(c.component.filteredEvents()).toEqual([]);
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
     expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
+  });
+
+  it('combines searchable tag and sport checkbox selections locally and removes each filter independently', async () => {
+    const c = await setup();
+    c.events.getEventsBy.mockReturnValue(of([...records, event('no-tag', [])])); await render(c);
+    const pickers = c.fixture.debugElement.queryAll(By.directive(ActivityFilterPickerComponent))
+      .map(element => element.componentInstance as ActivityFilterPickerComponent);
+    const tags = pickers.find(picker => picker.label() === 'Tags')!;
+    const sports = pickers.find(picker => picker.label() === 'Sports')!;
+    sports.selectionChange.emit(['Run', 'Ride']); await render(c);
+    expect(c.component.selectedSports()).toEqual(['Cycling', 'Running']);
+    tags.selectionChange.emit(['tag:endurance', 'untagged']); await render(c);
+    expect(c.component.filteredEvents().map(record => record.getID())).toEqual(['a', 'b', 'no-tag']);
+    expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({
+      tag: ['Endurance'], untagged: '1', sport: ['Cycling', 'Running'],
+    });
+    expect(c.fixture.nativeElement.querySelectorAll('mat-chip')).toHaveLength(4);
+    c.component.removeTag('Endurance'); await render(c);
+    expect(c.component.filteredEvents().map(record => record.getID())).toEqual(['no-tag']);
+    c.component.removeSport('Running'); await render(c);
+    expect(c.component.filteredEvents()).toEqual([]);
+    c.component.clearFilters(); await render(c);
+    expect(tags.summary()).toBe('All tags'); expect(sports.summary()).toBe('All sports');
+    expect(c.component.filteredEvents()).toHaveLength(4);
+    expect(c.haptics.selection).toHaveBeenCalledTimes(5);
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
+    expect(c.events.getEventCount).not.toHaveBeenCalled(); expect(c.events.getEventCountBy).not.toHaveBeenCalled();
+    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+  });
+
+  it('hydrates repeated tag and sport URL parameters silently and retains selected choices absent from the range', async () => {
+    const c = await setup();
+    c.params$.next(convertToParamMap({ tag: ['ENDURANCE', 'Recovery', 'endurance'], sport: ['run', 'Running', 'Ride'] })); await render(c);
+    expect(c.component.selectedTags()).toEqual(['ENDURANCE', 'Recovery']);
+    expect(c.component.selectedTagNames()).toEqual(['Endurance', 'Recovery']);
+    expect(c.component.selectedSports()).toEqual(['Cycling', 'Running']);
+    expect(c.component.filteredEvents()).toHaveLength(3);
+    c.params$.next(convertToParamMap({ tag: ['Missing saved', 'Recovery'], sport: ['Rowing', 'Run'] })); await render(c);
+    expect(c.component.tagOptions().some(option => option.value === 'tag:missing saved')).toBe(true);
+    expect(c.component.sports()).toContain('Rowing');
+    c.component.selectSports(['Running', 'Rowing', 'Run']);
+    c.component.selectTags(['recovery', 'missing saved']); await render(c);
+    expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
   });
 
   it('applies one bounded custom range only after submitting both dates, with inclusive results', async () => {
@@ -164,8 +208,8 @@ describe('ActivitiesPageComponent', () => {
     c.component.selectPeriod('custom'); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]')).toBeNull();
-    const fields = Array.from(c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters > mat-form-field')) as HTMLElement[];
-    expect(fields.map(field => field.querySelector('mat-label')?.textContent)).toEqual(['Tags', 'Custom dates', 'Sport']);
+    const labels = Array.from(c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters mat-label')) as HTMLElement[];
+    expect(labels.map(label => label.textContent)).toEqual(['Tags', 'Custom dates', 'Sports']);
     expect(c.fixture.nativeElement.querySelector('form')).toBeNull();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); await render(c);
     c.component.applyCustomRange(); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
@@ -275,7 +319,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.fixture.nativeElement.querySelector('input[aria-label="Start date"]').value).not.toBe('');
     expect(c.fixture.nativeElement.querySelector('input[aria-label="End date"]').value).not.toBe('');
     clear(); await render(c);
-    expect(c.component.period()).toBe('month'); expect(c.component.selectedTag()).toBe('Endurance');
+    expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
     expect(c.events.getEventsBy).toHaveBeenCalledTimes(4);
     expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 30 days');
@@ -328,7 +372,7 @@ describe('ActivitiesPageComponent', () => {
     c.component.cancelCustomRange(); await render(c);
     expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-05');
     expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-    c.component.selectTag('Race day'); await render(c);
+    c.component.selectTags(['Race day']); await render(c);
     expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
     c.component.selectPeriod('week'); await render(c);
     expect(c.component.customDates()).toBeNull(); expect(c.component.showCustomRange()).toBe(false);
@@ -391,7 +435,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventsBy).toHaveBeenLastCalledWith(c.user$.value, [], 'startDate', false, 0);
     c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
     expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-    c.component.selectTag('Endurance'); await render(c);
+    c.component.selectTags(['Endurance']); await render(c);
     expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
     c.component.clearFilters(); await render(c);
     expect(c.component.period()).toBe('month');
@@ -426,10 +470,10 @@ describe('ActivitiesPageComponent', () => {
     expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventsBy).not.toHaveBeenCalled();
     expect(c.haptics.selection).not.toHaveBeenCalled();
     c.dialogs[0].close(false); await render(c);
-    expect(c.component.period()).toBe('month'); expect(c.component.selectedTag()).toBe('Endurance');
+    expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
     expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
     expect(c.router.navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
-      queryParams: expect.objectContaining({ tag: 'Endurance', period: 'month' }), replaceUrl: true,
+      queryParams: expect.objectContaining({ tag: ['Endurance'], period: 'month' }), replaceUrl: true,
     }));
     expect(c.haptics.selection).not.toHaveBeenCalled();
   });
@@ -474,10 +518,14 @@ describe('ActivitiesPageComponent', () => {
 
   it('keeps literal tag names separate from the Untagged option', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValue(of([event('empty', []), event('named', ['__none'])])); await render(c);
-    c.component.selectTag(c.component.untaggedOption); await render(c);
+    c.events.getEventsBy.mockReturnValue(of([event('empty', []), event('named', ['__none', 'untagged'])])); await render(c);
+    c.component.selectTags([], true); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['empty']);
-    c.component.selectTag('__none'); await render(c);
+    c.component.selectTags(['__none']); await render(c);
+    expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['named']);
+    c.component.selectTagFilters(['untagged']); await render(c);
+    expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['empty']);
+    c.component.selectTagFilters(['tag:untagged']); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['named']);
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
   });
@@ -491,9 +539,9 @@ describe('ActivitiesPageComponent', () => {
       { ...event('benchmark', []), hasBenchmark: true },
     ]));
     c.params$.next(convertToParamMap({ sport: 'run' })); await render(c);
-    expect(c.component.selectedSport()).toBe('Running'); expect(c.component.filteredEvents()).toHaveLength(2);
+    expect(c.component.selectedSports()).toEqual(['Running']); expect(c.component.filteredEvents()).toHaveLength(2);
     expect(c.component.sports()).toContain('Cycling');
-    c.component.selectSport('Run'); expect(c.haptics.selection).not.toHaveBeenCalled();
+    c.component.selectSports(['Run']); expect(c.haptics.selection).not.toHaveBeenCalled();
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
   });
 
@@ -542,11 +590,11 @@ describe('ActivitiesPageComponent', () => {
     c.component.onEventsChange({ userID: 'owner', updatedTags: { b: ['New label'] }, deletedEventIDs: ['a'] }); await render(c);
     expect(c.component.filteredEvents()).toEqual([]);
     expect(c.component.library().map(t => t.name)).toContain('New label');
-    c.component.selectTag('New label'); await render(c);
+    c.component.selectTags(['New label']); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['b']);
     expect(c.component.filteredEvents()[0].benchmarkReviewTags).toBeUndefined();
     c.component.onEventsChange({ userID: 'owner', updatedTags: { b: [] }, deletedEventIDs: [] });
-    c.component.selectTag(c.component.untaggedOption); await render(c);
+    c.component.selectTags([], true); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['b']);
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
   });
@@ -634,7 +682,7 @@ describe('ActivitiesPageComponent', () => {
     table.clearSearch(); await render(c);
     table.sort.sort({ id: 'Distance', start: 'asc', disableClear: true }); await render(c);
     expect(table.data.sortData(table.data.filteredData, table.sort)[0].Event.getID()).toBe('activity-0');
-    c.component.selectTag('Endurance'); await render(c);
+    c.component.selectTags(['Endurance']); await render(c);
     expect(c.fixture.nativeElement.querySelector('mat-paginator').textContent).toContain('1 – 6 of 6');
     c.component.clearFilters(); await render(c);
     const columns = c.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
@@ -659,5 +707,89 @@ describe('ActivitiesPageComponent', () => {
       c.params$.next(convertToParamMap({ tag: 'Endurance', period: 'week' })); await render(c);
       expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('Activity filter picker Material integration', () => {
+  it('shows partial sport families and changes only that family when its checkbox is toggled', async () => {
+    TestBed.configureTestingModule({
+      imports: [ActivityFilterPickerComponent, NoopAnimationsModule],
+      providers: [
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+        { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+      ],
+    });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Sports');
+    fixture.componentRef.setInput('allLabel', 'All sports');
+    fixture.componentRef.setInput('searchLabel', 'Search sports');
+    fixture.componentRef.setInput('options', ['Running', 'Trail Running', 'Cycling'].map(value => ({ value, label: value, activityType: value })));
+    fixture.componentRef.setInput('shortcuts', [{ label: 'All Running / Trail', values: ['Running', 'Trail Running'] }]);
+    fixture.componentRef.setInput('selectedValues', ['Cycling', 'Running']);
+    const selected = vi.fn((values: string[]) => fixture.componentRef.setInput('selectedValues', values));
+    fixture.componentInstance.selectionChange.subscribe(selected);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle(); fixture.componentInstance.openPicker(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const checkbox = overlay.querySelector<HTMLInputElement>('mat-checkbox input')!;
+    expect(checkbox.indeterminate).toBe(true);
+    checkbox.click(); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling', 'Running', 'Trail Running']);
+    expect(checkbox.checked).toBe(true); expect(checkbox.indeterminate).toBe(false);
+    checkbox.click(); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling']);
+    fixture.componentInstance.closePicker(); await settle();
+  });
+
+  it('searches checkbox choices with sport icons and preserves selected choices hidden by search', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({
+      imports: [ActivityFilterPickerComponent, NoopAnimationsModule],
+      providers: [
+        { provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+      ],
+    });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Sports');
+    fixture.componentRef.setInput('allLabel', 'All sports');
+    fixture.componentRef.setInput('searchLabel', 'Search sports');
+    fixture.componentRef.setInput('options', [
+      { value: 'Running', label: 'Running', activityType: 'Running' },
+      { value: 'Cycling', label: 'Cycling', activityType: 'Cycling' },
+    ]);
+    fixture.componentRef.setInput('selectedValues', ['Cycling']);
+    const selected = vi.fn((values: string[]) => fixture.componentRef.setInput('selectedValues', values));
+    fixture.componentInstance.selectionChange.subscribe(selected);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelectorAll('app-activity-type-icon')).toHaveLength(2);
+    expect(overlay.querySelector('[aria-label="Cycling"]')?.getAttribute('aria-selected')).toBe('true');
+    const search = overlay.querySelector<HTMLInputElement>('input[aria-label="Search sports"]')!;
+    search.value = 'run'; search.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(overlay.querySelectorAll('mat-list-option')).toHaveLength(1);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    overlay.querySelector<HTMLElement>('mat-list-option[aria-label="Running"]')!.click(); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling', 'Running']);
+    expect(trigger.value).toBe('2 selected');
+    search.value = 'no match'; search.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(overlay.textContent).toContain('No matching sports.');
+    expect(fixture.componentInstance.selectedValues()).toEqual(['Cycling', 'Running']);
+    const clearSearch = overlay.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]')!;
+    clearSearch.focus(); clearSearch.click(); await settle();
+    expect(document.activeElement).toBe(search);
+    expect(overlay.querySelector('[aria-label="Cycling"]')?.getAttribute('aria-selected')).toBe('true');
+    const clear = Array.from(overlay.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.trim() === 'Clear selection')!;
+    clear.click(); await settle();
+    expect(selected).toHaveBeenLastCalledWith([]); expect(trigger.value).toBe('All sports');
+    const done = Array.from(overlay.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.trim() === 'Done')!;
+    done.click(); await settle();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
 });

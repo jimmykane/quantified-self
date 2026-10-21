@@ -13,13 +13,16 @@
 }
 .activity-catalog-error { margin-bottom: 16px; }
 .activity-history-status { justify-content: flex-start; margin-bottom: 12px; }
-.activity-explorer-filters { display: flex; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.activity-explorer-filters { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .activity-explorer-filters mat-form-field {
-  --mat-form-field-container-height: 46px;
-  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-container-height: var(--qs-table-filter-height, 46px);
+  --mat-form-field-container-text-size: var(--qs-table-filter-text-size, 0.95rem);
+  --mat-select-trigger-text-size: var(--qs-table-filter-text-size, 0.95rem);
+  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding, 10px);
   width: 170px;
   min-width: 0;
 }
+.activity-explorer-filters app-activity-filter-picker { width: 170px; min-width: 0; }
 .activity-explorer-filters .activity-date-filter { width: 210px; }
 .activity-explorer-filters .activity-custom-date-field { width: 310px; max-width: 100%; }
 .activity-active-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -28,7 +31,7 @@
 
 @include bp.max-768 {
   .activity-explorer-filters { width: 100%; }
-  .activity-explorer-filters mat-form-field { flex: 1 1 140px; width: auto; }
+  .activity-explorer-filters mat-form-field, .activity-explorer-filters app-activity-filter-picker { flex: 1 1 140px; width: auto; }
   .activity-explorer-filters .activity-custom-date-field { flex-basis: 100%; }
 }
 

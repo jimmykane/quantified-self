@@ -13,7 +13,9 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
 import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
-import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, normalizeActivityExplorerSport, type ActivityExplorerCustomDates, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
+import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, normalizeActivityExplorerSports, type ActivityExplorerCustomDates, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
+import { getActivityTypeFamilyFilterOptions } from '../../helpers/activity-type-family-filter.helper';
+import { ActivityFilterPickerComponent, type ActivityFilterPickerOption } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { ConfirmationDialogComponent, type ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
@@ -27,7 +29,7 @@ import { LoggerService } from '../../services/logger.service';
 @Component({
   selector: 'app-activities-page',
   standalone: true,
-  imports: [SharedModule, EventTableModule],
+  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent],
   templateUrl: './activities-page.component.html',
   styleUrls: ['./activities-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,8 +59,8 @@ export class ActivitiesPageComponent implements OnInit {
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
   readonly events = signal<AppEventInterface[]>([]);
   readonly catalogTags = signal<string[]>([]);
-  readonly selectedTag = signal('');
-  readonly selectedSport = signal('');
+  readonly selectedTags = signal<string[]>([]);
+  readonly selectedSports = signal<string[]>([]);
   readonly periods = ACTIVITY_EXPLORER_PERIODS;
   readonly defaultPeriod: ActivityExplorerPeriod = 'month';
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
@@ -74,28 +76,33 @@ export class ActivitiesPageComponent implements OnInit {
     return start?.isValid() && end?.isValid() && end.isBefore(start, 'day') ? { dateOrder: true } : null;
   } });
   readonly untagged = signal(false);
-  readonly untaggedOption = { untagged: true } as const;
   readonly loading = signal(false);
   readonly catalogLoading = signal(false);
   readonly historyError = signal(false);
   readonly catalogError = signal(false);
-  readonly library = computed(() => buildEventTagLibrary(this.events(), this.catalogTags(), this.selectedTag()));
-  readonly selectedKey = computed(() => this.selectedTag().toLowerCase());
-  readonly selectedName = computed(() => this.library().find(tag => tag.key === this.selectedKey())?.name || this.selectedTag());
-  readonly tagFilterValue = computed(() => this.untagged() ? this.untaggedOption : this.selectedName());
-  readonly sports = computed(() => activityExplorerSports(this.events(), this.selectedSport(), true));
+  readonly library = computed(() => buildEventTagLibrary(this.events(), [...this.catalogTags(), ...this.selectedTags()]));
+  readonly selectedTagNames = computed(() => this.selectedTags().map(tag => this.library().find(entry => entry.key === tag.toLowerCase())?.name || tag));
+  readonly tagOptions = computed<ActivityFilterPickerOption[]>(() => [
+    { value: 'untagged', label: 'Untagged', icon: 'label_off' },
+    ...this.library().map(tag => ({ value: `tag:${tag.key}`, label: tag.name, icon: 'sell' })),
+  ]);
+  readonly tagFilterValues = computed(() => [...this.selectedTags().map(tag => `tag:${tag.toLowerCase()}`), ...(this.untagged() ? ['untagged'] : [])]);
+  readonly sports = computed(() => activityExplorerSports(this.events(), this.selectedSports(), true));
+  readonly sportOptions = computed(() => this.sports().map(sport => ({ value: sport, label: sport, activityType: sport })));
+  readonly sportShortcuts = computed(() => getActivityTypeFamilyFilterOptions(this.selectedSports(), this.sports())
+    .map(family => ({ label: family.label, values: family.activityTypes })));
   readonly filters = computed(() => ({
-    tag: this.selectedTag(), untagged: this.untagged(), sport: this.selectedSport(), period: this.period(),
+    tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(), period: this.period(),
     customDates: this.period() === 'custom' ? this.customDates() : null,
   }));
   readonly filterContext = computed(() => JSON.stringify(this.filters()));
-  readonly hasFilters = computed(() => !!this.selectedTag() || this.untagged() || !!this.selectedSport() || this.period() !== this.defaultPeriod);
+  readonly hasFilters = computed(() => !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
   readonly filteredEvents = computed(() => this.user()
     ? filterActivityExplorerEvents(this.events(), this.filters(), new Date(this.localDayStartMs())) : []);
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
     : this.historyError() ? 'Activities couldn’t be loaded'
-      : this.selectedSport() ? 'No activities match these filters'
-        : this.untagged() ? 'No untagged activities' : this.selectedTag() ? 'No activities with this tag' : 'No activities in this date range');
+      : this.selectedSports().length || this.selectedTags().length > 1 || (this.untagged() && this.selectedTags().length) ? 'No activities match these filters'
+        : this.untagged() ? 'No untagged activities' : this.selectedTags().length ? 'No activities with this tag' : 'No activities in this date range');
   readonly emptyHint = computed(() => this.loading() ? '' : this.historyError() ? 'Try again in a moment.'
     : this.hasFilters() ? 'Try another date range or clear a filter.' : 'Try a wider date range or import an activity.');
 
@@ -129,10 +136,9 @@ export class ActivitiesPageComponent implements OnInit {
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const previousPeriod = this.period();
-      const tag = normalizeEventTagSuggestions([params.get('tag')])[0] || '';
-      this.selectedTag.set(tag);
-      this.untagged.set(!tag && params.get('untagged') === '1');
-      this.selectedSport.set(normalizeActivityExplorerSport((params.get('sport') || '').trim().slice(0, 100)));
+      this.selectedTags.set(normalizeEventTagSuggestions(params.getAll('tag')));
+      this.untagged.set(params.get('untagged') === '1');
+      this.selectedSports.set(normalizeActivityExplorerSports(params.getAll('sport')));
       const requestedPeriod = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       const customDates = requestedPeriod === 'custom' ? normalizeActivityExplorerCustomDates(params.get('start'), params.get('end')) : null;
       const period = requestedPeriod === 'custom' && !customDates ? this.defaultPeriod : requestedPeriod;
@@ -185,20 +191,34 @@ export class ActivitiesPageComponent implements OnInit {
       });
   }
 
-  selectTag(tag: string | typeof this.untaggedOption): void {
-    const untagged = typeof tag !== 'string';
-    const next = untagged ? '' : normalizeEventTagSuggestions([tag])[0] || '';
-    if (next.toLowerCase() === this.selectedKey() && untagged === this.untagged()) return;
-    this.selectedTag.set(next);
+  selectTags(tags: readonly string[], untagged = false): void {
+    const next = normalizeEventTagSuggestions(tags).sort((first, second) => first.toLowerCase().localeCompare(second.toLowerCase()));
+    const current = new Set(this.selectedTags().map(tag => tag.toLowerCase()));
+    if (next.length === current.size && next.every(tag => current.has(tag.toLowerCase())) && untagged === this.untagged()) return;
+    this.selectedTags.set(next);
     this.untagged.set(untagged);
     this.filtersChanged();
   }
 
-  selectSport(sport: string): void {
-    const next = normalizeActivityExplorerSport(sport);
-    if (next === this.selectedSport()) return;
-    this.selectedSport.set(next);
+  selectTagFilters(values: readonly string[]): void {
+    const tags = this.library().filter(tag => values.includes(`tag:${tag.key}`)).map(tag => tag.name);
+    this.selectTags(tags, values.includes('untagged'));
+  }
+
+  removeTag(tag: string): void {
+    this.selectTags(this.selectedTags().filter(value => value.toLowerCase() !== tag.toLowerCase()), this.untagged());
+  }
+
+  selectSports(sports: readonly string[]): void {
+    const next = normalizeActivityExplorerSports(sports);
+    const current = this.selectedSports();
+    if (next.length === current.length && next.every(sport => current.includes(sport))) return;
+    this.selectedSports.set(next);
     this.filtersChanged();
+  }
+
+  removeSport(sport: string): void {
+    this.selectSports(this.selectedSports().filter(value => value !== sport));
   }
 
   selectPeriod(period: ActivityExplorerPeriod, select?: MatSelect): void {
@@ -233,9 +253,9 @@ export class ActivitiesPageComponent implements OnInit {
     this.closeAllDatesWarning();
     this.customRangeOpen.set(false);
     if (!this.hasFilters()) return;
-    this.selectedTag.set('');
+    this.selectedTags.set([]);
     this.untagged.set(false);
-    this.selectedSport.set('');
+    this.selectedSports.set([]);
     const periodChanged = this.period() !== this.defaultPeriod;
     this.period.set(this.defaultPeriod);
     this.customDates.set(null);
@@ -341,8 +361,8 @@ export class ActivitiesPageComponent implements OnInit {
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
-        tag: this.selectedTag() || null, untagged: this.untagged() ? '1' : null,
-        sport: this.selectedSport() || null, period: this.period(), order: null,
+        tag: this.selectedTags().length ? this.selectedTags() : null, untagged: this.untagged() ? '1' : null,
+        sport: this.selectedSports().length ? this.selectedSports() : null, period: this.period(), order: null,
         start: this.period() === 'custom' ? this.customDates()?.startDate : null,
         end: this.period() === 'custom' ? this.customDates()?.endDate : null,
       },

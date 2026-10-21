@@ -12,6 +12,9 @@
 }
 
 .table-toolbar {
+  --qs-table-filter-height: 46px;
+  --qs-table-filter-text-size: 0.95rem;
+  --qs-table-filter-padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -22,16 +25,16 @@
 
 .table-toolbar-main {
   display: grid;
-  align-items: center;
+  align-items: start;
   grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr) auto;
   gap: 10px;
   min-width: 0;
 }
 
 .table-toolbar-main .qs-search-field {
-  --mat-form-field-container-height: 46px;
-  --mat-form-field-container-text-size: 0.95rem;
-  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-container-height: var(--qs-table-filter-height);
+  --mat-form-field-container-text-size: var(--qs-table-filter-text-size);
+  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
   width: 100%;
   min-width: 0;
 }
@@ -63,7 +66,7 @@
 }
 
 .table-toolbar-filters {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   justify-content: flex-start;
   min-width: 0;
@@ -73,13 +76,15 @@
 }
 
 .table-toolbar-actions {
+  min-height: var(--qs-table-filter-height);
   display: flex;
   align-items: center;
 }
 
 .tag-filter-field {
-  --mat-form-field-container-height: 46px;
-  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-container-height: var(--qs-table-filter-height);
+  --mat-select-trigger-text-size: var(--qs-table-filter-text-size);
+  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
   flex: 0 0 150px;
   width: 150px;
 }

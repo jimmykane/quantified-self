@@ -30,15 +30,9 @@
         [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
         (eventsChange)="onEventsChange($event)">
         <div event-table-filters class="activity-explorer-filters">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Tags</mat-label>
-            <mat-select [value]="tagFilterValue()" (selectionChange)="selectTag($event.value)" aria-label="Tags">
-              <mat-option value="">All tags</mat-option>
-              <mat-option [value]="untaggedOption">Untagged</mat-option>
-              @if (catalogLoading() && !library().length) { <mat-option disabled>Loading tags…</mat-option> }
-              @for (tag of library(); track tag.key) { <mat-option [value]="tag.name">{{ tag.name }}</mat-option> }
-            </mat-select>
-          </mat-form-field>
+          <app-activity-filter-picker label="Tags" allLabel="All tags" searchLabel="Search tags"
+            [options]="tagOptions()" [selectedValues]="tagFilterValues()" [loading]="catalogLoading()"
+            (selectionChange)="selectTagFilters($event)"></app-activity-filter-picker>
           @if (showCustomRange()) {
             <mat-form-field class="activity-custom-date-field" [formGroup]="customDateForm" appearance="outline" subscriptSizing="dynamic">
               <mat-label>Custom dates</mat-label>
@@ -70,20 +64,21 @@
               </mat-select>
             </mat-form-field>
           }
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Sport</mat-label>
-            <mat-select [value]="selectedSport()" (selectionChange)="selectSport($event.value)" aria-label="Sport">
-              <mat-option value="">All sports</mat-option>
-              @for (sport of sports(); track sport) { <mat-option [value]="sport">{{ sport }}</mat-option> }
-            </mat-select>
-          </mat-form-field>
+          <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports"
+            [options]="sportOptions()" [selectedValues]="selectedSports()" [shortcuts]="sportShortcuts()"
+            (selectionChange)="selectSports($event)"></app-activity-filter-picker>
         </div>
         @if (hasFilters()) {
           <div event-table-active-filters class="activity-active-filters">
             <mat-chip-set aria-label="Active activity filters">
-              @if (selectedTag() || untagged()) {
-                <mat-chip (removed)="selectTag('')"><mat-icon matChipAvatar>sell</mat-icon>{{ untagged() ? 'Untagged' : selectedName() }}
-                  <button matChipRemove aria-label="Remove tag filter"><mat-icon>cancel</mat-icon></button>
+              @for (tag of selectedTagNames(); track tag.toLowerCase()) {
+                <mat-chip (removed)="removeTag(tag)"><mat-icon matChipAvatar>sell</mat-icon>{{ tag }}
+                  <button matChipRemove [attr.aria-label]="'Remove tag ' + tag"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+              @if (untagged()) {
+                <mat-chip (removed)="selectTags(selectedTags())"><mat-icon matChipAvatar>label_off</mat-icon>Untagged
+                  <button matChipRemove aria-label="Remove Untagged filter"><mat-icon>cancel</mat-icon></button>
                 </mat-chip>
               }
               @if (period() !== defaultPeriod) {
@@ -93,9 +88,9 @@
                   <button matChipRemove aria-label="Remove date filter"><mat-icon>cancel</mat-icon></button>
                 </mat-chip>
               }
-              @if (selectedSport()) {
-                <mat-chip (removed)="selectSport('')">{{ selectedSport() }}
-                  <button matChipRemove aria-label="Remove sport filter"><mat-icon>cancel</mat-icon></button>
+              @for (sport of selectedSports(); track sport) {
+                <mat-chip (removed)="removeSport(sport)"><app-activity-type-icon matChipAvatar [activityType]="sport" size="18px"></app-activity-type-icon>{{ sport }}
+                  <button matChipRemove [attr.aria-label]="'Remove sport ' + sport"><mat-icon>cancel</mat-icon></button>
                 </mat-chip>
               }
             </mat-chip-set>

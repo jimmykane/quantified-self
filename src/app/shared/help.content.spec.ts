@@ -104,6 +104,8 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
+      '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
+      'Searching keeps checked choices selected', '**Clear selection**',
       '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
       '**Next** and **Previous**', 'matching total within that date range', 'do not start new event queries', 'shared table preferences',
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
