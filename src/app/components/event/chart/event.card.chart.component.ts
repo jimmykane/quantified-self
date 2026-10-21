@@ -72,6 +72,7 @@ import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helpe
 import {
   areEventChartOverlayMapsEqual,
   getEventChartOverlaySelectionKey,
+  resolveEventChartOverlayDataType,
   normalizeEventChartOverlayDataTypeByPrimary,
 } from '../../../helpers/event-chart-overlay.helper';
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
@@ -1104,21 +1105,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private buildChartPanelViews(): EventChartPanelViewModel[] {
     const panelByDataType = new Map(this.allChartPanels.map((panel) => [panel.dataType, panel]));
     const overlayMap = this.getEventChartOverlayDataTypeByPrimary();
-    const savedOverlays = Object.entries(overlayMap);
+    const availableTypes = [...panelByDataType.keys()];
 
     return this.chartPanels.map((panel) => {
       const overlayOptions = this.buildOverlayOptions(panel);
-      const primaryKey = getEventChartOverlaySelectionKey(panel.dataType);
-      const primaryVariants = this.allChartPanels.filter(available => getEventChartOverlaySelectionKey(available.dataType) === primaryKey);
-      const selectedOverlayDataType = overlayMap[panel.dataType] ?? (primaryVariants.length === 1
-        ? overlayMap[primaryKey] ?? savedOverlays.find(([key]) => getEventChartOverlaySelectionKey(key) === primaryKey)?.[1]
-        : undefined);
-      const overlayVariants = selectedOverlayDataType ? this.allChartPanels.filter(available =>
-        getEventChartOverlaySelectionKey(available.dataType) === getEventChartOverlaySelectionKey(selectedOverlayDataType)) : [];
-      const candidate = selectedOverlayDataType
-        ? panelByDataType.get(selectedOverlayDataType) ?? (overlayVariants.length === 1 ? overlayVariants[0] : null)
-        : null;
-      const overlayPanel = candidate && candidate.dataType !== panel.dataType ? candidate : null;
+      const selectedOverlayDataType = resolveEventChartOverlayDataType(panel.dataType, availableTypes, overlayMap);
+      const overlayPanel = selectedOverlayDataType ? panelByDataType.get(selectedOverlayDataType) ?? null : null;
 
       return {
         panel,

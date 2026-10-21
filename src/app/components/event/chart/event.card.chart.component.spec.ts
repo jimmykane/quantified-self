@@ -2072,6 +2072,21 @@ describe('EventCardChartComponent', () => {
     expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
   });
 
+  it.each([false, true])('does not pick between conflicting obsolete overlay preferences (reversed=%s)', async reverse => {
+    const entries = [['Speed', DataHeartRate.type], ['Speed in kilometers per hour', DataPower.type]];
+    const overlays = Object.fromEntries(reverse ? entries.reverse() : entries);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys: ['Speed'] });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel('Speed in miles per hour'), chartPanel(DataHeartRate.type), chartPanel(DataPower.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews).toHaveLength(1);
+    expect(component.chartPanelViews[0].overlayPanel).toBeNull();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
   it('does not overlay Distance onto itself when an obsolete unit alias resolves to the same panel', async () => {
     const overlays = { [DataDistance.type]: DataDistanceMiles.type };
     chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });

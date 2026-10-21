@@ -308,7 +308,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
   );
 
   selectedActivities.forEach((activity) => {
-    const streams = activity.getAllStreams() || [];
+    const streams = dedupeByType(activity.getAllStreams() || []);
     const activityCache = createActivityNumericCache(activity, streams);
     if (!streams.length) {
       return;
@@ -1215,13 +1215,15 @@ function getFilteredStreams(input: {
   userUnitSettings: UserUnitSettingsInterface;
   activityType: any;
 }): StreamInterface[] {
+  // Empty placeholders must not block derivation or conversion from actual recorded values.
+  const recordedStreams = input.streams.filter(hasFiniteStreamData);
   const allowedDataTypes = input.showAllData
     ? null
     : resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType]);
   const allowedDataTypeSet = allowedDataTypes ? new Set(allowedDataTypes) : null;
 
   const recordedUnitTypes = getEventChartUnitTypes(
-    input.streams.map(stream => stream.type), input.userUnitSettings, !input.showAllData,
+    recordedStreams.map(stream => stream.type), input.userUnitSettings, !input.showAllData,
   );
   const configuredTypes = input.showAllData
     ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType])
@@ -1231,7 +1233,7 @@ function getFilteredStreams(input: {
 
   const generatedStreams = ActivityUtilities
     .createUnitStreamsFromStreams(
-      input.streams.filter(stream => !retainEventChartSourceValues(stream.type)),
+      recordedStreams.filter(stream => !retainEventChartSourceValues(stream.type)),
       input.activityType,
       whitelistedUnitTypes,
       {
@@ -1241,7 +1243,7 @@ function getFilteredStreams(input: {
     );
   // Sports Lib's derived-metric path can omit unit variants of the original stream (e.g. grade-adjusted speed).
   const mergedStreams = generatedStreams.concat(
-    createMissingEventChartUnitStreams(input.streams, generatedStreams, whitelistedUnitTypes), input.streams,
+    createMissingEventChartUnitStreams(recordedStreams, generatedStreams, whitelistedUnitTypes), recordedStreams,
   );
   const deduplicated = dedupeByType(mergedStreams);
 
@@ -1268,6 +1270,14 @@ function getFilteredStreams(input: {
 }
 
 function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
+  // Normal activities have one stream per type. Avoid scanning their samples just to confirm that.
+  const seenTypes = new Set<string>();
+  if (streams.every(stream => {
+    if (!stream?.type || seenTypes.has(stream.type)) return false;
+    seenTypes.add(stream.type);
+    return true;
+  })) return streams;
+
   // TODO(quantified-self): remove this fallback once sports-lib guarantees canonical stream emission per type
   // (notably FIT vendor aliases for speed/distance fields) so the app never receives duplicate-type candidates.
   const streamsByType = new Map<string, {
