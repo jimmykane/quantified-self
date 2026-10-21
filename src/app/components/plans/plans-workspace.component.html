@@ -548,7 +548,7 @@
                   <mat-optgroup [label]="group.label">
                     @for (sport of group.options; track sport.value) {
                       <mat-option [value]="sport.value"
-                        [disabled]="session.mode === 'edit' && (group.strength || !!session.strength || session.strengthLoading) && sport.value !== session.value.sport">{{ sport.label }}</mat-option>
+                        [disabled]="session.mode === 'edit' && (group.strength || editorIsStrength()) && sport.value !== session.value.sport">{{ sport.label }}</mat-option>
                     }
                   </mat-optgroup>
                 }
@@ -618,12 +618,14 @@
                   <p>List each exercise in order. Repetitions, timed holds, load, and rest stay with this workout.</p>
                 </div>
                 <button appHapticTap mat-stroked-button type="button" (click)="addStrengthExercise()"
-                  [disabled]="busyAction() !== null || session.strengthLoading">
+                  [disabled]="busyAction() !== null || !session.strength">
                   <mat-icon aria-hidden="true">add</mat-icon><span>Add exercise</span>
                 </button>
               </div>
               @if (session.strengthLoading) {
                 <p role="status">Loading exercise prescription…</p>
+              } @else if (session.strengthLoadFailed) {
+                <p role="alert">The exercise prescription could not be loaded. Close and reopen this workout to retry.</p>
               } @else if (session.strength; as strength) {
                 @for (exercise of strength.exercises; track exercise.id; let exerciseIndex = $index; let lastExercise = $last) {
                   <app-compact-row class="workout-node-row" layout="stacked" density="compact"

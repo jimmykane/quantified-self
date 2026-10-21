@@ -1468,11 +1468,20 @@ current-schedule read. The seven alias names must describe the requested workout
 incidental mentions in another sport's notes do not change its editor. If the complete-strength preview is missing,
 the Assistant withholds other Training previews rather than substituting a summary-only writer. This private routing
 repair preserves the public contract and existing guidance, so it needs no additional metadata digest or plugin refresh.
-`strengthWorkoutRoutingContext` excludes quoted note content, note-preservation clauses and negated actions only when
-choosing an editor. The original prompt, constraints and requested note text still reach the model intact; this
-projection must never author or persist a prescription. Named exercise, set and repetition edits use the same complete
+`trainingWorkoutRoutingContext` excludes quoted note content, note-preservation clauses and negated actions before
+all preview-selection decisions, including library, phase and Garmin replacement routing. Quoted notes also supply
+no provider-delivery intent. Note edits retain their target and the note noun, so removing a note cannot select workout
+deletion. Single/curly quoted notes retain apostrophes in contractions. The original prompt, constraints and requested
+note text still reach the model intact; this projection must never author or persist a prescription. Named exercise,
+set and repetition edits use the same complete
 strength preview even when the request omits the word workout. Note edits that name the real strength workout retain
 that target. Read-current-state, full-companion validation and app confirmation remain mandatory.
+Scheduled strength editor lookups distinguish a confirmed absent alias companion from failed reads or invalid data.
+Only confirmed absence opens the original legacy interval recipe. Loading and failed lookups block calendar and
+library saves, sport conversion and interval editing; an inline error directs users to close and reopen for a fresh
+lookup. Stale failures after navigation/account changes cannot alter another draft or emit feedback. These are local
+editor/routing guards: MCP read/proposal shapes, metadata, scopes, consent and provider actions remain unchanged.
+The existing strength Help explains complete-prescription editing; the inline error supplies the retry instruction.
 No tools, schemas, scopes, consent, read fields, mutation kinds or provider actions are added.
 The pending metadata digest records a developer refresh; deployed-server update, registered-app rescan and bundle
 refresh remain separate release steps. Local bundle validation/sync uses only a temporary profile with a fixture app ID.

@@ -381,15 +381,26 @@ function canBeTrainingDeletionReply(prompt: string): boolean {
     && !removesEarlyLapPermission(prompt);
 }
 
-/** Editor selection only: never use this projection as an authored recipe or model prompt. */
-function strengthWorkoutRoutingContext(prompt: string): string {
+/** Routing only: never use this projection as an authored recipe, consent or model prompt. */
+function withoutWorkoutNoteContext(prompt: string): string {
   return prompt
+    .replace(/\b(?:with\s+(?:(?:a|an|the|my|existing)\s+)?notes?\s+(?:about|saying|that|to)|(?:keep|preserve|retain)\s+(?:(?:the|my|existing)\s+)?notes?\s+(?:about|saying|that)|notes?\s*:)[^.!?;\n]*/gu,
+      (clause, offset: number, source: string) => {
+        if (/["“‘']/u.test(clause) || /^\s*["“‘']/u.test(source.slice(offset + clause.length))) return clause;
+        // Preserve an independent action following an unquoted note qualifier.
+        const nextAction = /\b(?:then|but|instead)\b|\b(?:and|also)\s+(?:please\s+)?(?:create|save|copy|duplicate|edit|update|archive|restore|delete|remove|place|schedule|add|send|sync|deliver)\b/u.exec(clause);
+        return nextAction ? clause.slice(nextAction.index) : '';
+      })
     // Quoted note content may name another workout. Keep a note-edit request's
-    // actual target, such as "add a note to my Kettlebell workout".
-    .replace(/\bnotes?(?:\s*(?::|about|saying|that))?\s*(?:"[^"]*"|“[^”]*”|‘[^’]*’|'[^']*')/gu, '')
-    .replace(/\b(?:with\s+(?:(?:a|an|the|my|existing)\s+)?notes?\s+(?:about|saying|that|to)|(?:keep|preserve|retain)\s+(?:(?:the|my|existing)\s+)?notes?\s+(?:about|saying|that)|notes?\s*:)[^.!?;\n]*/gu, '')
-    // Inspect the original negation before the general selector removes only
-    // its verb; excluded workouts must not supply the strength sport context.
+    // actual target and the note noun: "remove a note" must remain a recipe edit.
+    .replace(/(\bnotes?\b[^.!?;\n]{0,160}?:\s*)(?:"[^"]*"|“[^”]*”|‘(?:[^’]|’(?=\p{L}))*’|'(?:[^']|'(?=\p{L}))*')/gu, '$1')
+    .replace(/(\bnotes?(?:\s*(?::|about|saying|that))?\s*)(?:"[^"]*"|“[^”]*”|‘(?:[^’]|’(?=\p{L}))*’|'(?:[^']|'(?=\p{L}))*')/gu, '$1');
+}
+
+function trainingWorkoutRoutingContext(prompt: string): string {
+  return withoutWorkoutNoteContext(prompt)
+    // Excluded actions and workouts must not select another editor or turn
+    // a one-workout request into a batch.
     .replace(/\b(?:don't|don’t|do not|doesn't|doesn’t|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify|create|add|make|build|draft|propose|suggest|schedule|send|sync|enable|disable|stop|retry|approve)\b(?:(?!\b(?:but|instead|then)\b)[^,.!?;\n])*/gu, '');
 }
 
@@ -424,14 +435,8 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   }
   // A negative library qualifier describes where the user does not want the
   // workout saved; it must not turn an ordinary schedule edit into a library edit.
-  const withoutNegatedLibrary = prompt.toLowerCase().replace(
+  const question = trainingWorkoutRoutingContext(prompt.toLowerCase()).replace(
     /\b(?:don't|do not|never|without|not)\b(?:(?!\bbut\b)[^,.!?;\n]){0,80}\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/gu,
-    '',
-  );
-  // A safety qualifier such as "do not update anything else" is not another
-  // requested mutation and should not force a one-workout create into batch.
-  const question = withoutNegatedLibrary.replace(
-    /\b(?:don't|don’t|do not|doesn't|doesn’t|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify)\b/gu,
     '',
   );
   const editsRecipeFields = /\b(?:remove|delete|insert|add|reorder|move|swap|set|change)\s+(?:(?:the|all|my|this|that|a|an|first|second|last|hr|heart[-\s]?rate|power|speed|pace|cadence|warm[-\s]?up|cool[-\s]?down|recovery|work|rest)\s+){0,4}(?:steps?|intervals?|targets?|repeats?|notes?)\b(?!\s+(?:planned\s+)?(?:workouts?|sessions?))/iu.test(question);
@@ -482,7 +487,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // appear in a note for another sport. Remove alias names before checking
   // legacy strength words so GRIT Strength does not bypass that distinction.
   const strengthAliases = /\b(?:weight\s+training|kettlebells?|calisthenics|core\s+training|les\s+mills\s+(?:core|grit\s+strength|bodypump))\b/gu;
-  const strengthContext = strengthWorkoutRoutingContext(withoutNegatedLibrary);
+  const strengthContext = question;
   const namedStrengthWorkout = new RegExp(`${strengthAliases.source}["'“”‘’]?\\s+(?:workouts?|sessions?|exercises?|sets?|reps?)\\b`, 'u').test(strengthContext)
     || new RegExp(`\\b(?:workouts?|sessions?)\\s+(?:named|called|for)\\s+["'“”‘’]?${strengthAliases.source}`, 'u').test(strengthContext);
   const strengthRecipeContext = namedStrengthWorkout
@@ -535,7 +540,7 @@ function requestsGarminReplacement(prompt: string): boolean {
 export function requestsAssistantTrainingDelivery(prompt: string): boolean {
   // Keep directly coordinated verbs under the same explicit negation. Do not
   // consume punctuation or an independent affirmative clause (e.g. "but sync").
-  const request = prompt.toLowerCase().replace(
+  const request = withoutWorkoutNoteContext(prompt.toLowerCase()).replace(
     /\b(?:don't|don’t|do not|does not|never|without|no)\s+(?:(?:also|any|this|that|the|my|workout|session|provider|service|watch|device|automatic|garmin|suunto|coros|wahoo)\s+){0,4}(?:send|sync|deliver)\b(?:\s+(?:(?:it|them|this|that|the|my|workout|session|plan)\s+){0,3}(?:or|and)\s+(?:send|sync|deliver)\b){0,2}/gu,
     '',
   );

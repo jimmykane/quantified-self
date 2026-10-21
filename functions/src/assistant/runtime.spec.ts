@@ -35,6 +35,48 @@ describe('Training phase preview routing', () => {
     expect(selectAssistantTrainingPreviewTool(`Add a note to my ${sport} workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Add the note "Repeat my Running workout" to my ${sport} workout.`)).toBe('preview_strength_workout_change');
   });
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('keeps quoted notes on the scheduled %s editor instead of changing mutation kinds', sport => {
+    for (const note of ['Save my workout to the library', 'Create a new phase', 'Create a replacement Garmin workout',
+      "Don't edit my library workout", 'Don’t edit my library workout']) {
+      expect(selectAssistantTrainingPreviewTool(`Add a note to my ${sport} workout: "${note}".`), note)
+        .toBe('preview_strength_workout_change');
+    }
+    expect(selectAssistantTrainingPreviewTool(`Add the note 'Don't edit my library workout' to my ${sport} workout.`))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Add the note ‘Don’t edit my library workout’ to my ${sport} workout.`))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Add a note: "Save my workout to the library" to my ${sport} workout.`))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Remove the note "Save my workout to the library" from my ${sport} workout.`))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Delete the note: "Create a phase" from my ${sport} workout.`))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Add a note to my "${sport}" workout: "Save my workout to the library".`))
+      .toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Add a note to my saved ${sport} workout in the library: "Create a new phase".`))
+      .toBe('preview_saved_workout_v2_change');
+  });
+  it('does not infer delivery consent from a quoted workout note', () => {
+    const prompt = 'Create a Running workout with the note "and send it to Wahoo".';
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
+    expect(requestsAssistantTrainingDelivery(`${prompt} Then send the workout to Garmin.`)).toBe(true);
+    expect(requestsAssistantTrainingDelivery('Create a Running workout with the note: "and send it to Wahoo", and send it to Garmin.')).toBe(true);
+  });
+  it('keeps removing a quoted note on the recipe editor instead of deleting the workout', () => {
+    expect(selectAssistantTrainingPreviewTool('Remove the note "Save my workout to the library" from my Running workout.'))
+      .toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Delete the note: "Create a phase" from my Running workout.'))
+      .toBe('preview_planned_workout_v3_change');
+  });
+  it('retains explicit actions after an unquoted note qualifier', () => {
+    for (const separator of [', then', ', and', ', but']) {
+      const prompt = `Create a Running workout with a note about my Kettlebell workout${separator} send it to Garmin.`;
+      expect(requestsAssistantTrainingDelivery(prompt), separator).toBe(true);
+      expect(selectAssistantTrainingPreviewTool(prompt), separator).toBe('preview_create_planned_workout');
+    }
+    expect(selectAssistantTrainingPreviewTool('Create a Running workout with a note about my Kettlebell workout, and save it in my library.'))
+      .toBe('preview_saved_workout_v2_change');
+  });
   it.each([
     'Update HR ranges across my plan, preserving warm-ups and early Lap.',
     'Adjust the HR zones across my plan.',
@@ -631,16 +673,20 @@ describe('Training preview model-tool selection', () => {
     expect(previews).toEqual(available ? ['preview_strength_workout_change'] : []);
   });
 
-  it('preserves the original prompt and quoted workout notes when narrowing editor selection', async () => {
+  it.each([
+    ['Create a Running workout with the note "Repeat my Kettlebell workout afterwards".', 'preview_create_planned_workout'],
+    ['Add a note to my Kettlebell workout: "Save my workout to the library".', 'preview_strength_workout_change'],
+    ['Create a Running workout with the note "and send it to Wahoo".', 'preview_create_planned_workout'],
+  ] as const)('preserves the original prompt and quoted notes when narrowing editor selection: %s', async (prompt, expected) => {
     const { session } = createSession();
-    session.tools.push(...(['preview_create_planned_workout', 'preview_strength_workout_change'] as const)
+    session.tools.push(...(['preview_create_planned_workout', 'preview_strength_workout_change', 'preview_saved_workout_v2_change',
+      'preview_training_plan_phases', 'preview_garmin_workout_replacement'] as const)
       .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
-    const prompt = 'Create a Running workout with the note "Repeat my Kettlebell workout afterwards".';
     const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async input => {
         expect(input.prompt).toBe(prompt);
         expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name))
-          .toEqual(['preview_create_planned_workout']);
+          .toEqual([expected]);
         await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
         return { answer: 'Read the current schedule before preparing the Running workout with the exact requested note.',
           visualRequest: { chart: null, map: null } };

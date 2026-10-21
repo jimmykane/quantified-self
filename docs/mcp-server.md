@@ -513,8 +513,10 @@ preview for named strength edits, preserving provider/lifecycle routing and the 
 Alias mentions in another sport's notes retain that sport's normal editor. A missing complete-strength preview never
 falls back to a generic Training writer. These first-party routing guards change no public tool metadata, schemas,
 scopes, grants, confirmation or delivery behavior and do not require an additional contract or plugin refresh.
-The private selector also excludes quoted note text and explicitly excluded workouts, while recognizing direct named
-exercise/set/repetition edits. It preserves the complete original prompt and all note text for the model; this
+The private selector excludes quoted note text from every preview-kind decision and delivery-intent check, so a note
+mentioning the library, phases, replacement or Send cannot request those actions. Removing a note remains a recipe edit.
+It also excludes explicitly excluded workouts while recognizing direct named exercise/set/repetition edits.
+It preserves the complete original prompt and all note text for the model; this
 selection context is never a replacement recipe, permission or stored value.
 This metadata-only clarification retains all registered shapes, scopes, grants and native/app approval rules; its digest
 is included in the pending developer-refresh record. Server deployment, registered-app rescan and bundled-plugin refresh

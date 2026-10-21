@@ -142,6 +142,7 @@ interface WorkoutEditorSession {
   value: ManualWorkoutEditorValue;
   strength: StrengthWorkoutDraftV1 | null;
   strengthLoading: boolean;
+  strengthLoadFailed: boolean;
 }
 
 interface WorkoutRow {
@@ -287,7 +288,7 @@ export class PlansWorkspaceComponent {
   ];
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
-  readonly editorIsStrength = computed(() => !!this.editor()?.strength || !!this.editor()?.strengthLoading
+  readonly editorIsStrength = computed(() => !!this.editor()?.strength || !!this.editor()?.strengthLoading || !!this.editor()?.strengthLoadFailed
     || this.editor()?.value.sport === ActivityTypes.StrengthTraining);
   readonly editorIsRowing = computed(() => isRowingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
@@ -741,7 +742,7 @@ export class PlansWorkspaceComponent {
               sport: item.structure.sport as ManualWorkoutSport, nodes: [] }
             : workoutStructureToManualEditor(item.title, todayLocalDate(), item.structure,
               normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings)),
-          strength: item.strength ?? null, strengthLoading: false });
+          strength: item.strength ?? null, strengthLoading: false, strengthLoadFailed: false });
       }).catch(error => {
         if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
         this.showError(error);
@@ -1118,6 +1119,7 @@ export class PlansWorkspaceComponent {
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
       strength: null,
       strengthLoading: false,
+      strengthLoadFailed: false,
     });
   }
 
@@ -1153,6 +1155,7 @@ export class PlansWorkspaceComponent {
           ),
         strength: null,
         strengthLoading: strength,
+        strengthLoadFailed: false,
       });
       if (strength) {
         const generation = this.editorGeneration;
@@ -1174,8 +1177,9 @@ export class PlansWorkspaceComponent {
             ...session, strength: { version: details.version, exercises: details.exercises }, strengthLoading: false,
           } : session);
         }).catch(error => {
-          if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
-          this.editor.update(session => session ? { ...session, strengthLoading: false } : session);
+          if (generation !== this.editorGeneration || this.destroyRef.destroyed || uid !== this.currentUser()?.uid) return;
+          this.editor.update(session => session && session.original?.id === workout.id
+            ? { ...session, strengthLoading: false, strengthLoadFailed: true } : session);
           this.showError(error);
         });
       }
@@ -1545,6 +1549,8 @@ export class PlansWorkspaceComponent {
   }
 
   private editorStructure(session: WorkoutEditorSession) {
+    if (session.strengthLoading) throw new Error('The exercise prescription is still loading.');
+    if (session.strengthLoadFailed) throw new Error('The exercise prescription could not be loaded. Close and reopen this workout to retry.');
     return session.strength || session.value.sport === ActivityTypes.StrengthTraining
       ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
         workoutId: session.original?.id ?? 'draft', revision: 1 }, session.value.sport)
