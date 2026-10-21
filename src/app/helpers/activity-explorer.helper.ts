@@ -5,11 +5,11 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { filterEventsByTag } from './event-tag-library.helper';
 
 export const ACTIVITY_EXPLORER_PERIODS = [
-  { value: 'all', label: 'All dates' },
   { value: 'month', label: 'Last 30 days' },
   { value: 'week', label: 'Last 7 days' },
   { value: 'quarter', label: 'Last 90 days' },
   { value: 'year', label: 'This year' },
+  { value: 'all', label: 'All dates' },
 ] as const;
 export type ActivityExplorerPeriod = typeof ACTIVITY_EXPLORER_PERIODS[number]['value'];
 

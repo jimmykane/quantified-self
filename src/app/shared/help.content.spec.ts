@@ -107,6 +107,8 @@ describe('help.content', () => {
       '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
       '**Next** and **Previous**', 'matching total within that date range', 'do not start new event queries', 'shared table preferences',
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
+      '**All dates** is the last option and shows a warning', '**Keep current range** to cancel without reloading',
+      'Saved All dates links also require confirmation',
       'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });
   it('explains unavailable pool timing without losing rests or inventing replacements', () => {

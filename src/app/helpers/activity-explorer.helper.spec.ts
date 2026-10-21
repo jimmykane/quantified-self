@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
+import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, type ActivityExplorerFilters } from './activity-explorer.helper';
 
 const now = new Date(2026, 9, 21, 12);
 const filters: ActivityExplorerFilters = { tag: '', untagged: false, sport: '', period: 'all' };
@@ -8,6 +8,12 @@ const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20
 });
 
 describe('Activity explorer date-range filters', () => {
+  it('places All dates after every bounded date range', () => {
+    expect(ACTIVITY_EXPLORER_PERIODS.at(-1)).toEqual({ value: 'all', label: 'All dates' });
+    for (const period of ACTIVITY_EXPLORER_PERIODS.slice(0, -1)) {
+      expect(activityExplorerDateRange(period.value, now)).not.toBeNull();
+    }
+  });
   it('offers canonical sports beyond the current range', () => {
     expect(activityExplorerSports([], '', true)).toContain('Running');
   });

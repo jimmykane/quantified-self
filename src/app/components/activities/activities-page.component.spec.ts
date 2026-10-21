@@ -2,6 +2,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSelect, MatSelectChange } from '@angular/material/select';
 import { ActivatedRoute, Router, UrlTree, convertToParamMap } from '@angular/router';
 import { By } from '@angular/platform-browser';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
@@ -32,6 +34,7 @@ import { EventTableModule } from '../../modules/event-table.module';
 import { EventTableComponent, type EventTableEventsChange } from '../event-table/event.table.component';
 import { EventTableActionsComponent } from '../event-table/actions/event.table.actions.component';
 import { ActivitiesPageComponent } from './activities-page.component';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 
 @Component({ selector: 'app-event-table', standalone: true, template: '<ng-content select="[event-table-filters]"></ng-content><ng-content select="[event-table-active-filters]"></ng-content>' })
 class EventTableStub {
@@ -67,6 +70,13 @@ async function setup(tag = '', realTable = false) {
   };
   const catalog = { listAllTags: vi.fn().mockResolvedValue(['Endurance', 'Race day', 'Recovery']) };
   const haptics = { selection: vi.fn(), error: vi.fn() };
+  const dialogs: { close: ReturnType<typeof vi.fn>; closed$: Subject<boolean | undefined> }[] = [];
+  const dialog = { open: vi.fn().mockImplementation(() => {
+    const closed$ = new Subject<boolean | undefined>();
+    const ref = { close: vi.fn((value?: boolean) => { closed$.next(value); closed$.complete(); }), afterClosed: () => closed$ };
+    dialogs.push({ close: ref.close, closed$ });
+    return ref;
+  }) };
   const userService = { updateUserProperties: vi.fn().mockResolvedValue(undefined) };
   const router = {
     navigate: vi.fn().mockResolvedValue(true), events: new Subject(),
@@ -91,10 +101,11 @@ async function setup(tag = '', realTable = false) {
       ] : []),
     ],
   });
+  TestBed.overrideComponent(ActivitiesPageComponent, { add: { providers: [{ provide: MatDialog, useValue: dialog }] } });
   if (!realTable) TestBed.overrideComponent(ActivitiesPageComponent, { remove: { imports: [EventTableModule] }, add: { imports: [EventTableStub] } });
   await TestBed.compileComponents();
   const fixture = TestBed.createComponent(ActivitiesPageComponent);
-  return { fixture, component: fixture.componentInstance, auth, user$, authState$, params$, events, catalog, haptics, router, userService };
+  return { fixture, component: fixture.componentInstance, auth, user$, authState$, params$, events, catalog, haptics, router, userService, dialog, dialogs };
 }
 async function render(context: Awaited<ReturnType<typeof setup>>) {
   context.fixture.detectChanges();
@@ -141,10 +152,33 @@ describe('ActivitiesPageComponent', () => {
     expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
   });
 
-  it('loads All dates only when explicitly selected and resets to the bounded default', async () => {
+  it('places All dates last and keeps the displayed range and query until confirmation', async () => {
     const c = await setup(); await render(c);
-    c.component.selectPeriod('all'); await render(c);
+    const select = c.fixture.debugElement.queryAll(By.directive(MatSelect))
+      .map(element => element.componentInstance as MatSelect).find(select => select.ariaLabel === 'Date range')!;
+    expect(select.options.last.value).toBe('all');
+    select.value = 'all';
+    select.selectionChange.emit(new MatSelectChange(select, 'all')); await render(c);
+    expect(select.value).toBe('month'); expect(c.component.period()).toBe('month');
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.dialog.open).toHaveBeenCalledExactlyOnceWith(ConfirmationDialogComponent, {
+      data: {
+        title: 'Load all activity history?',
+        message: expect.stringContaining('entire activity history'),
+        confirmText: 'Load all activities', cancelText: 'Keep current range',
+      },
+    });
+    expect(c.dialog.open.mock.lastCall[1].data.message).toContain('uses more data');
+    c.component.selectPeriod('all'); expect(c.dialog.open).toHaveBeenCalledOnce();
+    c.dialogs[0].close(true); await render(c);
+    expect(select.value).toBe('all'); expect(c.component.period()).toBe('all');
+    const dateField = c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]');
+    expect(dateField.textContent.trim()).toBe('All dates');
+    // The shared dialog owns its confirmation button's feedback; do not repeat it here.
+    expect(c.haptics.selection).toHaveBeenCalledOnce();
     expect(c.events.getEventsBy).toHaveBeenLastCalledWith(c.user$.value, [], 'startDate', false, 0);
+    c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
+    expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
     c.component.selectTag('Endurance'); await render(c);
     expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
     c.component.clearFilters(); await render(c);
@@ -154,16 +188,76 @@ describe('ActivitiesPageComponent', () => {
     c.component.clearFilters(); expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
   });
 
+  it.each([false, undefined])('keeps the current range without a query when All dates is dismissed with %s', async result => {
+    const c = await setup(); await render(c);
+    c.component.selectPeriod('week'); await render(c);
+    c.component.selectPeriod('all'); c.dialogs[0].close(result); await render(c);
+    expect(c.component.period()).toBe('week');
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventsBy.mock.calls.every(call => call[1].length === 2)).toBe(true);
+  });
+
   it('hydrates saved filters silently and only queries again when the date range changes', async () => {
     const c = await setup('Endurance'); await render(c);
     expect(c.component.filteredEvents()).toHaveLength(2);
     c.params$.next(convertToParamMap({ tag: 'Recovery', sport: 'Run', period: 'month' })); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['c']);
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
-    c.params$.next(convertToParamMap({ untagged: '1', period: 'all' })); await render(c);
+    c.params$.next(convertToParamMap({ untagged: '1', period: 'week' })); await render(c);
     expect(c.component.untagged()).toBe(true); expect(c.component.filteredEvents()).toEqual([]);
     expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
     expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('warns for an initial All dates link before any activity query and safely falls back on cancel', async () => {
+    const c = await setup(); c.params$.next(convertToParamMap({ tag: 'Endurance', period: 'all' })); await render(c);
+    expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventsBy).not.toHaveBeenCalled();
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    c.dialogs[0].close(false); await render(c);
+    expect(c.component.period()).toBe('month'); expect(c.component.selectedTag()).toBe('Endurance');
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.router.navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
+      queryParams: expect.objectContaining({ tag: 'Endurance', period: 'month' }), replaceUrl: true,
+    }));
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('requires confirmation for browser navigation to All dates and does not requery on cancel', async () => {
+    const c = await setup(); await render(c);
+    c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
+    expect(c.component.period()).toBe('month'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.dialogs[0].close(false); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.params$.next(convertToParamMap({ period: 'all' })); c.dialogs[1].close(true); await render(c);
+    expect(c.component.period()).toBe('all');
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2); expect(c.events.getEventsBy.mock.lastCall[1]).toEqual([]);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('closes a pending warning on date navigation, account changes and teardown', async () => {
+    const c = await setup(); await render(c);
+    c.component.selectPeriod('all');
+    c.params$.next(convertToParamMap({ period: 'week' })); await render(c);
+    expect(c.dialogs[0].close).toHaveBeenCalledExactlyOnceWith(false);
+    c.dialogs[0].closed$.next(true); expect(c.component.period()).toBe('week');
+    c.component.selectPeriod('all');
+    c.auth.currentUser = { uid: 'owner' }; c.authState$.next(c.auth.currentUser); await render(c);
+    expect(c.dialogs[1].close).toHaveBeenCalledExactlyOnceWith(false);
+    c.component.selectPeriod('all'); c.fixture.destroy();
+    expect(c.dialogs[2].close).toHaveBeenCalledExactlyOnceWith(false);
+    expect(c.events.getEventsBy.mock.calls.every(call => call[1].length === 2)).toBe(true);
+  });
+
+  it('does not reuse full-history confirmation after the signed-in session changes', async () => {
+    const c = await setup(); await render(c);
+    c.component.selectPeriod('all'); c.dialogs[0].close(true); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    c.auth.currentUser = { uid: 'owner' }; c.authState$.next(c.auth.currentUser); await render(c);
+    expect(c.component.period()).toBe('month'); expect(c.dialog.open).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    c.dialogs[1].close(false); await render(c);
+    expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
+    expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
   });
 
   it('keeps literal tag names separate from the Untagged option', async () => {

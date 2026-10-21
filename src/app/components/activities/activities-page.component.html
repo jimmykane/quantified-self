@@ -41,8 +41,14 @@
           </mat-form-field>
           <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
             <mat-label>Date range</mat-label>
-            <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value)" aria-label="Date range">
-              @for (period of periods; track period.value) { <mat-option [value]="period.value">{{ period.label }}</mat-option> }
+            <mat-select [value]="period()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
+              <mat-select-trigger>{{ periodLabel() }}</mat-select-trigger>
+              @for (period of periods; track period.value) {
+                <mat-option [value]="period.value">
+                  @if (period.value === 'all') { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
+                  {{ period.label }}
+                </mat-option>
+              }
             </mat-select>
           </mat-form-field>
           <mat-form-field appearance="outline" subscriptSizing="dynamic">

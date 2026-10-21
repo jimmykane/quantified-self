@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnInit, a
 import { DOCUMENT } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { combineLatest, Subscription } from 'rxjs';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatSelect } from '@angular/material/select';
+import { combineLatest, Subscription, take } from 'rxjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -12,6 +14,7 @@ import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
 import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerSport, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { EventTableEventsChange } from '../event-table/event.table.component';
+import { ConfirmationDialogComponent, type ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { EventTableModule } from '../../modules/event-table.module';
 import { SharedModule } from '../../modules/shared.module';
 import { AppEventService } from '../../services/app.event.service';
@@ -35,6 +38,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly logger = inject(LoggerService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
@@ -42,6 +46,8 @@ export class ActivitiesPageComponent implements OnInit {
   private generation = 0;
   private eventsSubscription?: Subscription;
   private catalogVersion = 0;
+  private urlPeriod: ActivityExplorerPeriod = 'month';
+  private allDatesDialog?: MatDialogRef<ConfirmationDialogComponent, boolean>;
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
   readonly events = signal<AppEventInterface[]>([]);
@@ -99,7 +105,12 @@ export class ActivitiesPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.destroyRef.onDestroy(() => { this.generation += 1; this.catalogVersion += 1; this.eventsSubscription?.unsubscribe(); });
+    this.destroyRef.onDestroy(() => {
+      this.generation += 1;
+      this.catalogVersion += 1;
+      this.eventsSubscription?.unsubscribe();
+      this.closeAllDatesWarning();
+    });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const previousPeriod = this.period();
       const tag = normalizeEventTagSuggestions([params.get('tag')])[0] || '';
@@ -107,6 +118,12 @@ export class ActivitiesPageComponent implements OnInit {
       this.untagged.set(!tag && params.get('untagged') === '1');
       this.selectedSport.set(normalizeActivityExplorerSport((params.get('sport') || '').trim().slice(0, 100)));
       const period = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
+      this.urlPeriod = period;
+      if (period === 'all' && this.period() !== 'all') {
+        this.confirmAllDates();
+        return;
+      }
+      this.closeAllDatesWarning();
       this.period.set(period);
       if (previousPeriod !== this.period() && this.user()) this.loadHistory();
       else this.refreshLocalDay();
@@ -118,6 +135,8 @@ export class ActivitiesPageComponent implements OnInit {
           this.user.set(nextUser);
           return;
         }
+        this.closeAllDatesWarning();
+        if (this.period() === 'all') this.period.set(this.defaultPeriod);
         this.owner = owner;
         this.user.set(nextUser);
         this.catalogVersion += 1;
@@ -126,12 +145,14 @@ export class ActivitiesPageComponent implements OnInit {
         this.catalogError.set(false);
         this.generation += 1;
         this.eventsSubscription?.unsubscribe();
+        this.eventsSubscription = undefined;
         this.events.set([]);
         this.loading.set(false);
         this.historyError.set(false);
         if (nextUser) {
           void this.loadCatalog();
-          this.loadHistory();
+          if (this.urlPeriod === 'all') this.confirmAllDates();
+          else this.loadHistory();
         }
       });
   }
@@ -152,14 +173,22 @@ export class ActivitiesPageComponent implements OnInit {
     this.filtersChanged();
   }
 
-  selectPeriod(period: ActivityExplorerPeriod): void {
+  selectPeriod(period: ActivityExplorerPeriod, select?: MatSelect): void {
     if (period === this.period()) return;
+    if (period === 'all') {
+      // Keep the displayed range consistent with its data while awaiting confirmation.
+      if (select) select.value = this.period();
+      this.confirmAllDates(true);
+      return;
+    }
+    this.closeAllDatesWarning();
     this.period.set(period);
     this.loadHistory(true);
     this.filtersChanged();
   }
 
   clearFilters(): void {
+    this.closeAllDatesWarning();
     if (!this.hasFilters()) return;
     this.selectedTag.set('');
     this.untagged.set(false);
@@ -176,7 +205,45 @@ export class ActivitiesPageComponent implements OnInit {
     this.updateUrl();
   }
 
-  private updateUrl(): void {
+  private confirmAllDates(feedback = false): void {
+    const user = this.user();
+    const owner = this.owner;
+    if (!user || owner !== this.auth.currentUser || this.allDatesDialog) return;
+    if (feedback) this.haptics.selection();
+    const dialogRef = this.dialog.open<ConfirmationDialogComponent, ConfirmationDialogData, boolean>(ConfirmationDialogComponent, {
+      data: {
+        title: 'Load all activity history?',
+        message: 'All dates loads your entire activity history. This can be slow and uses more data. Choose a shorter date range for faster loading.',
+        confirmText: 'Load all activities',
+        cancelText: 'Keep current range',
+      },
+    });
+    this.allDatesDialog = dialogRef;
+    dialogRef.afterClosed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(confirmed => {
+      if (this.allDatesDialog !== dialogRef) return;
+      this.allDatesDialog = undefined;
+      if (this.user()?.uid !== user.uid || this.owner !== owner || owner !== this.auth.currentUser) return;
+      if (confirmed === true) {
+        this.period.set('all');
+        this.loadHistory(true);
+        // ConfirmationDialogComponent owns feedback for its confirmation button.
+        this.updateUrl();
+        return;
+      }
+      // An initial All dates link has not loaded any history yet.
+      if (!this.eventsSubscription) this.loadHistory();
+      if (this.urlPeriod === 'all') this.updateUrl(true);
+    });
+  }
+
+  private closeAllDatesWarning(): void {
+    const dialogRef = this.allDatesDialog;
+    this.allDatesDialog = undefined;
+    dialogRef?.close(false);
+  }
+
+  private updateUrl(replaceUrl = false): void {
+    this.urlPeriod = this.period();
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
@@ -184,6 +251,7 @@ export class ActivitiesPageComponent implements OnInit {
         sport: this.selectedSport() || null, period: this.period(), order: null,
       },
       queryParamsHandling: 'merge',
+      replaceUrl,
     });
   }
 
