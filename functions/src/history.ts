@@ -2,7 +2,7 @@ import { replacesSupersededHistoryWork } from './connection-history/queue-replac
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { type HistoryExecution, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
+import { type HistoryExecution, HistoryLifecycleChangedError, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -351,6 +351,17 @@ async function addHistoryToQueueOperation(
         });
 
         for (const item of batchToProcess) options.execution?.onQueued(`${getServiceWorkoutQueueName(serviceName)}/${item.id}`);
+        if (options.execution) {
+          try {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            await dispatchConnectionHistoryWorkoutBatch(options.execution, batchToProcess.map((item: { id: string }) => item.id));
+          } catch (error) {
+            if (error instanceof HistoryLifecycleChangedError) throw error;
+            // Admission is durable. Do not reset rows or restart provider history
+            // after a dispatch/read failure; the existing dispatcher recovers them.
+            logger.warn('[ConnectionHistory] Activity batch dispatch deferred to scheduled recovery.', { service: serviceName });
+          }
+        }
         processedBatchesCount++;
         totalProcessedWorkoutsCount += processedWorkoutsCount;
 

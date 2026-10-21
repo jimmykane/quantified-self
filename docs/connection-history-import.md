@@ -130,6 +130,22 @@ retries do not reset the child's revision or accelerate its backoff. Already-wai
 once; subsequent newly admitted batches use immediate dispatch. Manual bulk backfills retain their existing dispatch
 behavior, and Garmin's separate single-task Health request pacing is unchanged.
 
+Suunto/COROS connection-history activity batches likewise dispatch promptly after their queue transaction commits
+and child paths are registered. They reuse the guarded workout dispatcher with exact batch-document reads (at most
+100), the existing capacity limit and 15-minute task spread; they do not scan or dispatch other users' work. Completed,
+dispatched, retrying, leased, parked and different-run/account/owner rows remain unchanged. Every started enqueue
+settles before checkpointing; failures retain durable undispatched children for the half-hour safety net, without
+resetting retries or repeating admission. A batch already waiting before deployment can still wait for that scan once.
+Manual bulk activity history, Wahoo, Garmin, worker concurrency and retry/backoff settings are unchanged.
+
+Monitoring is **covered/unchanged** after reviewing #829 and #847: the existing native workout queue, committed
+worker outcomes and scheduled eligible-backlog/recovery observations still own these children. Prompt-dispatch
+fallbacks emit a fixed service-only WARNING; they are not falsely counted as scheduled-dispatch failures or imported
+activities. No monitoring configuration changes. Existing Help's background/large-import guidance remains accurate,
+and MCP/Assistant and Training contracts are unaffected. Release requires separate approval for only
+`processConnectionHistoryTask`; no frontend, Rules, indexes, migration or replay is required. Rollback restores its
+previous revision while the scheduled dispatcher continues recovering durable children.
+
 Each operation retains its original range/cursor and a durable bounded completion receipt. An operation receipt survives a crash before the run advances. Queue admission remains idempotent if a failure occurs before a receipt can be persisted. Provider requests are at-least-once across an ambiguous network/commit failure; Garmin's existing duplicate-request handling is reused. Submission never proves delivery.
 
 Automatic Sleep/Health operations preserve credential-read and queue-admission errors for the coordinator's retry/authorization classification. Failed automatic admission keeps its claimed reservation and cooldown; manual callable error mapping and cooldown recovery retain their existing behavior.

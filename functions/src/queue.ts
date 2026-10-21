@@ -1,4 +1,4 @@
-import { withHistoryQueueExecution } from './connection-history/execution';
+import { withHistoryQueueExecution, type HistoryExecution } from './connection-history/execution';
 import * as functions from 'firebase-functions/v1';
 import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { retainCOROSTrainingCompletion } from './coros/training-completion';
@@ -312,7 +312,22 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
   }
 }
 
-async function dispatchQueueItemTasksInternal(serviceName: ServiceNames) {
+interface HistoryWorkoutBatch {
+  execution: HistoryExecution;
+  queueItemIds: readonly string[];
+}
+
+/** Dispatch only this coordinator's bounded batch, without changing bulk import/recovery schedules. */
+export async function dispatchConnectionHistoryWorkoutBatch(execution: HistoryExecution, queueItemIds: readonly string[]): Promise<void> {
+  if (![ServiceNames.SuuntoApp, ServiceNames.COROSAPI].includes(execution.serviceName) || queueItemIds.length > 100) {
+    throw new Error('Unsupported connection-history activity batch.');
+  }
+  if (!queueItemIds.length) return;
+  await execution.beforeRequest();
+  await dispatchQueueItemTasksInternal(execution.serviceName, { execution, queueItemIds });
+}
+
+async function dispatchQueueItemTasksInternal(serviceName: ServiceNames, historyBatch?: HistoryWorkoutBatch) {
   // Check queue depth
   const pendingTasks = await getCloudTaskQueueDepth(true);
   if (pendingTasks >= MAX_PENDING_TASKS) {
@@ -325,7 +340,9 @@ async function dispatchQueueItemTasksInternal(serviceName: ServiceNames) {
   const batchSize = availableSlots; // Caps at 1000 max
 
   // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore()
+  const querySnapshot = historyBatch
+    ? await readHistoryWorkoutBatch(serviceName, historyBatch, batchSize)
+    : await admin.firestore()
     .collection(getServiceWorkoutQueueName(serviceName))
     .where('processed', '==', false)
     .where('dispatchedToCloudTask', '==', null)
@@ -422,9 +439,29 @@ async function dispatchQueueItemTasksInternal(serviceName: ServiceNames) {
     }
   });
 
-  const dispatchResults = await Promise.all(promises);
+  // Finish every started enqueue before the coordinator checkpoints its child paths.
+  // Failed immediate attempts keep their durable rows for the scheduled safety net.
+  const dispatchResults = await Promise.all(historyBatch ? promises.map(promise => promise.catch(() => {
+    logger.warn('[ConnectionHistory] Activity dispatch deferred to scheduled recovery.', { service: serviceName });
+    return false;
+  })) : promises);
   const dispatchedCount = dispatchResults.filter(Boolean).length;
   logger.info(`Dispatched ${dispatchedCount}/${querySnapshot.size} tasks spread over ${DISPATCH_SPREAD_SECONDS}s`);
+}
+
+async function readHistoryWorkoutBatch(serviceName: ServiceNames, batch: HistoryWorkoutBatch, limit: number) {
+  const db = admin.firestore();
+  const snapshots = await db.getAll(...batch.queueItemIds.map(id => db.collection(getServiceWorkoutQueueName(serviceName)).doc(id)));
+  const now = Date.now();
+  const docs = snapshots.filter(snapshot => {
+    const data = snapshot.data();
+    return data?.connectionHistoryRunId === batch.execution.runId
+      && data.firebaseUserID === batch.execution.userID
+      && data[serviceName === ServiceNames.SuuntoApp ? 'userName' : 'openId'] === batch.execution.providerUserId
+      && data.processed === false && data.dispatchedToCloudTask === null && data.retryCount === 0
+      && !data.resultStatus && !(Number(data.processingLeaseExpiresAt) > now);
+  }).slice(0, limit);
+  return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
 const TIMEOUT_DEFAULT = 300;
