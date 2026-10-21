@@ -23,7 +23,7 @@
 .table-toolbar-main {
   display: grid;
   align-items: center;
-  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr) auto;
   gap: 10px;
   min-width: 0;
 }
@@ -70,6 +70,11 @@
   min-height: 0;
   overflow: visible;
   gap: 10px;
+}
+
+.table-toolbar-actions {
+  display: flex;
+  align-items: center;
 }
 
 .tag-filter-field {
@@ -249,7 +254,12 @@
   }
 
   .table-toolbar-filters {
-    grid-column: 1 / -1;
+    grid-column: 1;
+  }
+
+  .table-toolbar-actions {
+    grid-column: 2;
+    align-self: start;
   }
 
   .table-selection-toolbar {
@@ -487,6 +497,7 @@ mat-icon {
 
 .table-wrapper {
   overflow: auto;
+  max-height: min(60vh, 720px);
   width: 100%;
 }
 
@@ -585,6 +596,13 @@ mat-paginator {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.activity-custom-name {
+  max-width: 140px;
+  margin-top: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
 }
 
 .device-names-cell {

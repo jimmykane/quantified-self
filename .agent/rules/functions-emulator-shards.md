@@ -21,6 +21,9 @@ See [CI test coverage](../../docs/ci-testing.md#functions-emulator-matrix) for c
   implicitly through inherited environment variables or broad filename exclusions. Keep emulator files wholly
   emulator-gated and split mixed unit cases into ordinary specs before registering them. The coverage guard checks
   both configurations, hidden/future unit discovery and mixed registrations; preserve complete, non-overlapping coverage.
+- Derive retry-exhaustion fixtures from the applicable shared retry budget. Provider and internal/Training budgets
+  differ: verify the last pending retry, committed exhaustion and transaction rollback in affected emulator specs
+  when a budget changes. Keep coverage that provider retries remain pending beyond the internal budget.
 - For private-field exclusion checks, validate the existing strict public output schema or inspect property names
   recursively. Do not scan the entire serialized payload for bare field names: random opaque references can contain
   substrings such as `uid`. Keep explicit private-value canaries and negative nested-field fixtures as well.

@@ -510,7 +510,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Dashboard** is your main activity overview.
 - **Health** compares supported Sleep and Health measurements source by source. Open the [Health guide](/help#health) for metric ranges, source separation, and sync-state guidance.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
-- **Tags** opens your saved tag library. Use **Find a tag**, then choose a tag to see its activities in the events table. Generated timestamp names are hidden; the sport stays visible and opens the activity. Custom names remain visible. Tag matching ignores capitalization and includes older benchmark review tags. The page starts with your newest activities; **Load older activities** looks further back. While older history is available, counts, activity search, sorting, and table pages cover only loaded activities. Columns, sorting, and page-size choices on Tags stay local to the page. A saved tag with no loaded matches may still have older activities. Tag edits and activity deletions update the library immediately; a saved tag remains available when its last activity is removed. **Refresh tags and activities** loads the latest changes again. Your selected tag is kept in the page link.
+- [Activities](/activities), in the **Overview** section of the sidenav, uses the same full events table as Calendar. Choose **All dates**, **Last 7 days**, **Last 30 days**, **Last 90 days**, or **This year**, then combine **Tags**, **Sport**, and **Search activities**. Search matches activity titles, descriptions, tags, and sport names; separate alternative phrases with commas. Filters and search apply before results are paged, including older matching activities. Use **Next** and **Previous** in the table paginator; there is no separate history-loading step. The range shows the rows on the current page without a guessed total. **Start Date** orders the complete matching list newest or oldest first; other metrics remain visible as detail columns. **Untagged** finds activities with no tags, and tag matching ignores capitalization and includes older benchmark review tags. A multisport activity matches any of its recorded sports. **Last 7 days** includes today and the previous six local calendar days. Generated timestamp names are hidden; custom names remain visible beneath the sport. Use the column picker beside the filters to choose metrics, and scroll inside the table to keep its headings and paginator within reach. Columns and page size use the shared table preferences. Activity menus, tag editors, and selected-row bulk actions remain available; bulk selection applies to the current page. Confirmed tag edits and activity deletions refresh the results, and a saved tag remains available when its last activity is removed. **Refresh activities** checks for the latest changes. Tag, date range, sport and date-order selections stay in the page link; older /tags links open Activities with their tag selection.
 ${TRAINING_PLANNING_HELP_SNIPPETS.gettingStarted}
 - **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide and its **Email Training Feedback** action, or read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary.
@@ -1214,6 +1214,19 @@ When sending routes, provider sport profiles can be broader than your saved QS s
 - If original source files are stored for an activity, you can download the original file or files.
 
 ## Reprocessing a single activity
+
+### Correct an activity's ascent
+
+Open the activity action menu (**⋮**) and choose **Edit ascent**. If the recording contains several activities,
+select the activity to correct. Enter its total ascent and choose **Save**. The recording total and dashboard
+summaries update together. **Edited** identifies a saved correction; **Imported** shows the source value.
+**Reset to imported value** prepares a reset, which is applied only when you choose Save.
+
+Corrections survive reloads, source-file reimports, statistics regeneration, and provider history imports when the
+activity can be matched safely. A new import updates the value available for reset without replacing your correction.
+If the recording changed while the editor was open, reload ascent before saving. Comparisons and Diving terrain
+summaries cannot be edited. This corrects Quantified Self ascent totals, not the altitude chart, laps, original file,
+or the activity in Suunto.
 
 From an activity action menu you can also:
 

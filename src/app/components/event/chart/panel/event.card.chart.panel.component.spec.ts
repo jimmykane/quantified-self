@@ -651,7 +651,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.show).toBe(false);
     expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.series?.[0]?.silent).toBe(true);
-    expect(chart.on).not.toHaveBeenCalled();
+    expect(chart.on.mock.calls).toEqual([['finished', expect.any(Function)]]);
     expect(zr.on).not.toHaveBeenCalled();
     expect(intersectionObserverObserveSpies).toHaveLength(0);
     expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEALTH_PROVIDERS, type HealthProvider } from '../../../shared/health';
 import { increaseRetryCountIfCurrentUserActive, QueueResult } from '../queue-utils';
+import { MAX_RETRY_COUNT, PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import { updateHealthSyncState } from './writer';
 
 vi.unmock('firebase-admin');
@@ -29,7 +30,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health status in the exis
     afterAll(async () => { await admin.app().delete(); });
     const state = () => db.doc(`users/${uid}/healthSyncState/${provider}`);
     const queue = () => db.doc(`sleepSyncQueue/${uid}`);
-    async function seed(retryCount = 9) {
+    async function seed(retryCount = PROVIDER_MAX_RETRY_COUNT - 1) {
         await db.doc(`users/${uid}`).set({});
         await db.doc(`users/${uid}/meta/connection`).set({ generation: 'original' });
         await queue().set({ userID: uid, processed: false, retryCount, queueRevision: 'original', dateCreated: 1 });
@@ -48,22 +49,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health status in the exis
         isCurrent: current => current.queueRevision === 'original', onRetryExhaustedInTransaction: finalize,
     });
     it.each([HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.SuuntoApp, HEALTH_PROVIDERS.COROSAPI])(
+        'keeps %s pending beyond the default internal retry budget', async selected => {
+            provider = selected;
+            await seed(MAX_RETRY_COUNT - 1);
+            expect(await retry()).toBe(QueueResult.RetryIncremented);
+            expect((await queue().get()).get('retryCount')).toBe(MAX_RETRY_COUNT);
+            expect((await state().get()).get('retryPending')).toBe(true);
+            expect((await db.doc(`failed_jobs/${uid}`).get()).exists).toBe(false);
+        },
+    );
+    it.each([HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.SuuntoApp, HEALTH_PROVIDERS.COROSAPI])(
         'keeps %s retrying until the live counter commits exhaustion', async selected => {
             provider = selected;
-            await seed(8);
+            await seed(PROVIDER_MAX_RETRY_COUNT - 2);
             expect(await retry()).toBe(QueueResult.RetryIncremented);
+            expect((await queue().get()).get('retryCount')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
             expect((await state().get()).get('retryPending')).toBe(true);
             expect(await retry()).toBe(QueueResult.MovedToDLQ);
             expect((await state().get()).data()).toMatchObject({ status: 'failed', retryPending: false, lastSyncedAtMs: 8_000 });
             expect((await queue().get()).exists).toBe(false);
-            expect((await db.doc(`failed_jobs/${uid}`).get()).get('retryCount')).toBe(10);
+            expect((await db.doc(`failed_jobs/${uid}`).get()).get('retryCount')).toBe(PROVIDER_MAX_RETRY_COUNT);
         },
     );
     it('rolls status and queue movement back together on a failed transaction', async () => {
         await seed();
         expect(await retry(async transaction => { await finalStatus(transaction); throw new Error('commit failed'); })).toBe(QueueResult.Failed);
         expect((await state().get()).get('retryPending')).toBe(true);
-        expect((await queue().get()).get('retryCount')).toBe(9);
+        expect((await queue().get()).get('retryCount')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
         expect((await db.doc(`failed_jobs/${uid}`).get()).exists).toBe(false);
     });
     it.each(['queueRevision', 'processingOwner'])('does not publish a pending retry after %s changes', async field => {

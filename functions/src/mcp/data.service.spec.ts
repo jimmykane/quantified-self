@@ -1919,6 +1919,7 @@ describe('MCP data service', () => {
       expect(family.length).toBeGreaterThan(20);
       vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types) => [{
         ...activityDocument({ type: types.at(-1), stats: { [DataAscent.type]: 12, providerPayload: 'PRIVATE' } }),
+        ascentCorrection: { value: 12, sourceValue: 250, private: 'PRIVATE_CORRECTION' },
         id: `activity-${family.indexOf(types[0])}`,
       }]);
       const result = await createMcpDataService(dependencies).rankActivitiesByMetric({
@@ -1931,6 +1932,8 @@ describe('MCP data service', () => {
       expect(result.matchedActivityCount).toBe(Math.ceil(family.length / 20));
       expect(result.activities.some(activity => activity.activityType === family.at(-1))).toBe(true);
       expect(JSON.stringify(result)).not.toContain('PRIVATE');
+      expect(JSON.stringify(result)).not.toContain('ascentCorrection');
+      expect(JSON.stringify(result)).not.toContain('sourceValue');
       expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).rank_activities_by_metric.safeParse(result).success).toBe(true);
     });
 

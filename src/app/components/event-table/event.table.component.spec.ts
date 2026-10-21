@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
-import { EventTableComponent, MatPaginatorIntlFireStore } from './event.table.component';
+import { EventTableComponent, EventTablePaginatorIntl, MatPaginatorIntlFireStore } from './event.table.component';
 import { EventTableActionsComponent } from './actions/event.table.actions.component';
 import { MatListModule, type MatSelectionListChange } from '@angular/material/list';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
@@ -28,7 +29,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { from, of, Subject } from 'rxjs';
-import { User, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
+import { User, DataAscent, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
 import { Auth } from 'app/firebase/auth';
@@ -374,6 +375,63 @@ describe('EventTableComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('uses externally paged rows without slicing or local sorting and exposes an honest range', () => {
+        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
+        component.events = Array.from({ length: 10 }, (_, i) => new MockEvent('page-' + i)) as any;
+        component.ngOnChanges({ pagination: new SimpleChange(null, component.pagination, true), events: new SimpleChange([], component.events, false) });
+        fixture.detectChanges();
+        expect(component.data.paginator).toBeNull(); expect(component.data.sort).toBeNull();
+        expect(component.paginatorLength).toBe(11);
+        const intl = new EventTablePaginatorIntl(); intl.external = true;
+        expect(intl.getRangeLabel(0, 10, 11)).toBe('1 – 10');
+        expect(intl.getRangeLabel(1, 10, 13)).toBe('11 – 13');
+        expect(intl.getRangeLabel(0, 10, 0)).toBe('0 activities');
+        expect(component.tableSortActive).toBe('Start Date');
+        expect(component.tablePageSize).toBe(10);
+    });
+
+    it('forwards external pages and search with one feedback, and ignores pending or unchanged paging', async () => {
+        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
+        component.ngOnChanges({ pagination: new SimpleChange(null, component.pagination, true) });
+        const pages = vi.fn(); component.pageRequest.subscribe(pages);
+        const search = vi.fn(); component.searchChange.subscribe(search);
+        component.search('Race');
+        expect(search).toHaveBeenCalledWith('Race');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 10, length: 11 });
+        expect(pages).toHaveBeenCalledOnce(); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        component.isLoading = true;
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 10, length: 11 });
+        component.isLoading = false;
+        await component.pageChanges({ pageIndex: 0, pageSize: 10, length: 11 });
+        expect(pages).toHaveBeenCalledOnce(); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('forwards date sorting for external pages and leaves other column ordering disabled', () => {
+        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
+        const changes = vi.fn(); component.dateSortChange.subscribe(changes);
+        component.sort.sortChange.next({ active: 'Duration', direction: 'asc' });
+        expect(changes).not.toHaveBeenCalled();
+        component.sort.sortChange.next({ active: 'Start Date', direction: 'asc' });
+        expect(changes).toHaveBeenCalledWith('asc'); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('rebuilds external rows when the responsive date format changes', () => {
+        const breakpoints = new Subject<any>();
+        vi.spyOn(TestBed.inject(BreakpointObserver), 'observe').mockReturnValue(breakpoints);
+        (component as any).breakpointSubscription.unsubscribe();
+        (component as any).searchSubscription.unsubscribe();
+        component.pagination = { pageIndex: 0, pageSize: 10, hasNext: true, direction: 'desc' };
+        component.ngOnChanges({ pagination: new SimpleChange(null, component.pagination, true) });
+        const rebuild = vi.spyOn(component as any, 'processChanges');
+        component.ngOnInit();
+        breakpoints.next({ matches: true, breakpoints: {} });
+        expect(rebuild).toHaveBeenCalledWith('breakpoint_change', true);
+        expect(component.data.paginator).toBeNull();
+        expect(component.data.sort).toBeNull();
+    });
+
     it('should render a table toolbar with a filter projection slot', () => {
         const toolbar = fixture.nativeElement.querySelector('.table-toolbar') as HTMLElement;
         const mainRow = fixture.nativeElement.querySelector('.table-toolbar-main') as HTMLElement;
@@ -385,6 +443,12 @@ describe('EventTableComponent', () => {
         expect(filtersRow).toBeTruthy();
         expect(searchField).toBeTruthy();
         expect(mainRow.contains(filtersRow)).toBe(true);
+        component.showActions = true;
+        fixture.detectChanges();
+        expect(mainRow.querySelector('.table-toolbar-actions app-event-table-actions')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('th app-event-table-actions')).toBeNull();
+        const scrollRegion = fixture.nativeElement.querySelector('[role="region"][aria-label="Activity table"]') as HTMLElement;
+        expect(scrollRegion.getAttribute('tabindex')).toBe('0');
     });
 
     it('allows a parent tag selector without leaving a hidden table tag filter active', () => {
@@ -412,6 +476,43 @@ describe('EventTableComponent', () => {
         expect(component.data.data[0]['Name']).toBe('Test Run');
         expect(component.data.data[0]['Activity Types']).toBe('Run');
         expect(component.data.data[0]['Start Date']).toBe(dashboardDate);
+    });
+
+    it('keeps the complete table and hides only generated names when Activities opts in', () => {
+        const event = component.events[0];
+        event.name = event.startDate.toISOString();
+        const originalColumns = [...component.displayedColumns];
+        component.hideGeneratedNames = true;
+        component.ngOnChanges({ hideGeneratedNames: new SimpleChange(false, true, false) });
+        expect(component.data.data[0].Name).toBe('');
+        expect(component.displayedColumns).toEqual(originalColumns);
+        expect(component.data.data[0]['Tag Action Label']).not.toContain(event.name);
+        expect(event.name).toBe(event.startDate.toISOString());
+        event.name = 'Autumn race';
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        expect(component.data.data[0].Name).toBe('Autumn race');
+        expect(component.data.data[0]['Library Activity Label']).toBe('Autumn race');
+        component.hideGeneratedNames = false;
+        event.name = event.startDate.toISOString();
+        component.ngOnChanges({ hideGeneratedNames: new SimpleChange(true, false, false) });
+        expect(component.data.data[0].Name).toBe(event.name);
+        expect(mockEventService.updateEventProperties).not.toHaveBeenCalled();
+    });
+
+    it('preserves shared search but resets page and selection when explorer filters change', () => {
+        component.preserveSearchOnFilterChange = true;
+        component.search('Run');
+        component.selection.select(component.data.data[0]);
+        component.paginator.pageIndex = 2;
+        component.paginator.firstPage = vi.fn(() => { component.paginator.pageIndex = 0; });
+        mockHapticsService.selection.mockClear();
+        component.ngOnChanges({ filterContext: new SimpleChange('all', 'Running', false) });
+        expect(component.searchTerm).toBe('Run');
+        expect(JSON.parse(component.data.filter).text).toBe('run');
+        expect(component.selection.isEmpty()).toBe(true);
+        expect(component.paginator.pageIndex).toBe(0);
+        expect(component.paginator.firstPage).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('keeps Tag library columns, sorting, and pagination local without changing Dashboard preferences', async () => {
@@ -637,7 +738,7 @@ describe('EventTableComponent', () => {
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
         );
-        expect(template).toContain("[attr.aria-label]=\"isLibraryPresentation || !canManageEvents ? 'Activity actions' : null\"");
+        expect(template).toContain('aria-label="Activity actions"');
         expect(fixture.nativeElement.querySelector('app-event-table-actions')).toBeNull();
         expect(component.showRowActions).toBe(true);
 
@@ -860,6 +961,9 @@ describe('EventTableComponent', () => {
         await component.selectedColumnsChange(['Name', 'Start Date']);
 
         expectDashboardSettingsWrite({ tableSettings: { selectedColumns: ['Name', 'Start Date'] } });
+        mockUserService.updateUserProperties.mockClear();
+        await component.selectedColumnsChange(['Name', 'Start Date']);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
     it('should persist sort changes without writing unrelated user settings', async () => {
@@ -1013,6 +1117,30 @@ describe('EventTableComponent', () => {
         expect((component.data.data[1] as any).Name).toBe('Mutated Event 2');
         expect((component.data.data[1] as any).Privacy).toBe('private');
         expect((component.data.data[1] as any)['Has Benchmark']).toBeTruthy();
+    });
+
+    it.each([0, 250, null])('refreshes saved ascent in cached rows and preserves selection: %s', value => {
+        const event = component.events[0];
+        let ascent: DataAscent | null = new DataAscent(100);
+        vi.spyOn(event, 'getStatsAsArray').mockImplementation(() => ascent ? [ascent] : []);
+        (component as any).processChanges('ascent_initial');
+        const previousRows = [...component.data.data];
+        expect(previousRows[0].Ascent).toBe('100 m');
+        component.selection.select(previousRows[0], previousRows[1]);
+        ascent = value === null ? null : new DataAscent(value);
+        component.refreshSavedAscent(event);
+        expect(component.data.data[0].Ascent).toBe(value === null ? '' : `${value} m`);
+        expect(component.data.data[1]).toBe(previousRows[1]);
+        expect(component.selection.selected.map(row => row.Event.getID())).toEqual(['event1', 'event2']);
+    });
+    it('ignores a saved-ascent callback for an event instance replaced by newer input', () => {
+        const rows = [...component.data.data];
+        const previous = component.events[0];
+        component.events = [new MockEvent('event1') as any, ...component.events.slice(1)];
+        const rebuild = vi.spyOn(component, 'getStatsRowElement');
+        component.refreshSavedAscent(previous);
+        expect(rebuild).not.toHaveBeenCalled();
+        expect(component.data.data).toEqual(rows);
     });
 
     it('should support comma-separated search terms', () => {

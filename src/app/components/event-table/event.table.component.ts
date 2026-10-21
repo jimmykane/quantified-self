@@ -85,6 +85,29 @@ export interface EventTableEventsChange {
   deletedEventIDs: string[];
 }
 
+export interface EventTablePagination {
+  pageIndex: number;
+  pageSize: number;
+  hasNext: boolean;
+  direction: 'asc' | 'desc';
+}
+
+@Injectable()
+export class EventTablePaginatorIntl extends MatPaginatorIntl {
+  external = false;
+  itemsPerPageLabel = 'Items';
+  nextPageLabel = 'Next';
+  previousPageLabel = 'Previous';
+
+  constructor() {
+    super();
+    const defaultRangeLabel = this.getRangeLabel;
+    this.getRangeLabel = (page, size, length) => this.external
+      ? length ? `${page * size + 1} – ${Math.min((page + 1) * size, length)}` : '0 activities'
+      : defaultRangeLabel(page, size, length);
+  }
+}
+
 @Component({
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
@@ -92,7 +115,7 @@ export interface EventTableEventsChange {
   animations: [
     rowsAnimation
   ],
-  providers: [DatePipe],
+  providers: [DatePipe, { provide: MatPaginatorIntl, useClass: EventTablePaginatorIntl }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
@@ -115,8 +138,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() presentation: EventTablePresentation = 'dashboard';
   @Input() showTagFilter = true;
   @Input() filterContext = '';
+  @Input() preserveSearchOnFilterChange = false;
+  @Input() hideGeneratedNames = false;
   @Input() emptyMessage = 'No activities yet';
   @Input() emptyHint = 'Import an activity or change your filters';
+  @Input() pagination: EventTablePagination | null = null;
+  @Output() pageRequest = new EventEmitter<PageEvent>();
+  @Output() searchChange = new EventEmitter<string>();
+  @Output() dateSortChange = new EventEmitter<'asc' | 'desc'>();
+  private readonly paginatorIntl = inject(MatPaginatorIntl) as EventTablePaginatorIntl;
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
@@ -218,23 +248,41 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   get tableSortActive(): string {
+    if (this.pagination) return 'Start Date';
     if (this.isLibraryPresentation) return this.librarySort.active;
     return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
   }
 
   get tableSortDirection(): 'asc' | 'desc' {
+    if (this.pagination) return this.pagination.direction;
     if (this.isLibraryPresentation) return this.librarySort.direction;
     return this.user?.settings?.dashboardSettings?.tableSettings?.direction === 'asc' ? 'asc' : 'desc';
   }
 
   get tablePageSize(): number {
+    if (this.pagination) return this.pagination.pageSize;
     if (this.isLibraryPresentation) return this.libraryPageSize;
     const pageSize = this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage;
     return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
   }
 
+  get paginatorLength(): number {
+    return this.pagination
+      ? this.pagination.pageIndex * this.pagination.pageSize + (this.events?.length || 0) + (this.pagination.hasNext ? 1 : 0)
+      : this.data?.data.length || 0;
+  }
+
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    if (this.pagination && this.paginator && (simpleChanges.pagination || simpleChanges.isLoading)) {
+      this.paginator.pageIndex = this.pagination.pageIndex;
+    }
+    if (simpleChanges.pagination) {
+      this.paginatorIntl.external = !!this.pagination;
+      this.paginatorIntl.changes.next();
+      this.data.paginator = this.pagination ? null : this.paginator;
+      this.data.sort = this.pagination ? null : this.sort;
+    }
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
       // The loading base renders synchronously. Initialize the picker first so
@@ -248,12 +296,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.loading();
       return;
     }
-    if (this.events && (simpleChanges.events || simpleChanges.presentation) && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
+    if (this.events && (simpleChanges.events || simpleChanges.presentation || simpleChanges.hideGeneratedNames) && this.paginator && this.sort) {
       this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
     if (preferencesChanged) {
       const nextPageSize = this.tablePageSize;
-      if (!this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
+      if (!this.pagination && !this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
         this.paginator._changePageSize(nextPageSize);
       }
       this.updateDisplayedColumns();
@@ -272,12 +320,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.applyTableFilter();
     }
     if (simpleChanges.filterContext) {
-      this.searchTerm = '';
-      this.searchSubject.next('');
+      if (!this.preserveSearchOnFilterChange) {
+        this.searchTerm = '';
+        this.searchSubject.next('');
+      }
       this.tagFilter = '';
       this.selection.clear();
       this.suppressLibraryPageFeedback = true;
-      this.paginator?.firstPage();
+      if (!this.pagination) this.paginator?.firstPage();
       this.suppressLibraryPageFeedback = false;
       this.libraryPageIndex = 0;
       this.applyTableFilter();
@@ -308,7 +358,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
         this.isHandset = nextIsHandset;
         this.updateDisplayedColumns();
-        if (this.events && this.data.paginator && this.data.sort) {
+        if (this.events && this.paginator && this.sort) {
           this.processChanges('breakpoint_change', true);
         }
         this.changeDetector.markForCheck();
@@ -316,8 +366,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngAfterViewInit() {
-    this.data.paginator = this.paginator;
-    this.data.sort = this.sort;
+    this.data.paginator = this.pagination ? null : this.paginator;
+    this.data.sort = this.pagination ? null : this.sort;
     this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
       return (statRowElement as any)[`sort.${header}`];
     };
@@ -348,6 +398,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return terms.some(term => rowText.includes(term));
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
+      if (this.pagination) {
+        if (sort.active !== 'Start Date') return;
+        const direction = sort.direction === 'asc' ? 'asc' : 'desc';
+        if (direction !== this.pagination.direction) {
+          this.hapticsService.selection();
+          this.dateSortChange.emit(direction);
+        }
+        return;
+      }
       if (this.isBrowsePresentation) {
         return;
       }
@@ -402,6 +461,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges('after_delete_row');
     }
     this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
+  }
+
+  public refreshSavedAscent(event: EventInterface): void {
+    if (this.destroyed || !this.user || !this.events?.includes(event)) return;
+    this.invalidateRowCacheForEvent(event);
+    this.processChanges('ascent_saved', true);
   }
 
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
@@ -999,6 +1064,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
+    if (this.pagination) {
+      if (this.isLoading || (pageEvent.pageIndex === this.pagination.pageIndex && pageEvent.pageSize === this.pagination.pageSize)) return;
+      this.hapticsService.selection();
+      this.pageRequest.emit(pageEvent);
+      if (this.user.settings?.dashboardSettings?.tableSettings && this.user.settings.dashboardSettings.tableSettings.eventsPerPage !== pageEvent.pageSize) {
+        this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
+        await this.persistDashboardSettings({ tableSettings: { eventsPerPage: pageEvent.pageSize } });
+      }
+      return;
+    }
     if (this.isLibraryPresentation) {
       const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
       const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
@@ -1028,6 +1103,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   search(searchTerm: string) {
     this.searchTerm = searchTerm;
+    if (this.pagination) {
+      this.searchChange.emit(searchTerm);
+      return;
+    }
     this.applyTableFilter();
   }
 
@@ -1210,6 +1289,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private applyTableFilter(): void {
+    if (this.pagination) {
+      this.data.filter = '';
+      return;
+    }
     this.data.filter = JSON.stringify({
       text: this.searchTerm.trim().toLowerCase(),
       tag: this.tagFilter,
@@ -1235,6 +1318,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async selectedColumnsChange(event: string[]) {
     if (this.isBrowsePresentation) {
+      return;
+    }
+    if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
       return;
     }
     if (this.isLibraryPresentation) {
@@ -1474,11 +1560,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Privacy'] = event.privacy;
     statRowElement['Shared'] = isShared ? 'Shared' : '';
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
-    statRowElement['Name'] = event.name;
+    const activityName = getTagLibraryActivityName(event);
+    statRowElement['Name'] = this.hideGeneratedNames && !activityName ? '' : event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
-    if (this.isLibraryPresentation) {
-      const name = getTagLibraryActivityName(event);
+    if (this.isLibraryPresentation || this.hideGeneratedNames) {
+      const name = activityName;
       const date = startDate ? this.datePipe.transform(startDate, 'd MMM y, HH:mm') : '';
       statRowElement['Library Activity Name'] = name;
       statRowElement['Library Activity Label'] = name || `${statRowElement['Activity Types'] || 'Activity'}${date ? ` on ${date}` : ''}`;
@@ -1515,7 +1602,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
-    statRowElement['sort.Name'] = this.isLibraryPresentation
+    statRowElement['sort.Name'] = this.isLibraryPresentation || this.hideGeneratedNames
       ? statRowElement['Library Activity Name'] || statRowElement['Activity Types'] || ''
       : event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
@@ -1615,6 +1702,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return JSON.stringify({
       dateFormat,
       presentation: this.presentation,
+      hideGeneratedNames: this.hideGeneratedNames,
       unitSettings: this.user?.settings?.unitSettings ?? null,
       removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
       removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),

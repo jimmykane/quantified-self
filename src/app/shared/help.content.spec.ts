@@ -16,6 +16,11 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains ascent correction, reviewed reset and source preservation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    for (const phrase of ['**Edit ascent**', '**Reset to imported value**', '**Edited**',
+      'without replacing your correction', 'not the altitude chart, laps, original file']) expect(copy).toContain(phrase);
+  });
   it('explains browser verification cooldowns and recovery without resetting account data', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     expect(copy).toContain('Temporary verification service errors retry automatically after short pauses');
@@ -95,12 +100,14 @@ describe('help.content', () => {
     expect(content).toContain('**Import existing routes** remains available separately');
     expect(content).not.toContain('Saved-route libraries remain separate manual actions');
   });
-  it('explains tag-library selection, partial history, saved empty tags and refresh', () => {
+  it('explains the activity explorer, full shared table, partial history and saved filters', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',
-      'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
-      'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
-      'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
+    for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
+      'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
+      '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
+      'before results are paged', '**Next** and **Previous**', 'without a guessed total', 'shared table preferences',
+      'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
+      'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });
   it('explains unavailable pool timing without losing rests or inventing replacements', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');

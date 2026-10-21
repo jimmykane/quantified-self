@@ -4,6 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueueItemInterface } from '../queue/queue-item.interface';
+import { MAX_RETRY_COUNT, PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 const state = vi.hoisted(() => ({ db: null as unknown as Firestore, pro: vi.fn(), enqueue: vi.fn(), deliveryEnqueue: vi.fn() }));
 vi.mock('../utils', async importOriginal => ({ ...await importOriginal<typeof import('../utils')>(),
     hasProAccess: state.pro, enqueueRouteSyncTask: state.enqueue, enqueueRouteDeliverySyncTask: state.deliveryEnqueue }));
@@ -84,9 +85,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
         expect(observed().map(([, fields]) => fields.outcome)).toEqual([outcome]);
         expect(JSON.stringify(observed())).not.toContain('PRIVATE');
     });
+    it('keeps provider retries pending beyond the default internal retry budget', async () => {
+        const item = await seed(); item.retryCount = MAX_RETRY_COUNT - 1;
+        await item.ref!.update({ retryCount: item.retryCount });
+        expect(await increaseRetryCountIfCurrentUserActive({ ...guard(item), manualReconciliation: {} })).toBe(QueueResult.RetryIncremented);
+        expect((await item.ref!.get()).get('retryCount')).toBe(MAX_RETRY_COUNT);
+        expect((await state.db.doc('failed_jobs/qa').get()).exists).toBe(false);
+        expect(observed().map(([, fields]) => fields.outcome)).toEqual(['retry']);
+    });
     it('retry exhaustion produces new DLQ and reconciliation, never route success', async () => {
-        const item = await seed(); item.retryCount = 9; await item.ref!.update({ retryCount: 9 });
+        const item = await seed(); item.retryCount = PROVIDER_MAX_RETRY_COUNT - 1;
+        await item.ref!.update({ retryCount: item.retryCount });
         expect(await increaseRetryCountIfCurrentUserActive({ ...guard(item), manualReconciliation: {} })).toBe(QueueResult.MovedToDLQ);
+        expect((await state.db.doc('failed_jobs/qa').get()).get('retryCount')).toBe(PROVIDER_MAX_RETRY_COUNT);
         expect(observed().map(([, fields]) => fields.outcome)).toEqual(['dead_lettered', 'manual_reconciliation']);
     });
     it('legacy imports distinguish a persisted success from a skip', async () => {
