@@ -46,7 +46,7 @@ export class ActivityTypesMultiSelectComponent implements OnChanges {
 
   private refreshOptions(): void {
     const locked = new Set(normalizeActivityTypeSelection(this.lockedActivityTypes));
-    this.selectedActivityTypes = normalizeActivityTypeSelection([...this.selectedActivityTypes, ...locked]);
+    this.selectedActivityTypes = normalizeActivityTypeSelection([...(this.selectedActivityTypes || []), ...locked]);
     const available = Array.isArray(this.availableActivityTypes) ? normalizeActivityTypeSelection(this.availableActivityTypes) : this.catalog;
     // Keep saved no-match and catalog bridge choices removable without widening a context's sport families.
     const choices = normalizeActivityTypeSelection([...available, ...this.selectedActivityTypes]);

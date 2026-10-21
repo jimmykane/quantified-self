@@ -36,7 +36,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 })
 class MergedFilterTestHost {
   toolbar = true;
-  sports: ActivityTypes[] = [];
+  sports: ActivityTypes[] | null | undefined = [];
   availableSports?: ActivityTypes[];
   range = DateRanges.thisWeek;
   weekStart = DaysOfTheWeek.Monday;
@@ -138,6 +138,32 @@ describe('Merged toolbar filter rendering', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
     [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
     expect(host.requests).toHaveLength(1);
+  });
+
+  it.each([undefined, null])('handles a missing My Tracks sport filter (%s) and later hydration without searching', async savedSports => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance;
+    host.toolbar = false; host.sports = savedSports; host.availableSports = [ActivityTypes.Cycling];
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input[aria-label="Sports"]') as HTMLInputElement;
+    expect(trigger.value).toBe('All sports');
+    expect(host.requests).toEqual([]); expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    host.sports = [ActivityTypes.Running]; await settle();
+    expect(trigger.value).toBe('Running');
+    expect(overlay.querySelector('[aria-label="Running"]')?.getAttribute('aria-selected')).toBe('true');
+    host.sports = savedSports; await settle();
+    expect(trigger.value).toBe('All sports');
+    expect(overlay.querySelector('[aria-label="Running"]')).toBeNull();
+    expect(host.requests).toEqual([]); expect(haptics.selection).toHaveBeenCalledOnce();
+    const cycling = overlay.querySelector<HTMLElement>('mat-list-option[aria-label="Cycling"]')!;
+    cycling.focus(); cycling.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 32, bubbles: true })); await settle();
+    expect(host.requests).toEqual([expect.objectContaining({ activityTypes: [ActivityTypes.Cycling] })]);
+    expect(trigger.value).toBe('Cycling'); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('follows parent preferences silently and accepts one action after being enabled', async () => {
