@@ -2604,6 +2604,19 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').get());
         });
 
+        it('denies direct creation or replacement of server-owned ascent corrections', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({ type: 'Running' });
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running', eventID: 'original_event', stats: { Ascent: 100 },
+                });
+            });
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                ascentCorrection: { value: 50, sourceValue: 100 }, 'stats.Ascent': 50,
+            }));
+        });
+
         it('should deny user from writing to another users activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').set({

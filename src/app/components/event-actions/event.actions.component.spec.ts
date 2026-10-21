@@ -23,7 +23,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MAT_ICON_DEFAULT_OPTIONS, MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Privacy } from '@sports-alliance/sports-lib';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -207,6 +207,72 @@ describe('EventActionsComponent', () => {
         await component.sendToService();
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+    it('opens ascent editing for the signed-in owner with the recording identity', async () => {
+        component.user = { uid: 'test-user' } as any;
+        mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+        await component.editAscent();
+        expect(mockDialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+            data: { eventId: 'event-123', user: component.user }, width: '480px',
+        }));
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+    it.each(['shared', 'benchmark', 'processing'])('does not open ascent editing for %s recordings', async kind => {
+        component.user = { uid: kind === 'shared' ? 'other-user' : 'test-user' } as any;
+        if (kind === 'benchmark') (component.event as any).mergeType = 'benchmark';
+        if (kind === 'processing') component.isReprocessing = true;
+        await component.editAscent();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+    it('applies committed ascent without replacing hydrated activities or reading a cached snapshot', async () => {
+        const changed = vi.spyOn(component.ascentChanged, 'emit');
+        component.user = { uid: 'test-user' } as any;
+        const activity = { getID: () => 'hike', addStat: vi.fn(), removeStat: vi.fn() };
+        Object.assign(component.event, { getActivities: () => [activity], addStat: vi.fn(), clearActivities: vi.fn(), addActivities: vi.fn() });
+        mockEventService.getEventAndActivities = vi.fn().mockReturnValue(of(component.event));
+        const closed = new Subject<unknown>();
+        mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+        await component.editAscent();
+        closed.next({ activityId: 'hike', ascent: 75, eventAscent: 275, correction: { value: 75, sourceValue: 100 } });
+        await Promise.resolve();
+        expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+        expect(component.event.clearActivities).not.toHaveBeenCalled();
+        expect(component.event.getActivities()[0]).toBe(activity);
+        expect(activity.addStat.mock.calls[0][0].getValue()).toBe(75);
+        expect(activity).toHaveProperty('ascentCorrection', { value: 75, sourceValue: 100 });
+        expect((component.event.addStat as any).mock.calls[0][0].getValue()).toBe(275);
+        expect(changed).toHaveBeenCalledExactlyOnceWith(component.event);
+    });
+    it.each(['other', 'event-123'])('ignores an ascent result after the component receives another event instance: %s', async eventId => {
+        const changed = vi.spyOn(component.ascentChanged, 'emit');
+        component.user = { uid: 'test-user' } as any;
+        const closed = new Subject<unknown>();
+        mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+        mockEventService.getEventAndActivities = vi.fn().mockReturnValue(of(component.event));
+        await component.editAscent();
+        const nextEvent = { getID: () => eventId, clearActivities: vi.fn(), addActivities: vi.fn(), addStat: vi.fn() };
+        component.event = nextEvent as any;
+        closed.next({ activityId: 'hike', ascent: 75, eventAscent: 75, correction: null });
+        await Promise.resolve();
+        expect(nextEvent.clearActivities).not.toHaveBeenCalled();
+        expect(nextEvent.addStat).not.toHaveBeenCalled();
+        expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+        expect(changed).not.toHaveBeenCalled();
+    });
+    it('opens only one ascent editor when requested twice during lazy loading', async () => {
+        component.user = { uid: 'test-user' } as any;
+        mockDialog.open.mockReturnValueOnce({ afterClosed: () => new Subject() });
+        await Promise.all([component.editAscent(), component.editAscent()]);
+        expect(mockDialog.open).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+    it('does not open an ascent dialog if destroyed while its code is loading', async () => {
+        component.user = { uid: 'test-user' } as any;
+        const opening = component.editAscent();
+        fixture.destroy();
+        await opening;
+        expect(mockDialog.open).not.toHaveBeenCalled();
     });
     it.each([true, false])('waits for accepted activity-send navigation before feedback: %s', async opened => {
         component.user = { uid: 'test-user' } as typeof component.user;

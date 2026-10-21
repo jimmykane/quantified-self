@@ -463,6 +463,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
   }
 
+  public refreshSavedAscent(event: EventInterface): void {
+    if (this.destroyed || !this.user || !this.events?.includes(event)) return;
+    this.invalidateRowCacheForEvent(event);
+    this.processChanges('ascent_saved', true);
+  }
+
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
     const dashboardSettings = this.user?.settings?.dashboardSettings;
     if (!dashboardSettings) {
