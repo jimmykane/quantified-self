@@ -50,6 +50,7 @@ import {
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
 import type { EventChartPanelSeries } from './event-echarts-data.helper';
+import { canSelectEventChartDistanceXAxis } from './event-echarts-xaxis.helper';
 import { computeEventPanelRangeStats } from './event-echarts-range-stats.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
 
@@ -315,6 +316,39 @@ describe('event-echarts-data.helper', () => {
       expect(panels[0].unit).toBe('');
       expect(eventChartSeriesToPoints(panels[0].series[0]).filter(point => point.y !== null).map(point => point.y)).toEqual([0, 1000]);
     }
+  });
+
+  it.each([
+    { label: 'empty primary', primary: [], expected: [0, 50, 100], lapDistance: 50 },
+    { label: 'missing primary', primary: [null, null, null], expected: [0, 50, 100], lapDistance: 50 },
+    { label: 'invalid primary', primary: [NaN, null, Infinity], expected: [0, 50, 100], lapDistance: 50 },
+    { label: 'sparse primary', primary: [0, null, 200], expected: [0, 200], lapDistance: 0 },
+    { label: 'recorded zero primary', primary: [0, null, null], expected: [0], lapDistance: 0 },
+  ])('uses one recorded distance source consistently for $label', ({ primary, expected, lapDistance }) => {
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 2000, type: ActivityTypes.Running,
+      powerMeter: false, trainer: false, creator: { name: 'Synthetic', devices: [] },
+      stats: {}, events: [], intensityZones: [],
+      laps: [0, 1].map(index => ({ lapId: index + 1, startDate: index * 1000, endDate: (index + 1) * 1000,
+        startIndex: null, endIndex: null, type: LapTypes.Manual,
+        stats: { [DataDuration.type]: 1, [DataDistance.type]: 50 } })),
+      streams: { [DataDistance.type]: primary, [DataStrydDistance.type]: [0, 50, 100],
+        [DataHeartRate.type]: [100, 110, 120] },
+    });
+    activity.setID('distance-source'); activity.addStream(activity.generateTimeStream());
+    const before = structuredClone(activity.toJSON());
+    expect(canSelectEventChartDistanceXAxis([activity])).toBe(true);
+    expect(hasEventChartableData([activity], XAxisTypes.Distance)).toBe(true);
+    const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Distance,
+      showAllData: false, dataTypesToUse: [DataHeartRate.type], userUnitSettings: getDefaultUserUnitSettings(),
+      eventColorService: { getActivityColor: () => '#ff0000' } as any };
+    for (const panels of [buildEventChartPanels(input), buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))]) {
+      expect(panels).toHaveLength(1);
+      expect(eventChartSeriesToPoints(panels[0].series[0]).map(point => point.x)).toEqual(expected);
+    }
+    const markers = buildEventLapMarkers({ ...input, lapTypes: [LapTypes.Manual] });
+    expect(markers.map(marker => marker.xValue)).toEqual([lapDistance]);
+    expect(activity.toJSON()).toEqual(before);
   });
 
   it('defaults legacy rendering to continuous and changes policy without mutating the readings', () => {

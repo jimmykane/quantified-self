@@ -1,3 +1,5 @@
+import { DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib/metrics';
+
 export interface EventChartOverlayOption {
   dataType: string;
   label: string;
@@ -8,6 +10,13 @@ export interface EventChartOverlayOption {
 export type EventChartOverlayDataTypeByPrimary = Record<string, string>;
 
 const UNSAFE_OVERLAY_MAP_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+const DISTANCE_OVERLAY_TYPES = new Set([DataDistance.type, DataDistanceFeet.type, DataDistanceMiles.type]);
+
+/** Retain saved Distance choices when the user's unit preference replaces its rendered panel. */
+export function getEventChartOverlaySelectionKey(dataType: string): string {
+  return DISTANCE_OVERLAY_TYPES.has(dataType) ? DataDistance.type : dataType;
+}
 
 export function normalizeEventChartOverlayDataTypeByPrimary(
   value: unknown

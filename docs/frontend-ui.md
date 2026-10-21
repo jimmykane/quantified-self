@@ -584,7 +584,10 @@ Distance-axis hover-to-map synchronization selects the nearest finite distance/t
 index. Missing readings, invalid values and unpaired timestamps do not become zero or shift later samples; genuine
 zeros and repeated distances remain valid, with the first recorded pair winning a tie. No usable pair means no map
 cursor update. This read-only lookup preserves the source streams and works with both dense and sparse Distance
-streams, including the existing Stryd fallback.
+streams, including the existing Stryd fallback. Chart availability, x coordinates, lap markers and the map cursor
+use Stryd only when the primary Distance stream has no finite readings (including empty/all-null streams).
+A recorded zero keeps the primary source eligible. Individual holes in a usable primary stream are never filled
+from Stryd; the source streams and their summaries remain unchanged.
 
 The app and Functions both install Sports Lib 23.4.0. Original-file chart hydration retains missing Distance
 readings as null instead of carrying the last distance through unrelated sensor timestamps. Real zero and repeated
@@ -600,6 +603,10 @@ Its metric tick labels include Sports Lib's value-dependent m/Km unit, with no f
 uses the same rule. The user's distance preference selects one canonical/unit-variant panel, including when all
 recorded metrics are enabled. Miles retain their fixed unit heading. Unit conversion preserves nulls and real zero;
 range statistics use only recorded points, and zoom/overlays do not manufacture intermediate measurements.
+Saved Distance overlay keys and targets resolve to the currently available unit variant without writing settings on
+read. Exact saved keys take precedence; a user change replaces obsolete Distance aliases, including when selecting
+No overlay. This prevents a removed overlay from reappearing after a unit change. Stryd Distance and sustainable
+distance remain separate metrics; aliases cannot create a self-overlay.
 
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank

@@ -1388,17 +1388,25 @@ function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAx
     return false;
   }
 
-  if (
-    xAxisType === XAxisTypes.Distance
-    && !hasFiniteStreamData(
-      getActivityStreamByType(activity, DataDistance.type, streams)
-      || getActivityStreamByType(activity, DataStrydDistance.type, streams)
-    )
-  ) {
+  if (xAxisType === XAxisTypes.Distance && !getEventChartDistanceStream(activity, streams)) {
     return false;
   }
 
   return streams.some((stream) => isEventChartableRawStream(stream) && hasFiniteStreamData(stream));
+}
+
+/** Prefer recorded Distance, falling back as a whole stream only when it has no finite readings. */
+export function getEventChartDistanceStream(
+  activity: ActivityInterface | null | undefined,
+  knownStreams: Map<string, StreamInterface> | StreamInterface[] | null = null,
+): StreamInterface | null {
+  const streams = knownStreams ?? activity?.getAllStreams?.() ?? [];
+  const distance = getActivityStreamByType(activity, DataDistance.type, streams);
+  if (hasFiniteStreamData(distance)) {
+    return distance;
+  }
+  const stryd = getActivityStreamByType(activity, DataStrydDistance.type, streams);
+  return hasFiniteStreamData(stryd) ? stryd : null;
 }
 
 function getActivityStreamByType(
@@ -1457,13 +1465,14 @@ function isEventChartableRawStream(stream: StreamInterface | undefined | null): 
 }
 
 function hasFiniteStreamData(stream: StreamInterface | undefined | null): boolean {
-  if (!stream?.getData) {
+  const values = stream?.getData?.();
+  if (!isNumericValueArrayLike(values)) {
     return false;
   }
 
-  const values = toNumericArray(stream.getData());
+  // Source selection also runs on hover; do not copy a whole stream just to inspect it.
   for (let index = 0; index < values.length; index += 1) {
-    if (Number.isFinite(values[index])) {
+    if (Number.isFinite(toNumericValueOrNaN(values[index]))) {
       return true;
     }
   }
@@ -2180,10 +2189,8 @@ function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityN
     return cache.distanceValues;
   }
 
-  const primaryDistance = getActivityStreamNumericValues(activity, DataDistance.type, cache);
-  cache.distanceValues = primaryDistance.length > 0
-    ? primaryDistance
-    : getActivityStreamNumericValues(activity, DataStrydDistance.type, cache);
+  const distanceStream = getEventChartDistanceStream(activity, cache.streamByType);
+  cache.distanceValues = distanceStream ? getStreamNumericValues(distanceStream, cache) : [];
   return cache.distanceValues;
 }
 

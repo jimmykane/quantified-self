@@ -26,8 +26,6 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import {
   ActivityInterface,
   ChartCursorBehaviours,
-  DataDistance,
-  DataStrydDistance,
   EventInterface,
   LapTypes,
   type StreamInterface,
@@ -48,6 +46,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import {
   buildEventChartPanels,
+  getEventChartDistanceStream,
   buildEventLapMarkers,
   buildEventSwimLengthMarkers,
   buildEventZoomOverviewData,
@@ -72,6 +71,7 @@ import {
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
   areEventChartOverlayMapsEqual,
+  getEventChartOverlaySelectionKey,
   normalizeEventChartOverlayDataTypeByPrimary,
 } from '../../../helpers/event-chart-overlay.helper';
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
@@ -703,7 +703,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       ...this.getEventChartOverlayDataTypeByPrimary(),
     };
 
-    if (overlay && overlay !== primary) {
+    const primaryKey = getEventChartOverlaySelectionKey(primary);
+    // A user edit replaces obsolete unit aliases too, so No overlay cannot revive them later.
+    Object.keys(nextOverlayMap).forEach(key => {
+      if (key !== primary && getEventChartOverlaySelectionKey(key) === primaryKey) {
+        delete nextOverlayMap[key];
+      }
+    });
+    if (overlay && getEventChartOverlaySelectionKey(overlay) !== primaryKey) {
       nextOverlayMap[primary] = overlay;
     } else {
       delete nextOverlayMap[primary];
@@ -1096,19 +1103,25 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private buildChartPanelViews(): EventChartPanelViewModel[] {
     const panelByDataType = new Map(this.allChartPanels.map((panel) => [panel.dataType, panel]));
     const overlayMap = this.getEventChartOverlayDataTypeByPrimary();
+    const savedOverlays = Object.entries(overlayMap);
 
     return this.chartPanels.map((panel) => {
       const overlayOptions = this.buildOverlayOptions(panel);
-      const selectedOverlayDataType = overlayMap[panel.dataType] || null;
-      const overlayPanel = selectedOverlayDataType && selectedOverlayDataType !== panel.dataType
-        ? panelByDataType.get(selectedOverlayDataType) ?? null
+      const primaryKey = getEventChartOverlaySelectionKey(panel.dataType);
+      const selectedOverlayDataType = overlayMap[panel.dataType] ?? overlayMap[primaryKey]
+        ?? savedOverlays.find(([key]) => getEventChartOverlaySelectionKey(key) === primaryKey)?.[1];
+      const candidate = selectedOverlayDataType
+        ? panelByDataType.get(selectedOverlayDataType)
+          ?? this.allChartPanels.find(available => getEventChartOverlaySelectionKey(available.dataType)
+            === getEventChartOverlaySelectionKey(selectedOverlayDataType))
         : null;
+      const overlayPanel = candidate && candidate.dataType !== panel.dataType ? candidate : null;
 
       return {
         panel,
         overlayPanel,
         overlayOptions,
-        selectedOverlayDataType: overlayPanel ? selectedOverlayDataType : null,
+        selectedOverlayDataType: overlayPanel?.dataType ?? null,
       };
     });
   }
@@ -1418,8 +1431,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private resolveDistanceCursorTime(activity: ActivityInterface, targetDistance: number): number | null {
-    const distanceStream = this.getActivityStream(activity, DataDistance.type)
-      || this.getActivityStream(activity, DataStrydDistance.type);
+    const distanceStream = getEventChartDistanceStream(activity);
     const timeStream = this.getActivityStream(activity, XAxisTypes.Time);
     const seconds = resolveEventDistanceCursorSeconds(
       distanceStream?.getData(), timeStream?.getData(), targetDistance,

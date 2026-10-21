@@ -2,10 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import {
   areEventChartOverlayMapsEqual,
+  getEventChartOverlaySelectionKey,
   normalizeEventChartOverlayDataTypeByPrimary,
 } from './event-chart-overlay.helper';
 
 describe('event-chart-overlay.helper', () => {
+  it('treats Distance unit aliases as one selection without merging other recorded sources', () => {
+    expect(getEventChartOverlaySelectionKey('Distance')).toBe('Distance');
+    expect(getEventChartOverlaySelectionKey('Distance in miles')).toBe('Distance');
+    expect(getEventChartOverlaySelectionKey('Distance in feet')).toBe('Distance');
+    expect(getEventChartOverlaySelectionKey('Distance (Stryd)')).toBe('Distance (Stryd)');
+    expect(getEventChartOverlaySelectionKey('Estimated Sustainable Distance')).toBe('Estimated Sustainable Distance');
+  });
+
   it('normalizes valid directional overlay pairs', () => {
     expect(normalizeEventChartOverlayDataTypeByPrimary({
       ' Heart Rate ': ' Altitude ',
