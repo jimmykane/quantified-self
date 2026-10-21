@@ -732,6 +732,14 @@ continue through ordinary rendering. Range registrations remain deduplicated, an
 option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
 Form, Forecast and the four Training trend adapters share this path, without chart-local fetches or haptics.
 
+Timeline note titles face into the available chart space, including each Form grid and Sleep/weekly category bands.
+Their width is bounded and truncated with an ellipsis; the native marker tooltip retains the full title. After
+ECharts finishes layout, the shared host refines placement using `convertToPixel`, which accounts for automatic axis
+label margins. A geometry key prevents repeated patches; only marker series are merged, preserving readings, zoom,
+legend state and chart height. Real container resizes also refresh these overlays. The shared host removes its native
+layout listener on disposal and rejects queued work for a disposed or replaced chart. Help's existing shortened-title
+and full-tooltip guidance still applies; there are no changes to notes access, Training calculations or MCP contracts.
+
 `date-time-format.helper.ts` reuses at most 64 Intl date formatters for explicit timezone/locale/option combinations,
 with least-recently-used eviction. Health chart labels and workspace dates, Training readiness dates,
 and dashboard calendar grouping use it. Formatted readings are never cached. Calls that omit a timezone remain

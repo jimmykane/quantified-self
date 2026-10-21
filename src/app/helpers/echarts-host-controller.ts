@@ -51,6 +51,19 @@ export interface EChartsHostControllerConfig {
 
 export class EChartsHostController {
   private readonly timelineNotes = new TimelineNotesChartBinding();
+  private noteLayoutPending = false;
+  private readonly onChartFinished = () => {
+    if (this.noteLayoutPending || !this.timelineNotes.hasLabels) return;
+    const chart = this.chart;
+    this.noteLayoutPending = true;
+    // ECharts may emit during setOption; defer the overlay patch until it leaves its render pass.
+    void Promise.resolve().then(() => {
+      this.noteLayoutPending = false;
+      if (!chart || chart !== this.chart || chart.isDisposed()) return;
+      const layout = this.timelineNotes.updateLayout(chart, this.currentTheme === 'dark');
+      if (layout) this.config.eChartsLoader.setOption(chart, layout, { notMerge: false, lazyUpdate: false, silent: true });
+    }).catch(error => this.config.logger?.error?.('[EChartsHostController] Failed to lay out Timeline note labels', error));
+  };
   public setTimelineNotes(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = {}): void {
     this.timelineNotes.set(context, hints);
   }
@@ -142,6 +155,7 @@ export class EChartsHostController {
         }
 
         this.chart = chart;
+        chart.on?.('finished', this.onChartFinished);
         this.currentTheme = requestedTheme;
         this.observeContainer(container);
         this.subscribeToViewportResize();
@@ -233,6 +247,7 @@ export class EChartsHostController {
       this.resizeFrameId = null;
     }
 
+    this.chart?.off?.('finished', this.onChartFinished);
     this.config.eChartsLoader.dispose(this.chart);
     this.chart = null;
     this.currentTheme = undefined;
@@ -277,6 +292,10 @@ export class EChartsHostController {
       silent: true,
     });
     this.lastResizeSize = { width, height, pixelRatio };
+    const noteLayout = this.timelineNotes.update(this.chart, this.currentTheme === 'dark');
+    if (noteLayout) {
+      this.config.eChartsLoader.setOption(this.chart, noteLayout, { notMerge: false, lazyUpdate: false, silent: true });
+    }
     this.config.onContainerResize?.({ width, height });
   }
 
