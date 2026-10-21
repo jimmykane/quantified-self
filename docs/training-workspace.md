@@ -1468,6 +1468,11 @@ current-schedule read. The seven alias names must describe the requested workout
 incidental mentions in another sport's notes do not change its editor. If the complete-strength preview is missing,
 the Assistant withholds other Training previews rather than substituting a summary-only writer. This private routing
 repair preserves the public contract and existing guidance, so it needs no additional metadata digest or plugin refresh.
+`strengthWorkoutRoutingContext` excludes quoted note content, note-preservation clauses and negated actions only when
+choosing an editor. The original prompt, constraints and requested note text still reach the model intact; this
+projection must never author or persist a prescription. Named exercise, set and repetition edits use the same complete
+strength preview even when the request omits the word workout. Note edits that name the real strength workout retain
+that target. Read-current-state, full-companion validation and app confirmation remain mandatory.
 No tools, schemas, scopes, consent, read fields, mutation kinds or provider actions are added.
 The pending metadata digest records a developer refresh; deployed-server update, registered-app rescan and bundle
 refresh remain separate release steps. Local bundle validation/sync uses only a temporary profile with a fixture app ID.

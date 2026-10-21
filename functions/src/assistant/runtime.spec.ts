@@ -8,6 +8,9 @@ describe('Training phase preview routing', () => {
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my ${sport} workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my "${sport}" workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my workout for ${sport}.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Edit my ${sport} exercise reps.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Edit my ${sport} set.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Edit my ${sport} sets.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Send my ${sport} workout to Wahoo.`)).toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool(`Delete my ${sport} workout.`)).toBe('preview_training_deletion');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(sport);
@@ -16,6 +19,21 @@ describe('Training phase preview routing', () => {
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout with a note about ${sport}.`)).toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool(`Update the pace target in my Running workout; keep the note about ${sport}.`)).toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool(`Update the pace targets across my Running workouts; keep the note about ${sport}.`)).toBe('preview_planned_workout_v3_changes');
+  });
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('ignores quoted and excluded %s workouts when choosing the Running editor', sport => {
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout with the note "Repeat my ${sport} workout afterwards".`)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout with the note \n : \n "Repeat my ${sport} workout afterwards".`)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout with the note to repeat my ${sport} workout afterwards.`)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool(`Update my Running workout; keep the note about my ${sport} workout.`)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool(`Do not edit my ${sport} workout. Create a Running workout.`)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool(`Create a Running workout, but do not change my ${sport} workout.`)).toBe('preview_create_planned_workout');
+    for (const negation of ["doesn't", 'doesn’t', 'does not']) {
+      expect(selectAssistantTrainingPreviewTool(`Create a Running workout so it ${negation} duplicate my ${sport} workout.`))
+        .toBe('preview_create_planned_workout');
+    }
+    expect(selectAssistantTrainingPreviewTool(`Do not change my Running workout; edit my ${sport} set.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Add a note to my ${sport} workout.`)).toBe('preview_strength_workout_change');
+    expect(selectAssistantTrainingPreviewTool(`Add the note "Repeat my Running workout" to my ${sport} workout.`)).toBe('preview_strength_workout_change');
   });
   it.each([
     'Update HR ranges across my plan, preserving warm-ups and early Lap.',
@@ -611,6 +629,24 @@ describe('Training preview model-tool selection', () => {
       prompt: 'Edit the sets in my Kettlebell workout.', timeZone: 'Europe/Helsinki', history: [],
       trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
     expect(previews).toEqual(available ? ['preview_strength_workout_change'] : []);
+  });
+
+  it('preserves the original prompt and quoted workout notes when narrowing editor selection', async () => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_strength_workout_change'] as const)
+      .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    const prompt = 'Create a Running workout with the note "Repeat my Kettlebell workout afterwards".';
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        expect(input.prompt).toBe(prompt);
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name))
+          .toEqual(['preview_create_planned_workout']);
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the current schedule before preparing the Running workout with the exact requested note.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
   });
 
   it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {

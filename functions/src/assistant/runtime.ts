@@ -381,6 +381,18 @@ function canBeTrainingDeletionReply(prompt: string): boolean {
     && !removesEarlyLapPermission(prompt);
 }
 
+/** Editor selection only: never use this projection as an authored recipe or model prompt. */
+function strengthWorkoutRoutingContext(prompt: string): string {
+  return prompt
+    // Quoted note content may name another workout. Keep a note-edit request's
+    // actual target, such as "add a note to my Kettlebell workout".
+    .replace(/\bnotes?(?:\s*(?::|about|saying|that))?\s*(?:"[^"]*"|“[^”]*”|‘[^’]*’|'[^']*')/gu, '')
+    .replace(/\b(?:with\s+(?:(?:a|an|the|my|existing)\s+)?notes?\s+(?:about|saying|that|to)|(?:keep|preserve|retain)\s+(?:(?:the|my|existing)\s+)?notes?\s+(?:about|saying|that)|notes?\s*:)[^.!?;\n]*/gu, '')
+    // Inspect the original negation before the general selector removes only
+    // its verb; excluded workouts must not supply the strength sport context.
+    .replace(/\b(?:don't|don’t|do not|doesn't|doesn’t|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify|create|add|make|build|draft|propose|suggest|schedule|send|sync|enable|disable|stop|retry|approve)\b(?:(?!\b(?:but|instead|then)\b)[^,.!?;\n])*/gu, '');
+}
+
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
   if (assistantRecoveryDurationSeconds(prompt) !== null) return 'preview_planned_workout_v3_change';
@@ -470,17 +482,18 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // appear in a note for another sport. Remove alias names before checking
   // legacy strength words so GRIT Strength does not bypass that distinction.
   const strengthAliases = /\b(?:weight\s+training|kettlebells?|calisthenics|core\s+training|les\s+mills\s+(?:core|grit\s+strength|bodypump))\b/gu;
-  const namedStrengthWorkout = new RegExp(`${strengthAliases.source}["'“”‘’]?\\s+(?:workouts?|sessions?)\\b`, 'u').test(question)
-    || new RegExp(`\\b(?:workouts?|sessions?)\\s+(?:named|called|for)\\s+["'“”‘’]?${strengthAliases.source}`, 'u').test(question);
+  const strengthContext = strengthWorkoutRoutingContext(withoutNegatedLibrary);
+  const namedStrengthWorkout = new RegExp(`${strengthAliases.source}["'“”‘’]?\\s+(?:workouts?|sessions?|exercises?|sets?|reps?)\\b`, 'u').test(strengthContext)
+    || new RegExp(`\\b(?:workouts?|sessions?)\\s+(?:named|called|for)\\s+["'“”‘’]?${strengthAliases.source}`, 'u').test(strengthContext);
   const strengthRecipeContext = namedStrengthWorkout
-    || /\b(?:strength|gym|resistance)\b/u.test(question.replace(strengthAliases, ''));
+    || /\b(?:strength|gym|resistance)\b/u.test(strengthContext.replace(strengthAliases, ''));
   if (authorsWorkout && recipeBatch && !strengthRecipeContext
     && !changesWorkoutRecords) {
     return 'preview_planned_workout_v3_changes';
   }
   if (multipleWorkouts) return 'preview_training_changes';
   if (authorsWorkout && strengthRecipeContext
-    && /\b(workout|session|exercise|set|reps?)\b/u.test(question)) {
+    && /\b(?:workout|session|exercises?|sets?|reps?)\b/u.test(strengthContext)) {
     return 'preview_strength_workout_change';
   }
   const editsPoolSwim = /\b(edit|update|modify|change)\b/u.test(question)
