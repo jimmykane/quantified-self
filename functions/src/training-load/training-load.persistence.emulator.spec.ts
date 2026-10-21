@@ -97,7 +97,9 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const initial = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
     const oldLoad = resolveEffectiveTrainingLoad({}, initial);
     const originalChild = (await child.get()).data()!;
-    await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', 0));
+    expect(await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', 0))).toEqual({
+      activityId: 'leg', ascent: 0, eventAscent: 0, correction: { value: 0, sourceValue: 100 },
+    });
     expect((await child.get()).data()).toMatchObject({ stats: { Ascent: 0, Distance: originalChild.stats.Distance },
       ascentCorrection: { value: 0, sourceValue: 100 } });
     expect((await parent.get()).data()).toMatchObject({ stats: { Ascent: 0 }, originalFiles: [{ path: 'retained-original.fit' }] });
@@ -105,11 +107,21 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(resolveEffectiveTrainingLoad({}, saved)).toEqual(oldLoad);
     expect(saved.parentFingerprint).toBe(trainingLoadSourceFingerprint((await parent.get()).data()!));
     expect(saved.legs?.leg.sourceFingerprint).toBe(trainingLoadSourceFingerprint((await child.get()).data()!));
-    await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', null));
+    expect(await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', null))).toEqual({
+      activityId: 'leg', ascent: 100, eventAscent: 100, correction: null,
+    });
     expect((await child.get()).data()).not.toHaveProperty('ascentCorrection');
     expect((await parent.get()).data()?.stats.Ascent).toBe(100);
     saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
     expect(resolveEffectiveTrainingLoad({}, saved)).toEqual(oldLoad);
+  });
+  it('returns and restores absent imported ascent without leaving a correction behind', async () => {
+    const uid = setup(); await importWorkout(uid, workout());
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    expect(await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', null)))
+      .toEqual({ activityId: 'leg', ascent: null, eventAscent: null, correction: null });
+    expect((await db.doc(`users/${uid}/activities/leg`).get()).data()).not.toHaveProperty('ascentCorrection');
+    expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats).not.toHaveProperty('Ascent');
   });
   it('retains corrections across repeated provider/file imports and resets to the newest imported value', async () => {
     const uid = setup(); await importWorkout(uid, ascentWorkout());
@@ -131,6 +143,34 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const saved = (await db.doc(`users/${uid}/activities/reparsed-id`).get()).data()!;
     expect(saved).toMatchObject({ stats: { Ascent: 75 }, ascentCorrection: { value: 75, sourceValue: 250 } });
     expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats.Ascent).toBe(75);
+  });
+  it.each(['parent write', 'after finalization'])('retries a corrected reparse interrupted at %s without guessing between partial copies', async phase => {
+    const uid = setup(); await importWorkout(uid, ascentWorkout());
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    const parent = await db.doc(`users/${uid}/events/workout`).get();
+    const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const write = EventWriter.prototype.writeAllEventData;
+    const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
+      if (phase === 'parent write') {
+        const adapter = (this as unknown as { adapter: FirestoreAdapter }).adapter;
+        const setDoc = adapter.setDoc;
+        adapter.setDoc = (path, data) => path[2] === 'events'
+          ? Promise.reject(new Error('interrupted ascent reparse')) : setDoc(path, data);
+      }
+      await write.apply(this, args);
+      throw new Error('interrupted ascent reparse');
+    });
+    try {
+      await expect(persistReparsedEvent(uid, 'workout', ascentWorkout('partial-id', 250), parent.data()!, children.docs, '23.3.0'))
+        .rejects.toThrow('interrupted ascent reparse');
+    } finally { spy.mockRestore(); }
+    expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).size).toBe(2);
+    await persistReparsedEvent(uid, 'workout', ascentWorkout('retry-id', 300), parent.data()!, children.docs, '23.3.0');
+    const saved = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    expect(saved.docs.map(child => child.id)).toEqual(['retry-id']);
+    expect(saved.docs[0].data()).toMatchObject({ stats: { Ascent: 75 }, ascentCorrection: { value: 75, sourceValue: 300 } });
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'retry-id', null));
+    expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats.Ascent).toBe(300);
   });
   it('rejects stale edits, cross-recording targets, pending imports and deleting owners before writes', async () => {
     const uid = setup(); await importWorkout(uid, ascentWorkout());

@@ -88,11 +88,13 @@ describe('reprocessEvent', () => {
     });
     it('routes an owner-bound ascent correction through its strict service without reparsing files', async () => {
         const edit = { activityId: 'leg', ascent: 75, expectedSourceFingerprint: 'a'.repeat(64), expectedCorrection: null };
+        const saved = { activityId: 'leg', ascent: 75, eventAscent: 275, correction: { value: 75, sourceValue: 100 } };
+        hoisted.mockUpdateActivityAscent.mockResolvedValueOnce(saved);
         const result = await reprocessEvent({ auth: { uid: 'u1' }, app: { appId: 'app-id' },
             data: { eventId: 'event-1', mode: 'correct_ascent', expectedOwner: 'u1', edit } } as any);
         expect(hoisted.mockUpdateActivityAscent).toHaveBeenCalledWith('u1', 'event-1', edit);
         expect(hoisted.mockReparseEventFromOriginalFiles).not.toHaveBeenCalled();
-        expect(result).toEqual({ eventId: 'event-1', mode: 'correct_ascent', status: 'completed' });
+        expect(result).toEqual({ eventId: 'event-1', mode: 'correct_ascent', status: 'completed', ascent: saved });
     });
     it('rejects an owner change and unexpected ascent-call fields', async () => {
         const request = { auth: { uid: 'u1' }, app: { appId: 'app-id' },

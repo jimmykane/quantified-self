@@ -1,5 +1,5 @@
 import { Auth } from 'app/firebase/auth';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
@@ -8,8 +8,8 @@ import { AppFileService } from '../../services/app.file.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
-import { Subscription, firstValueFrom } from 'rxjs';
-import { DataAscent } from '@sports-alliance/sports-lib';
+import { Subscription } from 'rxjs';
+import { applySavedActivityAscent, type ActivityAscentUpdate } from '@shared/activity-ascent';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
@@ -43,29 +43,40 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
   private readonly sendAuth = inject(Auth, { optional: true });
+  private readonly destroyRef = inject(DestroyRef);
+  private ascentEditorOpen = false;
   get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid; }
   get canEditAscent(): boolean {
     return this.canSendOwnedActivities && !isBenchmarkEvent(this.event as unknown as { isMerge?: unknown; mergeType?: unknown });
   }
   async editAscent(): Promise<void> {
-    if (!this.canEditAscent || this.isReprocessing) return;
-    const { ActivityAscentEditorComponent } = await import('../activity-ascent-editor/activity-ascent-editor.component');
-    if (!this.canEditAscent) return;
-    this.hapticsService.selection();
-    this.ascentDialogSubscription?.unsubscribe();
-    this.ascentDialogSubscription = this.dialog.open(ActivityAscentEditorComponent, {
-      data: { eventId: this.event.getID(), user: this.user }, width: '480px', maxWidth: 'calc(100vw - 32px)',
-    }).afterClosed().pipe(take(1)).subscribe(async saved => {
-      if (!saved || !this.canEditAscent) return;
-      try {
-        const updated = await firstValueFrom(this.eventService.getEventAndActivities(this.user, this.event.getID()));
-        if (!updated || !this.canEditAscent) return;
-        this.event.clearActivities(); this.event.addActivities(updated.getActivities());
-        const ascent = updated.getStat(DataAscent.type);
-        if (ascent) this.event.addStat(ascent); else this.event.removeStat(DataAscent.type);
+    if (!this.canEditAscent || this.isReprocessing || this.ascentEditorOpen || this.destroyRef.destroyed) return;
+    const event = this.event, eventId = event.getID(), owner = this.user;
+    const isCurrent = () => !this.destroyRef.destroyed && this.event === event && event.getID() === eventId
+      && this.user?.uid === owner.uid && this.canEditAscent && !this.isReprocessing;
+    this.ascentEditorOpen = true;
+    let opened = false;
+    try {
+      const { ActivityAscentEditorComponent } = await import('../activity-ascent-editor/activity-ascent-editor.component');
+      if (!isCurrent()) return;
+      this.hapticsService.selection();
+      const ref = this.dialog.open(ActivityAscentEditorComponent, {
+        data: { eventId, user: owner }, width: '480px', maxWidth: 'calc(100vw - 32px)',
+      });
+      opened = true;
+      this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityAscentUpdate | undefined) => {
+        this.ascentEditorOpen = false;
+        if (!saved || !isCurrent()) return;
+        applySavedActivityAscent(event, saved);
         this.changeDetectorRef.markForCheck();
-      } catch (error) { this.logger.error('Could not refresh the saved ascent correction', error); }
-    });
+      });
+    } catch (error) {
+      this.logger.error('Could not open the ascent editor', error);
+      if (isCurrent()) {
+        this.hapticsService.error();
+        this.snackBar.open('Could not open ascent editing. Try again.', undefined, { duration: 3500 });
+      }
+    } finally { if (!opened) this.ascentEditorOpen = false; }
   }
   async sendToService(): Promise<void> {
     if (!this.canSendOwnedActivities) return;

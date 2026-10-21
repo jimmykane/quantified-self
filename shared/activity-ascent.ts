@@ -16,6 +16,27 @@ export interface ActivityAscentEdit {
   expectedCorrection: ActivityAscentCorrection | null;
 }
 
+/** Canonical values committed by the owner-only processing transaction. */
+export interface ActivityAscentUpdate {
+  activityId: string;
+  ascent: number | null;
+  eventAscent: number | null;
+  correction: ActivityAscentCorrection | null;
+}
+
+/** Patch summaries in place so an open chart retains its hydrated activities and streams. */
+export function applySavedActivityAscent(event: EventInterface, saved: ActivityAscentUpdate): void {
+  const activity = event.getActivities().find(item => item.getID() === saved.activityId) as AscentCorrectedActivity | undefined;
+  if (activity) {
+    if (saved.ascent === null) activity.removeStat(DataAscent.type);
+    else activity.addStat(new DataAscent(saved.ascent));
+    if (saved.correction) activity.ascentCorrection = { ...saved.correction };
+    else delete activity.ascentCorrection;
+  }
+  if (saved.eventAscent === null) event.removeStat(DataAscent.type);
+  else event.addStat(new DataAscent(saved.eventAscent));
+}
+
 export function validActivityAscent(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_ACTIVITY_ASCENT_METERS;
 }

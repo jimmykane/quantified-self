@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes, DataAscent, DataDistance, EventImporterJSON } from '@sports-alliance/sports-lib';
 import { applyActivityAscentCorrection, applyCorrectedEventAscent, readAscentCorrection,
-  carryActivityAscentCorrection, type AscentCorrectedActivity, validActivityAscent } from '@shared/activity-ascent';
+  applySavedActivityAscent, carryActivityAscentCorrection, type AscentCorrectedActivity, validActivityAscent } from '@shared/activity-ascent';
 
 describe('activity ascent corrections', () => {
   function activity(ascent = 100): AscentCorrectedActivity {
@@ -38,6 +38,21 @@ describe('activity ascent corrections', () => {
     applyCorrectedEventAscent(parent);
     expect(parent.getStat(DataAscent.type)?.getValue()).toBe(200);
     expect(parent.getStat(DataDistance.type)?.getValue()).toBe(20000);
+  });
+  it('patches a committed correction in place and clears absent imported ascent on reset', () => {
+    const parent = EventImporterJSON.getEventFromJSON({ name: 'Workout', startDate: 0, endDate: 3600000, stats: {}, activities: [] });
+    const target = activity(); target.setID('hike'); parent.addActivity(target); parent.addStat(new DataDistance(10000));
+    applySavedActivityAscent(parent, { activityId: target.getID(), ascent: 0, eventAscent: 0,
+      correction: { value: 0, sourceValue: null } });
+    expect(parent.getActivities()[0]).toBe(target);
+    expect(target.getStat(DataAscent.type)?.getValue()).toBe(0);
+    expect(parent.getStat(DataAscent.type)?.getValue()).toBe(0);
+    expect(target.ascentCorrection).toEqual({ value: 0, sourceValue: null });
+    applySavedActivityAscent(parent, { activityId: target.getID(), ascent: null, eventAscent: null, correction: null });
+    expect(target.getStat(DataAscent.type)).toBeFalsy(); expect(parent.getStat(DataAscent.type)).toBeFalsy();
+    expect(target.ascentCorrection).toBeUndefined();
+    expect(target.getStat(DataDistance.type)?.getValue()).toBe(10000);
+    expect(parent.getStat(DataDistance.type)?.getValue()).toBe(10000);
   });
   it('does not transfer a correction through the last-unmatched hydration fallback', () => {
     const existing = activity(), replacement = activity(250);

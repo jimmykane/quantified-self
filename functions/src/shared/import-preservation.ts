@@ -6,6 +6,7 @@ import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePaylo
 import { resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import type { PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
+import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { applyActivityAscentCorrection, applyCorrectedEventAscent, isTerrainAscentActivity, readAscentCorrection,
   type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 
@@ -65,10 +66,30 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
   let apply: () => void = () => undefined;
   const finish = await prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
     if (prepared) return;
-    const children = await transaction.get(db.collection(`users/${uid}/activities`)
-      .where('eventID', '==', event.getID()).limit(101));
-    if (children.size > 100) throw new Error('Ascent correction matching supports at most 100 activities.');
-    apply = prepareAscentCarryover(event, children.docs);
+    const parentRef = db.doc(`users/${uid}/events/${event.getID()}`);
+    const [parent, metadataDoc] = await transaction.getAll(parentRef, parentRef.collection('metaData').doc('trainingLoad'));
+    const metadata = metadataDoc.data() as TrainingLoadMetadata | undefined;
+    const recovering = metadata?.sourceWritePending || parent.data()?.benchmarkSourceWritePending;
+    const activeIds = recovering ? [...new Set(Object.values(metadata?.legs ?? metadata?.legacyLegs ?? {})
+      .flatMap(leg => leg.activityId ? [leg.activityId] : []))] : [];
+    if (activeIds.length > 100) throw new Error('Ascent correction matching supports at most 100 activities.');
+    if (activeIds.length) {
+      // An interrupted reparse can leave both old and new IDs. The server-owned leg snapshot
+      // identifies the active source; partial copies must not make its correction ambiguous.
+      const children = await transaction.getAll(...activeIds.map(id => db.doc(`users/${uid}/activities/${id}`)));
+      const sourceDocs = children.map(child => {
+        const data = child.data();
+        if (!data || data.eventID !== event.getID())
+          throw new Error('Cannot find the saved source activities for ascent correction recovery.');
+        return { id: child.id, data: () => data };
+      });
+      apply = prepareAscentCarryover(event, sourceDocs);
+    } else {
+      const children = await transaction.get(db.collection(`users/${uid}/activities`)
+        .where('eventID', '==', event.getID()).limit(101));
+      if (children.size > 100) throw new Error('Ascent correction matching supports at most 100 activities.');
+      apply = prepareAscentCarryover(event, children.docs);
+    }
   });
   prepared = true;
   apply();

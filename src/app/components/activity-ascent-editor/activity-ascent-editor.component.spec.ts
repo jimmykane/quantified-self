@@ -42,6 +42,8 @@ describe('ActivityAscentEditorComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
   });
   it('rejects negative/empty input and saves zero with one selection and success feedback', async () => {
+    const saved = { activityId: 'hike', ascent: 0, eventAscent: 0, correction: { value: 0, sourceValue: 250 } };
+    save.mockResolvedValueOnce(saved);
     const fixture = await render(), component = fixture.componentInstance;
     component.edit(-1); expect(component.canSave()).toBe(false);
     component.edit(null); expect(component.canSave()).toBe(false);
@@ -49,7 +51,7 @@ describe('ActivityAscentEditorComponent', () => {
     await component.save();
     expect(save).toHaveBeenCalledWith('owner', 'event', row, 0);
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
-    expect(ref.close).toHaveBeenCalledWith(true);
+    expect(ref.close).toHaveBeenCalledWith(saved);
   });
   it('reviews reset locally and restores the imported value only after Save', async () => {
     const component = (await render()).componentInstance;

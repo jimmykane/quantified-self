@@ -85,9 +85,9 @@ export class ActivityAscentEditorComponent implements OnInit {
     this.haptics.selection(); this.busy.set(true); this.error.set(''); this.ref.disableClose = true;
     const generation = this.generation;
     try {
-      await this.service.save(this.data.user.uid, this.data.eventId, row, this.reset() ? null : this.value());
+      const saved = await this.service.save(this.data.user.uid, this.data.eventId, row, this.reset() ? null : this.value());
       if (this.destroyRef.destroyed || generation !== this.generation) return;
-      this.haptics.success(); this.ref.close(true);
+      this.haptics.success(); this.ref.close(saved);
     } catch (error) {
       if (!this.destroyRef.destroyed && generation === this.generation) {
         this.error.set(error instanceof Error ? error.message : 'Could not save ascent. Reload the recording before retrying.');

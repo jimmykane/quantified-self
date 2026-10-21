@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { DataAscent } from '@sports-alliance/sports-lib';
 import { isTerrainAscentActivity, readActivityAscent, readAscentCorrection, validActivityAscent,
-  type ActivityAscentEdit } from '../../../shared/activity-ascent';
+  type ActivityAscentEdit, type ActivityAscentUpdate } from '../../../shared/activity-ascent';
 import { isBenchmarkEvent } from '../../../shared/event-classification';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -37,12 +37,12 @@ export function validateActivityAscentEdit(eventId: string, input: unknown): Act
  * One transaction checks the live source reservation, saves the activity and parent total, and certifies unchanged
  * load evaluations against the new summary. A client-only stat patch cannot update that private cache safely.
  */
-export async function updateActivityAscent(uid: string, eventId: string, request: unknown): Promise<void> {
+export async function updateActivityAscent(uid: string, eventId: string, request: unknown): Promise<ActivityAscentUpdate> {
   const input = validateActivityAscentEdit(eventId, request);
   const db = admin.firestore();
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metadataRef = eventRef.collection('metaData').doc('trainingLoad');
-  await db.runTransaction(async transaction => {
+  return db.runTransaction(async transaction => {
     const { guard, snapshots: [parent, metadataDoc] } = await getUserDeletionGuardedDocumentsInTransaction(
       db, transaction, uid, [eventRef, metadataRef]);
     if (guard.shouldSkip) throw new HttpsError('failed-precondition', 'This account is being deleted.');
@@ -63,7 +63,8 @@ export async function updateActivityAscent(uid: string, eventId: string, request
       || JSON.stringify(correction) !== JSON.stringify(readAscentCorrection(input.expectedCorrection)))
       throw new HttpsError('aborted', 'The activity changed. Reload it before saving ascent.');
     const original = correction ? correction.sourceValue : readActivityAscent(source.stats);
-    if (input.ascent === null && !correction) return;
+    if (input.ascent === null && !correction) return { activityId: target.id, ascent: original,
+      eventAscent: readActivityAscent(parentData.stats), correction: null };
     if (metadata?.parentFingerprint && metadata.parentFingerprint !== trainingLoadSourceFingerprint(parentData))
       throw new HttpsError('failed-precondition', 'The recording is updating. Reload it before editing ascent.');
     const byId = new Map(children.docs.map(child => [child.id, child]));
@@ -103,5 +104,6 @@ export async function updateActivityAscent(uid: string, eventId: string, request
     transaction.update(eventRef, sanitizeEventFirestoreWritePayload({ stats: parentStats }));
     if (nextMetadata) transaction.set(metadataRef, nextMetadata);
     cache.write();
+    return { activityId: target.id, ascent: value, eventAscent: readActivityAscent(parentStats), correction: nextCorrection };
   });
 }

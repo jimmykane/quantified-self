@@ -3,7 +3,7 @@ import { Auth } from '../firebase/auth';
 import { Firestore, collection, doc, getDocFromServer, getDocsFromServer, limit, query, where } from '../firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { isTerrainAscentActivity, readActivityAscent, readAscentCorrection,
-  type ActivityAscentCorrection } from '@shared/activity-ascent';
+  type ActivityAscentCorrection, type ActivityAscentUpdate } from '@shared/activity-ascent';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { browserTrainingLoadSourceFingerprint, trainingLoadTimeMs } from '@shared/training-load-source';
 
@@ -44,9 +44,10 @@ export class ActivityAscentService {
     })));
   }
 
-  async save(uid: string, eventId: string, row: ActivityAscentRow, ascent: number | null): Promise<void> {
+  async save(uid: string, eventId: string, row: ActivityAscentRow, ascent: number | null): Promise<ActivityAscentUpdate> {
     this.owner(uid);
-    await this.functions.call('reprocessEvent', { eventId, mode: 'correct_ascent', expectedOwner: uid,
+    const response = await this.functions.call<unknown, { ascent: ActivityAscentUpdate }>('reprocessEvent', { eventId, mode: 'correct_ascent', expectedOwner: uid,
       edit: { activityId: row.id, ascent, expectedSourceFingerprint: row.fingerprint, expectedCorrection: row.correction } });
+    return response.data.ascent;
   }
 }

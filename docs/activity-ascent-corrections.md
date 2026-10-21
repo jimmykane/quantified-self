@@ -15,6 +15,8 @@ App Check, an expected owner, a strict edit shape, and the current source finger
 Its transaction rechecks deletion, parent membership, benchmark classification, source-write barriers,
 source fingerprints, and the current correction. It reads at most 100 activities, updates ascent and its
 metadata, and recomputes parent ascent from non-Diving activities.
+The app receives those committed canonical values and patches ascent in place on the same recording instance.
+It keeps hydrated activities/streams and ignores results after navigation, an account change, or view destruction.
 
 Saved load evaluations, policies, and controls are retained. Their server-owned source fingerprints and
 cache are updated in that same transaction so unchanged load remains available after an ascent-only edit.
@@ -27,6 +29,9 @@ matches receive a correction; source-derived ID changes are supported, while an 
 replacement rather than moving to a guessed leg. The latest parse refreshes the imported reset value.
 The shared EventWriter retains this metadata explicitly because Sports Lib JSON omits app-owned fields.
 Browser hydration also keeps corrections separate from device-name fallback matching.
+Interrupted reparses use the server-owned active leg snapshot while a source-write barrier is present. This lets
+retries retain corrections without treating old IDs and partially written replacement IDs as competing activities;
+missing/foreign source references and ambiguity outside recovery still fail closed.
 
 **Reset to imported value** is reviewed in the editor and applies only after Save. It removes the correction
 and restores the latest imported value, including absence. Stale editors must reload. Altitude charts and

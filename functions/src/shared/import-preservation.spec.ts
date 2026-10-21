@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+vi.unmock('@sports-alliance/sports-lib');
+import { DataAscent, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { EventWriter, type FirestoreAdapter } from './event-writer';
-import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './import-preservation';
+import { prepareImportedEventWrite, prepareReparsedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './import-preservation';
 
 const state = vi.hoisted(() => ({
   activities: new Map<string, Record<string, unknown>>(), metadata: {} as Record<string, unknown>, parentExists: true,
+  parent: {} as Record<string, unknown>,
   get: vi.fn(), prepare: vi.fn(), commit: vi.fn(), collection: vi.fn(), select: vi.fn(), where: vi.fn(), limit: vi.fn(),
 }));
 vi.mock('../training-load/training-load-metadata', () => ({ prepareTrainingLoadMetadata: state.prepare }));
@@ -29,16 +31,19 @@ function event(activities = [activity()]) {
 describe('shared import preservation', () => {
   let authorize: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true;
+    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {};
     const query = { where: state.where, select: state.select, limit: state.limit };
     state.collection.mockReturnValue(query); state.where.mockReturnValue(query);
     state.select.mockReturnValue(query); state.limit.mockReturnValue(query);
     state.get.mockImplementation(async ref => ref === query
       ? { size: state.activities.size, docs: [...state.activities].map(([id, data]) => ({ id, data: () => data })) }
-      : ref.path.endsWith('/trainingLoad') ? { data: () => state.metadata } : { exists: state.parentExists });
+      : ref.path.includes('/activities/') ? { id: ref.path.split('/').at(-1), exists: state.activities.has(ref.path.split('/').at(-1)),
+        data: () => state.activities.get(ref.path.split('/').at(-1)) }
+      : ref.path.endsWith('/trainingLoad') ? { data: () => state.metadata } : { exists: state.parentExists, data: () => state.parent });
     state.prepare.mockImplementation(async (_uid, _event, authorize) => {
-      const db = { doc: (path: string) => ({ path }), collection: state.collection };
-      const transaction = { get: state.get };
+      const doc = (path: string) => ({ path, collection: (name: string) => ({ doc: (id: string) => doc(`${path}/${name}/${id}`) }) });
+      const db = { doc, collection: state.collection };
+      const transaction = { get: state.get, getAll: (...refs: unknown[]) => Promise.all(refs.map(ref => state.get(ref))) };
       await authorize(db, transaction);
       state.commit();
       return Object.assign(vi.fn(async () => authorize(db, transaction)), { sourceWriteId: 'attempt' });
@@ -49,6 +54,31 @@ describe('shared import preservation', () => {
   function store(id: string, parsed = activity(), extra: Record<string, unknown> = {}) {
     state.activities.set(id, { ...parsed.toJSON(), ...extra });
   }
+
+  it.each(['pending', 'finalized', 'legacy'])('recovers corrected activities from an interrupted reparse: %s', async phase => {
+    const parsed = EventImporterJSON.getEventFromJSON({ name: 'Run', startDate: 1700000000000, endDate: 1700003600000,
+      activities: [{ ...activity().toJSON(), streams: [], laps: [], intensityZones: [] }], stats: {} }).setID('event');
+    parsed.getFirstActivity().setID('retry-id'); parsed.getFirstActivity().addStat(new DataAscent(300));
+    store('saved-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
+    store('partial-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 } });
+    state.parent = { benchmarkSourceWritePending: true };
+    const legs = { original: { activityId: phase === 'finalized' ? 'partial-id' : 'saved-id' } };
+    state.metadata = { sourceWritePending: phase !== 'finalized', [phase === 'legacy' ? 'legacyLegs' : 'legs']: legs };
+    if (phase === 'pending') for (let index = 0; index < 101; index++)
+      store(`partial-${index}`, activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 } });
+    await prepareReparsedEventWrite('owner', parsed);
+    expect(state.collection).not.toHaveBeenCalled();
+    expect(parsed.getFirstActivity()).toHaveProperty('ascentCorrection', { value: 75, sourceValue: 300 });
+    expect(parsed.getStat(DataAscent.type).getValue()).toBe(75);
+  });
+
+  it.each([false, true])('rejects ambiguous completed sources or foreign recovery references (recovering: %s)', async recovering => {
+    store('saved-id', activity(), { eventID: recovering ? 'another-event' : 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
+    store('duplicate', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
+    state.metadata = recovering ? { sourceWritePending: true, legs: { original: { activityId: 'saved-id' } } } : {};
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toThrow();
+    expect(state.commit).not.toHaveBeenCalled();
+  });
 
   it('keeps new-import IDs unchanged and scopes/masks the existing-activity read', async () => {
     const parsed = activity();

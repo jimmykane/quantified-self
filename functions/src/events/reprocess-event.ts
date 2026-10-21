@@ -41,8 +41,8 @@ export const reprocessEvent = onCall({
     if (data.expectedOwner !== userID) throw new HttpsError('permission-denied', 'The recording owner changed. Sign in again.');
     if (Object.keys(data).some(key => !['eventId', 'mode', 'edit', 'expectedOwner'].includes(key)))
       throw new HttpsError('invalid-argument', 'Unexpected ascent correction fields.');
-    await updateActivityAscent(userID, eventId, data.edit);
-    return { eventId, mode, status: 'completed' };
+    const ascent = await updateActivityAscent(userID, eventId, data.edit);
+    return { eventId, mode, status: 'completed', ascent };
   }
   if (mode !== 'reimport' && mode !== 'regenerate') {
     throw new HttpsError('invalid-argument', 'mode must be either "reimport" or "regenerate".');
