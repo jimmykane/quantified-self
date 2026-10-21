@@ -16,6 +16,7 @@ import { buildEventTagLibrary } from '../../helpers/event-tag-library.helper';
 import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, normalizeActivityExplorerSports, type ActivityExplorerCustomDates, type ActivityExplorerPeriod } from '../../helpers/activity-explorer.helper';
 import { getActivityTypeFamilyFilterOptions } from '../../helpers/activity-type-family-filter.helper';
 import { ActivityFilterPickerComponent, type ActivityFilterPickerOption } from '../shared/activity-filter-picker/activity-filter-picker.component';
+import { MergedActivitiesToggleComponent } from '../shared/merged-activities-toggle/merged-activities-toggle.component';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { ConfirmationDialogComponent, type ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
@@ -29,7 +30,7 @@ import { LoggerService } from '../../services/logger.service';
 @Component({
   selector: 'app-activities-page',
   standalone: true,
-  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent],
+  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent, MergedActivitiesToggleComponent],
   templateUrl: './activities-page.component.html',
   styleUrls: ['./activities-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,6 +62,8 @@ export class ActivitiesPageComponent implements OnInit {
   readonly catalogTags = signal<string[]>([]);
   readonly selectedTags = signal<string[]>([]);
   readonly selectedSports = signal<string[]>([]);
+  readonly includeMergedEvents = signal(false);
+  readonly hasMergedEvents = computed(() => this.events().some(event => event.isMerge));
   readonly periods = ACTIVITY_EXPLORER_PERIODS;
   readonly defaultPeriod: ActivityExplorerPeriod = 'month';
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
@@ -95,10 +98,10 @@ export class ActivitiesPageComponent implements OnInit {
     tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(), period: this.period(),
     customDates: this.period() === 'custom' ? this.customDates() : null,
   }));
-  readonly filterContext = computed(() => JSON.stringify(this.filters()));
-  readonly hasFilters = computed(() => !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
+  readonly filterContext = computed(() => JSON.stringify({ ...this.filters(), merged: this.includeMergedEvents() }));
+  readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
   readonly filteredEvents = computed(() => this.user()
-    ? filterActivityExplorerEvents(this.events(), this.filters(), new Date(this.localDayStartMs())) : []);
+    ? filterActivityExplorerEvents(this.events().filter(event => this.includeMergedEvents() || !event.isMerge), this.filters(), new Date(this.localDayStartMs())) : []);
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
     : this.historyError() ? 'Activities couldn’t be loaded'
       : this.selectedSports().length || this.selectedTags().length > 1 || (this.untagged() && this.selectedTags().length) ? 'No activities match these filters'
@@ -139,6 +142,7 @@ export class ActivitiesPageComponent implements OnInit {
       this.selectedTags.set(normalizeEventTagSuggestions(params.getAll('tag')));
       this.untagged.set(params.get('untagged') === '1');
       this.selectedSports.set(normalizeActivityExplorerSports(params.getAll('sport')));
+      this.includeMergedEvents.set(params.get('merged') === '1');
       const requestedPeriod = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       const customDates = requestedPeriod === 'custom' ? normalizeActivityExplorerCustomDates(params.get('start'), params.get('end')) : null;
       const period = requestedPeriod === 'custom' && !customDates ? this.defaultPeriod : requestedPeriod;
@@ -209,6 +213,12 @@ export class ActivitiesPageComponent implements OnInit {
     this.selectTags(this.selectedTags().filter(value => value.toLowerCase() !== tag.toLowerCase()), this.untagged());
   }
 
+  selectMergedEvents(include: boolean): void {
+    if (include === this.includeMergedEvents()) return;
+    this.includeMergedEvents.set(include);
+    this.filtersChanged();
+  }
+
   selectSports(sports: readonly string[]): void {
     const next = normalizeActivityExplorerSports(sports);
     const current = this.selectedSports();
@@ -256,6 +266,7 @@ export class ActivitiesPageComponent implements OnInit {
     this.selectedTags.set([]);
     this.untagged.set(false);
     this.selectedSports.set([]);
+    this.includeMergedEvents.set(false);
     const periodChanged = this.period() !== this.defaultPeriod;
     this.period.set(this.defaultPeriod);
     this.customDates.set(null);
@@ -362,6 +373,7 @@ export class ActivitiesPageComponent implements OnInit {
       relativeTo: this.route,
       queryParams: {
         tag: this.selectedTags().length ? this.selectedTags() : null, untagged: this.untagged() ? '1' : null,
+        merged: this.includeMergedEvents() ? '1' : null,
         sport: this.selectedSports().length ? this.selectedSports() : null, period: this.period(), order: null,
         start: this.period() === 'custom' ? this.customDates()?.startDate : null,
         end: this.period() === 'custom' ? this.customDates()?.endDate : null,
@@ -461,7 +473,7 @@ export class ActivitiesPageComponent implements OnInit {
       .subscribe({
         next: events => {
           if (!this.isCurrent(generation, user.uid)) return;
-          this.events.set(events.filter(isNormalActivityEvent));
+          this.events.set(events.filter(event => event.isMerge === true || isNormalActivityEvent(event)));
           this.loading.set(false);
           this.historyError.set(false);
           initial = false;

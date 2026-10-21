@@ -67,6 +67,10 @@
           <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports"
             [options]="sportOptions()" [selectedValues]="selectedSports()" [shortcuts]="sportShortcuts()"
             (selectionChange)="selectSports($event)"></app-activity-filter-picker>
+          @if (hasMergedEvents()) {
+            <app-merged-activities-toggle [checked]="includeMergedEvents()"
+              (checkedChange)="selectMergedEvents($event)"></app-merged-activities-toggle>
+          }
         </div>
         @if (hasFilters()) {
           <div event-table-active-filters class="activity-active-filters">

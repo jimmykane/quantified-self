@@ -1,3 +1,4 @@
+import type { ActivityFilterPickerOption } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { Auth } from 'app/firebase/auth';
 import {
   AfterViewInit,
@@ -178,7 +179,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   public tagCatalogIsLoading = false;
   public tagCatalogLoadFailed = false;
   public canLoadTagCatalog = false;
-  public tagFilter = '';
+  public tagFilters: string[] = [];
+  public untaggedFilter = false;
+  public tagPickerOptions: ActivityFilterPickerOption[] = [];
+  public tagPickerValues: string[] = [];
   public tagFilterOptions: string[] = [];
   public isBulkTagSaving = false;
 
@@ -262,14 +266,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (simpleChanges.showActions || simpleChanges.presentation) {
       if (this.isBrowsePresentation) {
         this.searchTerm = '';
-        this.tagFilter = '';
+        this.tagFilters = [];
+        this.untaggedFilter = false;
         this.selection.clear();
         this.applyTableFilter();
       }
       this.updateDisplayedColumns();
     }
     if (simpleChanges.showTagFilter && !this.showTagFilter) {
-      this.tagFilter = '';
+      this.tagFilters = [];
+      this.untaggedFilter = false;
       this.applyTableFilter();
     }
     if (simpleChanges.filterContext) {
@@ -277,7 +283,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.searchTerm = '';
         this.searchSubject.next('');
       }
-      this.tagFilter = '';
+      this.tagFilters = [];
+      this.untaggedFilter = false;
       this.selection.clear();
       this.suppressLibraryPageFeedback = true;
       this.paginator?.firstPage();
@@ -326,12 +333,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     };
     this.data.filterPredicate = (row: any, filter: string) => {
       const filterState = this.parseTableFilter(filter);
-      if (filterState.tag) {
-        const tagKey = filterState.tag.toLowerCase();
-        const rowTags = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
-        if (!rowTags.some((tag: string) => tag.toLowerCase() === tagKey)) {
-          return false;
-        }
+      if (filterState.tags.length || filterState.untagged) {
+        const selected = new Set(filterState.tags.map(tag => tag.toLowerCase()));
+        const rowTags: string[] = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
+        if (!rowTags.some(tag => selected.has(tag.toLowerCase())) && !(filterState.untagged && !rowTags.length)) return false;
       }
 
       const terms = filterState.text
@@ -1040,16 +1045,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.applyTableFilter();
   }
 
-  updateTagFilter(tag: string): void {
-    const requestedTag = `${tag || ''}`;
-    const nextTag = requestedTag
-      ? this.tagFilterOptions.find(option => option.toLowerCase() === requestedTag.toLowerCase()) || ''
-      : '';
-    if (nextTag === this.tagFilter) {
-      return;
-    }
-    this.tagFilter = nextTag;
+  updateTagFilters(values: readonly string[]): void {
+    const tags = this.tagFilterOptions.filter(tag => values.includes(`tag:${tag.toLowerCase()}`));
+    const untagged = values.includes('untagged');
+    if (tags.length === this.tagFilters.length && tags.every(tag => this.tagFilters.includes(tag)) && untagged === this.untaggedFilter) return;
+    this.tagFilters = tags;
+    this.untaggedFilter = untagged;
     this.hapticsService.selection();
+    this.paginator?.firstPage();
     this.applyTableFilter();
   }
 
@@ -1219,21 +1222,22 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private applyTableFilter(): void {
+    this.tagPickerValues = [...this.tagFilters.map(tag => `tag:${tag.toLowerCase()}`), ...(this.untaggedFilter ? ['untagged'] : [])];
     this.data.filter = JSON.stringify({
-      text: this.searchTerm.trim().toLowerCase(),
-      tag: this.tagFilter,
+      text: this.searchTerm.trim().toLowerCase(), tags: this.tagFilters, untagged: this.untaggedFilter,
     });
   }
 
-  private parseTableFilter(filter: string): { text: string; tag: string } {
+  private parseTableFilter(filter: string): { text: string; tags: string[]; untagged: boolean } {
     try {
-      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tag?: unknown };
+      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tags?: unknown; untagged?: unknown };
       return {
         text: typeof parsed.text === 'string' ? parsed.text : '',
-        tag: typeof parsed.tag === 'string' ? parsed.tag : '',
+        tags: Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+        untagged: parsed.untagged === true,
       };
     } catch {
-      return { text: `${filter || ''}`, tag: '' };
+      return { text: `${filter || ''}`, tags: [], untagged: false };
     }
   }
 
@@ -1336,16 +1340,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.tagFilterOptions = normalizeEventTagSuggestions([
       ...(this.allHistoryTags || []),
       ...rows.flatMap(row => row['Tag Values'] || []),
-      ...((this.tagCatalogIsLoading || this.tagCatalogLoadFailed) && this.tagFilter ? [this.tagFilter] : []),
+      ...((this.tagCatalogIsLoading || this.tagCatalogLoadFailed) ? this.tagFilters : []),
     ]).sort((first, second) => first.localeCompare(second));
-    if (this.tagFilter) {
-      const selectedTagKey = this.tagFilter.toLowerCase();
-      const matchingTagOption = this.tagFilterOptions.find(tag => tag.toLowerCase() === selectedTagKey) || '';
-      if (matchingTagOption !== this.tagFilter) {
-        this.tagFilter = matchingTagOption;
-        this.applyTableFilter();
-      }
-    }
+    this.tagPickerOptions = [
+      { value: 'untagged', label: 'Untagged', icon: 'label_off' },
+      ...this.tagFilterOptions.map(tag => ({ value: `tag:${tag.toLowerCase()}`, label: tag, icon: 'sell' })),
+    ];
+    const selected = new Set(this.tagFilters.map(tag => tag.toLowerCase()));
+    this.tagFilters = this.tagFilterOptions.filter(tag => selected.has(tag.toLowerCase()));
+    this.applyTableFilter();
   }
 
   private processChanges(trigger: string = 'unknown', preserveSelection: boolean = false) {

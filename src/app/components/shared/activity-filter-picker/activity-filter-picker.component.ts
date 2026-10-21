@@ -37,6 +37,7 @@ export class ActivityFilterPickerComponent {
   readonly loading = input(false);
   // The filter owner validates the selection and owns its accepted-action feedback.
   readonly selectionChange = output<string[]>();
+  readonly opened = output<void>();
   readonly search = signal('');
   readonly pickerOpen = signal(false);
   readonly summary = computed(() => this.selectedValues().length === 0 ? this.allLabel()
@@ -78,6 +79,7 @@ export class ActivityFilterPickerComponent {
     });
     this.dialogId = this.dialogRef.id;
     this.pickerOpen.set(true);
+    this.opened.emit();
     this.haptics.selection();
     this.dialogRef.afterClosed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.dialogRef = undefined;

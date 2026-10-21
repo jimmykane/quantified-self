@@ -19,20 +19,9 @@
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         }
         @if (showTagFilter) {
-        <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
-          <mat-label>Tags</mat-label>
-          <mat-select [value]="tagFilter"
-            [disabled]="tagFilterOptions.length === 0 && !canLoadTagCatalog"
-            (openedChange)="onTagFilterOpened($event)" (selectionChange)="updateTagFilter($event.value)">
-            <mat-option value="">All tags</mat-option>
-            @if (tagCatalogIsLoading && tagFilterOptions.length === 0) {
-            <mat-option disabled>Loading tags…</mat-option>
-            }
-            @for (tag of tagFilterOptions; track tag) {
-            <mat-option [value]="tag">{{ tag }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+        <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
+          [options]="tagPickerOptions" [selectedValues]="tagPickerValues" [loading]="tagCatalogIsLoading"
+          (opened)="onTagFilterOpened(true)" (selectionChange)="updateTagFilters($event)"></app-activity-filter-picker>
         }
         <ng-content select="[event-table-filters]"></ng-content>
       </div>

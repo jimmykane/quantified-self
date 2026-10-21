@@ -344,6 +344,7 @@ describe('EventTableComponent', () => {
 
         component.paginator = {
             _changePageSize: vi.fn(),
+            firstPage: vi.fn(),
             page: new Subject()
         } as any;
 
@@ -408,11 +409,11 @@ describe('EventTableComponent', () => {
     });
 
     it('allows a parent tag selector without leaving a hidden table tag filter active', () => {
-        component.tagFilter = 'Race';
+        component.tagFilters = ['Race'];
         component.showTagFilter = false;
         component.ngOnChanges({ showTagFilter: new SimpleChange(true, false, false) });
         fixture.detectChanges();
-        expect(component.tagFilter).toBe('');
+        expect(component.tagFilters).toEqual([]);
         expect(fixture.nativeElement.querySelector('.tag-filter-field')).toBeNull();
         expect(fixture.nativeElement.querySelector('.qs-search-field')).toBeTruthy();
     });
@@ -1118,10 +1119,10 @@ describe('EventTableComponent', () => {
 
         const raceRow = component.data.data[0] as any;
         const recoveryRow = component.data.data[1] as any;
-        component.updateTagFilter('race');
+        component.updateTagFilters(['tag:race']);
 
         expect(component.tagFilterOptions).toEqual(['Long run', 'Race', 'Recovery']);
-        expect(component.tagFilter).toBe('Race');
+        expect(component.tagFilters).toEqual(['Race']);
         expect(raceRow['Tag Values']).toEqual(['Race', 'Long run']);
         expect(component.data.filterPredicate(raceRow, component.data.filter)).toBe(true);
         expect(component.data.filterPredicate(recoveryRow, component.data.filter)).toBe(false);
@@ -1132,11 +1133,30 @@ describe('EventTableComponent', () => {
         (component.events[0] as any).tags = ['race', 'Long run'];
         (component as any).processChanges('spec_recased_selected_tag');
         expect(component.tagFilterOptions).toEqual(['Long run', 'race', 'Recovery']);
-        expect(component.tagFilter).toBe('race');
+        expect(component.tagFilters).toEqual(['race']);
 
         (component.events[0] as any).tags = ['Long run'];
         (component as any).processChanges('spec_removed_selected_tag');
-        expect(component.tagFilter).toBe('');
+        expect(component.tagFilters).toEqual([]);
+    });
+
+    it('matches any checked tag or Untagged, keeps text search and ignores unchanged choices', () => {
+        (component.events[0] as any).tags = ['Race'];
+        (component.events[1] as any).tags = ['Recovery'];
+        (component as any).processChanges('spec_multi_tags');
+        component.ngAfterViewInit();
+        const [race, recovery] = component.data.data;
+        component.updateTagFilters(['tag:race', 'tag:recovery']);
+        expect(component.data.filterPredicate(race, component.data.filter)).toBe(true);
+        expect(component.data.filterPredicate(recovery, component.data.filter)).toBe(true);
+        const calls = mockHapticsService.selection.mock.calls.length;
+        component.updateTagFilters(['tag:recovery', 'tag:race']);
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(calls);
+        component.updateTagFilters(['tag:race', 'untagged']);
+        expect(component.data.filterPredicate(recovery, component.data.filter)).toBe(false);
+        expect(component.data.filterPredicate({ 'Tag Values': [] }, component.data.filter)).toBe(true);
+        component.search('missing');
+        expect(component.data.filterPredicate(race, component.data.filter)).toBe(false);
     });
 
     it('keeps historical tag choices while the table changes to a different date range', async () => {
@@ -1147,14 +1167,14 @@ describe('EventTableComponent', () => {
         const catalogCalls = mockEventTagCatalogService.listAllTags.mock.calls.length;
 
         expect(component.tagFilterOptions).toEqual(['Historical', 'Race']);
-        component.updateTagFilter('historical');
-        expect(component.tagFilter).toBe('Historical');
+        component.updateTagFilters(['tag:historical']);
+        expect(component.tagFilters).toEqual(['Historical']);
 
         component.events = [new MockEvent('new-range-event') as any];
         (component as any).processChanges('spec_new_date_range');
 
         expect(component.tagFilterOptions).toEqual(['Historical', 'Race']);
-        expect(component.tagFilter).toBe('Historical');
+        expect(component.tagFilters).toEqual(['Historical']);
         expect(component.data.filterPredicate(component.data.data[0], component.data.filter)).toBe(false);
         expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledTimes(catalogCalls);
     });
@@ -1162,7 +1182,7 @@ describe('EventTableComponent', () => {
     it('keeps a selected historical tag while refreshing the catalog and ignores stale owner results', async () => {
         mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Historical']);
         await (component as any).loadAllHistoryTags(true);
-        component.updateTagFilter('Historical');
+        component.updateTagFilters(['tag:historical']);
 
         let resolveRefresh!: (tags: string[]) => void;
         mockEventTagCatalogService.listAllTags.mockReturnValueOnce(new Promise<string[]>(resolve => {
@@ -1172,7 +1192,7 @@ describe('EventTableComponent', () => {
         component.events = [new MockEvent('new-range-event') as any];
         (component as any).processChanges('spec_range_changed_during_refresh');
 
-        expect(component.tagFilter).toBe('Historical');
+        expect(component.tagFilters).toEqual(['Historical']);
         expect(component.tagFilterOptions).toContain('Historical');
 
         component.targetUser = new User('other-user');
@@ -1215,11 +1235,11 @@ describe('EventTableComponent', () => {
         (component.events[0] as any).tags = ['Race'];
         (component as any).processChanges('spec_tag_haptics');
 
-        component.updateTagFilter('race');
-        component.updateTagFilter('Race');
+        component.updateTagFilters(['tag:race']);
+        component.updateTagFilters(['tag:race']);
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
 
-        component.updateTagFilter('');
+        component.updateTagFilters([]);
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
     });
 

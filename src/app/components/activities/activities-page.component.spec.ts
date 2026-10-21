@@ -545,6 +545,37 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventsBy).toHaveBeenCalledOnce();
   });
 
+  it('toggles loaded merged rows locally, preserves other filters and restores URL choices silently', async () => {
+    const c = await setup();
+    c.events.getEventsBy.mockReturnValue(of([
+      event('run', ['Endurance']),
+      { ...event('merged', ['Endurance']), isMerge: true },
+      { ...event('benchmark', ['Endurance']), hasBenchmark: true },
+    ]));
+    await render(c);
+    const toggle = c.fixture.debugElement.query(By.css('app-merged-activities-toggle'));
+    expect(toggle).toBeTruthy();
+    c.component.selectTags(['Endurance']);
+    c.haptics.selection.mockClear();
+    toggle.componentInstance.checkedChange.emit(true);
+    await render(c);
+    expect(c.component.filteredEvents().map(record => record.getID())).toEqual(['run', 'merged']);
+    expect(c.component.selectedTags()).toEqual(['Endurance']);
+    expect(c.router.navigate.mock.lastCall[1].queryParams.merged).toBe('1');
+    expect(c.haptics.selection).toHaveBeenCalledTimes(1);
+    c.component.selectMergedEvents(true);
+    expect(c.haptics.selection).toHaveBeenCalledTimes(1);
+    c.component.selectMergedEvents(false);
+    expect(c.component.filteredEvents().map(record => record.getID())).toEqual(['run']);
+    c.haptics.selection.mockClear();
+    c.params$.next(convertToParamMap({ merged: '1' })); await render(c);
+    expect(c.component.includeMergedEvents()).toBe(true);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventCountBy).not.toHaveBeenCalled();
+    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+  });
+
   it('uses one live listener for subsequent activity updates without repeating the query', async () => {
     const c = await setup(); const live = new Subject<AppEventInterface[]>();
     c.events.getEventsBy.mockReturnValue(live); c.fixture.detectChanges();

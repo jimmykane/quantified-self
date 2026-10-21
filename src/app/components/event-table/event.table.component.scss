@@ -26,7 +26,7 @@
 .table-toolbar-main {
   display: grid;
   align-items: start;
-  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr) auto;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
   gap: 10px;
   min-width: 0;
 }
@@ -72,7 +72,8 @@
   min-width: 0;
   min-height: 0;
   overflow: visible;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .table-toolbar-actions {
@@ -82,11 +83,9 @@
 }
 
 .tag-filter-field {
-  --mat-form-field-container-height: var(--qs-table-filter-height);
-  --mat-select-trigger-text-size: var(--qs-table-filter-text-size);
-  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
-  flex: 0 0 150px;
-  width: 150px;
+  flex: 0 0 170px;
+  width: 170px;
+  min-width: 0;
 }
 
 .table-toolbar-filters:empty {

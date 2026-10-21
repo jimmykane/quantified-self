@@ -1,3 +1,4 @@
+import { ActivityFilterPickerComponent } from '../components/shared/activity-filter-picker/activity-filter-picker.component';
 import { NgModule } from '@angular/core';
 import { MatPaginatorIntl } from '@angular/material/paginator';
 import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
@@ -7,7 +8,7 @@ import { EventsExportFormComponent } from '../components/events-export-form/even
 import { SharedModule } from './shared.module';
 
 @NgModule({
-  imports: [SharedModule],
+  imports: [SharedModule, ActivityFilterPickerComponent],
   declarations: [
     EventTableComponent,
     EventTableActionsComponent,
