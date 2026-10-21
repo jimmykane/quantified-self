@@ -1,4 +1,8 @@
 {
+  "src/app/components/activity-ascent-editor/activity-ascent-editor.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the standalone ascent editor with Material controls in TestBed to verify imported/edited values, unit settings, validation, reset review, haptics and account changes during pending saves."
+  },
   "src/app/components/activity-send/activity-send-page.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
@@ -74,6 +78,10 @@
   "src/app/components/training-load/training-load-settings.component.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
+  },
+  "src/app/services/activity-ascent.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify the injected Firebase Auth owner and callable service boundary, including account changes and the exact app-only ascent request."
   },
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",

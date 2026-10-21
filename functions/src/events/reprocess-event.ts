@@ -6,12 +6,15 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { reparseEventFromOriginalFiles } from '../reparse/sports-lib-reparse.service';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { REPARSE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
+import { updateActivityAscent } from './activity-ascent.service';
 
-type ReprocessMode = 'reimport' | 'regenerate';
+type ReprocessMode = 'reimport' | 'regenerate' | 'correct_ascent';
 
 interface ReprocessEventRequest {
   eventId: string;
   mode: ReprocessMode;
+  edit?: unknown;
+  expectedOwner?: string;
 }
 
 export const reprocessEvent = onCall({
@@ -33,6 +36,14 @@ export const reprocessEvent = onCall({
     throw new HttpsError('invalid-argument', 'eventId is required.');
   }
 
+  if (mode === 'correct_ascent') {
+    const data = request.data as ReprocessEventRequest;
+    if (data.expectedOwner !== userID) throw new HttpsError('permission-denied', 'The recording owner changed. Sign in again.');
+    if (Object.keys(data).some(key => !['eventId', 'mode', 'edit', 'expectedOwner'].includes(key)))
+      throw new HttpsError('invalid-argument', 'Unexpected ascent correction fields.');
+    await updateActivityAscent(userID, eventId, data.edit);
+    return { eventId, mode, status: 'completed' };
+  }
   if (mode !== 'reimport' && mode !== 'regenerate') {
     throw new HttpsError('invalid-argument', 'mode must be either "reimport" or "regenerate".');
   }

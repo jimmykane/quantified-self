@@ -8,7 +8,9 @@ import { AppFileService } from '../../services/app.file.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -42,6 +44,29 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 export class EventActionsComponent implements OnInit, OnDestroy {
   private readonly sendAuth = inject(Auth, { optional: true });
   get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid; }
+  get canEditAscent(): boolean {
+    return this.canSendOwnedActivities && !isBenchmarkEvent(this.event as unknown as { isMerge?: unknown; mergeType?: unknown });
+  }
+  async editAscent(): Promise<void> {
+    if (!this.canEditAscent || this.isReprocessing) return;
+    const { ActivityAscentEditorComponent } = await import('../activity-ascent-editor/activity-ascent-editor.component');
+    if (!this.canEditAscent) return;
+    this.hapticsService.selection();
+    this.ascentDialogSubscription?.unsubscribe();
+    this.ascentDialogSubscription = this.dialog.open(ActivityAscentEditorComponent, {
+      data: { eventId: this.event.getID(), user: this.user }, width: '480px', maxWidth: 'calc(100vw - 32px)',
+    }).afterClosed().pipe(take(1)).subscribe(async saved => {
+      if (!saved || !this.canEditAscent) return;
+      try {
+        const updated = await firstValueFrom(this.eventService.getEventAndActivities(this.user, this.event.getID()));
+        if (!updated || !this.canEditAscent) return;
+        this.event.clearActivities(); this.event.addActivities(updated.getActivities());
+        const ascent = updated.getStat(DataAscent.type);
+        if (ascent) this.event.addStat(ascent); else this.event.removeStat(DataAscent.type);
+        this.changeDetectorRef.markForCheck();
+      } catch (error) { this.logger.error('Could not refresh the saved ascent correction', error); }
+    });
+  }
   async sendToService(): Promise<void> {
     if (!this.canSendOwnedActivities) return;
     const ids = [this.event.getID()];
@@ -60,6 +85,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
+  private ascentDialogSubscription?: Subscription;
 
   private analyticsService = inject(AppAnalyticsService);
   private originalFileDownloadService = inject(AppOriginalFileDownloadService);
@@ -495,6 +521,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.ascentDialogSubscription?.unsubscribe();
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe()
     }

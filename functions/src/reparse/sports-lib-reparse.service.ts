@@ -1,4 +1,3 @@
-import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
@@ -57,7 +56,7 @@ import {
     resolveActivityIdentityAssignments,
 } from '../shared/activity-identity-matcher';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
-import { IMPORTED_EVENT_EDIT_FIELDS as REPARSE_PRESERVED_EVENT_FIELDS, preserveImportedEventEdits } from '../shared/import-preservation';
+import { IMPORTED_EVENT_EDIT_FIELDS as REPARSE_PRESERVED_EVENT_FIELDS, preserveImportedEventEdits, prepareReparsedEventWrite } from '../shared/import-preservation';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { shouldPreserveParsedDistance } from './regeneration-distance';
 import { preserveFreshSourceEventSummary } from './source-event-summary';
@@ -1774,7 +1773,7 @@ export async function persistReparsedEvent(
         parsedEventAny.originalFile = existingEventAny.originalFile;
     }
 
-    const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareTrainingLoadMetadata(uid, event));
+    const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareReparsedEventWrite(uid, event));
     const parsedActivities = parsedEvent.getActivities();
     const strictIdentity = resolveActivityIdentityAssignments(existingActivityDocs.map(toComparableExistingActivity), parsedActivities as ActivityIdentityLike[], {
         requireStrictMatch: true,

@@ -208,6 +208,23 @@ describe('EventActionsComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
+    it('opens ascent editing for the signed-in owner with the recording identity', async () => {
+        component.user = { uid: 'test-user' } as any;
+        mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+        await component.editAscent();
+        expect(mockDialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+            data: { eventId: 'event-123', user: component.user }, width: '480px',
+        }));
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+    it.each(['shared', 'benchmark', 'processing'])('does not open ascent editing for %s recordings', async kind => {
+        component.user = { uid: kind === 'shared' ? 'other-user' : 'test-user' } as any;
+        if (kind === 'benchmark') (component.event as any).mergeType = 'benchmark';
+        if (kind === 'processing') component.isReprocessing = true;
+        await component.editAscent();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
     it.each([true, false])('waits for accepted activity-send navigation before feedback: %s', async opened => {
         component.user = { uid: 'test-user' } as typeof component.user;
         let finishNavigation!: (result: boolean) => void;

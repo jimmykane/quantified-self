@@ -8,6 +8,9 @@
   }
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel">
+  @if (canEditAscent) {
+    <button mat-menu-item (click)="editAscent()" [disabled]="isReprocessing"><mat-icon>edit</mat-icon><span>Edit ascent</span></button>
+  }
   @if (canSendOwnedActivities) { <button mat-menu-item (click)="sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
   @if (!isPubliclyShared) {
   <button mat-menu-item (click)="shareEventLink()" [disabled]="isSharing">

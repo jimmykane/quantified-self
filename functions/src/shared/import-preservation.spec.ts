@@ -56,7 +56,7 @@ describe('shared import preservation', () => {
     expect(parsed.getID()).toBe('legacy-0');
     expect(state.collection).toHaveBeenCalledWith('users/owner/activities');
     expect(state.where).toHaveBeenCalledWith('eventID', '==', 'event');
-    expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance');
+    expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance', 'ascentCorrection');
     expect(state.limit).toHaveBeenCalledWith(101);
     expect(state.get.mock.invocationCallOrder.at(-1)).toBeLessThan(state.commit.mock.invocationCallOrder[0]);
   });
@@ -108,6 +108,14 @@ describe('shared import preservation', () => {
     const parsed = activity();
     await expect(prepareImportedEventWrite('owner', event([parsed]), authorize)).rejects.toThrow('superseded');
     expect(state.get).not.toHaveBeenCalled(); expect(parsed.getID()).toBe('legacy-0');
+  });
+
+  it('rejects a corrected source changing to diving before committing a source reservation', async () => {
+    store('saved-id', activity(), { sourceActivityKey: 'same-source', ascentCorrection: { value: 75, sourceValue: 100 } });
+    const parsed = Object.assign(activity(0, 'Scuba Diving'), { sourceActivityKey: 'same-source' });
+    await expect(prepareImportedEventWrite('owner', event([parsed]))).rejects.toThrow('Reset it before changing');
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(parsed.getID()).toBe('legacy-0');
   });
 
   it('does not apply identities from a failed or retried reservation transaction', async () => {

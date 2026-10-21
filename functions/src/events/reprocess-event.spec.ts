@@ -4,12 +4,14 @@ const hoisted = vi.hoisted(() => {
     const mockGet = vi.fn();
     const mockDoc = vi.fn(() => ({ get: mockGet }));
     const mockReparseEventFromOriginalFiles = vi.fn();
+    const mockUpdateActivityAscent = vi.fn();
     let onCallOptions: unknown = null;
 
     return {
         mockGet,
         mockDoc,
         mockReparseEventFromOriginalFiles,
+        mockUpdateActivityAscent,
         getOnCallOptions: () => onCallOptions,
         setOnCallOptions: (options: unknown) => {
             onCallOptions = options;
@@ -51,6 +53,9 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
 }));
 
 import { reprocessEvent } from './reprocess-event';
+vi.mock('./activity-ascent.service', () => ({
+    updateActivityAscent: (...args: unknown[]) => hoisted.mockUpdateActivityAscent(...args),
+}));
 
 describe('reprocessEvent', () => {
     beforeEach(() => {
@@ -80,6 +85,22 @@ describe('reprocessEvent', () => {
             app: { appId: 'app-id' },
             data: { eventId: 'e1', mode: 'reimport' },
         } as any)).rejects.toMatchObject({ code: 'unauthenticated' });
+    });
+    it('routes an owner-bound ascent correction through its strict service without reparsing files', async () => {
+        const edit = { activityId: 'leg', ascent: 75, expectedSourceFingerprint: 'a'.repeat(64), expectedCorrection: null };
+        const result = await reprocessEvent({ auth: { uid: 'u1' }, app: { appId: 'app-id' },
+            data: { eventId: 'event-1', mode: 'correct_ascent', expectedOwner: 'u1', edit } } as any);
+        expect(hoisted.mockUpdateActivityAscent).toHaveBeenCalledWith('u1', 'event-1', edit);
+        expect(hoisted.mockReparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(result).toEqual({ eventId: 'event-1', mode: 'correct_ascent', status: 'completed' });
+    });
+    it('rejects an owner change and unexpected ascent-call fields', async () => {
+        const request = { auth: { uid: 'u1' }, app: { appId: 'app-id' },
+            data: { eventId: 'event-1', mode: 'correct_ascent', expectedOwner: 'other', edit: {} } };
+        await expect(reprocessEvent(request as any)).rejects.toMatchObject({ code: 'permission-denied' });
+        await expect(reprocessEvent({ ...request, data: { ...request.data, expectedOwner: 'u1', stats: {} } } as any))
+            .rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(hoisted.mockUpdateActivityAscent).not.toHaveBeenCalled();
     });
 
     it('should reject requests without app check', async () => {
