@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSelect } from '@angular/material/select';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { of, Subject, throwError } from 'rxjs';
@@ -46,6 +48,59 @@ describe('Training load editor', () => {
     await component.ngOnInit();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it('uses one modeled score and activity wording for a single-activity workout', async () => {
+    const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loaded(), fixture.componentInstance.error()).toBe(true));
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('.workout-load strong')?.textContent).toBe('Modeled TSS');
+    expect(element.querySelector('.workout-load span')?.textContent).toContain('87.3');
+    expect(element.textContent).not.toMatch(/\blegs?\b/i);
+    expect(element.textContent).toContain('Include this activity in modeled load');
+    expect(element.textContent).toContain('Numeric overrides stay with this activity');
+    expect(element.textContent).toContain('Save activity');
+    expect(element.textContent).toContain('Reset activity');
+    expect([...element.querySelectorAll('dt')].map(label => label.textContent)).not.toContain('Modeled activity TSS');
+    expect(selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+  });
+  it('keeps differing legacy workout and activity scores explicitly labelled', async () => {
+    vi.spyOn(component.data.event, 'getStat').mockReturnValue(new DataTrainingStressScore(120));
+    const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loaded(), fixture.componentInstance.error()).toBe(true));
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('.workout-load strong')?.textContent).toBe('Total workout TSS');
+    expect(element.querySelector('.workout-load span')?.textContent).toContain('120.0');
+    const activityRow = [...element.querySelectorAll('dl > div')].find(row => row.querySelector('dt')?.textContent === 'Modeled activity TSS');
+    expect(activityRow?.querySelector('dd')?.textContent).toContain('87.3');
+  });
+  it('names multisport activities by sport and disambiguates repeats without changing their selection IDs', async () => {
+    const original = component.data.event.getActivities()[0];
+    vi.spyOn(component.data.event, 'getActivities').mockReturnValue([
+      { ...original, type: ActivityTypes.Running, getID: () => 'run-1' },
+      { ...original, type: ActivityTypes.Cycling, getID: () => 'ride' },
+      { ...original, type: ActivityTypes.Running, getID: () => 'run-2' },
+    ]);
+    const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loaded(), fixture.componentInstance.error()).toBe(true));
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('.workout-load strong')?.textContent).toBe('Total workout TSS');
+    expect(element.textContent).toContain('Modeled activity TSS');
+    expect(element.textContent).not.toMatch(/\blegs?\b/i);
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(select.options.map(option => [option.value, option.viewValue])).toEqual([
+      ['run-1', 'Running · Activity 1'], ['ride', 'Cycling'], ['run-2', 'Running · Activity 3'],
+    ]);
+    await vi.waitFor(() => expect(select.triggerValue).toBe('Running · Activity 1'));
+    select.selectionChange.emit({ source: select, value: 'run-2' }); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedId()).toBe('run-2');
+    await vi.waitFor(() => expect(select.triggerValue).toBe('Running · Activity 3'));
+    expect(selection).toHaveBeenCalledOnce(); expect(save).not.toHaveBeenCalled();
+  });
   it('explains pending imports without displaying previous candidates as current', () => {
     component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, sourceWritePending: true });
     expect(component.model).toMatchObject({ score: null, reasons: ['source-updating'] });

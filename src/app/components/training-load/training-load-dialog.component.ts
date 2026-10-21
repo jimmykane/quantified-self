@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal, LOCALE_ID } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal, LOCALE_ID } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormControl, FormGroup } from '@angular/forms';
@@ -37,6 +37,11 @@ export class TrainingLoadDialogComponent implements OnInit {
   readonly policies = signal<TrainingLoadPolicyHead[]>([]);
   readonly activities = this.data.event.getActivities().map(activity => ({ id: activity.getID() as string,
     type: activity.type, getStat: activity.getStat.bind(activity) }));
+  readonly activityOptions = this.activities.map((activity, index, activities) => ({ id: activity.id,
+    label: activities.filter(other => other.type === activity.type).length > 1
+      ? `${activity.type || 'Unknown sport'} · Activity ${index + 1}` : activity.type || 'Unknown sport' }));
+  // Legacy workouts can retain a parent score that differs even with only one activity.
+  readonly showActivityLoad = computed(() => this.activities.length > 1 || this.model.score !== this.legModel.score);
   readonly form = new FormGroup({ method: new FormControl<TrainingLoadMethod>('AUTOMATIC', { nonNullable: true }),
     included: new FormControl(true, { nonNullable: true }), override: new FormControl<string | number | null>('', { nonNullable: true }),
     future: new FormControl(false, { nonNullable: true }) });
@@ -104,15 +109,15 @@ export class TrainingLoadDialogComponent implements OnInit {
   get explanation(): string {
     if (this.legModel.status === 'excluded') return 'Excluded from modeled load. Activity history and volume are retained.';
     if (this.metadata()?.sourceWritePending) return 'This import is not complete. Training load is unavailable until it finishes. Retry the import if it failed; you can still exclude the whole workout.';
-    if (this.legModel.reasons.includes('source-updating')) return 'The activity changed during reparse. Close this editor and reopen the activity to load its current legs.';
-    if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched legs below before using modeled load.';
-    if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this leg’s saved policy.';
+    if (this.legModel.reasons.includes('source-updating')) return 'The workout changed during reparse. Close this editor and reopen the workout to load its current activities.';
+    if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched activities below before using modeled load.';
+    if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this activity’s saved policy.';
     if (!this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate HR and MET candidates.';
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
     if (this.legModel.method === 'MET') return 'Estimate from file calories, body mass and duration.';
     if (this.legModel.hrAlgorithm === 'BANISTER') return 'Calculated from recorded heart rate and explicit resting, threshold and maximum HR calibration.';
     if (this.legModel.hrAlgorithm === 'THRESHOLD') return 'Estimated from recorded heart rate relative to the file threshold. This estimate is used when resting or maximum HR is missing and the sport supports calculated TSS.';
-    if (this.legModel.score === null) return 'No eligible load calculation is available from this file. Use a numeric override or exclude the leg.';
+    if (this.legModel.score === null) return 'No eligible load calculation is available from this file. Use a numeric override or exclude the activity.';
     return this.legModel.reasons.length ? 'An eligible calculation was unavailable. The next eligible Automatic method was used.' : 'Calculated from the available file inputs.';
   }
   get reasonText(): string {
