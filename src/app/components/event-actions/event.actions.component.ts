@@ -1,5 +1,5 @@
 import { Auth } from 'app/firebase/auth';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
@@ -9,6 +9,8 @@ import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
+import { applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
+import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -41,7 +43,42 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
   private readonly sendAuth = inject(Auth, { optional: true });
+  private readonly destroyRef = inject(DestroyRef);
+  private ascentEditorOpen = false;
   get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid; }
+  get canEditAscent(): boolean {
+    return this.canSendOwnedActivities && !isBenchmarkEvent(this.event as unknown as { isMerge?: unknown; mergeType?: unknown });
+  }
+  async editAscent(): Promise<void> {
+    if (!this.canEditAscent || this.isReprocessing || this.ascentEditorOpen || this.destroyRef.destroyed) return;
+    const event = this.event, eventId = event.getID(), owner = this.user;
+    const isCurrent = () => !this.destroyRef.destroyed && this.event === event && event.getID() === eventId
+      && this.user?.uid === owner.uid && this.canEditAscent && !this.isReprocessing;
+    this.ascentEditorOpen = true;
+    let opened = false;
+    try {
+      const { ActivityAscentEditorComponent } = await import('../activity-ascent-editor/activity-ascent-editor.component');
+      if (!isCurrent()) return;
+      this.hapticsService.selection();
+      const ref = this.dialog.open(ActivityAscentEditorComponent, {
+        data: { eventId, user: owner }, width: '480px', maxWidth: 'calc(100vw - 32px)',
+      });
+      opened = true;
+      this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityElevationUpdate | undefined) => {
+        this.ascentEditorOpen = false;
+        if (!saved || !isCurrent()) return;
+        applySavedActivityElevation(event, saved);
+        this.ascentChanged.emit(event);
+        this.changeDetectorRef.markForCheck();
+      });
+    } catch (error) {
+      this.logger.error('Could not open the elevation editor', error);
+      if (isCurrent()) {
+        this.hapticsService.error();
+        this.snackBar.open('Could not open elevation editing. Try again.', undefined, { duration: 3500 });
+      }
+    } finally { if (!opened) this.ascentEditorOpen = false; }
+  }
   async sendToService(): Promise<void> {
     if (!this.canSendOwnedActivities) return;
     const ids = [this.event.getID()];
@@ -54,12 +91,14 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() showDownloadOriginal = false;
   @Input() navigateAfterDelete = true;
   @Output() eventDeleted = new EventEmitter<string>();
+  @Output() ascentChanged = new EventEmitter<EventInterface>();
 
   public isReprocessing = false;
   public isSharing = false;
 
   public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
+  private ascentDialogSubscription?: Subscription;
 
   private analyticsService = inject(AppAnalyticsService);
   private originalFileDownloadService = inject(AppOriginalFileDownloadService);
@@ -495,6 +534,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.ascentDialogSubscription?.unsubscribe();
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe()
     }

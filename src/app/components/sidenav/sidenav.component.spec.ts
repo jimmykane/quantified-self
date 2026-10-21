@@ -95,12 +95,39 @@ describe('SideNavComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('keeps Tags hidden from the sidenav for guests and signed-in users', () => {
+    it('shows Activities under Overview after Calendar for signed-in users only', () => {
         fixture.detectChanges();
-        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/activities')).toBe(false);
         mockUserService.user.mockReturnValue(new User('tags-owner'));
         fixture.detectChanges();
-        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
+        const link = fixture.nativeElement.querySelector('a[routerlink="/activities"]') as HTMLAnchorElement;
+        expect(link?.getAttribute('href')).toBe('/activities');
+        expect(link.parentElement?.getAttribute('aria-labelledby')).toBe('sidenav-overview-heading');
+        expect(link.previousElementSibling?.getAttribute('routerlink')).toBe('/calendar');
+        expect(link.querySelector('mat-icon')?.textContent).toBe('list_alt');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('navigates to Activities with one feedback and highlights filtered activity links', async () => {
+        mockUserService.user.mockReturnValue(new User('activity-owner'));
+        vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        TestBed.inject(ShellNavigationEffectsService);
+        const router = TestBed.inject(Router);
+        await router.navigateByUrl('/dashboard');
+        fixture.detectChanges();
+        const link = fixture.nativeElement.querySelector('a[routerlink="/activities"]') as HTMLAnchorElement;
+        link.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(router.url).toBe('/activities');
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        await router.navigateByUrl('/activities?tag=Endurance&sport=Running#table');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(link.classList.contains('active')).toBe(true);
+        expect(link.getAttribute('aria-current')).toBe('page');
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
     it('does not render a navigation section heading', () => {
@@ -304,7 +331,7 @@ describe('SideNavComponent', () => {
         expect(navigationItems.slice(0, 8).map(item => item.injector.get(RouterLink).urlTree?.toString()))
             .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/ai-insights', '/routes', '/mytracks']);
         const expectedGroups = [
-            ['sidenav-overview-heading', ['Dashboard', 'Calendar']],
+            ['sidenav-overview-heading', ['Dashboard', 'Calendar', 'Activities']],
             ['sidenav-training-health-heading', ['Training', 'Plans', 'Health', 'Timeline notes', 'Assistant']],
             ['sidenav-explore-heading', ['Routes', 'My Tracks']],
             ['sidenav-tools-heading', ['Compare Files', 'Send activities']],
@@ -739,10 +766,10 @@ describe('flat sidenav style contract without fixtures', () => {
         const styles = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.scss'), 'utf8');
         expect(styles).not.toContain('.sidenav-subitem');
         expect(styles).toContain('border-left: 3px solid var(--mat-sys-primary) !important');
-        expect(styles).toContain('.sidenav-notes-item mat-icon');
+        expect(styles).toContain('.sidenav-route-link mat-icon');
         expect(styles).toContain('margin-inline: 8px 16px');
-        const notesRule = styles.slice(styles.indexOf('[mat-list-item].sidenav-notes-item {'), styles.indexOf('.sidenav-notes-item mat-icon'));
-        expect(notesRule).toContain('padding-inline-start: 16px');
+        const routeRule = styles.slice(styles.indexOf('[mat-list-item].sidenav-route-link {'), styles.indexOf('.sidenav-route-link mat-icon'));
+        expect(routeRule).toContain('padding-inline-start: 16px');
         const phoneRules = styles.slice(styles.indexOf('@include bp.xsmall'));
         expect(phoneRules).toContain('mat-list-item, button[mat-list-item], a[mat-list-item]');
         expect(phoneRules).toContain('width: calc(100% - 8px)');

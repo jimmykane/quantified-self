@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { FieldPath, type Transaction } from 'firebase-admin/firestore';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
@@ -18,12 +19,13 @@ import { DELIVERY_LEDGER, DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE,
   type DeliveryContext, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { deliveryContentDigest, deliveryIdentity, resolveDeliveryIntent } from './intent';
 import { reconciliationJobId } from './marker';
-import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../shared/training-provider-verification';
+import { TRAINING_DELIVERY_VERIFICATIONS, type TrainingVerificationV1 } from '../../../../shared/training-provider-verification';
 import { readVerificationRequest, stageVerification } from './verification-queue';
 import { TrainingScheduleMutationError } from '../mutation';
 import { readPastCleanupAuthorization } from './marker';
+import { ReconciliationReads, type DeliveryDocumentReader } from './reconciliation-reads';
 
-export async function readStrengthDetailsForDelivery(tx: Transaction,
+export async function readStrengthDetailsForDelivery(tx: DeliveryDocumentReader,
   user: FirebaseFirestore.DocumentReference, workout: ScheduledWorkoutV1): Promise<StrengthWorkoutDetailsV1 | null> {
   if (!isStrengthWorkoutSportV1(workout.structure.sport)) return null;
   const snapshot = await tx.get(user.collection('scheduledWorkouts').doc(workout.id)
@@ -40,11 +42,11 @@ export async function readStrengthDetailsForDelivery(tx: Transaction,
 }
 
 /** Suunto's app preview uses owner units; native watch measurements remain canonical. */
-export async function readSuuntoGuideUnitSettings(tx: Transaction, user: FirebaseFirestore.DocumentReference,
+export async function readSuuntoGuideUnitSettings(tx: DeliveryDocumentReader, user: FirebaseFirestore.DocumentReference,
   provider: PlannedWorkoutProviderId, workouts: readonly ScheduledWorkoutV1[]): Promise<UserUnitSettingsInterface | undefined> {
   return (await readSuuntoGuideOwnerPreferences(tx, user, provider, workouts)).unitSettings;
 }
-export async function readSuuntoGuideOwnerPreferences(tx: Transaction, user: FirebaseFirestore.DocumentReference,
+export async function readSuuntoGuideOwnerPreferences(tx: DeliveryDocumentReader, user: FirebaseFirestore.DocumentReference,
   provider: PlannedWorkoutProviderId, workouts: readonly ScheduledWorkoutV1[]): Promise<{
     unitSettings?: UserUnitSettingsInterface; swimmingSettings?: SuuntoSwimmingGuideSettings;
   }> {
@@ -68,22 +70,23 @@ export async function readSuuntoGuideOwnerPreferences(tx: Transaction, user: Fir
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
   workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean,
-  retainedWorkoutId?: string, ledger?: DeliveryLedgerV1 | null): Promise<DeliveryContext> {
+  retainedWorkoutId?: string, ledger?: DeliveryLedgerV1 | null, reads?: ReconciliationReads): Promise<DeliveryContext> {
   const user = runtime.db.collection('users').doc(uid);
-  const connection = await runtime.connection(tx, uid, provider);
-  const strength = workout ? await readStrengthDetailsForDelivery(tx, user, workout) : null;
-  const preferences = await readSuuntoGuideOwnerPreferences(tx, user, provider, workout ? [workout] : []);
+  const reader = reads ?? tx;
+  const connection = await (reads ? reads.connection(provider) : runtime.connection(tx, uid, provider));
+  const strength = workout ? await readStrengthDetailsForDelivery(reader, user, workout) : null;
+  const preferences = await readSuuntoGuideOwnerPreferences(reader, user, provider, workout ? [workout] : []);
   const suuntoUnitSettings = preferences.unitSettings;
   const suuntoWeightUnits = strength ? suuntoUnitSettings?.weightUnits : undefined;
   const workoutId = workout?.id ?? retainedWorkoutId;
   const [overrideDoc, settingDoc, scopeDoc, planDoc] = workoutId ? await Promise.all([
-    tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('workout', workoutId, provider))),
-    workout?.planId ? tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('plan', workout.planId, provider))) : null,
-    tx.get(user.collection(DELIVERY_SCOPES).doc(workoutId)),
-    workout?.planId ? tx.get(user.collection('trainingPlans').doc(workout.planId)) : null,
+    reader.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('workout', workoutId, provider))),
+    workout?.planId ? reader.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('plan', workout.planId, provider))) : null,
+    reader.get(user.collection(DELIVERY_SCOPES).doc(workoutId)),
+    workout?.planId ? reader.get(user.collection('trainingPlans').doc(workout.planId)) : null,
   ]) : [null, null, null, null];
   const override = (overrideDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null;
-  const pastCleanup = ledger ? await readPastCleanupAuthorization(tx, runtime.db, uid, ledger, workout) : null;
+  const pastCleanup = ledger ? await readPastCleanupAuthorization(reader, runtime.db, uid, ledger, workout) : null;
   return { workout, strength, ...(suuntoWeightUnits === undefined ? {} : { suuntoWeightUnits }),
     ...(preferences.swimmingSettings ? { suuntoSwimmingSettings: preferences.swimmingSettings } : {}),
     ...(suuntoUnitSettings === undefined ? {} : { suuntoUnitSettings }),
@@ -112,13 +115,18 @@ export function writeDelivery(runtime: DeliveryRuntime, tx: Transaction, uid: st
   tx.set(user.collection(DELIVERY_LEDGER).doc(ledger.id), ledger);
   tx.set(user.collection(TRAINING_DELIVERY_STATUSES).doc(ledger.id), projectDelivery(ledger));
   const inspection = runtime.transport(ledger.provider, uid)?.inspection;
-  tx.set(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(ledger.id), {
+  tx.set(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(ledger.id), projectVerification(ledger,
+    !!inspection && inspection.policy.mode !== 'unavailable', runtime.now()));
+}
+
+function projectVerification(ledger: DeliveryLedgerV1, canInspect: boolean, nowMs: number): TrainingVerificationV1 {
+  return {
     schemaVersion: 1, id: ledger.id, workoutId: ledger.workoutId, planId: ledger.planId, provider: ledger.provider,
-    state: ledger.verification?.state ?? 'unsupported', canCheck: !!inspection && inspection.policy.mode !== 'unavailable'
+    state: ledger.verification?.state ?? 'unsupported', canCheck: canInspect
       && ledger.desired === 'present' && !ledger.attempt && !!ledger.actual,
     missing: ledger.verification?.missing ?? false, lastCheckedAtMs: ledger.verification?.checkedAtMs ?? null,
-    nextCheckAtMs: ledger.verification?.nextCheckAtMs ?? null, updatedAtMs: runtime.now(),
-  });
+    nextCheckAtMs: ledger.verification?.nextCheckAtMs ?? null, updatedAtMs: nowMs,
+  };
 }
 
 export function queuedDeliveryOperation(record: DeliveryLedgerV1): 'upsert' | 'remove' | null {
@@ -140,7 +148,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired;
   const retried = settingRevision !== previous?.settingsRevision;
   const mappingApprovalProof = intent.mappingApprovalProof ?? previous?.mappingApprovalProof;
-  const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+  const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: structuredClone(previous.verification) } : {}),
     ...(previous?.suuntoGuideGeneration !== undefined ? { suuntoGuideGeneration: previous.suuntoGuideGeneration } : {}),
     ...(previous?.suuntoRetiredGuides ? { suuntoRetiredGuides: previous.suuntoRetiredGuides,
       suuntoRetiredExternalIds: previous.suuntoRetiredExternalIds ?? previous.suuntoRetiredGuides.map(item => item.ids.externalId) } : {}),
@@ -211,6 +219,7 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
   const user = db.collection('users').doc(uid);
   const jobRef = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
   return db.runTransaction(async tx => {
+    const reads = new ReconciliationReads(runtime, tx, uid);
     if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
     const [jobDoc, stateDoc, settingsState, locks] = await Promise.all([
       tx.get(jobRef), tx.get(user.collection('trainingPlanState').doc('current')),
@@ -234,30 +243,40 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
       : user.collection(DELIVERY_LEDGER).orderBy(FieldPath.documentId());
     if (cursor) query = query.startAfter(cursor);
     const page = await tx.get(query.limit(TRAINING_DELIVERY_PAGE_SIZE));
-    const records: { record: DeliveryLedgerV1; context: DeliveryContext; requestedAtMs: number }[] = [];
+    const records: { record: DeliveryLedgerV1; previous: DeliveryLedgerV1 | null; context: DeliveryContext;
+      requestedAtMs: number; status: FirebaseFirestore.DocumentData | undefined;
+      verification: FirebaseFirestore.DocumentData | undefined }[] = [];
+    const retain = async (record: DeliveryLedgerV1, previous: DeliveryLedgerV1 | null, context: DeliveryContext) => {
+      const [status, verification, requestedAtMs] = await Promise.all([
+        reads.get(user.collection(TRAINING_DELIVERY_STATUSES).doc(record.id)),
+        reads.get(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(record.id)),
+        context.transport?.inspection ? readVerificationRequest(runtime, reads, uid, record) : 0,
+      ]);
+      records.push({ record, previous, context, requestedAtMs, status: status.data(), verification: verification.data() });
+    };
     for (const doc of page.docs) {
       if (phase === 'workouts') {
         const workout = parseScheduledWorkoutV1(doc.data());
         for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
-          const context = await readDeliveryContext(runtime, tx, uid, workout, provider, hasPro);
+          const context = await readDeliveryContext(runtime, tx, uid, workout, provider, hasPro, undefined, undefined, reads);
           if (!context.setting?.enabled || !context.connection.destinationKey) continue;
           const id = deliveryIdentity(uid, provider, context.connection.destinationKey, workout.id);
-          const stored = await tx.get(user.collection(DELIVERY_LEDGER).doc(id));
+          const stored = await reads.get(user.collection(DELIVERY_LEDGER).doc(id));
           const previous = (stored.data() ?? null) as DeliveryLedgerV1 | null;
-          context.pastCleanup = await readPastCleanupAuthorization(tx, db, uid, previous, workout);
+          context.pastCleanup = await readPastCleanupAuthorization(reads, db, uid, previous, workout);
           const record = reconcileRecord(runtime, context, uid, provider, workout.id, previous);
-          if (record) records.push({ record, context, requestedAtMs: context.transport?.inspection ? await readVerificationRequest(runtime, tx, uid, record) : 0 });
+          if (record) await retain(record, previous, context);
         }
       } else {
         const previous = doc.data() as DeliveryLedgerV1;
-        const workoutDoc = await tx.get(user.collection('scheduledWorkouts').doc(previous.workoutId));
+        const workoutDoc = await reads.get(user.collection('scheduledWorkouts').doc(previous.workoutId));
         const context = await readDeliveryContext(runtime, tx, uid, workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null,
-          previous.provider, hasPro, previous.workoutId, previous);
+          previous.provider, hasPro, previous.workoutId, previous, reads);
         const record = reconcileRecord(runtime, context, uid, previous.provider, previous.workoutId, previous);
-        if (record) records.push({ record, context, requestedAtMs: context.transport?.inspection ? await readVerificationRequest(runtime, tx, uid, record) : 0 });
+        if (record) await retain(record, previous, context);
       }
     }
-    for (const { record, context, requestedAtMs } of records) {
+    for (const { record, previous, context, requestedAtMs, status, verification } of records) {
       const operationKind = queuedDeliveryOperation(record);
       if (operationKind && !record.providerAccessBlocked && !['failed', 'needs_attention'].includes(record.status)
         && !(record.verification?.missing && !record.repair)) {
@@ -265,7 +284,21 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
           provider: record.provider, destinationKey: record.destinationKey, operationKind,
           dueAtMs: Math.max(record.retryAtMs, record.lease?.expiresAtMs ?? 0), dispatchToken: randomUUID() });
       } else stageVerification(runtime, tx, uid, record, context, requestedAtMs);
-      writeDelivery(runtime, tx, uid, record);
+      // A source edit needs an acknowledgement even when its provider payload is identical.
+      const sourceUpdatedAtMs = Math.max(context.workout?.updatedAtMs ?? 0,
+        context.setting?.updatedAtMs ?? 0, context.override?.updatedAtMs ?? 0);
+      if (previous && previous.updatedAtMs >= sourceUpdatedAtMs
+        && isDeepStrictEqual(previous, { ...record, updatedAtMs: previous.updatedAtMs })) record.updatedAtMs = previous.updatedAtMs;
+      if (!isDeepStrictEqual(previous, record)) tx.set(user.collection(DELIVERY_LEDGER).doc(record.id), record);
+      const projectedStatus = projectDelivery(record);
+      if (!isDeepStrictEqual(status, projectedStatus)) tx.set(user.collection(TRAINING_DELIVERY_STATUSES).doc(record.id), projectedStatus);
+      const inspection = context.transport?.inspection;
+      const projectedVerification = projectVerification(record, !!inspection && inspection.policy.mode !== 'unavailable', runtime.now());
+      // Read both projections above so absent/stale views are repaired, even for an unchanged private ledger.
+      if (!verification || !Number.isSafeInteger(verification.updatedAtMs) || verification.updatedAtMs < 0
+        || !isDeepStrictEqual(verification, { ...projectedVerification, updatedAtMs: verification.updatedAtMs })) {
+        tx.set(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(record.id), projectedVerification);
+      }
     }
     const finished = page.size < TRAINING_DELIVERY_PAGE_SIZE && phase === 'ledger';
     const nextPhase = page.size < TRAINING_DELIVERY_PAGE_SIZE ? 'ledger' : phase;

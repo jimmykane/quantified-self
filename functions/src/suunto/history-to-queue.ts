@@ -8,15 +8,18 @@ import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import type { ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 
 interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
+  background?: boolean;
 }
 
 interface HistoryToQueueResponse {
   result: string;
   stats?: HistoryImportResult;
+  historyImport?: ConnectionHistoryStatusProjection;
 }
 
 /**
@@ -45,7 +48,8 @@ export const addSuuntoAppHistoryToQueue = onCall({
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const { startDate: startDateStr, endDate: endDateStr } = request.data as HistoryToQueueRequest;
+  const { startDate: startDateStr, endDate: endDateStr, background } = (request.data ?? {}) as HistoryToQueueRequest;
+  if (background !== undefined && typeof background !== 'boolean') throw new HttpsError('invalid-argument', 'background must be a boolean.');
   const startDate = new Date(startDateStr);
   const endDate = new Date(endDateStr);
 
@@ -55,6 +59,12 @@ export const addSuuntoAppHistoryToQueue = onCall({
 
   if (startDate > endDate) {
     throw new HttpsError('invalid-argument', 'Start date is after the end date');
+  }
+
+  if (background === true) {
+    const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+    const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate, endDate);
+    if (historyImport) return { result: 'History import accepted', historyImport };
   }
 
   // First check last history import

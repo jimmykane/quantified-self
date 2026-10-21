@@ -1,3 +1,4 @@
+import { getEventChartUnitTypes, retainEventChartSourceValues, createMissingEventChartUnitStreams, getEventChartUnitSource } from './event-chart-units.helper';
 import { getRejectedSwimTiming, resolveSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
 import { buildEventLineSegments, resolveEventLineContinuity, type EventLineContinuitySettings } from './event-chart-line-continuity.helper';
 import {
@@ -27,9 +28,6 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataDescent,
-  DataDepth,
-  DataDiveAscentRate,
-  DataNextStopDepth,
   DataSpeed,
   DataStrokeRateAvg,
   DataStrydDistance,
@@ -47,14 +45,15 @@ import type { AppEventColorService } from '../services/color/app.event.color.ser
 import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
+  hasEventChartValueDependentUnit,
   isEventPaceStreamType,
   resolveEventColorGroupKey,
   resolveEventSeriesColor
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
-import { getEnduranceMetricLabel, SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
-import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { getEnduranceMetricLabel } from '@shared/endurance-metrics';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
 import { getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters } from './event-swim-distance-display.helper';
@@ -309,7 +308,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
   );
 
   selectedActivities.forEach((activity) => {
-    const streams = activity.getAllStreams() || [];
+    const streams = dedupeByType(activity.getAllStreams() || []);
     const activityCache = createActivityNumericCache(activity, streams);
     if (!streams.length) {
       return;
@@ -337,7 +336,9 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       );
       // Metric distance uses Sports Lib's value-dependent m/Km display. Its axis
       // includes the unit on each tick, so a fixed '(m)' heading would be misleading.
-      const unit = stream.type === SUSTAINABLE_DISTANCE_TYPE ? '' : streamDataClass.unit || '';
+      const unit = hasEventChartValueDependentUnit(stream.type) ? ''
+        : resolveUnitAwareDisplayFromValue(stream.type, 0, input.userUnitSettings, { preferredType: stream.type })?.unit
+          ?? streamDataClass.unit ?? '';
 
       if (!panelsMap.has(stream.type)) {
         panelsMap.set(stream.type, {
@@ -498,13 +499,7 @@ function buildEventChartSnapshotStreamTypeSet(
 }
 
 function getUnitBaseDataTypes(dataType: string): string[] {
-  const unitGroups = (DynamicDataLoader as unknown as {
-    dataTypeUnitGroups?: Record<string, Record<string, unknown>>;
-  }).dataTypeUnitGroups || {};
-  const baseTypes = Object.entries(unitGroups)
-    .filter(([baseType, unitGroup]) => baseType === dataType || Object.prototype.hasOwnProperty.call(unitGroup, dataType))
-    .map(([baseType]) => baseType);
-  return baseTypes.length > 0 ? baseTypes : [dataType];
+  return [getEventChartUnitSource(dataType)];
 }
 
 function getDerivedStreamDependencyTypes(dataType: string): string[] {
@@ -1220,34 +1215,15 @@ function getFilteredStreams(input: {
   userUnitSettings: UserUnitSettingsInterface;
   activityType: any;
 }): StreamInterface[] {
+  // Empty placeholders must not block derivation or conversion from actual recorded values.
+  const recordedStreams = input.streams.filter(hasFiniteStreamData);
   const allowedDataTypes = input.showAllData
     ? null
     : resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType]);
   const allowedDataTypeSet = allowedDataTypes ? new Set(allowedDataTypes) : null;
 
-  const shouldRemoveSpeed = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataSpeed.type, input.userUnitSettings)
-    .indexOf(DataSpeed.type) === -1;
-  const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, input.userUnitSettings)
-    .indexOf(DataGradeAdjustedSpeed.type) === -1;
-  const shouldRemoveDistance = DynamicDataLoader
-    .getNonUnitBasedDataTypes(input.showAllData, input.dataTypesToUse)
-    .indexOf(DataDistance.type) === -1;
-  const shouldRemoveDepth = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDepth.type, input.userUnitSettings)
-    .indexOf(DataDepth.type) === -1;
-  const shouldRemoveNextStopDepth = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataNextStopDepth.type, input.userUnitSettings)
-    .indexOf(DataNextStopDepth.type) === -1;
-  const shouldRemoveDiveAscentRate = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDiveAscentRate.type, input.userUnitSettings)
-    .indexOf(DataDiveAscentRate.type) === -1;
-
-  const recordedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-    input.streams.map((stream) => stream.type),
-    input.userUnitSettings,
-    { includeDerivedTypes: !input.showAllData }
+  const recordedUnitTypes = getEventChartUnitTypes(
+    recordedStreams.map(stream => stream.type), input.userUnitSettings, !input.showAllData,
   );
   const configuredTypes = input.showAllData
     ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType])
@@ -1255,18 +1231,19 @@ function getFilteredStreams(input: {
   const whitelistedUnitTypes = [...new Set([...recordedUnitTypes, ...configuredTypes])];
   const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
 
-  const mergedStreams = ActivityUtilities
+  // Convert recorded metrics first. Derived pace must not replace a recorded pace's values or gaps.
+  const convertedStreams = createMissingEventChartUnitStreams(recordedStreams, whitelistedUnitTypes);
+  const generatedStreams = ActivityUtilities
     .createUnitStreamsFromStreams(
-      input.streams,
+      recordedStreams.filter(stream => !retainEventChartSourceValues(stream.type)).concat(convertedStreams),
       input.activityType,
       whitelistedUnitTypes,
       {
         includeDerivedTypes: !input.showAllData || configuredTypes.length > 0,
         includeUnitVariants: true,
       }
-    )
-    .concat(input.streams);
-
+    );
+  const mergedStreams = generatedStreams.concat(convertedStreams, recordedStreams);
   const deduplicated = dedupeByType(mergedStreams);
 
   return deduplicated
@@ -1283,32 +1260,23 @@ function getFilteredStreams(input: {
         return false;
       }
 
-      switch (stream.type) {
-        case SUSTAINABLE_DISTANCE_TYPE:
-          return DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings).includes(stream.type);
-        case DataDistance.type:
-          return !shouldRemoveDistance;
-        case DataDepth.type:
-          return !shouldRemoveDepth;
-        case DataNextStopDepth.type:
-          return !shouldRemoveNextStopDepth;
-        case DataDiveAscentRate.type:
-          return !shouldRemoveDiveAscentRate;
-        case DataSpeed.type:
-          return !shouldRemoveSpeed;
-        case DataGradeAdjustedSpeed.type:
-          return !shouldRemoveGradeAdjustedSpeed;
-        case DataLatitudeDegrees.type:
-        case DataLongitudeDegrees.type:
-          return false;
-        default:
-          return true;
-      }
+      if (stream.type === DataLatitudeDegrees.type || stream.type === DataLongitudeDegrees.type) return false;
+      return retainEventChartSourceValues(stream.type)
+        || (DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings) ?? [stream.type])
+          .includes(stream.type);
     })
     .sort((left, right) => left.type.localeCompare(right.type));
 }
 
 function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
+  // Normal activities have one stream per type. Avoid scanning their samples just to confirm that.
+  const seenTypes = new Set<string>();
+  if (streams.every(stream => {
+    if (!stream?.type || seenTypes.has(stream.type)) return false;
+    seenTypes.add(stream.type);
+    return true;
+  })) return streams;
+
   // TODO(quantified-self): remove this fallback once sports-lib guarantees canonical stream emission per type
   // (notably FIT vendor aliases for speed/distance fields) so the app never receives duplicate-type candidates.
   const streamsByType = new Map<string, {
@@ -1387,17 +1355,25 @@ function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAx
     return false;
   }
 
-  if (
-    xAxisType === XAxisTypes.Distance
-    && !hasFiniteStreamData(
-      getActivityStreamByType(activity, DataDistance.type, streams)
-      || getActivityStreamByType(activity, DataStrydDistance.type, streams)
-    )
-  ) {
+  if (xAxisType === XAxisTypes.Distance && !getEventChartDistanceStream(activity, streams)) {
     return false;
   }
 
   return streams.some((stream) => isEventChartableRawStream(stream) && hasFiniteStreamData(stream));
+}
+
+/** Prefer recorded Distance, falling back as a whole stream only when it has no finite readings. */
+export function getEventChartDistanceStream(
+  activity: ActivityInterface | null | undefined,
+  knownStreams: Map<string, StreamInterface> | StreamInterface[] | null = null,
+): StreamInterface | null {
+  const streams = knownStreams ?? activity?.getAllStreams?.() ?? [];
+  const distance = getActivityStreamByType(activity, DataDistance.type, streams);
+  if (hasFiniteStreamData(distance)) {
+    return distance;
+  }
+  const stryd = getActivityStreamByType(activity, DataStrydDistance.type, streams);
+  return hasFiniteStreamData(stryd) ? stryd : null;
 }
 
 function getActivityStreamByType(
@@ -1456,13 +1432,14 @@ function isEventChartableRawStream(stream: StreamInterface | undefined | null): 
 }
 
 function hasFiniteStreamData(stream: StreamInterface | undefined | null): boolean {
-  if (!stream?.getData) {
+  const values = stream?.getData?.();
+  if (!isNumericValueArrayLike(values)) {
     return false;
   }
 
-  const values = toNumericArray(stream.getData());
+  // Source selection also runs on hover; do not copy a whole stream just to inspect it.
   for (let index = 0; index < values.length; index += 1) {
-    if (Number.isFinite(values[index])) {
+    if (Number.isFinite(toNumericValueOrNaN(values[index]))) {
       return true;
     }
   }
@@ -1496,9 +1473,7 @@ export function resolveEventChartConfiguredDataTypes(
     const logicalDataTypes = dataType === DataPace.type && usesSwimPace
       ? [DataPace.type, DataSwimPace.type]
       : [dataType];
-    const resolvedTypes = DynamicDataLoader
-      .getUnitBasedDataTypesFromDataTypes(logicalDataTypes, userUnitSettings, { includeDerivedTypes: true })
-      .concat(logicalDataTypes);
+    const resolvedTypes = getEventChartUnitTypes(logicalDataTypes, userUnitSettings, true).concat(logicalDataTypes);
 
     resolvedTypes.forEach((resolvedType) => {
       if (!resolvedType || resolvedDataTypes.includes(resolvedType)) {
@@ -1574,13 +1549,19 @@ function toSeriesPoints(
     const distanceValues = getActivityDistanceValues(activity, activityCache);
     const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
     const length = Math.min(streamValues.length, distanceValues.length, absoluteTimes.length);
+    // Distance can be recorded less often than the metric. Learn its cadence
+    // independently so ordinary missing coordinates do not force a line break,
+    // while Detect/Custom still respect gaps in either source stream.
+    const distanceSegments = buildEventLineSegments(
+      absoluteTimes, distanceValues, resolveEventLineContinuity(lineContinuity),
+    );
 
     const lineValues = new Float64Array(length * 2);
     const pointTimes = new Float64Array(length);
     const pointSegments = new Uint32Array(length);
     let segment = 0;
     let previousSourceSegment = 0;
-    let coordinateBreak = false;
+    let previousDistanceSegment = 0;
     let pointCount = 0;
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -1591,7 +1572,6 @@ function toSeriesPoints(
       const x = distanceValues[index];
       const time = absoluteTimes[index];
       if (!Number.isFinite(x) || !Number.isFinite(time)) {
-        if (typeof y === 'number' && Number.isFinite(y)) coordinateBreak = true;
         continue;
       }
       const writeOffset = pointCount * 2;
@@ -1599,10 +1579,10 @@ function toSeriesPoints(
       lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
       pointTimes[pointCount] = time;
       if (sourceSegments[index]) {
-        if (coordinateBreak || previousSourceSegment !== sourceSegments[index]) segment++;
+        if (previousDistanceSegment !== distanceSegments[index] || previousSourceSegment !== sourceSegments[index]) segment++;
         pointSegments[pointCount] = segment;
         previousSourceSegment = sourceSegments[index];
-        coordinateBreak = false;
+        previousDistanceSegment = distanceSegments[index];
       }
       pointCount += 1;
       if (x < minX) {
@@ -2174,10 +2154,8 @@ function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityN
     return cache.distanceValues;
   }
 
-  const primaryDistance = getActivityStreamNumericValues(activity, DataDistance.type, cache);
-  cache.distanceValues = primaryDistance.length > 0
-    ? primaryDistance
-    : getActivityStreamNumericValues(activity, DataStrydDistance.type, cache);
+  const distanceStream = getEventChartDistanceStream(activity, cache.streamByType);
+  cache.distanceValues = distanceStream ? getStreamNumericValues(distanceStream, cache) : [];
   return cache.distanceValues;
 }
 

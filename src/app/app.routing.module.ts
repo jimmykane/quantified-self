@@ -618,15 +618,16 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
-    path: 'tags',
-    loadComponent: () => import('./components/tags/tags-page.component').then(module => module.TagsPageComponent),
+    path: 'activities',
+    loadComponent: () => import('./components/activities/activities-page.component').then(module => module.ActivitiesPageComponent),
     data: {
-      title: 'Tags', animation: 'Tags', preload: true,
-      description: 'Browse saved activity tags and find their activities across your history.',
+      title: 'Activities', animation: 'Activities', preload: true,
+      description: 'Explore your activity history with search, tags, date range and sport filters.',
       robots: 'noindex, follow',
     },
     canMatch: [authGuard, onboardingGuard],
   },
+  { path: 'tags', pathMatch: 'full', redirectTo: 'activities' },
   {
     path: 'calendar/day/:date',
     loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')

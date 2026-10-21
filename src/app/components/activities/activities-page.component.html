@@ -1,0 +1,107 @@
+<section class="qs-workspace-page activities-page">
+  <app-page-header title="Activities" leadingIcon="list_alt" subtitle="Find activities by date, sport or tag.">
+    <button pageHeaderTitleActions mat-icon-button aria-label="Refresh activities" (click)="refresh()"
+      [disabled]="loading() || catalogLoading() || !user()">
+      @if (loading() || catalogLoading()) { <mat-spinner diameter="20" aria-label="Refreshing activities"></mat-spinner> }
+      @else { <mat-icon>refresh</mat-icon> }
+    </button>
+  </app-page-header>
+
+  @if (user()) {
+    @if (loading() || historyError()) {
+      <div class="activity-history-status" role="status" aria-live="polite">
+        @if (loading()) { <mat-spinner diameter="18" aria-label="Loading activities"></mat-spinner><span>Loading activities…</span> }
+        @else {
+          <span role="alert">Activities couldn’t be loaded. Try again.</span>
+          <button mat-button (click)="retryActivities()">Try again</button>
+        }
+      </div>
+    }
+    @if (catalogError()) {
+      <div class="activity-catalog-error" role="alert">
+        <span>Saved tags couldn’t be loaded.</span>
+        <button mat-button (click)="retryCatalog()" [disabled]="catalogLoading()">Try again</button>
+      </div>
+    }
+    @for (tableUser of tableUsers(); track tableUser.uid) {
+      <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true" presentation="dashboard"
+        [isLoading]="loading()" [showTagFilter]="false"
+        [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
+        [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
+        (eventsChange)="onEventsChange($event)">
+        <div event-table-filters class="activity-explorer-filters">
+          <app-activity-filter-picker label="Tags" allLabel="All tags" searchLabel="Search tags"
+            [options]="tagOptions()" [selectedValues]="tagFilterValues()" [loading]="catalogLoading()"
+            (selectionChange)="selectTagFilters($event)"></app-activity-filter-picker>
+          @if (showCustomRange()) {
+            <mat-form-field class="activity-custom-date-field" [formGroup]="customDateForm" appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Custom dates</mat-label>
+              <mat-date-range-input [rangePicker]="customPicker" (click)="customPicker.open()" (keydown.enter)="applyCustomRange()">
+                <input #customStartDate matStartDate formControlName="start" placeholder="Start date" aria-label="Start date">
+                <input matEndDate formControlName="end" placeholder="End date" aria-label="End date">
+              </mat-date-range-input>
+              <mat-datepicker-toggle class="activity-custom-calendar-toggle" matIconSuffix [for]="customPicker"></mat-datepicker-toggle>
+              <button mat-icon-button matIconSuffix type="button" aria-label="Clear custom dates and show date presets"
+                matTooltip="Show date presets" (click)="clearCustomRange()"><mat-icon>close</mat-icon></button>
+              <mat-date-range-picker #customPicker (opened)="onCustomPickerOpened()">
+                <mat-date-range-picker-actions>
+                  <button mat-button matDateRangePickerCancel (click)="cancelCustomRange()">Cancel</button>
+                  <button mat-flat-button matDateRangePickerApply (click)="applyCustomRange()">Apply</button>
+                </mat-date-range-picker-actions>
+              </mat-date-range-picker>
+              <mat-error>Enter valid dates with the end on or after the start.</mat-error>
+            </mat-form-field>
+          } @else {
+            <mat-form-field class="activity-date-filter" appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Date range</mat-label>
+              <mat-select #datePresets [value]="period()" (selectionChange)="selectPeriod($event.value, $event.source)" aria-label="Date range">
+                @for (period of periods; track period.value) {
+                  <mat-option [value]="period.value">
+                    @if (period.value === 'all') { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
+                    {{ period.label }}
+                  </mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports"
+            [options]="sportOptions()" [selectedValues]="selectedSports()" [shortcuts]="sportShortcuts()"
+            (selectionChange)="selectSports($event)"></app-activity-filter-picker>
+          @if (hasMergedEvents()) {
+            <app-merged-activities-toggle [checked]="includeMergedEvents()"
+              (checkedChange)="selectMergedEvents($event)"></app-merged-activities-toggle>
+          }
+        </div>
+        @if (hasFilters()) {
+          <div event-table-active-filters class="activity-active-filters">
+            <mat-chip-set aria-label="Active activity filters">
+              @for (tag of selectedTagNames(); track tag.toLowerCase()) {
+                <mat-chip (removed)="removeTag(tag)"><mat-icon matChipAvatar>sell</mat-icon>{{ tag }}
+                  <button matChipRemove [attr.aria-label]="'Remove tag ' + tag"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+              @if (untagged()) {
+                <mat-chip (removed)="selectTags(selectedTags())"><mat-icon matChipAvatar>label_off</mat-icon>Untagged
+                  <button matChipRemove aria-label="Remove Untagged filter"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+              @if (period() !== defaultPeriod) {
+                <mat-chip (removed)="selectPeriod(defaultPeriod)">
+                  @if (period() === 'custom') { {{ customDates()?.startDate | date:'mediumDate' }} – {{ customDates()?.endDate | date:'mediumDate' }} }
+                  @else { {{ periodLabel() }} }
+                  <button matChipRemove aria-label="Remove date filter"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+              @for (sport of selectedSports(); track sport) {
+                <mat-chip (removed)="removeSport(sport)"><app-activity-type-icon matChipAvatar [activityType]="sport" size="18px"></app-activity-type-icon>{{ sport }}
+                  <button matChipRemove [attr.aria-label]="'Remove sport ' + sport"><mat-icon>cancel</mat-icon></button>
+                </mat-chip>
+              }
+            </mat-chip-set>
+            <button mat-button (click)="clearFilters()">Clear filters</button>
+          </div>
+        }
+      </app-event-table>
+    }
+  }
+</section>

@@ -239,6 +239,16 @@ describe('durable history coordinator', () => {
     await expect(retry({ auth: { uid: 'owner' }, data: { runId: run.id } })).rejects.toMatchObject({ code: 'failed-precondition' });
     expect(mocks.rows.has('workoutQueue/failed')).toBe(false); expect(saved().processed).toBe(true);
   });
+  it('does not let an older failed scope overwrite an active manual run on the same connection', async () => {
+    run.processed = true; run.steps[0].status = 'failed'; run.steps[0].done = true;
+    run.steps[0].capability.cooldownGroup = 'routes';
+    const meta = mocks.rows.get(`users/owner/meta/${run.serviceName}`);
+    meta.connectionHistoryImport = { runId: 'new-manual', active: true };
+    const retry = retryConnectionHistoryImport as unknown as (request: any) => Promise<unknown>;
+    await expect(retry({ auth: { uid: 'owner' }, data: { runId: run.id } })).rejects.toMatchObject({ code: 'already-exists' });
+    expect(saved().processed).toBe(true);
+    expect(meta.connectionHistoryImport).toEqual({ runId: 'new-manual', active: true });
+  });
   it('retains route children admitted before a dispatch failure for bounded parent recovery', async () => {
     run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, importRouteHistory: true, rangePreset: '30_days', runId,
       tokenPath: 'suuntoAppAccessTokens/owner/tokens/account', rootPath: 'suuntoAppAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
@@ -283,7 +293,7 @@ describe('durable history coordinator', () => {
     mocks.rows.set('failed_jobs/failed', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', queueRevision: 'old', error: 'failed', expireAt: { seconds: 1 } });
     const retry = retryConnectionHistoryImport as unknown as (request: any) => Promise<unknown>;
     await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
-    expect(mocks.rows.get('workoutQueue/failed')).toMatchObject({ processed: false, retryCount: 0 });
+    expect(mocks.rows.get('workoutQueue/failed')).toMatchObject({ processed: false, retryCount: 0, dispatchedToCloudTask: null });
     expect(mocks.rows.get('workoutQueue/failed').queueRevision).not.toBe('old');
     expect(mocks.rows.get('workoutQueue/failed').expireAt).toMatchObject({ _seconds: Math.floor(now / 1000) + 7 * 86400 });
     expect(mocks.rows.has('failed_jobs/failed')).toBe(false);

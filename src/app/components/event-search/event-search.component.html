@@ -1,6 +1,55 @@
 @if (searchFormGroup) {
 <form [formGroup]="searchFormGroup" autocomplete="off">
   <app-loading-overlay class="search-overlay" [isLoading]="isLoading" [showSkeleton]="false" height="auto">
+    @if (toolbarRangeLayout) {
+    <div class="toolbar-controls">
+      @if (showDatePicker) {
+        @if (customRangeOpen || selectedDateRange === dateRanges.custom) {
+          <mat-form-field class="toolbar-custom-date-field" appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Custom dates</mat-label>
+            <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="toolbarPicker"
+              (click)="toolbarPicker.open()" (keydown.enter)="applyToolbarCustomRange()">
+              <input #customStartDate matStartDate [formControl]="startDateControl" placeholder="Start date" aria-label="Start date">
+              <input matEndDate [formControl]="endDateControl" placeholder="End date" aria-label="End date">
+            </mat-date-range-input>
+            <mat-datepicker-toggle class="toolbar-calendar-toggle" matIconSuffix [for]="toolbarPicker"></mat-datepicker-toggle>
+            <button mat-icon-button matIconSuffix type="button" aria-label="Clear custom dates and show date presets"
+              matTooltip="Show date presets" (click)="clearToolbarCustomRange()"><mat-icon>close</mat-icon></button>
+            <mat-date-range-picker #toolbarPicker (opened)="onToolbarPickerOpened()">
+              <mat-date-range-picker-actions>
+                <button mat-button matDateRangePickerCancel (click)="cancelToolbarCustomRange()">Cancel</button>
+                <button mat-flat-button matDateRangePickerApply (click)="applyToolbarCustomRange()">Apply</button>
+              </mat-date-range-picker-actions>
+            </mat-date-range-picker>
+            <mat-error>Enter valid dates, up to 5 years, with the end on or after the start.</mat-error>
+          </mat-form-field>
+        } @else {
+          <mat-form-field class="toolbar-date-filter" appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Date range</mat-label>
+            <mat-select #datePresets [value]="selectedDateRange" aria-label="Date range"
+              (selectionChange)="onToolbarDateRangeChange($event.value, $event.source)">
+              @for (option of toolbarDateRangeOptions; track option.value) {
+                <mat-option [value]="option.value">
+                  @if (option.value === dateRanges.all) { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
+                  {{ option.label }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+      }
+      @if (showActivityTypePicker) {
+        <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports"
+          [options]="toolbarSportOptions" [selectedValues]="toolbarSelectedSports" [shortcuts]="toolbarSportShortcuts"
+          (selectionChange)="onToolbarSportsChange($event)"></app-activity-filter-picker>
+      }
+      @if (showMergedEventsToggle) {
+        <app-merged-activities-toggle [checked]="includeMergedEvents" [disabled]="mergedEventsToggleDisabled"
+          [label]="mergedEventsToggleLabel" [hint]="mergedEventsToggleHint"
+          (checkedChange)="onMergedEventsChange($event)"></app-merged-activities-toggle>
+      }
+    </div>
+    } @else {
     <section class="filters-row"
       [ngStyle]="{display: showDatePicker || showActivityTypePicker || showMergedEventsToggle ? 'flex' : 'none' }">
       @if (searchFormGroup) {
@@ -43,50 +92,6 @@
       }
     </section>
     <section class="button-groups">
-      @if (toolbarRangeLayout) {
-      @if (primaryToolbarDateRangeOptions.length) {
-      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
-        class="toolbar-range-group" (change)="dateToggleChange($event)">
-        @for (option of primaryToolbarDateRangeOptions; track option.value) {
-        <mat-button-toggle [value]="option.value" [attr.aria-label]="option.ariaLabel">
-          {{ option.label }}
-        </mat-button-toggle>
-        }
-      </mat-button-toggle-group>
-      }
-      @if (secondaryToolbarDateRangeOptions.length) {
-      <button mat-button type="button" class="secondary-ranges-button" [matMenuTriggerFor]="secondaryRangeMenu"
-        aria-label="More date shortcuts">
-        <span>{{ secondaryDateRangeButtonLabel }}</span>
-        <mat-icon>expand_more</mat-icon>
-      </button>
-      <mat-menu #secondaryRangeMenu="matMenu" class="qs-menu-panel" xPosition="before" [overlapTrigger]="false">
-        @for (option of secondaryToolbarDateRangeOptions; track option.value) {
-        <button mat-menu-item type="button" [attr.aria-label]="option.ariaLabel"
-          [attr.aria-current]="selectedDateRange === option.value ? 'true' : null"
-          (click)="onSecondaryDateRangeSelection(option.value)">
-          @if (selectedDateRange === option.value) {
-          <mat-icon>check</mat-icon>
-          }
-          <span>{{ option.label }}</span>
-        </button>
-        }
-      </mat-menu>
-      }
-      @if (showMergedEventsToggle) {
-      <div class="merge-toggle-group">
-        <button mat-button type="button" class="merged-events-button"
-          [attr.aria-label]="mergedEventsToggleLabel" [attr.aria-pressed]="includeMergedEvents"
-          [disabled]="mergedEventsToggleDisabled" (click)="onMergedEventsChange(!includeMergedEvents)">
-          <mat-icon aria-hidden="true">{{ includeMergedEvents ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
-          <span>Merged</span>
-        </button>
-        @if (mergedEventsToggleDisabled && !includeMergedEvents) {
-        <span class="merge-toggle-hint">{{ mergedEventsToggleHint }}</span>
-        }
-      </div>
-      }
-      } @else {
       <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
         (change)="dateToggleChange($event)">
         @if (dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1) {
@@ -158,8 +163,8 @@
         }
       </div>
       }
-      }
     </section>
+    }
   </app-loading-overlay>
 </form>
 }

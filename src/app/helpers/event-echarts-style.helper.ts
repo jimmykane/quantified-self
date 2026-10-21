@@ -11,6 +11,7 @@ import {
   DataDepth,
   DataDepthFeet,
   DataDistance,
+  DynamicDataLoader,
   DataDuration,
   DataEPOC,
   DataEffortPaceAvg,
@@ -88,6 +89,14 @@ import {
 import { isInverseMetric } from '@shared/metric-semantics';
 import { AppColors } from '../services/color/app.colors';
 import { AppDataColors } from '../services/color/app.data.colors';
+
+/** All canonical distance subclasses inherit value-dependent m/Km formatting; fixed-unit variants override it. */
+export function hasEventChartValueDependentUnit(streamType: string): boolean {
+  try {
+    return DynamicDataLoader.getDataClassFromDataType(streamType).prototype.getDisplayUnit
+      === DataDistance.prototype.getDisplayUnit;
+  } catch { return false; }
+}
 
 const ALTITUDE_GROUP = new Set<string>([
   DataAltitude.type,

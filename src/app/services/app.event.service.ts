@@ -1,6 +1,7 @@
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
+import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, applyActivityAscentCorrection, carryActivityAscentCorrection, type AscentCorrectedActivity } from '@shared/activity-ascent';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromServer, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath, runTransaction } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
@@ -279,6 +280,8 @@ export class AppEventService implements OnDestroy {
     delete sanitizedPayload.userID;
     delete sanitizedPayload.eventStartDate;
     delete sanitizedPayload.sourceActivityKey;
+    delete sanitizedPayload.ascentCorrection;
+    delete sanitizedPayload.descentCorrection;
     return sanitizedPayload;
   }
 
@@ -506,7 +509,12 @@ export class AppEventService implements OnDestroy {
             }
           }
         }
-        activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
+        const activity = EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id);
+        for (const metric of ACTIVITY_ELEVATION_METRICS) {
+          const { field } = activityElevationMetric(metric);
+          applyActivityAscentCorrection(activity as AscentCorrectedActivity, sanitizedJson[field], false, metric);
+        }
+        activitiesArray.push(activity);
       } catch (e) {
         this.logger.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
       }
@@ -1241,6 +1249,7 @@ export class AppEventService implements OnDestroy {
    */
   private applyUserActivityOverrides(existingActivity: ActivityInterface, parsedActivity: ActivityInterface): void {
     if (!existingActivity || !parsedActivity) return;
+    carryActivityAscentCorrection(existingActivity as AscentCorrectedActivity, parsedActivity as AscentCorrectedActivity);
 
     const existingCreatorName = getActivityCreatorNameCarryover(
       existingActivity.creator?.name,

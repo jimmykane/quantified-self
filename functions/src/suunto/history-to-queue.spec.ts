@@ -6,6 +6,8 @@ import * as history from '../history';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
+import { startManualActivityHistory } from '../connection-history/manual-activity';
+vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 // Mock firebase-functions/v2/https
 vi.mock('firebase-functions/v2/https', async (importOriginal) => {
@@ -52,9 +54,29 @@ describe('Suunto History to Queue', () => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
+        vi.mocked(startManualActivityHistory).mockReset();
     });
 
     describe('addSuuntoAppHistoryToQueue', () => {
+        it('accepts a background request without scanning provider history in the callable', async () => {
+            const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
+            vi.mocked(startManualActivityHistory).mockResolvedValue(projection);
+            const request = createMockRequest({ data: { startDate: '2026-10-01T21:00:00Z', endDate: '2026-10-02T20:59:59.999Z', background: true } });
+            await expect(addSuuntoAppHistoryToQueue(request as any)).resolves.toEqual({ result: 'History import accepted', historyImport: projection });
+            expect(startManualActivityHistory).toHaveBeenCalledWith('testUserID', SERVICE_NAME, new Date(request.data.startDate), new Date(request.data.endDate));
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
+        it('retains legacy admission when the connection cannot be safely bound to a coordinator', async () => {
+            vi.mocked(startManualActivityHistory).mockResolvedValue(null);
+            await addSuuntoAppHistoryToQueue(createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02', background: true } }) as any);
+            expect(history.addHistoryToQueue).toHaveBeenCalledOnce();
+        });
+        it('preserves a background admission cooldown error without falling back to a provider scan', async () => {
+            const error = new HttpsError('permission-denied', 'History import is not allowed until 2026-11-01T00:00:00.000Z');
+            vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+            await expect(addSuuntoAppHistoryToQueue(createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02', background: true } }) as any)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
         it('should add history to queue and return success', async () => {
             const recentDate = new Date();
             recentDate.setDate(recentDate.getDate() - 7);

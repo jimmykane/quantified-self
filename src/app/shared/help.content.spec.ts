@@ -16,6 +16,11 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains independent ascent/descent correction, reviewed reset and source preservation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',
+      'without replacing your correction', 'not the altitude chart, laps, original file']) expect(copy).toContain(phrase);
+  });
   it('explains browser verification cooldowns and recovery without resetting account data', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     expect(copy).toContain('Temporary verification service errors retry automatically after short pauses');
@@ -95,12 +100,21 @@ describe('help.content', () => {
     expect(content).toContain('**Import existing routes** remains available separately');
     expect(content).not.toContain('Saved-route libraries remain separate manual actions');
   });
-  it('explains tag-library selection, partial history, saved empty tags and refresh', () => {
+  it('explains the activity explorer, full shared table, partial history and saved filters', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',
-      'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
-      'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
-      'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
+    for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
+      'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
+      '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
+      'Searching keeps checked choices selected', '**Clear selection**',
+      '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
+      '**Next** and **Previous**', 'matching total within that date range', 'do not start new event queries', 'shared table preferences',
+      'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
+      '**All dates** is the last option and shows a warning', '**Keep current range** to cancel without reloading',
+      'Saved All dates links also require confirmation', '**Custom dates**', 'Both dates are included',
+      'replaces the date preset selector in place', 'The field shows your selected dates', '**×** clear button',
+      'Clearing an unapplied custom range keeps the previous preset',
+      'only applying a valid changed range starts a new date-range query', 'Custom dates stay fixed as days pass',
+      'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });
   it('explains unavailable pool timing without losing rests or inventing replacements', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');
@@ -2438,6 +2452,10 @@ describe('help.content', () => {
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Manual **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing');
+    expect(serviceConnectionsSection?.content).toContain('one page at a time');
+    expect(serviceConnectionsSection?.content).toContain('Acceptance means the request is saved, not that every activity has arrived');
+    expect(serviceConnectionsSection?.content).toContain('wait for queued activities before reporting completion');
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
     expect(serviceConnectionsSection?.content).toContain('Services shows **Import already running** and prevents another request');
     expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the import');

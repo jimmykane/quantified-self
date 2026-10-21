@@ -19,24 +19,21 @@
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         }
         @if (showTagFilter) {
-        <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
-          <mat-label>Tags</mat-label>
-          <mat-select [value]="tagFilter"
-            [disabled]="tagFilterOptions.length === 0 && !canLoadTagCatalog"
-            (openedChange)="onTagFilterOpened($event)" (selectionChange)="updateTagFilter($event.value)">
-            <mat-option value="">All tags</mat-option>
-            @if (tagCatalogIsLoading && tagFilterOptions.length === 0) {
-            <mat-option disabled>Loading tags…</mat-option>
-            }
-            @for (tag of tagFilterOptions; track tag) {
-            <mat-option [value]="tag">{{ tag }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+        <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
+          [options]="tagPickerOptions" [selectedValues]="tagPickerValues" [loading]="tagCatalogIsLoading"
+          (opened)="onTagFilterOpened(true)" (selectionChange)="updateTagFilters($event)"></app-activity-filter-picker>
         }
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
+      @if (canManageEvents && !isLibraryPresentation) {
+        <div class="table-toolbar-actions">
+          <app-event-table-actions [selectedDataTypes]="selectedColumns" icon="tune"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        </div>
+      }
     </div>
+
+    <ng-content select="[event-table-active-filters]"></ng-content>
 
     @if (canManageEvents && selection.selected.length > 0) {
       <div class="table-selection-toolbar" aria-live="polite">
@@ -129,7 +126,7 @@
     [hasError]="!isLoading && this.events && this.events.length === 0" [allowErrorPassthrough]="true"
     [errorMessage]="emptyMessage" [errorHint]="emptyHint"
     [errorIcon]="'directions_run'" [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="12px">
-    <div class="table-wrapper qs-scrollbar">
+    <div class="table-wrapper qs-scrollbar" tabindex="0" role="region" aria-label="Activity table">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
         [matSortDirection]="tableSortDirection" matSortDisableClear>
         @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
@@ -143,12 +140,7 @@
           </th>
           }
           @if (isLast && showRowActions) {
-          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="isLibraryPresentation || !canManageEvents ? 'Activity actions' : null">
-            @if (canManageEvents && !isLibraryPresentation) {
-            <app-event-table-actions [selectedDataTypes]="selectedColumns"
-              (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
-            }
-          </th>
+          <th mat-header-cell *matHeaderCellDef aria-label="Activity actions"></th>
           }
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
@@ -187,7 +179,7 @@
               @if (user) {
               <app-event-actions [user]="user" [event]="$any(row.Event)"
                 [showDownloadOriginal]="true" [navigateAfterDelete]="false"
-                (eventDeleted)="removeDeletedEvent($event)"></app-event-actions>
+                (eventDeleted)="removeDeletedEvent($event)" (ascentChanged)="refreshSavedAscent($event)"></app-event-actions>
               }
             </span>
             }
@@ -205,6 +197,9 @@
               }
               <span class="activity-type-text">{{ row[column] }}</span>
             </span>
+            @if (hideGeneratedNames && row.Name) {
+              <span class="activity-custom-name description-text" [matTooltip]="row.Name">{{ row.Name }}</span>
+            }
             }
             @if (column === 'Shared') {
             <span class="shared-state-cell" [class.shared-state-cell--empty]="!row[column]"
@@ -283,7 +278,7 @@
         }
 
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-header-row class="event-table-header" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"
           [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
           [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
@@ -293,7 +288,7 @@
         <tr class="mat-row activity-table-no-data-row" *matNoDataRow
           [class.activity-table-no-data-row--hidden]="!isLoading && events?.length === 0">
           <td class="mat-cell" [attr.colspan]="displayedColumns.length">
-            <span *ngIf="searchTerm">No activities match "{{searchTerm}}"</span>
+            <span *ngIf="searchTerm && !isLoading">No activities match "{{searchTerm}}"</span>
             <span *ngIf="!searchTerm && !isLoading">No activities found</span>
           </td>
         </tr>
@@ -301,7 +296,7 @@
     </div>
   </app-loading-overlay>
 
-  <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
+  <mat-paginator (page)="pageChanges($event)" [length]="data.data.length"
     [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
     [pageSizeOptions]="isLibraryPresentation ? [5, 10, 25, 50, 100, 250] : [10, 25, 50, 100, 250]"></mat-paginator>
 </div>

@@ -148,6 +148,15 @@ failures or create/delete temporary test policies without exact separate approva
 
 ## Diagnosis and release evidence
 
+Suunto/COROS automatic connection-history activity batches can promptly dispatch their own bounded children using
+the same guarded workout path with a 60-second history-only spread. Scheduled recovery and manual bulk history
+retain the shared 15-minute spread. Coverage is **covered/unchanged**: native task depth/delay and
+committed worker outcomes still apply; failed prompt enqueues leave durable rows for the existing scheduled dispatcher
+and its eligible-backlog/recovery observations. Service-only fallback warnings are diagnostic, not the versioned
+scheduled-dispatch failure metric or successful ingestion. No new monitoring resources or labels are needed. Manual
+bulk activity history, Wahoo/Garmin dispatch, retry policy and worker concurrency are unchanged. See
+[connection-history coordination](connection-history-import.md#coordination-persistence-and-retries) for release scope.
+
 Original-file checksum coverage is **unchanged** at the monitoring boundary. Explicit CRC32C upload
 validation rejects corrupted bytes through the same Storage-error path already handled by activity
 workers: retry/failure attempts and any newly committed dead letters retain their fixed provider,
