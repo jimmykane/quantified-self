@@ -1,10 +1,27 @@
 # Firestore stats index allowlist
 
-`firestore.indexes.json` declares the **final, phase-two state**: `stats` is exempt from automatic indexing on both
-`events` and `activities`. Explicit child configurations preserve the audited query and compatibility fields.
-Do not deploy that complete file as the first migration step. The two phases below are separate, manually approved
-cloud changes; merging this configuration does not authorize either phase. No runtime, schema, data, Rules, provider,
-MCP or Sports Lib change is needed.
+Committed rollout stage: **prepare**.
+
+`firestore.indexes.json` always declares the **current deployable stage**, pinned by
+`tools/firestore-stats-indexes.stage.json`. Preparation explicitly retains the 11 audited children and leaves automatic
+indexing enabled on both `stats` parents. Parent exemptions are introduced in separate, gated follow-up PRs, one
+collection at a time. Routine, separately approved index deployments can therefore continue during preparation and
+observation; they do not pick up a future exemption prematurely. Merging any PR does not authorize a cloud change.
+No runtime, schema, data, Rules, provider, MCP or Sports Lib change is needed.
+
+The stats-only final policy is covered by `tools/fixtures/firestore-stats-indexes-final.json`, which is **not referenced
+by Firebase deployment configuration**. It deliberately contains no composites or unrelated overrides that could become
+stale. Tests compose each rollout stage with the current canonical composites and unrelated settings.
+
+| PR / stage marker | Deployable parent exemptions | Merge gate |
+| --- | --- | --- |
+| Preparation / `prepare` | Neither | Reviewed child modes and passing tests |
+| Events follow-up / `events-exempt` | `events.stats` only | Preparation deployed; all explicit children and current composites READY; fresh preflight and smoke checks |
+| Activities follow-up / `both-exempt` | Both | Events enforcement completed; observation and smoke checks passed; fresh preflight and separate approval |
+
+Keep the two enforcement PRs in draft and stacked on their preceding PR until its merge. After each predecessor merges,
+retarget/rebase its successor onto the latest `develop`, retaining only that successor's parent/stage change. Reconcile
+intervening index additions before preflight. Never merge the activities exemption during the events observation window.
 
 ## Query audit
 
@@ -37,11 +54,14 @@ stats will require an intentional index addition after enforcement.
 
 Eight representative production **planning-only** checks succeeded: Power Curve eligibility, standalone activity type,
 Weight, VO2 Max, event date range, comparison list, event-to-activity lookup and MCP activity ranking. No workout document
-results were retrieved or saved. This is a baseline; the final exemption state still requires real staging verification.
+results were retrieved or saved. This is a baseline; the final exemption state still requires isolated real-Firestore verification.
 
 ## Index contract
 
-The explicit policy lives in `tools/firestore-stats-indexes.mjs` and is checked against `firestore.indexes.json` in CI.
+The explicit child policy lives in `tools/firestore-stats-indexes.mjs` and is checked against `firestore.indexes.json` in CI.
+The stage marker must match the exact set of committed parent exemptions; unknown stages, activities-first exemptions
+and stage/config mismatches fail CI. The preparation CLI refuses both enforcement phases, and the events-only CLI
+refuses activities enforcement. Advancing the marker and its parent exemption requires the corresponding follow-up PR.
 
 | Collection | Child fields | Collection-scope modes |
 | --- | --- | --- |
@@ -52,12 +72,15 @@ The explicit policy lives in `tools/firestore-stats-indexes.mjs` and is checked 
 Array modes deliberately preserve the existing defaults on the legacy allowlisted arrays, including PowerCurve.
 Further reduction of those modes is a separate query/compatibility review. Numeric fields need no array mode.
 No collection-group indexes are introduced. Existing composites remain authoritative for their query combinations.
-The parent exemption also removes whole-map `stats` indexing, not just individual subfield indexes. R-R, future and
-display-only stats inherit no automatic indexes; their persisted values and canonical display remain unchanged.
+Once applied, each parent exemption also removes whole-map `stats` indexing, not just individual subfield indexes.
+R-R, future and display-only stats inherit no automatic indexes on that collection only after its enforcement step;
+preparation leaves them indexed. Their persisted values and canonical display remain unchanged in every stage.
 
 Adding a new query on a stat requires an allowlist/mode and composite review in the same PR. Do not automatically
 derive this allowlist from Sports Lib's DataStore: most metrics are readable without being queryable in Firestore.
-The guard rejects unreviewed stats overrides and composites, missing parents, missing modes and duplicate overrides.
+The guard rejects unreviewed stats overrides and composites, unexpected/missing stage parents, missing modes and
+duplicate overrides. Unrelated index additions remain deployable; fresh live composite metadata must match the current
+canonical file before enforcing a parent. A building or missing new composite postpones enforcement, not its deployment.
 
 App Help was reviewed: this is an internal storage/index policy with no user-visible behavior change, so Help needs no
 edit. MCP/Assistant impact is likewise limited to preserving existing query support; projections, catalogs, wire
@@ -77,8 +100,9 @@ below instead of a broad `firebase deploy --only firestore` that can affect Rule
 
 ### Phase 1: preserve the child indexes
 
-1. In a real non-production Firestore database, verify the baseline, apply the explicit child plans, then apply the
-   parent exemptions using the phase-two procedure. Seed only synthetic fixtures: missing stats, valid zero values,
+1. Merge only the preparation PR. In a real non-production Firestore database, verify the baseline, apply the explicit
+   child plans, then use the respective reviewed enforcement branch for each parent exemption, following the phase-two
+   procedure. Seed only synthetic fixtures: missing stats, valid zero values,
    scalar/array stats, normal/multisport events and benchmark pairs. Smoke-test authenticated event/details reads,
    dashboard, Power Curve eligibility, Weight/VO2 Health history, comparisons, Calendar, Tracks, tags, MCP metrics and
    rankings; compare selected fields, values, pagination and results before/after. Include supported older clients.
@@ -101,10 +125,13 @@ below instead of a broad `firebase deploy --only firestore` that can affect Rule
 3. Wait for every operation to complete and every child index to be READY. Verify each child has an explicit
    configuration (`usesAncestorConfig` false or omitted by protobuf), not just an inherited READY index. Re-run the
    production smoke/planner matrix. Preserve the result and timestamp in the deployment record outside repository docs.
+   Routine index deployments remain available while the enforcement drafts wait. The canonical preparation file has
+   neither parent exemption, so deploying a new unrelated index does not start phase two.
 
 ### Phase 2: remove automatic stats indexing
 
-1. Capture fresh read-only metadata in temporary local files, using the exact approved target:
+1. Check out the events follow-up branch (`events-exempt`). Capture fresh read-only metadata in temporary local files,
+   using the exact approved target. Review the fresh plan and smoke evidence before marking its PR ready and merging:
 
    ```sh
    gcloud firestore indexes fields list --project=PROJECT_ID --database='(default)' --format=json > /tmp/qs-stats-fields.json
@@ -118,15 +145,21 @@ below instead of a broad `firebase deploy --only firestore` that can affect Rule
    against a disabled parent.
    Any drift is a stop condition: re-audit instead of forcing the plan. It does not certify snapshot freshness or
    historical client compatibility; those remain operator gates.
-2. After the separate phase-two approval and staging/smoke gates, review and manually run the single printed command:
+2. After merging only the events follow-up and obtaining the separate phase-two approval and isolated-database/smoke gates,
+   recapture metadata and regenerate the plan on the merged revision. Review and manually run the single printed command:
    it disables automatic indexing on **events.stats only**. Do not deploy the entire final config in place of these phases.
    Wait for completion; inspect inherited/unindexed sample stats and the still-explicit allowlisted children. Re-run
    the planner/authenticated smoke matrix and watch missing-index `FAILED_PRECONDITION` errors and query latency before
-   continuing. Query Explain uses IAM, so it does not replace authenticated browser/Rules coverage.
-3. Capture both metadata files again. Run the same helper with `enforce-activities`; after the same checks and approved
-   verification window, review/run that one parent command. Verify both final parent exemptions and all 22 composites.
-   Once the completed production state matches the reviewed canonical file, ordinary index deployments may use it.
-   Current Hosting and Functions workflows do not deploy Firestore indexes; keep that boundary intact.
+   continuing. Keep the activities follow-up in draft during observation. Unrelated index deployments can continue from
+   the events-only canonical file, which cannot exempt activities. Query Explain uses IAM, so it does not replace
+   authenticated browser/Rules coverage.
+3. After the observation gate passes, update the activities follow-up onto the current base (`both-exempt`). Capture
+   both metadata files again and run the helper with `enforce-activities`. In addition to child/composite readiness, it
+   requires the explicit events exemption to have completed. Review the evidence, then merge this follow-up only after
+   separate approval. On the merged revision recapture metadata, regenerate and review/run that one parent command.
+   Verify both final parent exemptions and all current event/activity composites (22 at the original audit).
+   Current Hosting and Functions workflows do not deploy Firestore indexes; keep that boundary intact. Avoid concurrent
+   mutation commands against the same index/field while applying a step; no rollout-wide index deployment freeze is needed.
 
 No field values or documents are deleted by this migration. Firestore removes existing automatic index entries through
 managed background operations; no document rewrite/backfill/delete job is needed. Wait for operation completion and
@@ -141,18 +174,23 @@ gcloud firestore indexes composite list --project=PROJECT_ID --database='(defaul
 node tools/firestore-stats-indexes.mjs rollback PROJECT_ID '(default)' /tmp/qs-stats-fields.json /tmp/qs-stats-composites.json > /tmp/qs-stats-rollback.json
 ```
 
-After separate rollback approval, review/run the two parent-only `--clear-exemption` commands, or just the affected
-collection's command. The rollback gate also checks ancestor/default and composite drift, so clearing an exemption
+Before rollback, prepare a matching configuration PR: remove the affected parent exemption and move the stage marker
+back to `events-exempt` (activities-only rollback) or `prepare` (both parents). Rolling back events while activities stays
+exempt is not a supported stage; restore activities first. Merge the rollback configuration before resuming ordinary
+index deployments so they cannot reapply the exemption. Then, after separate rollback approval, review/run the two
+parent-only `--clear-exemption` commands, or just the affected collection's command. The rollback gate also checks
+ancestor/default and composite drift, so clearing an exemption
 cannot silently restore a different inheritance policy. Keep all explicit children and composites. Restoring inherited indexing may require background
 rebuilds before affected queries recover; rollback is not guaranteed to be immediate. If phase one failed, stop before
 disabling any parent and fix the specific child configuration. Do not clear child exemptions while a parent is disabled.
-Reconcile the canonical configuration with any approved rollback before another index deployment.
+Keep all deployment operators on the reconciled canonical revision.
 
 Run `npm run test:stats-indexes`, `npm run test:workflows`, and
 `npm --prefix functions test -- src/firestore-indexes.spec.ts` after policy/configuration edits. Test the affected query
 services as well when a query shape changes. Tests cover inheritance policy, quoted field paths, all array modes,
-unknown/R-R stats, additive preparation, wildcard/parent drift, incomplete/failed builds, inherited child configurations, cross-project snapshots,
-separate parent phases, rollback and the print-only CLI. Real staging validation remains a required deployment gate.
+unknown/R-R stats, additive preparation, stage/config mismatch, unwired final fixtures, unrelated index additions,
+wildcard/parent drift, incomplete/failed builds, inherited child configurations, cross-project snapshots, ordered parent
+phases, rollback and the print-only CLI. Real non-production Firestore validation remains a required deployment gate.
 
 References: [map inheritance and composite independence](https://firebase.google.com/docs/firestore/query-data/index-overview#automatic_index_exemptions),
 [field configuration and index removal](https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.collectionGroups.fields),

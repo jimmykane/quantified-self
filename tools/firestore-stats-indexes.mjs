@@ -6,6 +6,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const collectionScope = mode => ({ ...mode, queryScope: 'COLLECTION' });
 const ordered = [{ order: 'ASCENDING' }, { order: 'DESCENDING' }].map(collectionScope);
 const array = [...ordered, collectionScope({ arrayConfig: 'CONTAINS' })];
+const stageParents = {
+  prepare: [],
+  'events-exempt': ['events'],
+  'both-exempt': ['events', 'activities'],
+};
+export const statsIndexStage = JSON.parse(readFileSync(resolve(root, 'tools/firestore-stats-indexes.stage.json'), 'utf8')).stage;
 
 // Query dependencies and conservative legacy compatibility, not a metric catalog.
 // See docs/firestore-stats-indexes.md before changing this list or its modes.
@@ -40,11 +46,12 @@ function apiModes(indexes, fieldPath) {
   return modes(indexes.map(index => ({ ...index.fields[0], queryScope: index.queryScope })));
 }
 
-export function validateStatsIndexConfig(config) {
+export function validateStatsIndexConfig(config, stage = statsIndexStage) {
+  requireCondition(typeof stage === 'string' && Object.hasOwn(stageParents, stage), 'Unknown stats index rollout stage');
   requireCondition(!config.fieldOverrides.some(field => isTarget(field.collectionGroup) && field.fieldPath === '*'),
     'Collection wildcard changes non-stats query indexes; re-audit before rollout');
   const expected = [
-    ...['events', 'activities'].map(collectionGroup => ({ collectionGroup, fieldPath: 'stats', indexes: [] })),
+    ...stageParents[stage].map(collectionGroup => ({ collectionGroup, fieldPath: 'stats', indexes: [] })),
     ...statsIndexAllowlist,
   ];
   const actual = config.fieldOverrides.filter(field => isTarget(field.collectionGroup) && isStats(field.fieldPath));
@@ -72,8 +79,8 @@ function compositeKey(index) {
   })) });
 }
 
-function checkBaseline(config, fields, composites, project, database) {
-  validateStatsIndexConfig(config);
+function checkBaseline(config, fields, composites, project, database, stage) {
+  validateStatsIndexConfig(config, stage);
   requireCondition(Array.isArray(fields) && Array.isArray(composites), 'Expected fresh gcloud JSON arrays');
   const prefix = `projects/${project}/databases/${database}/collectionGroups/`;
   requireCondition(fields.every(field => field.name?.startsWith(prefix))
@@ -104,8 +111,8 @@ function checkBaseline(config, fields, composites, project, database) {
   return prefix;
 }
 
-export function checkReadiness(config, fields, composites, project, database) {
-  const prefix = checkBaseline(config, fields, composites, project, database);
+export function checkReadiness(config, fields, composites, project, database, stage = statsIndexStage) {
+  const prefix = checkBaseline(config, fields, composites, project, database, stage);
   for (const field of statsIndexAllowlist) {
     const matches = fields.filter(candidate => candidate.name === `${prefix}${field.collectionGroup}/fields/${field.fieldPath}`);
     const current = matches[0]?.indexConfig;
@@ -115,8 +122,8 @@ export function checkReadiness(config, fields, composites, project, database) {
   }
 }
 
-export function checkPreparation(config, fields, composites, project, database) {
-  const prefix = checkBaseline(config, fields, composites, project, database);
+export function checkPreparation(config, fields, composites, project, database, stage = statsIndexStage) {
+  const prefix = checkBaseline(config, fields, composites, project, database, stage);
   for (const collectionGroup of ['events', 'activities']) {
     const parent = fields.find(field => field.name === `${prefix}${collectionGroup}/fields/stats`);
     requireCondition(!parent || same(apiModes(parent.indexConfig?.indexes || [], 'stats'), modes(array)),
@@ -134,24 +141,38 @@ export function checkPreparation(config, fields, composites, project, database) 
   }
 }
 
-export function createRolloutPlan(config, phase, project, database, snapshots) {
+export function createRolloutPlan(config, phase, project, database, snapshots, stage = statsIndexStage) {
   requireCondition(/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/.test(project || ''), 'An explicit project ID is required');
   requireCondition(database === '(default)' || /^[a-z][a-z0-9-]{2,61}[a-z0-9]$/.test(database || ''), 'An explicit database ID is required');
   requireCondition(['prepare', 'enforce-events', 'enforce-activities', 'rollback'].includes(phase), 'Unknown rollout phase');
-  validateStatsIndexConfig(config);
+  validateStatsIndexConfig(config, stage);
   requireCondition(snapshots, 'Every phase requires fresh field and composite snapshots');
   if (phase.startsWith('enforce-')) {
-    checkReadiness(config, snapshots.fields, snapshots.composites, project, database);
+    const group = phase.slice('enforce-'.length);
+    requireCondition(stageParents[stage].includes(group), `Parent exemption is not enabled by committed rollout stage: ${stage}`);
+    checkReadiness(config, snapshots.fields, snapshots.composites, project, database, stage);
+    const parent = name => snapshots.fields.find(field => field.name ===
+      `projects/${project}/databases/${database}/collectionGroups/${name}/fields/stats`);
+    if (group === 'activities') {
+      const events = parent('events')?.indexConfig;
+      requireCondition(events && events.usesAncestorConfig !== true && !(events.indexes || []).length,
+        'Activities enforcement requires the completed explicit events exemption first');
+    } else if (stage === 'events-exempt') {
+      const activities = parent('activities');
+      requireCondition(!activities || same(apiModes(activities.indexConfig?.indexes || [], 'stats'), modes(array)),
+        'Activities parent drift during events-only rollout; reconcile before enforcement');
+    }
   } else if (phase === 'prepare') {
-    checkPreparation(config, snapshots.fields, snapshots.composites, project, database);
+    requireCondition(stage === 'prepare', 'Preparation requires the committed prepare stage');
+    checkPreparation(config, snapshots.fields, snapshots.composites, project, database, stage);
   } else {
-    checkBaseline(config, snapshots.fields, snapshots.composites, project, database);
+    checkBaseline(config, snapshots.fields, snapshots.composites, project, database, stage);
   }
   const fields = phase === 'prepare' ? statsIndexAllowlist
     : (phase === 'rollback' ? ['events', 'activities'] : [phase.slice('enforce-'.length)])
       .map(collectionGroup => ({ collectionGroup, fieldPath: 'stats', indexes: [] }));
   return {
-    phase, project, database,
+    phase, stage, project, database,
     notice: 'Review-only argv. Nothing is executed. Cloud changes require separate approval. Snapshots must be captured immediately before each phase.',
     commands: fields.map(field => [
       'gcloud', 'firestore', 'indexes', 'fields', 'update', field.fieldPath,
