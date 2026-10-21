@@ -525,6 +525,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public onXAxisTypeChange(value: XAxisTypes): void {
+    if (!this.user || this.event?.isMultiSport() || value === this.displayedXAxisType
+      || (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis)) {
+      return;
+    }
+    this.hapticsService.selection();
     this.xAxisType = value;
   }
 

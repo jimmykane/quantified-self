@@ -953,6 +953,25 @@ describe('EventCardChartComponent', () => {
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
   });
 
+  it('persists an accepted axis change with one haptic and ignores an immediate repeat', () => {
+    component.onXAxisTypeChange(XAxisTypes.Time);
+    component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith({ xAxisType: XAxisTypes.Time });
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it.each(['signed out', 'multisport'])('ignores stale axis actions when controls are disabled: %s', (reason) => {
+    if (reason === 'signed out') component.user = null;
+    else component.event = { isMultiSport: () => true } as any;
+
+    component.onXAxisTypeChange(XAxisTypes.Duration);
+    component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
   it.each([
     [undefined, XAxisTypes.Duration],
     [XAxisTypes.Distance, XAxisTypes.Duration],
@@ -988,6 +1007,12 @@ describe('EventCardChartComponent', () => {
     expect(eventDataHelper.buildEventLapMarkers).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
     expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
     expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+    // Selecting the displayed fallback is a no-op, and a stale Distance action is still blocked.
+    component.onXAxisTypeChange(expectedAxis);
+    component.onXAxisTypeChange(XAxisTypes.Distance);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(component.xAxisType).toBe(savedAxis ?? XAxisTypes.Duration);
 
     // Browsing another sport restores the original preference, not the swim fallback.
     if (savedAxis === XAxisTypes.Distance) {

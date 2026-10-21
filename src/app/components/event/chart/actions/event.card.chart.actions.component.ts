@@ -238,7 +238,8 @@ export class EventCardChartActionsComponent {
   }
 
   async onXAxisTypeChange(value: XAxisTypes) {
-    if (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis) {
+    if (!this.user || this.event?.isMultiSport() || value === this.xAxisType
+      || (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis)) {
       return;
     }
     this.xAxisType = value;

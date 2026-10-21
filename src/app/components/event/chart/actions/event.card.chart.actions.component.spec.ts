@@ -353,11 +353,29 @@ describe('EventCardChartActionsComponent', () => {
     expect(option('Duration').textContent).toContain('radio_button_checked');
     expect(option('Time').disabled).toBe(false);
     expect(option('Distance').disabled).toBe(true);
+    option('Duration').click();
     option('Distance').click();
     expect(emit).not.toHaveBeenCalled();
     expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
     option('Time').click();
     expect(emit).toHaveBeenCalledExactlyOnceWith(XAxisTypes.Time);
+    await component.onXAxisTypeChange(XAxisTypes.Time);
+    expect(emit).toHaveBeenCalledOnce();
+    // The parent validates the live activity selection and owns accepted-change feedback.
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
+  it.each(['signed out', 'multisport'])('ignores axis actions when the menu is disabled: %s', async (reason) => {
+    if (reason === 'signed out') component.user = null;
+    else component.event = { isMultiSport: () => true } as EventInterface;
+    const emit = vi.spyOn(component.xAxisTypeChange, 'emit');
+
+    await component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(emit).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
   });
 
   it('ignores distance x-axis changes when distance is unavailable', async () => {
