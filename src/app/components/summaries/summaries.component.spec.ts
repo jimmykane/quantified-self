@@ -1537,6 +1537,9 @@ describe('SummariesComponent', () => {
     component.tiles = [tile]; component.mainGridTiles = [tile]; component.kpiLaneTiles = [];
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
     expect(component.mainGridSections.map(section => section.id)).toEqual(['health']);
+    expect(component.mainGridSections[0].hasHealthCharts).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-board.dashboard-tile-board--health')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-cell.dashboard-health-cell app-tile-chart.dashboard-health-chart')).not.toBeNull();
     const picker = fixture.nativeElement.querySelector('app-dashboard-chart-library');
     component.tiles = []; component.mainGridTiles = [];
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
@@ -1547,6 +1550,19 @@ describe('SummariesComponent', () => {
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
     expect(component.mainGridSections.map(section => section.id)).toEqual(['health']);
     expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
+  });
+
+  it('keeps public boards on their existing sizing when Health charts are absent', () => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile as DashboardChartTileViewModel;
+    component.user = { uid: 'public-owner', settings: { dashboardSettings: { tiles: [tile] } } } as any;
+    component.eventUser = { uid: 'shared-owner' } as any;
+    component.showActions = false;
+    component.tiles = [tile]; component.mainGridTiles = [tile];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.isOwnerDashboard).toBe(false);
+    expect(component.mainGridSections.some(section => section.hasHealthCharts)).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-board.dashboard-tile-board--health')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.dashboard-health-chart')).toBeNull();
   });
 
   it('renders the fixed Today summary on an otherwise empty read-only dashboard', () => {

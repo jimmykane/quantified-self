@@ -34,6 +34,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportStateService, HistoryImportRequestState, historyImportCooldownAt } from '../../services/history-import-state.service';
+import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
 dayjs.extend(relativeTime);
 
@@ -43,6 +44,12 @@ export interface HistoryImportResult {
   failureCount: number;
   processedBatches: number;
   failedBatches: number;
+}
+interface ActivityHistoryResponse {
+  stats?: HistoryImportResult;
+  historyImport?: ConnectionHistoryStatusProjection;
+  /** Local receipt fence, not callable input. */
+  connectionGeneration?: string | null;
 }
 
 type HealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' | 'error';
@@ -86,6 +93,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isHistoryImportPending = signal(false);
   public isActivityHistoryImportRunning = signal(false);
   public historyImportRunningMessage = '';
+  public backgroundActivityImport = signal<ConnectionHistoryStatusProjection | null>(null);
+  public backgroundImportNeedsAttention = false;
   /** Stores the actual backend response for display (COROS/Suunto/Wahoo only). */
   public pendingImportResult = signal<HistoryImportResult | null>(null);
   public isSleepBackfillSubmitting = signal(false);
@@ -132,7 +141,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private contextGeneration = 0;
   private sharedStateSubscriptions = new Subscription();
   private authSubscription: Subscription | null = null;
-  private activityState: HistoryImportRequestState<{ stats?: HistoryImportResult }> = { status: 'idle' };
+  private activityState: HistoryImportRequestState<ActivityHistoryResponse> = { status: 'idle' };
   private sleepState: HistoryImportRequestState<SleepBackfillQueueResponse> = { status: 'idle' };
   private cooldownTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
@@ -228,8 +237,16 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.today = dayjs().endOf('day');
     this.syncSharedImportState();
     this.isSubmitting = this.activityState.status === 'pending';
-    this.isHistoryImportPending.set(this.activityState.status === 'success'
-      && (this.activityState.nextAllowedAtMs === undefined || this.activityState.nextAllowedAtMs > Date.now()));
+    const receipt = this.activityState.result;
+    const accepted = receipt?.connectionGeneration === (this.userMetaForService?.connectionStateGeneration ?? null)
+      ? receipt?.historyImport : undefined;
+    const live = this.userMetaForService?.connectionHistoryImport;
+    const latest = live && (!accepted || live.runId === accepted.runId || live.updatedAtMs > accepted.updatedAtMs) ? live : accepted;
+    const background = latest?.rangePreset === 'custom' ? latest : null;
+    this.backgroundActivityImport.set(background ?? null);
+    this.backgroundImportNeedsAttention = !!background?.steps.some(step => step.status === 'failed' || step.status === 'skipped');
+    this.isHistoryImportPending.set(!!background?.active || (!receipt?.historyImport && this.activityState.status === 'success'
+      && (this.activityState.nextAllowedAtMs === undefined || this.activityState.nextAllowedAtMs > Date.now())));
     this.nextImportAvailableDate = undefined;
     this.syncActivityHistoryImportRunning();
     this.checksHealthBackfillAvailability = this.serviceName === ServiceNames.SuuntoApp
@@ -305,7 +322,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!this.currentUserID) return;
     const activityKey = this.importState.key(this.currentUserID, this.serviceName, 'activity');
     const sleepKey = this.importState.key(this.currentUserID, this.serviceName, 'sleep');
-    this.sharedStateSubscriptions.add(this.importState.watch$<{ stats?: HistoryImportResult }>(activityKey).subscribe(state => {
+    this.sharedStateSubscriptions.add(this.importState.watch$<ActivityHistoryResponse>(activityKey).subscribe(state => {
       this.activityState = state;
       this.pendingImportResult.set(state.result?.stats ?? null);
       this.activityImportFailed.set(state.status === 'error');
@@ -378,7 +395,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       : 0;
     const leaseExpiry = typeof expiresAt === 'number' && Number.isFinite(expiresAt) ? expiresAt : 0;
     const remainingMs = Math.max(leaseExpiry, retryAllowedAtMs) - Date.now();
-    this.isActivityHistoryImportRunning.set(remainingMs > 0);
+    const usesBackgroundActivityHistory = this.serviceName === ServiceNames.SuuntoApp
+      || this.serviceName === ServiceNames.COROSAPI || this.serviceName === ServiceNames.WahooAPI;
+    this.isActivityHistoryImportRunning.set((usesBackgroundActivityHistory
+      && (!!this.userMetaForService?.connectionHistoryImport?.active || !!this.backgroundActivityImport()?.active))
+      || remainingMs > 0);
     if (remainingMs <= 0 || this.isDestroyed) return;
     this.activityHistoryLeaseTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
       this.activityHistoryLeaseTimer = null;
@@ -445,26 +466,32 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       if (this.isActivityHistoryImportRunning()) return;
 
       dispatched = true;
+      const connectionGeneration = this.userMetaForService?.connectionStateGeneration ?? null;
       const result = await this.userService.importServiceHistoryForCurrentUser(
         serviceName,
         startDate,
         endDate,
         userID
       );
-      const cooldownMs = serviceName === ServiceNames.GarminAPI
+      const cooldownMs = result?.historyImport ? 0 : serviceName === ServiceNames.GarminAPI
         ? GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 86_400_000
         : typeof result?.stats?.successCount === 'number'
           ? result.stats.successCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT * 86_400_000
           : null;
       this.importState.finish(key, operation, {
-        status: 'success', result, range: { startDate, endDate }, acceptedAtMs: Date.now(),
+        status: 'success', result: result?.historyImport ? { ...result, connectionGeneration } : result,
+        range: { startDate, endDate }, acceptedAtMs: Date.now(),
         ...(cooldownMs !== null ? { nextAllowedAtMs: Date.now() + cooldownMs } : {}),
       });
       if (!this.isCurrentView(userID, serviceName, generation)) return;
-      this.importInitiated.emit(result);
+      // The parent treats this event as a legacy scan result and resets import counts.
+      // Background acceptance must retain server-owned progress and cooldown metadata.
+      if (!result?.historyImport) this.importInitiated.emit(result);
 
       // Store result for display (COROS/Suunto return stats, Garmin doesn't)
-      if (result?.stats) {
+      if (result?.historyImport) {
+        this.snackBar.open('History import started in the background. Check progress in Connections.', undefined, { duration: 4000 });
+      } else if (result?.stats) {
         if (result.stats.successCount === 0) {
           this.snackBar.open('No new activities found to import.', undefined, {
             duration: 3000,

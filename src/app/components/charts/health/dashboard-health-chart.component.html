@@ -46,7 +46,7 @@
             <strong>{{ chart.latestValueText }}</strong>
             @if (!showingExample() && context(); as sourceView) {
               <app-chart-source-picker [choices]="sourceView.sources" [selectedKey]="sourceView.selectedKey"
-                [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" />
+                [chartTitle]="title()" [compact]="!overview()" [disabled]="disabled()" (selected)="selectSource($event)" />
             } @else {
               <span class="health-example-attribution">Example data · {{ chart.model.readingLabel }}</span>
             }

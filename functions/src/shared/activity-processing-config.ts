@@ -21,7 +21,7 @@ export const ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS = {
 
 export const REPARSE_PROCESSING_RUNTIME_BASE_OPTIONS = {
   memory: '1GiB',
-  cpu: 2,
+  cpu: 1,
   concurrency: 1,
 } as const;
 

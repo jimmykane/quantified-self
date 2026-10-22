@@ -26,8 +26,6 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import {
   ActivityInterface,
   ChartCursorBehaviours,
-  DataDistance,
-  DataStrydDistance,
   EventInterface,
   LapTypes,
   type StreamInterface,
@@ -48,6 +46,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import {
   buildEventChartPanels,
+  getEventChartDistanceStream,
   buildEventLapMarkers,
   buildEventSwimLengthMarkers,
   buildEventZoomOverviewData,
@@ -67,10 +66,13 @@ import {
   EventChartRange,
   normalizeEventRange,
   resolveEventChartXAxisType,
+  resolveEventDistanceCursorSeconds,
 } from '../../../helpers/event-echarts-xaxis.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
   areEventChartOverlayMapsEqual,
+  getEventChartOverlaySelectionKey,
+  resolveEventChartOverlayDataType,
   normalizeEventChartOverlayDataTypeByPrimary,
 } from '../../../helpers/event-chart-overlay.helper';
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
@@ -702,7 +704,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       ...this.getEventChartOverlayDataTypeByPrimary(),
     };
 
-    if (overlay && overlay !== primary) {
+    const primaryKey = getEventChartOverlaySelectionKey(primary);
+    const availableTypes = new Set(this.allChartPanels.map(panel => panel.dataType));
+    // Remove obsolete aliases, while preserving other unit panels explicitly displayed together.
+    Object.keys(nextOverlayMap).forEach(key => {
+      if (key !== primary && !availableTypes.has(key) && getEventChartOverlaySelectionKey(key) === primaryKey) {
+        delete nextOverlayMap[key];
+      }
+    });
+    if (overlay && overlay !== primary && (getEventChartOverlaySelectionKey(overlay) !== primaryKey || availableTypes.has(overlay))) {
       nextOverlayMap[primary] = overlay;
     } else {
       delete nextOverlayMap[primary];
@@ -1095,19 +1105,18 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private buildChartPanelViews(): EventChartPanelViewModel[] {
     const panelByDataType = new Map(this.allChartPanels.map((panel) => [panel.dataType, panel]));
     const overlayMap = this.getEventChartOverlayDataTypeByPrimary();
+    const availableTypes = [...panelByDataType.keys()];
 
     return this.chartPanels.map((panel) => {
       const overlayOptions = this.buildOverlayOptions(panel);
-      const selectedOverlayDataType = overlayMap[panel.dataType] || null;
-      const overlayPanel = selectedOverlayDataType && selectedOverlayDataType !== panel.dataType
-        ? panelByDataType.get(selectedOverlayDataType) ?? null
-        : null;
+      const selectedOverlayDataType = resolveEventChartOverlayDataType(panel.dataType, availableTypes, overlayMap);
+      const overlayPanel = selectedOverlayDataType ? panelByDataType.get(selectedOverlayDataType) ?? null : null;
 
       return {
         panel,
         overlayPanel,
         overlayOptions,
-        selectedOverlayDataType: overlayPanel ? selectedOverlayDataType : null,
+        selectedOverlayDataType: overlayPanel?.dataType ?? null,
       };
     });
   }
@@ -1417,30 +1426,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private resolveDistanceCursorTime(activity: ActivityInterface, targetDistance: number): number | null {
-    const distanceStream = this.getActivityStream(activity, DataDistance.type)
-      || this.getActivityStream(activity, DataStrydDistance.type);
+    const distanceStream = getEventChartDistanceStream(activity);
     const timeStream = this.getActivityStream(activity, XAxisTypes.Time);
-    const distanceValues = this.toNumericArray(distanceStream?.getData());
-    const timeValues = this.toNumericArray(timeStream?.getData());
-
-    const length = Math.min(distanceValues.length, timeValues.length);
-    if (!length) {
-      return null;
-    }
-
-    let closestIndex = 0;
-    let smallestDelta = Number.POSITIVE_INFINITY;
-
-    for (let index = 0; index < length; index += 1) {
-      const delta = Math.abs(targetDistance - distanceValues[index]);
-      if (delta < smallestDelta) {
-        smallestDelta = delta;
-        closestIndex = index;
-      }
-    }
-
-    const seconds = timeValues[closestIndex];
-    if (!Number.isFinite(seconds)) {
+    const seconds = resolveEventDistanceCursorSeconds(
+      distanceStream?.getData(), timeStream?.getData(), targetDistance,
+    );
+    if (seconds === null) {
       return null;
     }
 
@@ -1465,13 +1456,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     const streams = activity.getAllStreams?.() || [];
     return streams.find((stream) => stream?.type === streamType) || null;
-  }
-
-  private toNumericArray(value: unknown): number[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((item) => Number(item));
   }
 
   private loading(): void {

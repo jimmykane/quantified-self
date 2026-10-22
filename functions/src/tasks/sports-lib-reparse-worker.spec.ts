@@ -203,7 +203,7 @@ describe('processSportsLibReparseTask', () => {
     it('should register with reparse runtime limits', () => {
         expect(hoisted.capturedTaskOptions[0]).toMatchObject({
             memory: '1GiB',
-            cpu: 2,
+            cpu: 1,
             concurrency: 1,
             timeoutSeconds: 1800,
         });

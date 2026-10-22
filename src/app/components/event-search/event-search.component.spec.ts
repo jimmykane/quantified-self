@@ -1,3 +1,13 @@
+import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { By } from '@angular/platform-browser';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import { DateAdapter } from '@angular/material/core';
+import { MatDateRangeInput, MatDateRangePicker } from '@angular/material/datepicker';
+import type { Dayjs } from 'dayjs';
+import { MatSelect } from '@angular/material/select';
+import dayjs from 'dayjs';
+import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
+import { MergedActivitiesToggleComponent } from '../shared/merged-activities-toggle/merged-activities-toggle.component';
 import { ChangeDetectorRef, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
@@ -10,7 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { EventSearchComponent, Search } from './event-search.component';
-import { ActivityTypesFilterMenuComponent } from '../activity-types-filter-menu/activity-types-filter-menu.component';
+import { ActivityTypesMultiSelectComponent } from '../activity-types-multi-select/activity-types-multi-select.component';
 import { MaterialModule } from '../../modules/material.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -19,12 +29,15 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   selector: 'app-merged-filter-test-host',
   standalone: false,
   template: `<app-event-search class="table-toolbar-layout compact-filter-layout"
-    [compact]="true" [toolbarRangeLayout]="true" [selectedDateRange]="range"
-    [startOfTheWeek]="weekStart" [selectedActivityTypes]="[]" [showMergedEventsToggle]="true"
+    [compact]="true" [toolbarRangeLayout]="toolbar" [selectedDateRange]="range"
+    [startOfTheWeek]="weekStart" [selectedActivityTypes]="sports" [availableActivityTypes]="availableSports" [showMergedEventsToggle]="true"
     [includeMergedEvents]="includeMerged" [mergedEventsToggleDisabled]="disabled"
     (searchChange)="onSearch($event)"></app-event-search>`,
 })
 class MergedFilterTestHost {
+  toolbar = true;
+  sports: ActivityTypes[] | null | undefined = [];
+  availableSports?: ActivityTypes[];
   range = DateRanges.thisWeek;
   weekStart = DaysOfTheWeek.Monday;
   includeMerged = true;
@@ -46,9 +59,10 @@ describe('Merged toolbar filter rendering', () => {
   beforeEach(async () => {
     haptics.selection.mockClear();
     await TestBed.configureTestingModule({
-      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesFilterMenuComponent],
-      imports: [CommonModule, ReactiveFormsModule, NoopAnimationsModule, MaterialModule, AppChartSharedModule],
-      providers: [{ provide: AppHapticsService, useValue: haptics }],
+      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesMultiSelectComponent],
+      imports: [ActivityFilterPickerComponent, MergedActivitiesToggleComponent, CommonModule, ReactiveFormsModule, NoopAnimationsModule, MaterialModule, AppChartSharedModule],
+      providers: [{ provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } }],
     }).compileComponents();
   });
 
@@ -68,6 +82,88 @@ describe('Merged toolbar filter rendering', () => {
     expect(button.textContent).toContain('check_box');
     expect(button.textContent).not.toContain('check_box_outline_blank');
     expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces presets in place, applies native calendar selections once and restores focus on clear', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    fixture.componentInstance.range = DateRanges.thisMonth;
+    fixture.detectChanges();
+    const render = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    const selector = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    selector.open(); await render();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    (Array.from(overlay.querySelectorAll('mat-option')).find(option => option.textContent?.trim() === 'Custom dates') as HTMLElement).click();
+    await render();
+    const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+    const presetEnd = getDatesForDateRange(DateRanges.thisMonth, DaysOfTheWeek.Monday).endDate!;
+    expect(search.endDateControl.value?.getTime()).toBe(presetEnd.getTime() - 1);
+    expect(fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]')).toBeNull();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
+    search.searchFormGroup.patchValue({ startDate: null, endDate: null });
+    const picker = fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
+    const adapter = fixture.debugElement.query(By.directive(MatDateRangeInput)).injector.get(DateAdapter) as DateAdapter<Dayjs>;
+    picker.startAt = dayjs('2026-09-01');
+    fixture.nativeElement.querySelector('input[aria-label="Start date"]').click(); await render();
+    for (const date of ['2026-09-03', '2026-09-04']) {
+      const label = adapter.format(dayjs(date), 'LL');
+      const cell = Array.from(overlay.querySelectorAll<HTMLElement>('[aria-label]')).find(element => element.getAttribute('aria-label') === label);
+      expect(cell).toBeDefined(); cell!.click(); await render();
+      expect(fixture.componentInstance.requests).toEqual([]);
+    }
+    (overlay.querySelector('button[matDateRangePickerApply]') as HTMLButtonElement).click(); await render();
+    expect(fixture.componentInstance.requests).toHaveLength(1);
+    expect(fixture.componentInstance.requests[0]).toMatchObject({
+      dateRange: DateRanges.custom, startDate: new Date(2026, 8, 3), endDate: new Date(2026, 8, 4, 23, 59, 59, 999),
+    });
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]').click(); await render();
+    expect(fixture.componentInstance.requests).toHaveLength(2);
+    expect(fixture.componentInstance.requests[1].dateRange).toBe(DateRanges.lastThirtyDays);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+  });
+
+  it('uses the same sport picker in the My Tracks layout and preserves available and selected no-match sports', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance; host.toolbar = false;
+    host.sports = [ActivityTypes.Running]; host.availableSports = [ActivityTypes.Cycling];
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input[aria-label="Sports"]') as HTMLInputElement;
+    expect(trigger).toBeTruthy(); trigger.click(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect([...overlay.querySelectorAll('mat-list-option')].map(option => option.getAttribute('aria-label'))).toEqual(['Cycling', 'Running']);
+    expect(host.requests).toEqual([]); expect(haptics.selection).toHaveBeenCalledOnce();
+    (overlay.querySelector('[aria-label="Cycling"]') as HTMLElement).click(); await settle();
+    expect(host.requests).toEqual([expect.objectContaining({ activityTypes: [ActivityTypes.Running, ActivityTypes.Cycling], dateRange: DateRanges.thisWeek })]);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it.each([undefined, null])('handles a missing My Tracks sport filter (%s) and later hydration without searching', async savedSports => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance;
+    host.toolbar = false; host.sports = savedSports; host.availableSports = [ActivityTypes.Cycling];
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input[aria-label="Sports"]') as HTMLInputElement;
+    expect(trigger.value).toBe('All sports');
+    expect(host.requests).toEqual([]); expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    host.sports = [ActivityTypes.Running]; await settle();
+    expect(trigger.value).toBe('Running');
+    expect(overlay.querySelector('[aria-label="Running"]')?.getAttribute('aria-selected')).toBe('true');
+    host.sports = savedSports; await settle();
+    expect(trigger.value).toBe('All sports');
+    expect(overlay.querySelector('[aria-label="Running"]')).toBeNull();
+    expect(host.requests).toEqual([]); expect(haptics.selection).toHaveBeenCalledOnce();
+    const cycling = overlay.querySelector<HTMLElement>('mat-list-option[aria-label="Cycling"]')!;
+    cycling.focus(); cycling.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 32, bubbles: true })); await settle();
+    expect(host.requests).toEqual([expect.objectContaining({ activityTypes: [ActivityTypes.Cycling] })]);
+    expect(trigger.value).toBe('Cycling'); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('follows parent preferences silently and accepts one action after being enabled', async () => {
@@ -147,26 +243,10 @@ describe('EventSearchComponent', () => {
     expect(hapticsService.selection).not.toHaveBeenCalled();
   });
 
-  it('should expose one flattened shortcut group for table toolbar layout', () => {
-    const { component } = createComponent(undefined, searchComponent => {
-      searchComponent.compact = true;
-      searchComponent.toolbarRangeLayout = true;
-    });
-
-    expect(component.primaryToolbarDateRangeOptions.map(option => option.label)).toEqual([
-      'This wk',
-      'Last wk',
-      '7d',
-      'This mo',
-      'Last mo',
-      '30d',
-    ]);
-    expect(component.secondaryToolbarDateRangeOptions.map(option => option.label)).toEqual([
-      `${component.currentYear}`,
-      `${component.currentYear - 1}`,
-      'All',
-    ]);
-    expect(component.secondaryDateRangeButtonLabel).toBe('More');
+  it('offers full date preset labels, with Custom dates and All dates last', () => {
+    const { component } = createComponent(undefined, c => { c.toolbarRangeLayout = true; c.compact = true; });
+    expect(component.toolbarDateRangeOptions[0].label).toBe('Last 30 days');
+    expect(component.toolbarDateRangeOptions.slice(-2).map(option => option.label)).toEqual(['Custom dates', 'All dates']);
   });
 
   it('uses activity language for merged rows and long-range loading', () => {
@@ -176,70 +256,88 @@ describe('EventSearchComponent', () => {
     expect(component.mergedEventsToggleHint).toBe('Merged activities are excluded');
   });
 
-  it('should use a mobile grid for table toolbar date shortcuts so labels do not collide', () => {
+  it('uses wrapping field controls for the table toolbar', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/event-search/event-search.component.scss'),
       'utf8',
     );
 
-    expect(styles).toContain(':host(.table-toolbar-layout) .toolbar-range-group');
-    expect(styles).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));');
+    expect(styles).toContain(':host(.table-toolbar-layout) .toolbar-controls');
+    expect(styles).toContain('flex-wrap: wrap;');
+    expect(styles).not.toContain('.toolbar-range-group');
   });
 
-  it('should update the secondary range menu label when a secondary shortcut is selected', async () => {
-    const { component, hapticsService } = createComponent(undefined, searchComponent => {
-      searchComponent.compact = true;
-      searchComponent.toolbarRangeLayout = true;
-    });
-    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+  it('cancels All dates from the preset selector without querying or changing the displayed range', async () => {
+    const dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(false) }) };
+    const { component } = createComponent(dialog, c => { c.toolbarRangeLayout = true; });
+    const source = { value: DateRanges.all } as MatSelect;
+    const search = vi.spyOn(component, 'search');
+    await component.onToolbarDateRangeChange(DateRanges.all, source);
+    expect(dialog.open).toHaveBeenCalledOnce();
+    expect(search).not.toHaveBeenCalled();
+    expect(source.value).toBe(DateRanges.thisWeek);
+    expect(component.selectedDateRange).toBe(DateRanges.thisWeek);
+  });
 
-    await component.onSecondaryDateRangeSelection(DateRanges.lastYear);
+  it('edits custom dates in place and only searches on valid Apply or clearing an applied range', async () => {
+    const { component, hapticsService } = createComponent();
+    const emit = vi.spyOn(component.searchChange, 'emit');
+    await component.onToolbarDateRangeChange(DateRanges.custom);
+    expect(component.customRangeOpen).toBe(true);
+    expect(component.selectedDateRange).toBe(DateRanges.thisWeek);
+    component.startDateControl.setValue(dayjs('2026-09-01'));
+    component.endDateControl.setValue(dayjs('2026-09-03'));
+    expect(emit).not.toHaveBeenCalled();
+    await component.applyToolbarCustomRange();
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(component.selectedStartDate?.getHours()).toBe(0);
+    expect(component.selectedEndDate?.getHours()).toBe(23);
+    expect(component.selectedEndDate?.getDate()).toBe(3);
+    await component.applyToolbarCustomRange();
+    expect(emit).toHaveBeenCalledTimes(1);
+    component.startDateControl.setValue(null);
+    await component.applyToolbarCustomRange();
+    expect(emit).toHaveBeenCalledTimes(1);
+    component.cancelToolbarCustomRange();
+    expect(component.startDateControl.value?.getTime()).toBe(component.selectedStartDate?.getTime());
+    await component.clearToolbarCustomRange();
+    expect(component.selectedDateRange).toBe(DateRanges.lastThirtyDays);
+    expect(emit).toHaveBeenCalledTimes(2);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(4);
+  });
 
-    expect(searchSpy).toHaveBeenCalledTimes(1);
-    expect(component.selectedDateRange).toBe(DateRanges.lastYear);
-    expect(component.secondaryDateRangeButtonLabel).toBe(`${component.currentYear - 1}`);
+  it('cancels an unapplied custom editor without querying and accepts only changed sport checkboxes', async () => {
+    const { component, hapticsService } = createComponent();
+    const search = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+    await component.onToolbarDateRangeChange(DateRanges.custom);
+    await component.clearToolbarCustomRange();
+    expect(component.selectedDateRange).toBe(DateRanges.thisWeek);
+    expect(component.customRangeOpen).toBe(false);
+    expect(search).not.toHaveBeenCalled();
+    hapticsService.selection.mockClear();
+    await component.onToolbarSportsChange(['Running', 'Cycling']);
+    expect(component.toolbarSelectedSports).toEqual(['Running', 'Cycling']);
+    await component.onToolbarSportsChange(['Cycling', 'Run']);
+    expect(search).toHaveBeenCalledTimes(1);
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    expect(component.toolbarDateRangeOptions.at(-1)?.label).toBe('All dates');
   });
 
-  it('should reuse the all-range warning for secondary toolbar shortcuts', async () => {
-    const dialog = {
-      open: vi.fn().mockReturnValue({
-        afterClosed: () => of(true),
-      }),
-    };
-    const { component } = createComponent(dialog, searchComponent => {
-      searchComponent.compact = true;
-      searchComponent.toolbarRangeLayout = true;
-    });
-    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
-
-    await component.onSecondaryDateRangeSelection(DateRanges.all);
-
-    expect(dialog.open).toHaveBeenCalledTimes(1);
-    expect(searchSpy).toHaveBeenCalledTimes(1);
-    expect(component.selectedDateRange).toBe(DateRanges.all);
-    expect(component.secondaryDateRangeButtonLabel).toBe('All');
-  });
-
-  it('should require confirmation when selecting all from the table toolbar even if all is already active', async () => {
-    const dialog = {
-      open: vi.fn().mockReturnValue({
-        afterClosed: () => of(false),
-      }),
-    };
-    const { component } = createComponent(dialog, searchComponent => {
-      searchComponent.selectedDateRange = DateRanges.all;
-      searchComponent.compact = true;
-      searchComponent.toolbarRangeLayout = true;
-    });
-    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
-
-    await component.onSecondaryDateRangeSelection(DateRanges.all);
-
-    expect(dialog.open).toHaveBeenCalledTimes(1);
-    expect(searchSpy).not.toHaveBeenCalled();
-    expect(component.selectedDateRange).toBe(DateRanges.all);
-    expect(component.secondaryDateRangeButtonLabel).toBe('All');
+  it('keeps draft dates out of sport and merged filter requests', async () => {
+    const { component } = createComponent(undefined, c => { c.toolbarRangeLayout = true; });
+    const emit = vi.spyOn(component.searchChange, 'emit');
+    const committed = getDatesForDateRange(DateRanges.thisWeek, DaysOfTheWeek.Monday);
+    await component.onToolbarDateRangeChange(DateRanges.custom);
+    component.startDateControl.setValue(dayjs('2020-01-01'));
+    component.endDateControl.setValue(null);
+    await component.onToolbarSportsChange(['Running']);
+    await component.onMergedEventsChange(false);
+    expect(emit).toHaveBeenCalledTimes(2);
+    for (const [request] of emit.mock.calls) {
+      expect(request.dateRange).toBe(DateRanges.thisWeek);
+      expect(request.startDate?.getTime()).toBe(committed.startDate?.getTime());
+      expect(request.endDate?.getTime()).toBe(committed.endDate?.getTime());
+    }
   });
 
   it('should auto-search when a valid custom date change occurs', async () => {

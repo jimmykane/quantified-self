@@ -12,3 +12,9 @@
   /* Only the calendar's own row grows; charts in adjacent rows keep their height. */
   grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
 }
+
+@media (max-width: 767px) {
+  :host(.dashboard-tile-board--health) {
+    grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
+  }
+}

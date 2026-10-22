@@ -5,6 +5,8 @@ import { https } from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
+import { startManualActivityHistory } from '../connection-history/manual-activity';
+vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 const accountMocks = vi.hoisted(() => ({
     getActiveCOROSTokenSnapshot: vi.fn(),
@@ -75,6 +77,7 @@ describe('COROS History to Queue', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(startManualActivityHistory).mockReset();
         (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
         accountMocks.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'coros-open-id-1' });
@@ -100,6 +103,21 @@ describe('COROS History to Queue', () => {
     });
 
     describe('addCOROSAPIHistoryToQueue', () => {
+        it('accepts the validated calendar range as a background activity import, including the last day', async () => {
+            const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
+            vi.mocked(startManualActivityHistory).mockResolvedValue(projection);
+            await expect(addCOROSAPIHistoryToQueue({ ...data, background: true }, context)).resolves.toEqual({ result: 'History import accepted', historyImport: projection });
+            const [, , start, end] = vi.mocked(startManualActivityHistory).mock.calls[0];
+            expect(start.toISOString()).toBe(data.startDate.slice(0, 10) + 'T00:00:00.000Z');
+            expect(end.toISOString()).toBe(data.endDate.slice(0, 10) + 'T23:59:59.999Z');
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+        });
+        it('retains the manual path for legacy connections', async () => {
+            vi.mocked(startManualActivityHistory).mockResolvedValue(null);
+            await addCOROSAPIHistoryToQueue({ ...data, background: true }, context);
+            expect(history.addHistoryToQueue).toHaveBeenCalled();
+        });
         it('preserves a busy reservation before importing any window', async () => {
             const error = new https.HttpsError('already-exists', 'A recent-history import is already running. Please wait for it to finish.');
             vi.mocked(history.withActivityHistoryImportReservation).mockRejectedValueOnce(error);

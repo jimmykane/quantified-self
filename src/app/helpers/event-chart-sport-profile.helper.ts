@@ -1,3 +1,4 @@
+import { getEventChartUnitSource } from './event-chart-units.helper';
 import { resolveCompatibleActivityType, WALKING_ACTIVITY_TYPE_GROUP } from '@shared/activity-type-compatibility';
 import {
   type ActivityTypeGroup,
@@ -23,7 +24,6 @@ import {
   DataSwimPace,
   DataTemperature,
   DataVerticalSpeed,
-  DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 
 export type EventChartMetricFamily =
@@ -383,13 +383,7 @@ export function getEventChartSelectionKey(dataType: string | null | undefined): 
     return '';
   }
 
-  const unitGroups = (DynamicDataLoader as unknown as {
-    dataTypeUnitGroups?: Record<string, Record<string, unknown>>;
-  }).dataTypeUnitGroups || {};
-  const unitBaseType = Object.entries(unitGroups)
-    .find(([baseType, variants]) => baseType === normalizedType || Object.prototype.hasOwnProperty.call(variants, normalizedType))
-    ?.[0];
-  return unitBaseType || normalizedType;
+  return getEventChartUnitSource(normalizedType);
 }
 
 export function getRegisteredEventChartActivityTypes(): ActivityTypes[] {

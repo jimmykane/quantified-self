@@ -136,6 +136,10 @@ or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
+### Connection feature cards
+
+Connections feature cards keep one title, description and action. They do not repeat a promotional checkmark line or a generic cooldown duration. History import keeps actual last-requested and next-available dates together as quiet metadata, with activity and Sleep/Health timings separate. A request date is not a completed-delivery date. Existing pending/error states, provider limits, eligibility checks and exact expiry timers remain unchanged; presentation reuses already-loaded metadata without new provider reads or mutations. Monitoring and MCP contracts are unchanged.
+
 ## Dialog actions and haptic ownership
 
 Use the global Material dialog surface with `mat-dialog-title`, a bounded `mat-dialog-content` scroll owner, and
@@ -580,6 +584,50 @@ Distance axes. Display buffers contain only original finite coordinates plus nul
 intensity-zone styling, overlays, and comparison activities retain the same connection decisions and original values.
 Each activity has its own series; preferences never connect separate activities.
 
+Distance-axis hover-to-map synchronization selects the nearest finite distance/time pair at its original stream
+index. Missing readings, invalid values and unpaired timestamps do not become zero or shift later samples; genuine
+zeros and repeated distances remain valid, with the first recorded pair winning a tie. No usable pair means no map
+cursor update. This read-only lookup preserves the source streams and works with both dense and sparse Distance
+streams, including the existing Stryd fallback. Chart availability, x coordinates, lap markers and the map cursor
+use Stryd only when the primary Distance stream has no finite readings (including empty/all-null streams).
+A recorded zero keeps the primary source eligible. Individual holes in a usable primary stream are never filled
+from Stryd; the source streams and their summaries remain unchanged.
+
+The app and Functions both install Sports Lib 23.4.0. Original-file chart hydration retains missing Distance
+readings as null instead of carrying the last distance through unrelated sensor timestamps. Real zero and repeated
+recorded distances remain valid. Distance-axis charts omit rows without an observed x coordinate; time-axis charts can
+still show their other sensor readings. The map cursor uses the aligned finite pairs above. Opening a chart does not
+rewrite recorded summaries; historical saved statistics change only through the existing original-file reparse action.
+Distance-axis lines apply the selected continuity mode to both the metric and distance recording intervals before
+coordinate filtering. Normal sparse coordinates can connect; Detect/Custom preserve breaks in either source stream.
+Continuous can span missing data without inventing a distance, tooltip reading or statistic at those missing rows.
+
+The Distance metric itself keeps those sparse values on Time/Duration axes and uses the same continuity setting.
+Chart unit selection covers every registered Sports Lib conversion family, including pace, effort/grade-adjusted pace,
+swim pace, speed, vertical speed, depth and sustainable distance. It removes unselected base-unit duplicates while
+retaining each deliberately selected unit panel. Recorded metrics can convert units even when their sport does not
+calculate that metric. Headers, ticks, tooltips and range statistics use the same Sports Lib display and user settings;
+Weight, for example, displays pounds consistently while its source values remain kilograms.
+
+Canonical distance subclasses use Sports Lib's value-dependent m/Km tick labels without a fixed metre heading.
+Distinct sources such as Stryd Distance, Step Length and Jump Distance retain their own panel identity and canonical
+values, with conversion at display time: Sports Lib's shared generic miles/feet identifiers cannot merge them into
+recorded Distance or one another. Unique unit variants, including GNSS Distance, retain their selected unit panel.
+Duplicate raw stream selection happens before unit conversion, so each unit uses the same selected source. Empty
+stream placeholders cannot block conversion from valid recorded samples. Recorded pace, swim pace and grade-adjusted
+pace are converted before deriving missing metrics from speed; changing units must not replace recorded pace values
+or fill their gaps. Existing converted streams with finite readings, including zero, retain their own gaps. Conversion
+preserves nulls and real zero; range statistics use only recorded points, and zoom/overlays do not manufacture
+intermediate measurements.
+
+Saved overlay keys and targets resolve to the current unit variant without writing settings on read. Exact saved
+choices take precedence, even when their target is unavailable. Alias migration requires a single available variant
+and agreement among inherited choices; multiple units or conflicting older preferences cannot silently choose an
+overlay. Reading an event never deletes or rewrites these preferences. Explicit edits remove obsolete aliases but
+preserve settings for other currently available unit panels. GNSS Distance, recorded Distance, Stryd and sustainable
+distance remain distinct sources. Exact self-overlays are rejected, while two deliberately displayed unit variants
+can overlay each other on their own axes.
+
 The shared panel renderer retains line endpoints for native viewport clipping instead of filtering away offscreen
 endpoints. This keeps a connected segment visible when zoomed between its samples, while a broken segment stays blank
 even when neither boundary is in view. Tooltip headers and individual rows outside the visible range are suppressed.
@@ -684,7 +732,8 @@ Production service-worker and public
 startup/prerender checks pass, as does beta's service-worker check. All 722 targeted app assertions pass, including
 the existing App Check recovery tests. Functions compilation and the MCP compatibility check also pass. Package
 verification covers ESM/CommonJS identity, TypeScript resolution and every emitted metrics-worker chunk. Both the
-app and Functions pin 23.3.0 with registry URLs and the verified release integrity in their lockfiles.
+app and Functions pinned 23.3.0 for that verification. Their current 23.4.0 pins retain registry URLs and matching
+release integrity in both lockfiles.
 
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
@@ -1066,6 +1115,8 @@ Older baseline variation is deterministic and independent by metric; never repea
 commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
+
+At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for the metric plot; page scrolling exposes the complete chart and date axis. Shorter cards still fill their row, including Sleep. Desktop grids retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
 
 Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.
 

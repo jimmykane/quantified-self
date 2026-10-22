@@ -421,7 +421,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `23.1.0` in both app and Functions
+- Installed `@sports-alliance/sports-lib`: `23.4.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -1993,6 +1993,14 @@ on phones rather than being truncated in single-line list slots. Rows use compac
 long edit histories from taking over the page. Deleted workouts use the same surface-free Show/Hide Material-button
 pattern as Training recovery details, with controlled hidden content and haptic feedback, not a raised expansion panel.
 Failed history reads have an explicit Retry action.
+Deleted-workout rows reuse compact rows with the canonical sport icon, wrapping titles and localized scheduled dates;
+on phones their History and permanent-delete actions sit below the details instead of squeezing the text into ellipses.
+History focuses its labelled region and scrolls it below the visible app header as soon as the loading panel renders,
+so an off-screen result no longer appears to be a no-op. Closing history, changing scope/account or replacing its request
+invalidates pending focus; resolving a request and loading older revisions do not scroll the page again.
+MCP impact: no wire impact. This changes only native frontend layout/focus, not plan/workout read coverage, recipes,
+history/restore permissions, scopes, consent, mutations or provider actions. Existing Help's Deleted workouts and
+history/restore instructions remain accurate and were reviewed; no help-content change or MCP/plugin refresh is needed.
 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
@@ -2378,6 +2386,41 @@ invalidates the old plan-level success total before reconciliation. Both look-ah
 show **Upcoming status incomplete**, not an allegedly complete total. Read/crypto failures show
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
+
+#### Reconciliation database work
+
+Each reconciliation transaction attempt owns one `ReconciliationReads` instance for its exact owner and page.
+It reuses provider connection authority once per provider and document snapshots by exact path, including absent
+documents. Shared plan/settings, scope, strength, Suunto owner preferences, verification requests and past-cleanup
+markers retain their existing validation. A new page or Firestore transaction retry creates a fresh cache. Delivery,
+recovery and inspection workers retain their independent per-request admission checks and current-state reads.
+
+Reconciliation compares the final ledger after verification staging against its previous value. A genuine state
+change or a newer workout, inherited setting or workout-override timestamp still advances `updatedAtMs`; the app's
+and MCP's current-source acknowledgement therefore remains intact even when an edit produces identical provider
+content. An unchanged scan preserves that timestamp and skips the private ledger write. Both strict public projections
+are read before writing so missing, stale or malformed views are repaired independently. An unchanged status or
+verification projection is left untouched; verification availability changes still update its projection. Unsupported
+inspection retains its existing next-check timestamp while the capability remains unavailable. Actual remote-check
+timestamps continue to come from inspection evidence.
+
+This trades two projection reads per considered identity for up to three avoided writes on an unchanged pass.
+The deterministic 25-workout/single-plan/four-provider fixture reduces connection resolutions from 100 to 4 and
+context document reads from 425 to 131. Those document counts exclude connection internals, ledger/projection reads
+and queue overhead; they are local operation counts, not measured production CPU or monetary savings. Both current
+workout and historical-ledger phases, 25-item pages, 30-minute recovery, delivery/verification enqueueing, Retry-After,
+leases, revisions, consent and deletion fences retain their existing behavior.
+
+MCP impact review: no wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
+change. Existing strict sync reads use the same source-freshness acknowledgement and private-field exclusions; no
+new planning read or bundled-plugin update is needed. Help's delivery and Check instructions remain applicable.
+Monitoring decision: **unchanged**. The existing provider outcomes, dispatch/backlog and unavailable-observation
+coverage still observes the same queues, worker events and committed outcomes. Read-only production review on
+21 October 2026 found fourteen `qs_training_*_v1` metrics, six enabled Training alert policies and the QS Training
+Delivery dashboard. Queue-health age derives from queue writes, so skipping ledger/projection writes does not change
+its age signal. Verification covers read counts, fresh transaction attempts, unchanged document update times,
+projection repair, identical-content edit acknowledgement and due-check recovery, plus the existing delivery
+emulator lifecycle suite. Source verification authorizes no deployment or monitoring configuration change.
 
 #### Server-confirmed sync settings and current revisions (#812)
 
@@ -6112,7 +6155,8 @@ multi-result total. Compact private load summaries preserve it through their exi
 query paths, queues, triggers or scheduled rebuilds. Refreshed evaluations and changed summaries use the existing
 metadata/cache writes and invalidation flow; reparsing history still incurs that normal refresh work.
 
-Root and Functions now pin the same published sports-lib 23.1.0 package in both manifests and lockfiles.
+Root and Functions adopted the same published sports-lib 23.1.0 package for that threshold-HR update; the current
+23.4.0 pins retain those HR rules.
 The runtime reparse target resolves from that installed version; version mismatch checks remain strict.
 Historical candidates require the normal approved
 original-file reparse lifecycle and derived refresh; a Training rebuild alone cannot recover file calibration.
@@ -6708,9 +6752,27 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.1.0 with FIT Parser 6.2.2 and matching package integrity.
+Root and Functions now pin published Sports Lib 23.4.0 with matching package integrity. The direct Functions FIT Parser
+pin remains 6.2.2; Sports Lib retains its own compatible parser dependency.
 Both consumers recognize the expanded 284-type catalog. The earlier 22.0.0 integration and its historical verification
 remain recorded here; package adoption does not deploy either consumer or start a production reparse.
+
+#### Sports Lib 23.4.0 sparse distance adoption
+
+Missing Distance readings remain null; recorded zeros and repeated distances remain observations. Library-derived
+speed and grade-adjusted calculations use supported intervals rather than treating carried-forward distance as
+measured stops. Consequently calculated pace load and durability evidence can change when the original is parsed.
+Imported scores retain precedence, and HR/power/MET formulas, policy snapshots and user controls are unchanged.
+
+Event Details hydrates streams from retained originals without writing them to Firestore. Opening a chart therefore
+needs no historical reparse. Saved summaries and private Training evaluations change only on new imports or through
+the existing authorized source-backed reparse, including strict leg matching, reservations, retries, deletion fences
+and normal derived invalidation. Training builders continue to consume saved summaries; no global schema bump,
+new data-upgrade path or automatic backfill is introduced. Saved routes need no reparse for this distance correction.
+
+MCP impact review: selected chart/sample projections retain null gaps and their existing numeric fields. Optional
+library interval-support metadata is not exposed. No catalog, scope, consent, registered schema, planning/delivery
+capability or plugin change is needed. See the reparse runbook for the existing operational boundary.
 
 #### Earlier published dependency verification
 

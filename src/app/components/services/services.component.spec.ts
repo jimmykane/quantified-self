@@ -721,11 +721,19 @@ describe('ServicesComponent', () => {
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'send-activities', 'historical-send', 'auto-sync', 'uploads']);
     });
 
-    it('does not repeat the Pro plan in provider feature details', () => {
-        const featureDetails = Object.values(component.serviceOverviewCardsBySection)
-            .flatMap(cards => cards.map(card => card.detail));
-
-        expect(featureDetails).not.toContain(expect.stringMatching(/\bpro\b/i));
+    it.each(['garmin', 'suunto', 'coros', 'wahoo'] as const)('keeps %s feature cards focused on their description and action', section => {
+        fixture.detectChanges();
+        component.activeSection = section;
+        fixture.detectChanges();
+        const overview = fixture.nativeElement.querySelector('.service-detail:not([hidden]) .service-overview') as HTMLElement;
+        expect(overview.querySelectorAll('.service-overview-card')).toHaveLength(component.serviceOverviewCardsBySection[section].length);
+        expect(overview.querySelector('.service-overview-card__detail')).toBeNull();
+        expect(overview.textContent).not.toContain('cooldown');
+        expect(overview.textContent).not.toContain('check_circle');
+        for (const card of component.serviceOverviewCardsBySection[section]) {
+            expect(overview.textContent).toContain(card.title);
+            expect(overview.textContent).toContain(card.description);
+        }
     });
 
     it('summarizes enabled activity and route delivery for every affected provider', () => {
@@ -904,7 +912,7 @@ describe('ServicesComponent', () => {
         expect(manageButtons).toHaveLength(7);
         expect(activePanel.textContent).toContain('Sleep & 24/7 Health history');
         expect(activePanel.textContent).toContain('Backfill Suunto sleep and available 24/7 Health metrics.');
-        expect(activePanel.textContent).toContain('Historical Sleep and 24/7 Health backfill · 7-day cooldown');
+        expect(activePanel.querySelector('.service-overview').textContent).not.toContain('cooldown');
         expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Suunto');
         expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
         expect(manageButtons[3].getAttribute('aria-label')).toBe('Send activities for Suunto');
@@ -953,7 +961,7 @@ describe('ServicesComponent', () => {
         expect(manageButtons).toHaveLength(6);
         expect(activePanel.textContent).toContain('Sleep & daily Health history');
         expect(activePanel.textContent).toContain('Backfill COROS sleep and available daily Health metrics.');
-        expect(activePanel.textContent).toContain('Historical Sleep and daily Health backfill · 7-day cooldown');
+        expect(activePanel.querySelector('.service-overview').textContent).not.toContain('cooldown');
         expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for COROS');
         expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for COROS');
 

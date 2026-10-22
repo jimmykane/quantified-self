@@ -574,3 +574,11 @@
         flex-basis: 120px;
     }
 }
+
+.settings-sport-picker {
+    --qs-table-filter-height: 56px;
+    --qs-table-filter-padding: 16px;
+    --qs-table-filter-text-size: 1rem;
+    width: 100%;
+    min-width: 0;
+}

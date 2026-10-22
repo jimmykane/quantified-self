@@ -17,8 +17,53 @@ the heavy admission cap tracked separately in [#543](https://github.com/jimmykan
 | `processSportsLibRouteReparseTask` | Gen2 / 4 GiB / 1,800 s | Whole attempt and committed route job outcome |
 
 All five use isolated owning-module entrypoints; discovery still exports the full inventory.
-CPU, native task retry/backoff, pacing, parser safe-runtime budgets, target version handling,
-deletion guards and persisted queue states are unchanged. No new Function or schedule exists.
+The monitoring rollout preserved CPU, native task retry/backoff, pacing, parser safe-runtime budgets,
+target version handling, deletion guards and persisted queue states. No new Function or schedule exists.
+
+### Normal worker one-vCPU candidate
+
+The local resource candidate sets only `processSportsLibReparseTask` to one vCPU, retaining
+1 GiB memory, concurrency one and the 1,800-second timeout. Heavy, route and direct HTTP reparse
+resources retain their existing settings. Parser code, dependencies, task identity, retries,
+admission, source-write fences and queue lifecycle are unchanged. This is a prepared candidate;
+the CPU reduction and a production benchmark require a separately approved deployment.
+
+Local registration tests and the compiled endpoint checker verify the candidate's resource
+contract. A host process without a CPU quota cannot establish one-versus-two-vCPU performance;
+the existing cold-import benchmark measures startup/RSS only. These checks establish no
+quota-controlled parsing result or saving.
+
+For the approved live comparison:
+
+1. Capture the current two-vCPU revision and its parser version before changing it. Use comparable
+   active windows with the same parser/dependencies and source-size/format mix. Exclude deployment
+   transitions and do not compare whole migration days with materially different admitted work.
+2. Deploy exactly `functions:processSportsLibReparseTask` from the reviewed source, then read back
+   its one-vCPU/1-GiB/concurrency-one/1,800-second contract and unchanged task settings.
+3. Use the exact old/new revision labels for native CPU allocation, billable instance time,
+   requests, utilization, memory and latency. Compare allocated CPU seconds per committed
+   **completed** job and completion throughput; retain skipped/superseded jobs, retries,
+   rollout waits and acknowledgement-only attempts as separate counts. A zero-completion or
+   materially different workload window is not a valid efficiency comparison.
+4. Check normal-tier `[Reparse]` committed outcomes, worker failures and p95 latency alongside
+   native Cloud Tasks dispatch delay/depth and eligible-age/progress observations. Retain one CPU
+   only if CPU allocation per completion improves without a material loss of throughput or
+   regression in timeouts, failures, memory pressure or queue progress. Record actual billing
+   separately when available; allocated CPU is not a euro saving.
+5. If the guardrails regress, prepare a reviewed two-vCPU reversal and obtain explicit approval
+   for that deployment. Do not change retry policy, weaken alerts, replay jobs or disable discovery
+   as part of this comparison.
+
+Deployment command, only after approval:
+
+```sh
+firebase deploy --project quantified-self-io --only functions:processSportsLibReparseTask
+```
+
+Monitoring coverage decision: **unchanged**. The existing normal-tier attempt/commit/failure,
+latency and eligible-age/progress observations, native worker/Cloud Tasks charts and alert policies
+already cover the same Function and queue independently of CPU count. No telemetry, dashboard,
+threshold, schedule, monitoring query or monitoring resource is added by this candidate.
 
 Local Node 22.23.3 cold-import verification on 19 October 2026 (three fresh processes per
 scenario, medians after GC; startup measurements, **not parsing peaks or production billing**):

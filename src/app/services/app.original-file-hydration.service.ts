@@ -20,6 +20,7 @@ import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import { AppEventInterface, OriginalFileMetaData } from '@shared/app-event.interface';
 import { createParsingOptions } from '@shared/parsing-options';
 import { getActivityCreatorNameCarryover } from '@shared/activity-creator-name';
+import { applyCorrectedEventAscent, carryActivityAscentCorrection, type AscentCorrectedActivity } from '@shared/activity-ascent';
 
 export interface ParseOptions {
   skipEnrichment?: boolean;
@@ -259,6 +260,7 @@ export class AppOriginalFileHydrationService {
       }
       this.applyUserActivityOverrides(existingActivity, parsedActivity);
     });
+    applyCorrectedEventAscent(parsedEvent);
 
     if (assignedParsedToExistingIndex.size !== parsedActivities.length) {
       const assignedParsedIndexes = new Set(assignedParsedToExistingIndex.keys());
@@ -511,6 +513,7 @@ export class AppOriginalFileHydrationService {
     if (!existingActivity || !parsedActivity) {
       return;
     }
+    carryActivityAscentCorrection(existingActivity as AscentCorrectedActivity, parsedActivity as AscentCorrectedActivity);
 
     const existingCreatorName = getActivityCreatorNameCarryover(
       existingActivity.creator?.name,

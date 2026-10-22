@@ -1,3 +1,4 @@
+import type { ActivityFilterPickerOption } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { Auth } from 'app/firebase/auth';
 import {
   AfterViewInit,
@@ -115,6 +116,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() presentation: EventTablePresentation = 'dashboard';
   @Input() showTagFilter = true;
   @Input() filterContext = '';
+  @Input() preserveSearchOnFilterChange = false;
+  @Input() hideGeneratedNames = false;
   @Input() emptyMessage = 'No activities yet';
   @Input() emptyHint = 'Import an activity or change your filters';
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
@@ -176,7 +179,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   public tagCatalogIsLoading = false;
   public tagCatalogLoadFailed = false;
   public canLoadTagCatalog = false;
-  public tagFilter = '';
+  public tagFilters: string[] = [];
+  public untaggedFilter = false;
+  public tagPickerOptions: ActivityFilterPickerOption[] = [];
+  public tagPickerValues: string[] = [];
   public tagFilterOptions: string[] = [];
   public isBulkTagSaving = false;
 
@@ -233,7 +239,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
   }
 
-
   ngOnChanges(simpleChanges: SimpleChanges): void {
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
@@ -248,7 +253,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.loading();
       return;
     }
-    if (this.events && (simpleChanges.events || simpleChanges.presentation) && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
+    if (this.events && (simpleChanges.events || simpleChanges.presentation || simpleChanges.hideGeneratedNames) && this.paginator && this.sort) {
       this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
     if (preferencesChanged) {
@@ -261,20 +266,25 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (simpleChanges.showActions || simpleChanges.presentation) {
       if (this.isBrowsePresentation) {
         this.searchTerm = '';
-        this.tagFilter = '';
+        this.tagFilters = [];
+        this.untaggedFilter = false;
         this.selection.clear();
         this.applyTableFilter();
       }
       this.updateDisplayedColumns();
     }
     if (simpleChanges.showTagFilter && !this.showTagFilter) {
-      this.tagFilter = '';
+      this.tagFilters = [];
+      this.untaggedFilter = false;
       this.applyTableFilter();
     }
     if (simpleChanges.filterContext) {
-      this.searchTerm = '';
-      this.searchSubject.next('');
-      this.tagFilter = '';
+      if (!this.preserveSearchOnFilterChange) {
+        this.searchTerm = '';
+        this.searchSubject.next('');
+      }
+      this.tagFilters = [];
+      this.untaggedFilter = false;
       this.selection.clear();
       this.suppressLibraryPageFeedback = true;
       this.paginator?.firstPage();
@@ -308,7 +318,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
         this.isHandset = nextIsHandset;
         this.updateDisplayedColumns();
-        if (this.events && this.data.paginator && this.data.sort) {
+        if (this.events && this.paginator && this.sort) {
           this.processChanges('breakpoint_change', true);
         }
         this.changeDetector.markForCheck();
@@ -323,12 +333,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     };
     this.data.filterPredicate = (row: any, filter: string) => {
       const filterState = this.parseTableFilter(filter);
-      if (filterState.tag) {
-        const tagKey = filterState.tag.toLowerCase();
-        const rowTags = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
-        if (!rowTags.some((tag: string) => tag.toLowerCase() === tagKey)) {
-          return false;
-        }
+      if (filterState.tags.length || filterState.untagged) {
+        const selected = new Set(filterState.tags.map(tag => tag.toLowerCase()));
+        const rowTags: string[] = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
+        if (!rowTags.some(tag => selected.has(tag.toLowerCase())) && !(filterState.untagged && !rowTags.length)) return false;
       }
 
       const terms = filterState.text
@@ -402,6 +410,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges('after_delete_row');
     }
     this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
+  }
+
+  public refreshSavedAscent(event: EventInterface): void {
+    if (this.destroyed || !this.user || !this.events?.includes(event)) return;
+    this.invalidateRowCacheForEvent(event);
+    this.processChanges('ascent_saved', true);
   }
 
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
@@ -1031,16 +1045,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.applyTableFilter();
   }
 
-  updateTagFilter(tag: string): void {
-    const requestedTag = `${tag || ''}`;
-    const nextTag = requestedTag
-      ? this.tagFilterOptions.find(option => option.toLowerCase() === requestedTag.toLowerCase()) || ''
-      : '';
-    if (nextTag === this.tagFilter) {
-      return;
-    }
-    this.tagFilter = nextTag;
+  updateTagFilters(values: readonly string[]): void {
+    const tags = this.tagFilterOptions.filter(tag => values.includes(`tag:${tag.toLowerCase()}`));
+    const untagged = values.includes('untagged');
+    if (tags.length === this.tagFilters.length && tags.every(tag => this.tagFilters.includes(tag)) && untagged === this.untaggedFilter) return;
+    this.tagFilters = tags;
+    this.untaggedFilter = untagged;
     this.hapticsService.selection();
+    this.paginator?.firstPage();
     this.applyTableFilter();
   }
 
@@ -1210,21 +1222,22 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private applyTableFilter(): void {
+    this.tagPickerValues = [...this.tagFilters.map(tag => `tag:${tag.toLowerCase()}`), ...(this.untaggedFilter ? ['untagged'] : [])];
     this.data.filter = JSON.stringify({
-      text: this.searchTerm.trim().toLowerCase(),
-      tag: this.tagFilter,
+      text: this.searchTerm.trim().toLowerCase(), tags: this.tagFilters, untagged: this.untaggedFilter,
     });
   }
 
-  private parseTableFilter(filter: string): { text: string; tag: string } {
+  private parseTableFilter(filter: string): { text: string; tags: string[]; untagged: boolean } {
     try {
-      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tag?: unknown };
+      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tags?: unknown; untagged?: unknown };
       return {
         text: typeof parsed.text === 'string' ? parsed.text : '',
-        tag: typeof parsed.tag === 'string' ? parsed.tag : '',
+        tags: Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+        untagged: parsed.untagged === true,
       };
     } catch {
-      return { text: `${filter || ''}`, tag: '' };
+      return { text: `${filter || ''}`, tags: [], untagged: false };
     }
   }
 
@@ -1235,6 +1248,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async selectedColumnsChange(event: string[]) {
     if (this.isBrowsePresentation) {
+      return;
+    }
+    if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
       return;
     }
     if (this.isLibraryPresentation) {
@@ -1324,16 +1340,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.tagFilterOptions = normalizeEventTagSuggestions([
       ...(this.allHistoryTags || []),
       ...rows.flatMap(row => row['Tag Values'] || []),
-      ...((this.tagCatalogIsLoading || this.tagCatalogLoadFailed) && this.tagFilter ? [this.tagFilter] : []),
+      ...((this.tagCatalogIsLoading || this.tagCatalogLoadFailed) ? this.tagFilters : []),
     ]).sort((first, second) => first.localeCompare(second));
-    if (this.tagFilter) {
-      const selectedTagKey = this.tagFilter.toLowerCase();
-      const matchingTagOption = this.tagFilterOptions.find(tag => tag.toLowerCase() === selectedTagKey) || '';
-      if (matchingTagOption !== this.tagFilter) {
-        this.tagFilter = matchingTagOption;
-        this.applyTableFilter();
-      }
-    }
+    this.tagPickerOptions = [
+      { value: 'untagged', label: 'Untagged', icon: 'label_off' },
+      ...this.tagFilterOptions.map(tag => ({ value: `tag:${tag.toLowerCase()}`, label: tag, icon: 'sell' })),
+    ];
+    const selected = new Set(this.tagFilters.map(tag => tag.toLowerCase()));
+    this.tagFilters = this.tagFilterOptions.filter(tag => selected.has(tag.toLowerCase()));
+    this.applyTableFilter();
   }
 
   private processChanges(trigger: string = 'unknown', preserveSelection: boolean = false) {
@@ -1474,11 +1489,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Privacy'] = event.privacy;
     statRowElement['Shared'] = isShared ? 'Shared' : '';
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
-    statRowElement['Name'] = event.name;
+    const activityName = getTagLibraryActivityName(event);
+    statRowElement['Name'] = this.hideGeneratedNames && !activityName ? '' : event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
-    if (this.isLibraryPresentation) {
-      const name = getTagLibraryActivityName(event);
+    if (this.isLibraryPresentation || this.hideGeneratedNames) {
+      const name = activityName;
       const date = startDate ? this.datePipe.transform(startDate, 'd MMM y, HH:mm') : '';
       statRowElement['Library Activity Name'] = name;
       statRowElement['Library Activity Label'] = name || `${statRowElement['Activity Types'] || 'Activity'}${date ? ` on ${date}` : ''}`;
@@ -1515,7 +1531,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
-    statRowElement['sort.Name'] = this.isLibraryPresentation
+    statRowElement['sort.Name'] = this.isLibraryPresentation || this.hideGeneratedNames
       ? statRowElement['Library Activity Name'] || statRowElement['Activity Types'] || ''
       : event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
@@ -1615,6 +1631,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return JSON.stringify({
       dateFormat,
       presentation: this.presentation,
+      hideGeneratedNames: this.hideGeneratedNames,
       unitSettings: this.user?.settings?.unitSettings ?? null,
       removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
       removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),

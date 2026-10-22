@@ -7,6 +7,7 @@ import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ServiceNames, WahooAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import type { ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 import { getNextAllowedHistoryImportDate, HistoryImportResult } from '../history';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import {
@@ -45,6 +46,7 @@ const HISTORY_LEASE_MS = 15 * 60 * 1000;
 interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
+  background?: boolean;
 }
 
 interface WahooWorkoutsResponse {
@@ -334,17 +336,25 @@ export const addWahooAPIHistoryToQueue = onCall({
   memory: '512MiB',
   timeoutSeconds: 540,
   maxInstances: 10,
-}, async (request): Promise<{ result: string; stats: WahooHistoryImportResult }> => {
+}, async (request): Promise<{ result: string; stats?: WahooHistoryImportResult; historyImport?: ConnectionHistoryStatusProjection }> => {
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
   if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
-  const { startDate: startValue, endDate: endValue } = request.data as HistoryToQueueRequest;
+  const { startDate: startValue, endDate: endValue, background } = (request.data || {}) as HistoryToQueueRequest;
+  if (background !== undefined && typeof background !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'Invalid background option.');
+  }
   const startDate = new Date(startValue);
   const endDate = new Date(endValue);
   if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
     throw new HttpsError('invalid-argument', 'No valid start and/or end date was provided.');
   }
   if (startDate > endDate) throw new HttpsError('invalid-argument', 'Start date is after the end date.');
+  if (background === true) {
+    const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+    const historyImport = await startManualActivityHistory(request.auth.uid, SERVICE_NAME, startDate, endDate);
+    if (historyImport) return { result: 'History import accepted', historyImport };
+  }
   const nextAllowedDate = await getNextAllowedHistoryImportDate(request.auth.uid, SERVICE_NAME);
   if (nextAllowedDate && nextAllowedDate > new Date()) {
     throw new HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);

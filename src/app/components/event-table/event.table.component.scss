@@ -12,6 +12,9 @@
 }
 
 .table-toolbar {
+  --qs-table-filter-height: 46px;
+  --qs-table-filter-text-size: 0.95rem;
+  --qs-table-filter-padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -22,16 +25,16 @@
 
 .table-toolbar-main {
   display: grid;
-  align-items: center;
-  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  align-items: start;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
   gap: 10px;
   min-width: 0;
 }
 
 .table-toolbar-main .qs-search-field {
-  --mat-form-field-container-height: 46px;
-  --mat-form-field-container-text-size: 0.95rem;
-  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-container-height: var(--qs-table-filter-height);
+  --mat-form-field-container-text-size: var(--qs-table-filter-text-size);
+  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
   width: 100%;
   min-width: 0;
 }
@@ -63,20 +66,26 @@
 }
 
 .table-toolbar-filters {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
   overflow: visible;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar-actions {
+  min-height: var(--qs-table-filter-height);
+  display: flex;
+  align-items: center;
 }
 
 .tag-filter-field {
-  --mat-form-field-container-height: 46px;
-  --mat-form-field-container-vertical-padding: 10px;
-  flex: 0 0 150px;
-  width: 150px;
+  flex: 0 0 170px;
+  width: 170px;
+  min-width: 0;
 }
 
 .table-toolbar-filters:empty {
@@ -249,7 +258,12 @@
   }
 
   .table-toolbar-filters {
-    grid-column: 1 / -1;
+    grid-column: 1;
+  }
+
+  .table-toolbar-actions {
+    grid-column: 2;
+    align-self: start;
   }
 
   .table-selection-toolbar {
@@ -302,6 +316,15 @@
 }
 
 /* Standardize cell behavior */
+.event-table-header {
+  // App container tokens are translucent; sticky content needs a solid surface.
+  background: var(--mat-sys-surface-bright);
+}
+
+.event-table-header > th {
+  opacity: 1;
+}
+
 .mat-mdc-header-cell,
 .mat-mdc-cell {
   white-space: nowrap !important;
@@ -403,7 +426,11 @@
 
 @include bp.xsmall {
 
+  .table-toolbar-main .qs-search-field { grid-column: 1; }
+  .table-toolbar-actions { grid-column: 2; grid-row: 1; }
+
   .table-toolbar-filters {
+    grid-column: 1 / -1;
     align-items: stretch;
     flex-direction: column;
     width: 100%;
@@ -487,6 +514,7 @@ mat-icon {
 
 .table-wrapper {
   overflow: auto;
+  max-height: min(60vh, 720px);
   width: 100%;
 }
 
@@ -585,6 +613,13 @@ mat-paginator {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.activity-custom-name {
+  max-width: 140px;
+  margin-top: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
 }
 
 .device-names-cell {

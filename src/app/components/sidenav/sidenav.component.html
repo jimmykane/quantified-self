@@ -51,6 +51,12 @@
       <mat-icon>calendar_month</mat-icon>
       <span>Calendar</span>
     </mat-list-item>
+
+    <a mat-list-item class="sidenav-route-link" routerLinkActive="active" ariaCurrentWhenActive="page" routerLink="/activities"
+      (click)="sideNav.close()">
+      <mat-icon matListItemIcon aria-hidden="true">list_alt</mat-icon>
+      <span matListItemTitle>Activities</span>
+    </a>
   </div>
 
   <div role="group" aria-labelledby="sidenav-training-health-heading">
@@ -77,7 +83,7 @@
       <mat-icon>cardiology</mat-icon>
       <span>Health</span>
     </mat-list-item>
-    <a mat-list-item class="sidenav-notes-item" routerLink="/health/compare"
+    <a mat-list-item class="sidenav-route-link sidenav-notes-item" routerLink="/health/compare"
       routerLinkActive="active" ariaCurrentWhenActive="page" (click)="sideNav.close()">
       <mat-icon matListItemIcon aria-hidden="true">edit_note</mat-icon>
       <span matListItemTitle>Timeline notes</span>
@@ -94,8 +100,6 @@
       }
     </mat-list-item>
   </div>
-
-  <!-- Tags is temporarily omitted from navigation; /tags remains available. -->
 
   <div role="group" aria-labelledby="sidenav-explore-heading">
     <div id="sidenav-explore-heading" class="sidenav-section-header">Explore</div>

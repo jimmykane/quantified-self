@@ -8,7 +8,7 @@ import { DELIVERY_LEDGER, DELIVERY_QUEUE, TrainingDeliveryTransportError, type D
 import { trainingDeliveryCommand } from './commands';
 import { reconcileTrainingDeliveryPage } from './store';
 import { processTrainingDelivery } from './worker';
-import { stageTrainingDeliveryReconciliation, stageTrainingDeliveryDisconnect } from './marker';
+import { stageTrainingDeliveryReconciliation, stageTrainingDeliveryDisconnect, reconciliationJobId } from './marker';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { mutateTrainingScheduleForUser } from '../persistence';
 import { restoreTrainingScheduleRevisionForUser } from '../restore';
@@ -21,6 +21,8 @@ import { processTrainingVerification } from './verification-worker';
 import { productionRequestCapacity } from './request-capacity';
 import type { InspectionObservation } from './verification-contracts';
 import { createGarminTrainingClient } from './garmin/http';
+import { TRAINING_DELIVERY_STATUSES } from '../../../../shared/training-provider-delivery';
+import { TRAINING_DELIVERY_VERIFICATIONS, parseTrainingVerificationV1 } from '../../../../shared/training-provider-verification';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', { timeout: 30_000 }, () => {
   // Never accept a production project or a non-loopback emulator endpoint.
@@ -124,6 +126,94 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
 
     expect(transactionPrecondition).toHaveBeenCalledTimes(1);
     expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+  const deliveryViews = async (id: string) => Promise.all([DELIVERY_LEDGER, TRAINING_DELIVERY_STATUSES,
+    TRAINING_DELIVERY_VERIFICATIONS].map(collection => db.collection('users').doc(uid).collection(collection).doc(id).get()));
+
+  it.each([false, true])('does not rewrite unchanged ledgers or projections (inspection=%s), and recovers due checks', async canInspect => {
+    if (canInspect) inspection();
+    const ledger = await delivered();
+    const before = await deliveryViews(ledger.id);
+    // Queue documents are leaves; simulate a lost reservation in this loopback fixture.
+    await db.collection(DELIVERY_QUEUE).doc(ledger.id).delete();
+    now += 30 * 60_000;
+    await mark(); await drain();
+    const after = await deliveryViews(ledger.id);
+    after.forEach((snapshot, index) => {
+      expect(snapshot.data()).toEqual(before[index].data());
+      expect(snapshot.updateTime!.isEqual(before[index].updateTime!)).toBe(true);
+    });
+    if (canInspect) expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).data()).toMatchObject({ kind: 'verification' });
+    else expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).exists).toBe(false);
+    expect(transport.calls).toHaveLength(1);
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs)
+      .toBe(now + 30 * 60_000);
+  });
+
+  it.each(['status', 'verification'] as const)('repairs missing %s and stale sibling projections without rewriting the ledger', async missing => {
+    const ledger = await delivered();
+    const before = await deliveryViews(ledger.id);
+    // Both projection collections contain fixed leaves only.
+    const missingIndex = missing === 'status' ? 1 : 2;
+    const staleIndex = missing === 'status' ? 2 : 1;
+    await before[missingIndex].ref.delete();
+    await before[staleIndex].ref.update({ privateCanary: 'must not persist', missing: true });
+    now += 60_000;
+    await mark(); await drain();
+    const after = await deliveryViews(ledger.id);
+    expect(after[0].updateTime!.isEqual(before[0].updateTime!)).toBe(true);
+    expect(parseTrainingDeliveryStatusV1(after[1].data())).toEqual(projectDelivery(before[0].data() as DeliveryLedgerV1));
+    expect(parseTrainingVerificationV1(after[2].data())).toMatchObject({ state: 'unsupported', missing: false });
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it('acknowledges a newer authored revision even when delivery content is identical', async () => {
+    await delivered();
+    const ledger = (await ledgers())[0];
+    now += 60_000;
+    await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w').update({ revision: 2, updatedAtMs: now });
+    await mark(); await drain();
+    const after = await deliveryViews(ledger.id);
+    expect(after[0].data()).toEqual({ ...ledger, updatedAtMs: now });
+    expect(parseTrainingDeliveryStatusV1(after[1].data())).toMatchObject({ status: 'delivered', updatedAtMs: now });
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it('updates check availability when capabilities change without a ledger change', async () => {
+    const ledger = await delivered();
+    const before = await deliveryViews(ledger.id);
+    inspection(); now += 60_000;
+    await mark(); await drain();
+    const after = await deliveryViews(ledger.id);
+    expect(after[0].updateTime!.isEqual(before[0].updateTime!)).toBe(true);
+    expect(parseTrainingVerificationV1(before[2].data()).canCheck).toBe(false);
+    expect(parseTrainingVerificationV1(after[2].data())).toMatchObject({ canCheck: true, updatedAtMs: now });
+  });
+
+  it('reads provider authority once per page and refreshes it after a transaction retry', async () => {
+    await send();
+    const user = db.collection('users').doc(uid);
+    await user.collection('scheduledWorkouts').doc('w2').set(workout('w2'));
+    await mark();
+    const connection = runtime.connection;
+    let aborted = false;
+    runtime.connection = vi.fn(async (tx, owner, provider) => {
+      const authority = await connection(tx, owner, provider);
+      if (!aborted && provider === 'coros') {
+        aborted = true; connectionGeneration = 'connection-2';
+        throw Object.assign(new Error('synthetic transaction conflict'), { code: 10 });
+      }
+      return authority;
+    });
+    await reconcileTrainingDeliveryPage(runtime, uid);
+    const calls = vi.mocked(runtime.connection).mock.calls;
+    expect(calls.filter(call => call[2] === 'garmin')).toHaveLength(2);
+    expect(calls.filter(call => call[2] === 'coros')).toHaveLength(2);
+    expect(calls.filter(call => call[2] === 'wahoo')).toHaveLength(1);
+    expect(calls.filter(call => call[2] === 'suunto')).toHaveLength(1);
+    expect((await ledgers())[0].status).toBe('pending');
+    await reconcileTrainingDeliveryPage(runtime, uid);
+    expect(vi.mocked(runtime.connection).mock.calls.filter(call => call[2] === 'garmin')).toHaveLength(3);
   });
   it('queues/coalesces manual checks without changing settings and replays the typed receipt', async () => {
     inspection(); const ledger = await delivered();

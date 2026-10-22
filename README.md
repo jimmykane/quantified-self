@@ -270,6 +270,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Sports Lib activity and route reprocessing monitoring](docs/reparse-monitoring.md)
 - [Account cleanup and disconnect recovery monitoring](docs/account-cleanup-monitoring.md)
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
+- [Activity ascent/descent corrections and source preservation](docs/activity-ascent-corrections.md)
 - [Activity sending workspace and recovery](docs/activity-sending-workspace.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)
 - [Route import and delivery monitoring](docs/route-monitoring.md)

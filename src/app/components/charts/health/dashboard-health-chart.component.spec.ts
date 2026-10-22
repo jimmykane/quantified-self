@@ -546,11 +546,18 @@ describe('dashboard chart source interactions', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.health-value-row app-chart-source-picker')?.textContent).toContain('Minimum sleep HR');
+    expect(host.classList.contains('health-dashboard-tile')).toBe(true);
+    const picker = host.querySelector('.health-value-row app-chart-source-picker')!;
+    expect(picker.querySelector('.chart-reading-picker > span')?.classList.contains('cdk-visually-hidden')).toBe(true);
+    expect(picker.querySelector('.chart-reading-method')).toBeNull();
+    expect(picker.querySelector('button')?.getAttribute('aria-label')).toContain('Minimum sleep HR');
+    expect(picker.querySelector('.chart-source-row')?.textContent).toContain('Suunto');
     expect(host.querySelector('.health-value-row strong')?.textContent).toBe('57 bpm');
     expect(host.querySelector('.health-recorded-date')?.textContent).toBe('Recorded ' + component.recordedDate());
     expect(host.querySelector('.health-evidence-text')?.textContent).toContain('No trend inferred');
     fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
     expect(host.querySelector('.health-thumbnail-source')?.textContent).toContain('Suunto');
+    expect(host.classList.contains('health-dashboard-tile')).toBe(false);
     expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('Minimum sleep HR');
     expect(host.querySelector('.health-thumbnail-value')?.textContent).toBe('57 bpm');
     expect(watch).toHaveBeenCalledOnce();

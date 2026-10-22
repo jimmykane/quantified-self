@@ -6,6 +6,7 @@ import { AppFileService } from './app.file.service';
 import { LoggerService } from './logger.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { AppCacheService } from './app.cache.service';
+import { resolveEventDistanceCursorSeconds } from '../helpers/event-echarts-xaxis.helper';
 import {
   EventImporterFIT,
   EventImporterGPX,
@@ -76,6 +77,42 @@ describe('AppOriginalFileHydrationService', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('hydrates sparse distance from the original without moving HR readings onto invented distances', async () => {
+    const start = Date.parse('2026-01-01T00:00:00Z');
+    const iso = (second: number) => new Date(start + second * 1000).toISOString();
+    const source = JSON.stringify({ DeviceLog: {
+      Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+      Header: { DateTime: iso(0), Duration: 6, Distance: 20 },
+      Windows: [{ Window: { Type: 'Activity', Duration: 6, Distance: 20 } }],
+      Samples: Array.from({ length: 7 }, (_, second) => ({
+        TimeISO8601: iso(second), HR: 1.5,
+        ...(second === 0 ? { Events: [{ Activity: { ActivityType: 3 } }] }
+          : second === 6 ? { Events: [{ Lap: { Type: 'Stop' } }] } : {}),
+        ...([2, 4, 6].includes(second) ? { Distance: (second - 2) * 5 } : {}),
+      })),
+    } });
+    vi.spyOn(service, 'downloadFile').mockResolvedValue(new TextEncoder().encode(source).buffer as ArrayBuffer);
+    const enrichment = new AppEventUtilities(loggerMock);
+    eventUtilitiesMock.enrich.mockImplementation((activity, streams) => enrichment.enrich(activity, streams));
+    const result = await service.parseEventFromOriginalFiles({
+      originalFile: { path: 'users/u/events/e/synthetic.json' },
+      getActivities: () => [],
+    } as any, { preserveActivityIdsFromEvent: false });
+
+    expect(result.failedFiles).toEqual([]);
+    const activity = result.finalEvent!.getFirstActivity();
+    const distance = activity.getStreamData('Distance');
+    const time = activity.getStreamData('Time');
+    expect(distance).toEqual([null, null, 0, null, 10, null, 20]);
+    expect(time).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(activity.getStreamData('Heart Rate')).toEqual([90, 90, 90, 90, 90, 90, 90]);
+    const beforeCursor = structuredClone(activity.toJSON());
+    expect(resolveEventDistanceCursorSeconds(distance, time, 0)).toBe(2);
+    expect(resolveEventDistanceCursorSeconds(distance, time, 9)).toBe(4);
+    expect(activity.toJSON()).toEqual(beforeCursor);
+    expect(activity.getDistance()?.getValue()).toBe(20);
   });
 
   it('should parse single-file events successfully', async () => {

@@ -277,6 +277,8 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/tags')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/activities')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/activities/unknown')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/health/compare')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note/extra')).toBe(false);
@@ -351,6 +353,8 @@ describe('Firebase Hosting configuration', () => {
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
+    // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
+    // Activity ascent/descent editing and Connections import-timing help were updated on this date.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -413,6 +417,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tags</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/activities</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');

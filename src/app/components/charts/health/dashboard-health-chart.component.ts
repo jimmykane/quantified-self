@@ -23,6 +23,7 @@ import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { healthMetricReadingTitle, restingHeartRateSupportNote } from '../../../helpers/chart-source.helper';
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
+    host: { '[class.health-dashboard-tile]': '!preview() && !thumbnail() && !overview()' },
     imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
     templateUrl: './dashboard-health-chart.component.html', styleUrls: ['./dashboard-health-chart.component.css'], changeDetection: ChangeDetectionStrategy.OnPush })
 export class DashboardHealthChartComponent {

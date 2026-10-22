@@ -1,4 +1,4 @@
-<section [class.tile-chart-kpi-row]="compactKpiRow" [class.tile-chart-calendar]="chartType === activityCalendarChartType" [class.tile-has-header-controls]="showHeaderControls && !compactKpiRow"
+<section [class.tile-chart-kpi-row]="compactKpiRow" [class.tile-chart-calendar]="chartType === activityCalendarChartType" [class.tile-chart-health]="!!healthMetric" [class.tile-has-header-controls]="showHeaderControls && !compactKpiRow"
   [class.tile-has-stacked-mobile-controls]="showStackedMobileHeaderControls && !compactKpiRow">
   @if (showHeaderControls) {
   <div class="tile-header-controls">
