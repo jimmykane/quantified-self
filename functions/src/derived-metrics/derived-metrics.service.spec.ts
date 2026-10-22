@@ -155,6 +155,8 @@ const hoisted = vi.hoisted(() => {
     const select = vi.fn();
     const where = vi.fn();
     const transactionGet = vi.fn();
+    const transactionGetAll = vi.fn(async (...refs: unknown[]) => refs.slice(0, -1)
+        .map(ref => ({ ref, exists: false, data: () => undefined })));
     const transactionSet = vi.fn();
     const userRootGet = vi.fn();
     const tombstoneGet = vi.fn();
@@ -202,6 +204,7 @@ const hoisted = vi.hoisted(() => {
     });
     const runTransaction = vi.fn(async (updateFunction: (transaction: unknown) => Promise<void>) => {
         await updateFunction({
+            getAll: transactionGetAll,
             get: transactionGet,
             set: transactionSet,
         });
@@ -239,6 +242,7 @@ const hoisted = vi.hoisted(() => {
         select,
         where,
         transactionGet,
+        transactionGetAll,
         transactionSet,
         userRootGet,
         tombstoneGet,
@@ -5102,7 +5106,7 @@ describe('startDerivedMetricsProcessing', () => {
         hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
-                get: hoisted.transactionGet,
+                getAll: hoisted.transactionGetAll, get: hoisted.transactionGet,
                 set: hoisted.transactionSet,
             });
         });
@@ -5147,7 +5151,7 @@ describe('startDerivedMetricsProcessing', () => {
             .mockResolvedValueOnce({ exists: false, data: () => undefined })
             .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'processing', generation: 43 }) });
         hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
-            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            const transaction = { getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet };
             await callback(transaction);
             await callback(transaction);
         });
@@ -5176,7 +5180,7 @@ describe('startDerivedMetricsProcessing', () => {
             return defaultGet(ref);
         });
         hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
-            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            const transaction = { getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet };
             await callback(transaction); // Aborted attempt; a concurrent write forces a retry.
             vi.setSystemTime(requestAtMs + 30_000);
             await callback(transaction);
@@ -5339,7 +5343,7 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
         mockTransactionDeletionGuardDefaults();
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
-                get: hoisted.transactionGet,
+                getAll: hoisted.transactionGetAll, get: hoisted.transactionGet,
                 set: hoisted.transactionSet,
             });
         });
@@ -5359,7 +5363,7 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
             .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'queued', generation: 43,
                 buildNotBeforeMs: Date.now(), dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form] }) });
         hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
-            const transaction = { get: hoisted.transactionGet, set: hoisted.transactionSet };
+            const transaction = { getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet };
             await callback(transaction); // Aborted optimistic attempt, not a committed write.
             await callback(transaction);
         });
@@ -5575,7 +5579,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         mockTransactionDeletionGuardDefaults();
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
-                get: hoisted.transactionGet,
+                getAll: hoisted.transactionGetAll, get: hoisted.transactionGet,
                 set: hoisted.transactionSet,
             });
         });
@@ -5623,7 +5627,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         }) });
         hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
             vi.setSystemTime(enteredAt + 30_000);
-            await callback({ get: hoisted.transactionGet, set: hoisted.transactionSet });
+            await callback({ getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet });
         });
         await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Form], { background: true });
         expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 13, 100);

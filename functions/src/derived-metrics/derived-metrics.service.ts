@@ -225,7 +225,7 @@ import { getEventTags } from '../../../shared/event-tags';
 import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import { recordDerivedMetricCommit } from './monitoring';
-import { derivedImportBuildIntervalMs, isDerivedImportBatchingEnabled, isDerivedImportService } from './import-batching';
+import { derivedImportBuildIntervalMs, isDerivedImportService } from './import-batching';
 import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId } from '../connection-history/model';
 import {
     getUserDeletionGuardState,
@@ -5905,7 +5905,7 @@ export async function fetchRecoveryLookbackEventDocs(
 export async function flushPendingDerivedMetricsAfterHistory(
     uid: string, runId: string, revision: number, options?: { repairOnly: true },
 ): Promise<void> {
-    if ((!options?.repairOnly && !isDerivedImportBatchingEnabled(uid)) || !isConnectionHistoryRunId(runId)
+    if (!isConnectionHistoryRunId(runId)
         || !Number.isSafeInteger(revision) || revision < 0) return;
     const result = await markDerivedMetricsDirtyAndMaybeQueue(uid, [], {
         completedHistory: { runId, revision, repairOnly: options?.repairOnly },

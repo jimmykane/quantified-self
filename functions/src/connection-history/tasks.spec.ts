@@ -339,8 +339,7 @@ describe('durable history coordinator', () => {
     expect(signals().at(-1)).toMatchObject({ event: 'dispatch_attempt', outcome: 'failed', provider: 'wahoo' });
     run.processed = true; await trigger(event); expect(signals()).toHaveLength(1);
   });
-  it.each(['processed', 'failed', 'skipped'] as const)('flushes pending derived work on a committed terminal %s transition for a pilot owner', async status => {
-    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', 'owner');
+  it.each(['processed', 'failed', 'skipped'] as const)('flushes pending derived work on a committed terminal %s transition without configuration', async status => {
     const before = structuredClone(run); run.processed = true; run.revision++; run.steps[0].status = status;
     const trigger = onConnectionHistoryImportWritten as unknown as (event: {
       params: { runId: string };
@@ -354,11 +353,9 @@ describe('durable history coordinator', () => {
     mocks.flushDerived.mockClear();
     await trigger({ ...event, data: { ...event.data, before: { exists: true, data: () => run } } });
     await trigger({ ...event, params: { runId: 'another-run' } });
-    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', ''); await trigger(event);
     expect(mocks.flushDerived).not.toHaveBeenCalled();
   });
-  it('repairs a newly committed flush receipt after pilot opt-out without recursing on unchanged receipts', async () => {
-    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', '');
+  it('repairs a newly committed flush receipt without recursing on unchanged receipts', async () => {
     run.processed = true; run.revision = 1;
     const before = structuredClone(run);
     run.derivedMetricsFlush = { revision: 1, generation: 2 };
@@ -376,7 +373,6 @@ describe('durable history coordinator', () => {
     expect(mocks.flushDerived).not.toHaveBeenCalled();
   });
   it('ignores malformed terminal updates with no run revision or completion receipt', async () => {
-    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', '');
     const malformed = { ...run, processed: true, revision: undefined };
     const trigger = onConnectionHistoryImportWritten as unknown as (event: unknown) => Promise<void>;
     await expect(trigger({ params: { runId: run.id }, data: {

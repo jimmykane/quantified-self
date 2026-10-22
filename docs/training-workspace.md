@@ -5381,21 +5381,19 @@ MCP impact: **no wire or authority change**. Existing prepare/read contracts ret
 retry guidance; the private scheduling fields are never projected into their responses. No additional scopes, tools,
 planning fields, provider actions, registered-schema changes or plugin rebuild are required.
 
-### Import-specific five-minute pilot
+### Import-specific five-minute batching
 
-`DERIVED_METRICS_IMPORT_BATCH_UIDS` is a default-off, comma-separated exact account allowlist in the server
-runtime environment. An empty value disables this pilot; `*` does not enable all accounts. Set the same value for
-all deployed Functions that schedule derived work, including `onConnectionHistoryImportWritten`. Configuration
-activation and deployment require separate approval. No actual account identifiers belong in this document or Git.
+History-import batching applies automatically to all accounts after deployment. No account allowlist or environment
+activation is required. Ordinary background updates retain the two-minute interval outside a recent active history import.
 
-For an enabled account, a new background generation reads the four existing Suunto/Garmin/COROS/Wahoo metadata
-leaves inside its coordinator transaction, projected to `connectionHistoryImport` only. An active UUID-bound import
-checkpoint updated within fifteen minutes changes the fixed build-start interval from two to five minutes.
-Missing, completed, malformed, future-dated or stale checkpoints retain the ordinary interval. The first build and
-manual control/benchmark edits retain prompt scheduling. Coalescing an already queued generation performs no extra
-metadata reads and never slides its deadline. The existing generation, claim, revision and account-deletion fences
-remain authoritative. Completion and write-block handoffs use this same bounded interval and durable enqueue recovery.
-Automatic freshness and MCP preparation join the account's scheduled work, retaining truthful preparing/last-result states.
+A new background generation reads the four existing Suunto/Garmin/COROS/Wahoo metadata leaves inside its coordinator
+transaction, projected to `connectionHistoryImport` only. An active UUID-bound import checkpoint updated within fifteen
+minutes changes the fixed build-start interval from two to five minutes. Missing, completed, malformed, future-dated or
+stale checkpoints retain the ordinary interval. The first build and manual control/benchmark edits retain prompt
+scheduling. Coalescing an already queued generation performs no extra metadata reads and never slides its deadline.
+The existing generation, claim, revision and account-deletion fences remain authoritative. Completion and write-block
+handoffs use this same bounded interval and durable enqueue recovery. Automatic freshness and MCP preparation join
+the account's scheduled work, retaining truthful preparing/last-result states.
 
 The existing history-write trigger expedites the coordinator's pending union when a run changes from active to
 terminal, including failed/skipped partial imports. Its transaction rechecks the exact terminal run revision and owner
@@ -5415,29 +5413,31 @@ it cannot promote later pending work, increment generations or reset the task's 
 a newer same-provider import starts is ignored. This handles failed/lost enqueue responses and concurrent duplicates.
 The receipt is one bounded field on the retained run, excluded from public history projections and MCP. Its update
 preserves the run revision, progress clock and TTL. The existing trigger treats that one receipt-bearing update as
-an enqueue-repair notification. It may repair only the matching persisted receipt, even after pilot opt-out; it cannot
-admit new completion work or write another receipt. Null/unchanged receipts and other terminal-to-terminal updates
-remain no-ops, so this notification cannot recurse. Existing history retention and account cleanup cover the receipt.
+an enqueue-repair notification. It may repair only the matching persisted receipt; it cannot admit new completion
+work or write another receipt. Null/unchanged receipts and other terminal-to-terminal updates remain no-ops, so this
+notification cannot recurse. Existing history retention and account cleanup cover the receipt.
 
 Even without a terminal event, the final dirty generation remains scheduled at a fixed deadline and runs without a new
 source write. Concurrent imports share one account coordinator; another provider's active checkpoint can retain the
-five-minute interval. Releasing the allowlist leaves already scheduled work valid, with at most its existing bounded
-wait; it does not require replay, queue deletion, a migration, new index or a scanner.
+five-minute interval. Once imports finish or their checkpoints become stale, new background work uses the ordinary
+interval. Already scheduled generations retain their valid bounded deadline. No data migration, new Function, queue,
+index, scanner or cleanup is required. Rollback uses the normal code deployment workflow.
 
-Verification uses real Firestore and synthetic recorded TSS events: compare ordinary and pilot scheduling over fourteen
-arrivals, including a correction and deletion, then require identical final Form payloads and complete input versions.
-Additional cases cover concurrent dirty arrivals/completion, obsolete terminal revisions, restart, foreign owner,
-account deletion, manual priority, late writes and failed enqueue handoffs. Completion regressions cover old events
-after later work, superseded projected runs, clean/missing coordinators, concurrent duplicates and lost enqueue replies
-after a claim, plus committed receipt repair after pilot opt-out without new admissions. Public history projection
-tests exclude the receipt. These fixtures are not production savings.
+Verification uses real Firestore and synthetic recorded TSS events: compare ordinary scheduling with automatic active
+import scheduling over fourteen arrivals, including a correction and deletion, then require identical final Form payloads
+and complete input versions. The active-import case requires no environment configuration. Additional cases cover
+concurrent dirty arrivals/completion, obsolete terminal revisions, restart, foreign owner, account deletion, manual
+priority, late writes and failed enqueue handoffs. Completion regressions cover old events after later work, superseded
+projected runs, clean/missing coordinators, concurrent duplicates and lost enqueue replies after a claim, plus committed
+receipt repair without new admissions. Public history projection tests exclude the receipt. These fixtures are not
+production savings.
 
 Monitoring: **covered** by existing native derived queues, eligible-age probes and committed outcome metrics. The
 source bundle extends guarded enqueue-failure coverage to `onconnectionhistoryimportwritten`; worker-attempt metrics
 still select only ingress/calculation workers. Intentional future deadlines remain excluded from overdue samples.
-The filter extension needs separately approved monitoring apply/readback. Pilot evaluation compares worker starts,
-scanned document counters, source/publication revisions, failures and refresh latency using existing logs; it adds no
-per-record logging or duplicate production calculations. Roll back the allowlist for a regression.
+Deploy the filter extension through the existing monitoring workflow. Batching requires no monitoring configuration
+to activate. Compare worker starts, scanned document counters, source/publication revisions, failures and refresh
+latency using existing logs; this adds no per-record logging or duplicate production calculations.
 
 MCP impact: **no wire or authority change**. Calculation payloads, schemas, scopes, consent, planning reads/writes,
 provider actions and bounded preparation contracts are unchanged. Only a private background scheduling deadline can

@@ -25,7 +25,6 @@ import { advanceHistoryRun, type HistoryChildObservation } from './advance';
 import { withHistoryExecution } from './context';
 import { emitHistoryMonitoring, historyMonitoringProvider, historyExpectedContention } from './monitoring';
 import { historyProbeDue, observeConnectionHistory, recordHistoryProbeUnavailable } from './monitoring-probe';
-import { isDerivedImportBatchingEnabled } from '../derived-metrics/import-batching';
 
 const region = FUNCTIONS_MANIFEST.processConnectionHistoryTask.region;
 const refFor = (id: string) => admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(id);
@@ -250,11 +249,11 @@ export const onConnectionHistoryImportWritten = onDocumentWritten({ region, docu
       && Number.isSafeInteger(receipt.generation) && Number(receipt.generation) > 0
       && (previous.derivedMetricsFlush?.revision !== receipt.revision
         || previous.derivedMetricsFlush?.generation !== receipt.generation);
-    const firstTerminal = previous?.processed === false && isDerivedImportBatchingEnabled(run.userID);
+    const firstTerminal = previous?.processed === false;
     if ((firstTerminal || receiptCommitted) && previous?.userID === run.userID
       && run.id === event.params.runId && isConnectionHistoryRunId(run.id)) {
       const { flushPendingDerivedMetricsAfterHistory } = await import('../derived-metrics/derived-metrics.service');
-      // The receipt's own event retries its exact enqueue even after pilot opt-out.
+      // The receipt's own event retries only its exact committed enqueue.
       // That repair never writes another receipt, so it cannot retrigger itself.
       if (receiptCommitted) await flushPendingDerivedMetricsAfterHistory(run.userID, run.id, run.revision, { repairOnly: true });
       else await flushPendingDerivedMetricsAfterHistory(run.userID, run.id, run.revision);

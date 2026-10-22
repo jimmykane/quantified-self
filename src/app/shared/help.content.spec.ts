@@ -50,7 +50,7 @@ describe('help.content', () => {
     expect(copy).toContain('background rebuild may wait up to two minutes');
     expect(copy).toContain('plus normal sync, queue and calculation time');
     expect(copy).toContain('All changes are retained');
-    expect(copy).toContain('background interval may extend to five minutes');
+    expect(copy).toContain('updates automatically use a five-minute background interval');
     expect(copy).toContain('late-arriving records still trigger an update');
     expect(copy).toContain('Training load edits and benchmark changes receive priority');
     expect(copy).toContain('wait for any calculation already running');

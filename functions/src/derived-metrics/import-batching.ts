@@ -10,12 +10,6 @@ export function isDerivedImportService(value: unknown): value is ServiceNames {
     return HISTORY_SERVICES.some(service => service === value);
 }
 
-/** Default-off server configuration. No wildcard and no client-supplied rollout flag. */
-export function isDerivedImportBatchingEnabled(uid: string): boolean {
-    return !!uid && uid !== '*' && (process.env.DERIVED_METRICS_IMPORT_BATCH_UIDS ?? '')
-        .split(',').some(candidate => candidate.trim() === uid);
-}
-
 /** Called only when scheduling a new background generation, never for each source write. */
 export async function derivedImportBuildIntervalMs(
     transaction: FirebaseFirestore.Transaction,
@@ -23,7 +17,6 @@ export async function derivedImportBuildIntervalMs(
     nowMs: number,
     ordinaryIntervalMs: number,
 ): Promise<number> {
-    if (!isDerivedImportBatchingEnabled(uid)) return ordinaryIntervalMs;
     const db = admin.firestore();
     const snapshots = await transaction.getAll(
         ...HISTORY_SERVICES.map(service => db.doc(`users/${uid}/meta/${service}`)),

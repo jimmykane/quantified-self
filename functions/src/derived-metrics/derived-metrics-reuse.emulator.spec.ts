@@ -104,7 +104,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
 
     const historyId = '11111111-1111-4111-8111-111111111111';
     async function activeImport() {
-        vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', uid);
         await user().collection('meta').doc(ServiceNames.SuuntoApp).set({ connectionHistoryImport: {
             active: true, runId: historyId, updatedAtMs: Date.now(),
         } });
@@ -119,13 +118,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
     it('reduces fourteen-arrival imports while producing identical Form after a correction and deletion', async () => {
         const finalPayloads: unknown[] = [];
         const base = Date.parse('2026-10-22T12:00:00Z');
-        for (const pilot of [false, true]) {
+        for (const importing of [false, true]) {
             mocks.firestore.mockReturnValue(db);
             uid = `reuse-fixture-${randomUUID()}`; owners.push(uid); await user().set({ fixture: true });
             let now = base;
             vi.spyOn(Date, 'now').mockImplementation(() => now);
-            await activeImport();
-            if (!pilot) vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', '');
+            if (importing) await activeImport();
             const tasks: { generation: number; due: number }[] = [];
             mocks.enqueue.mockImplementation(async (...args: unknown[]) => {
                 tasks.push({ generation: Number(args[1]), due: now + Number(args[2] ?? 0) * 1000 });
@@ -160,7 +158,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
                 await worker({ data: { uid, generation: task.generation } });
                 now += 21_000;
             }
-            expect(starts).toEqual(pilot ? [0, 300_000, 600_000] : [0, 120_000, 240_000, 360_000, 480_000]);
+            expect(starts).toEqual(importing ? [0, 300_000, 600_000] : [0, 120_000, 240_000, 360_000, 480_000]);
             const form = (await user().collection('derivedMetrics').doc(DERIVED_METRIC_KINDS.Form).get()).data()!;
             expect(form).toMatchObject({ status: 'ready', builtFromEventMutationVersion: 16, sourceEventCount: 13 });
             expect(form.payload.dailyLoads).toEqual([expect.objectContaining({ load: 167 })]);
@@ -336,14 +334,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
     });
 
-    it('repairs an existing receipt after pilot opt-out without admitting another terminal event', async () => {
+    it('repairs an existing receipt without admitting another terminal event', async () => {
         const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
         await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
         await terminalImport();
         mocks.enqueue.mockRejectedValueOnce(new Error('synthetic outage'));
         await expect(flushPendingDerivedMetricsAfterHistory(uid, historyId, 1)).rejects.toThrow('derived_metrics_history_flush_enqueue_failed');
         const before = (await coordinator().get()).data()!;
-        vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', ''); mocks.enqueue.mockClear();
+        mocks.enqueue.mockClear();
         await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1, { repairOnly: true });
         expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith(uid, before.generation);
         expect((await coordinator().get()).data()).toEqual(before);
