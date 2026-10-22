@@ -225,7 +225,7 @@ import { getEventTags } from '../../../shared/event-tags';
 import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import { recordDerivedMetricCommit } from './monitoring';
-import { derivedImportBuildIntervalMs, isDerivedImportService } from './import-batching';
+import { derivedImportBuildIntervalMs, IMPORT_BUILD_INTERVAL_MS, isDerivedImportService } from './import-batching';
 import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId } from '../connection-history/model';
 import {
     getUserDeletionGuardState,
@@ -5508,6 +5508,9 @@ async function backgroundBuildNotBeforeMs(
 ): Promise<number> {
     // Legacy/malformed clocks must never create an unbounded wait.
     if (startedAtMs === null || !Number.isFinite(startedAtMs) || startedAtMs < 0 || startedAtMs > nowMs) return nowMs;
+    // Once the longest interval has elapsed, metadata cannot delay this build.
+    // Avoid four billed reads and a new read-failure dependency for ordinary work.
+    if (startedAtMs + Math.max(BACKGROUND_BUILD_INTERVAL_MS, IMPORT_BUILD_INTERVAL_MS) <= nowMs) return nowMs;
     const intervalMs = await derivedImportBuildIntervalMs(transaction, uid, nowMs, BACKGROUND_BUILD_INTERVAL_MS);
     return Math.max(nowMs, startedAtMs + intervalMs);
 }

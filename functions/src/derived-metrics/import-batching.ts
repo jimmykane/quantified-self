@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { isConnectionHistoryRunId } from '../connection-history/model';
 
-const IMPORT_BUILD_INTERVAL_MS = 5 * 60_000;
+export const IMPORT_BUILD_INTERVAL_MS = 5 * 60_000;
 const IMPORT_CHECKPOINT_MAX_AGE_MS = 15 * 60_000;
 const HISTORY_SERVICES = [ServiceNames.SuuntoApp, ServiceNames.GarminAPI, ServiceNames.COROSAPI, ServiceNames.WahooAPI];
 

@@ -5591,10 +5591,11 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
     });
 
     it.each([
-        ['idle', null, 0], ['idle', -30_000, 90], ['idle', -120_000, 0],
-        ['idle', 30_000, 0], ['failed', -30_000, 0],
-        ['queued', -30_000, 0], ['processing', -1_200_000, 0],
-    ] as const)('batches background work from %s with previous start offset %s', async (status, offset, delay) => {
+        ['idle', null, 0, 0], ['idle', -30_000, 90, 1], ['idle', -120_000, 0, 1],
+        ['idle', -299_999, 0, 1], ['idle', -300_000, 0, 0], ['idle', -300_001, 0, 0],
+        ['idle', 30_000, 0, 0], ['failed', -30_000, 0, 0],
+        ['queued', -30_000, 0, 0], ['processing', -1_200_000, 0, 0],
+    ] as const)('batches background work from %s with previous start offset %s', async (status, offset, delay, metadataReads) => {
         const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
         vi.useFakeTimers();
         vi.setSystemTime(Date.UTC(2026, 9, 17));
@@ -5607,6 +5608,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         const response = await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Acwr],
             { background: true, incrementEventMutationVersion: true });
         expect(response).toMatchObject({ queued: true, generation: 13 });
+        expect(hoisted.transactionGetAll).toHaveBeenCalledTimes(metadataReads);
         expect(hoisted.enqueueDerivedMetricsTask.mock.calls).toEqual([
             delay ? ['user-1', 13, delay] : ['user-1', 13],
         ]);

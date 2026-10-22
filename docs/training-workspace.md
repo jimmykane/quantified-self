@@ -5386,8 +5386,10 @@ planning fields, provider actions, registered-schema changes or plugin rebuild a
 History-import batching applies automatically to all accounts after deployment. No account allowlist or environment
 activation is required. Ordinary background updates retain the two-minute interval outside a recent active history import.
 
-A new background generation reads the four existing Suunto/Garmin/COROS/Wahoo metadata leaves inside its coordinator
-transaction, projected to `connectionHistoryImport` only. An active UUID-bound import checkpoint updated within fifteen
+Background scheduling skips import-metadata reads for a first build, an invalid prior start, or a prior start at least
+five minutes old: those builds are prompt under either interval. For a valid recent prior start, a new background
+generation reads the four existing Suunto/Garmin/COROS/Wahoo metadata leaves inside its coordinator transaction,
+projected to `connectionHistoryImport` only. An active UUID-bound import checkpoint updated within fifteen
 minutes changes the fixed build-start interval from two to five minutes. Missing, completed, malformed, future-dated or
 stale checkpoints retain the ordinary interval. The first build and manual control/benchmark edits retain prompt
 scheduling. Coalescing an already queued generation performs no extra metadata reads and never slides its deadline.
