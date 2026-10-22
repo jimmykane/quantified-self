@@ -33,6 +33,7 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
 import { BenchmarkModule } from './benchmark.module';
 import { TrainingImpactComponent } from '../components/training-impact/training-impact.component';
 import { BenchmarkRRComponent } from '../components/benchmark/benchmark-rr.component';
+import { SummaryDisclosureComponent } from '../components/shared/summary-disclosure/summary-disclosure.component';
 
 @NgModule({
     imports: [
@@ -45,6 +46,7 @@ import { BenchmarkRRComponent } from '../components/benchmark/benchmark-rr.compo
         EventCadencePowerComponent,
         TrainingImpactComponent,
         BenchmarkRRComponent,
+        SummaryDisclosureComponent,
     ],
     exports: [
         EventSummaryComponent

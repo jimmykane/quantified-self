@@ -406,6 +406,19 @@ benchmark charts, particularly overlapping lines and map backgrounds.
 
 ### Benchmark R–R summaries and plots
 
+All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
+alongside the existing categories. It is not part of Device or Physiological. The existing metric-card renderer
+shows up to seven primary statistics with short contextual labels; the shared flat disclosure contains the other
+available statistics. If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
+and recorded zero remains zero. `rr-metrics.ts` owns the common catalog; values and units remain Sports Lib's.
+Each selected activity is inspected separately; parent-event and multisport aggregates are never used for R–R.
+A local Recording selector preserves source identity across filtering. Two-source benchmarks use the shared stat
+delta formatter and card treatment, restricted to types valid in both sources. Explicit multisport merges and
+ordinary events have no R–R comparison deltas. Initialization and unchanged selections stay silent; accepted source
+and category changes and the shared disclosure own one selection haptic. This summary does not inspect streams,
+start a worker, fetch originals, reparse, persist statistics or add backend reads. MCP metric projections, consent,
+catalog discovery and query/index contracts are unchanged; this is presentation of already-adopted saved metrics.
+
 `BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
 (including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
 full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.

@@ -10,7 +10,8 @@ import {
   SimpleChanges,
   ViewChild,
   effect,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -31,6 +32,10 @@ import { buildSummaryMetricTabs, SummaryMetricTab } from '../../../helpers/summa
 import { expandStatsTypesForCompositeDiff } from '../../../helpers/header-stats-composite.helper';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { hasEventDiveSourceRecords } from '../../../helpers/event-dive-source-records.helper';
+import { buildRRStatSummary, getBenchmarkRRLabels, type RRStatSummary } from '../../../helpers/benchmark-rr.helper';
+import { RR_METRICS, RR_STAT_LABELS } from '../../../constants/rr-metrics';
+import { isBenchmarkEvent } from '@shared/event-classification';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 
@@ -41,6 +46,7 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   diving: 'scuba_diving',
   environment: 'landscape_2',
   device: 'devices',
+  rr: 'ecg_heart',
   physiological: 'demography',
   other: 'category',
 };
@@ -48,6 +54,8 @@ const SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
 const STATS_GRID_PERF_LOGS_ENABLED = false;
 const SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS = 300;
 type TabBodyHeightSyncMode = 'allow_shrink' | 'only_grow';
+let nextRRRegionId = 0;
+interface RRRecording extends RRStatSummary { key: string; label: string; summaryId: string; activity: ActivityInterface; }
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -68,6 +76,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
+  public rrRecordings: RRRecording[] = [];
+  readonly activeRRRecording = signal<RRRecording | null>(null);
+  public rrShowDiff = false;
+  public rrComparisonLabel = '';
+  public rrDiffByType = new Map<string, { display: string; percent: number; color: string }>();
+  readonly rrStatLabels = RR_STAT_LABELS;
+  readonly rrRegionId = `event-rr-summary-${++nextRRRegionId}`;
   public activityTypes: ActivityTypes[] = [];
   public get metricManufacturer(): string | undefined {
     return getCommonMetricManufacturer(this.selectedActivities);
@@ -95,6 +110,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private cdr = inject(ChangeDetectorRef);
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
+  private haptics = inject(AppHapticsService);
   private eventColorService = inject(AppEventColorService);
   private logger = inject(LoggerService);
   private eventSummaryTabsLocalStorageService = inject(AppEventSummaryTabsLocalStorageService);
@@ -139,6 +155,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   ngOnChanges(simpleChanges: SimpleChanges) {
     const ngChangesStart = this.getPerfStart();
     if (!this.selectedActivities.length) {
+      this.rrRecordings = [];
+      this.activeRRRecording.set(null);
+      this.updateRRDiffMap();
       this.displayedStatsToShow = [];
       this.stats = [];
       this.activityTypes = [];
@@ -156,6 +175,22 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       }
       return;
     }
+
+    const labels = getBenchmarkRRLabels(this.selectedActivities);
+    const allActivities = this.event.getActivities();
+    this.rrRecordings = this.selectedActivities.flatMap((activity, index) => {
+      const requested = this.statsToShow;
+      const summary = buildRRStatSummary(this.getStatsForActivity(activity).filter(stat => !requested || requested.includes(stat.getType())));
+      if (!summary.stats.length) return [];
+      const eventIndex = allActivities.indexOf(activity);
+      return [{ ...summary,
+        activity,
+        key: `${this.event?.getID?.() ?? 'event'}:${activity.getID?.() || (eventIndex >= 0 ? eventIndex : index)}`,
+        label: `${labels[index]}${this.selectedActivities.length > 1 && activity.type ? ` · ${activity.type}` : ''}`,
+        summaryId: `${this.rrRegionId}-${index}`,
+      }];
+    });
+    this.activeRRRecording.set(this.rrRecordings.find(recording => recording.key === this.activeRRRecording()?.key) ?? this.rrRecordings[0] ?? null);
 
     const statsBuildStart = this.getPerfStart();
     if (this.selectedActivities.length === 1) {
@@ -204,10 +239,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   public onSelectedTabIndexChange(index: number) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.metricTabs.length) return;
+    const changed = index !== this.selectedTabIndex;
     this.selectedTabIndex = index;
     if (this.isPrewarmingTabs) {
       return;
     }
+    if (changed) this.haptics.selection();
     const selectedTabId = this.metricTabs[index]?.id;
     if (selectedTabId) {
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
@@ -238,6 +276,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private updateDiffMap(unitSettings = this.unitSettings) {
+    this.updateRRDiffMap(unitSettings);
     const diffStart = this.getPerfStart();
     this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
     if (!this.showDiff || !unitSettings) {
@@ -251,6 +290,32 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (STATS_GRID_PERF_LOGS_ENABLED) {
       this.logPerf('update_diff_map', diffStart, { showDiff: true, diffCount: this.diffByType.size });
     }
+  }
+
+  public onRRRecordingChange(key: string): void {
+    const recording = this.rrRecordings.find(candidate => candidate.key === key);
+    if (!recording || recording === this.activeRRRecording()) return;
+    this.activeRRRecording.set(recording);
+    this.haptics.selection();
+    this.updateRRDiffMap();
+    this.scheduleTabBodyHeightSync('allow_shrink', true);
+  }
+
+  private updateRRDiffMap(unitSettings = this.unitSettings): void {
+    this.rrDiffByType = new Map(); this.rrComparisonLabel = '';
+    this.rrShowDiff = isBenchmarkEvent(this.event) && this.selectedActivities.length === 2;
+    const source = this.activeRRRecording();
+    if (!this.rrShowDiff || !source || !unitSettings) return;
+    const other = this.rrRecordings.find(recording => recording.activity !== source.activity);
+    if (!other) return;
+    const otherTypes = new Set(other.stats.map(stat => stat.getType()));
+    const comparableStats = source.stats.filter(stat => otherTypes.has(stat.getType()));
+    const differences = buildDiffMapForStats(comparableStats, RR_METRICS.map(metric => metric.type),
+      [source.activity, other.activity], unitSettings);
+    differences.forEach((diff, type) => this.rrDiffByType.set(type, {
+      ...diff, color: this.eventColorService.getDifferenceColor(diff.percent),
+    }));
+    this.rrComparisonLabel = other.label;
   }
 
   private buildDiffMap(unitSettings: UserUnitSettingsInterface): Map<string, { display: string; percent: number; color: string }> {
@@ -272,11 +337,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     const includeEmptyGroupIds: EventSummaryMetricGroupId[] = hasEventDiveSourceRecords(this.selectedActivities)
       ? ['diving']
       : [];
+    if (this.rrRecordings.length) includeEmptyGroupIds.push('rr');
+    const rrTypes = new Set(this.rrRecordings.flatMap(recording => recording.stats.map(stat => stat.getType())));
 
     this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow, { includeEmptyGroupIds })
       .map((tab) => ({
         ...tab,
-        metricTypes: tab.metricTypes.filter((metricType) => availableStatTypes.has(metricType)),
+        metricTypes: tab.metricTypes.filter((metricType) => (tab.id === 'rr' ? rrTypes : availableStatTypes).has(metricType)),
       }))
       .filter((tab) => tab.metricTypes.length > 0 || includeEmptyGroupIds.includes(tab.id));
     this.resetSelectedTab();

@@ -8,6 +8,12 @@
   width: 100%;
 }
 
+.rr-recording-summary { padding-block: 12px 0; overflow-wrap: anywhere; }
+.rr-recording-summary > h3 { margin: 0 0 4px; font: var(--mat-sys-title-medium); }
+.rr-recording-note { margin: 0 0 12px; color: var(--mat-sys-on-surface-variant); }
+.rr-recording-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 12px; }
+.rr-recording-toolbar mat-form-field { width: 280px; max-width: 100%; }
+
 .summary-tab-label {
   display: inline-flex;
   align-items: center;

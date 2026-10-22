@@ -104,8 +104,12 @@ import { By } from '@angular/platform-browser';
 import { MatTooltip } from '@angular/material/tooltip';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
+import { BENCHMARK_RR_METRICS } from '../../helpers/benchmark-rr.helper';
 
 describe('DataTypeIconComponent', () => {
+  it.each(BENCHMARK_RR_METRICS.map(metric => metric.type))('uses a heart-interval icon for %s', type => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe('ecg_heart');
+  });
   const verticalSpeedTypes = Object.entries(SportsLib).flatMap(([name, candidate]) =>
     name.startsWith('DataVerticalSpeed') && typeof candidate === 'function'
       && 'type' in candidate && typeof candidate.type === 'string' ? [candidate.type] : []);

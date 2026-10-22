@@ -194,6 +194,7 @@ import {
   DataWeight,
   DataWPrime,
 } from '@sports-alliance/sports-lib';
+import { RR_METRICS } from './rr-metrics';
 
 export type EventSummaryMetricGroupId =
   | 'overall'
@@ -202,6 +203,7 @@ export type EventSummaryMetricGroupId =
   | 'altitude'
   | 'environment'
   | 'device'
+  | 'rr'
   | 'physiological'
   | 'other';
 
@@ -572,9 +574,16 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       ...DEVICE_SIGNAL_EXTRA_TYPE_STRINGS,
     ],
   },
+  {
+    id: 'rr',
+    label: 'R–R & HRV',
+    metricTypes: RR_METRICS.map(metric => metric.type),
+    singleValueTypes: RR_METRICS.map(metric => metric.type),
+  },
 ];
 
 export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
+  ...RR_METRICS.map(metric => metric.type),
   DataDuration.type,
   DataMovingTime.type,
   DataDistance.type,

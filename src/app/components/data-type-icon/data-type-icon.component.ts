@@ -26,6 +26,7 @@ import {
   DataSpeedAvgMilesPerHour
 } from '@sports-alliance/sports-lib';
 import { EVENT_SUMMARY_DIVING_STAT_TYPES } from '../../constants/event-summary-metric-groups';
+import { RR_METRICS } from '../../constants/rr-metrics';
 import { DataPaceAvg, DataPaceAvgMinutesPerMile } from '@sports-alliance/sports-lib';
 import { DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard } from '@sports-alliance/sports-lib';
 import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
@@ -135,6 +136,7 @@ const VERTICAL_SPEED_ICON_TYPES = new Set([
   DataVerticalSpeed.type, ...Object.keys(DynamicDataLoader.dataTypeUnitGroups[DataVerticalSpeed.type] ?? {}),
 ].flatMap(type => [type, DynamicDataLoader.dataTypeAvgDataType[type],
   DynamicDataLoader.dataTypeMinDataType[type], DynamicDataLoader.dataTypeMaxDataType[type]].filter(Boolean)));
+const RR_ICON_TYPES = new Set<string>(RR_METRICS.map(metric => metric.type));
 
 @Component({
   selector: 'app-data-type-icon',
@@ -175,6 +177,7 @@ export class DataTypeIconComponent {
   }
 
   getColumnHeaderIcon(statName): string {
+    if (RR_ICON_TYPES.has(statName)) return 'ecg_heart';
     if (VERTICAL_SPEED_ICON_TYPES.has(statName)) {
       return 'unfold_more_double';
     }

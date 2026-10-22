@@ -8,6 +8,7 @@ import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import {
   BENCHMARK_RR_METRICS, buildBenchmarkRRAnalysisInput, buildBenchmarkRRRows,
   formatBenchmarkRRValue, getBenchmarkRRIntervalSource, getBenchmarkRRLabels, hasBenchmarkRRStats,
+  buildRRStatSummary,
 } from './benchmark-rr.helper';
 
 function recording(name = 'Strap') {
@@ -20,6 +21,24 @@ function recording(name = 'Strap') {
 }
 
 describe('benchmark R–R summaries', () => {
+  it('groups only valid saved R–R statistics, preserving zero and the original stat instances', () => {
+    const zero = new DataRRArtifactPercentage(0), rmssd = new DataRRRMSSD(8.14), count = new DataRRArtifactCount(0);
+    const invalid = new DataRRCoverage(100);
+    vi.spyOn(invalid, 'getValue').mockReturnValue(NaN);
+    const input = [zero, rmssd, count, invalid];
+    const summary = buildRRStatSummary(input);
+    expect(summary.primaryTypes).toEqual([zero.getType(), rmssd.getType()]);
+    expect(summary.detailTypes).toEqual([count.getType()]);
+    expect(summary.stats).toEqual([zero, rmssd, count]);
+    expect(summary.stats[0]).toBe(zero); expect(input).toHaveLength(4);
+  });
+
+  it('shows secondary-only saved metrics immediately, and keeps missing statistics empty', () => {
+    const count = new DataRRArtifactCount(0);
+    expect(buildRRStatSummary([count])).toEqual({ stats: [count], primaryTypes: [count.getType()], detailTypes: [] });
+    expect(buildRRStatSummary([])).toEqual({ stats: [], primaryTypes: [], detailTypes: [] });
+  });
+
   it('keeps source values separate, with missing values distinct from recorded zero', () => {
     const a = recording(), b = recording('Watch');
     a.addStat(new DataRRCoverage(100)); a.addStat(new DataRRArtifactPercentage(0)); a.addStat(new DataRRArtifactCount(0));
