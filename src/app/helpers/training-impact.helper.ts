@@ -58,10 +58,16 @@ export function buildTrainingSessionImpactView(
   source: TrainingImpactSnapshotState,
 ): TrainingSessionImpactView {
   const eventId = `${event?.getID?.() || ''}`.trim() || null;
+  if (source.status === 'private') return unavailable('private', '', eventId);
   if (isBenchmarkEventForTrainingMetrics(event)) {
     return unavailable('excluded', 'Merged benchmark events are excluded from Training.', eventId);
   }
   const dayMs = resolveTrainingImpactUtcDayMs(event);
+  if (source.status !== 'ready') {
+    return unavailable(source.status, source.status === 'error'
+      ? 'Training impact could not be loaded.'
+      : 'Updating Training impact…', eventId, dayMs);
+  }
   const modeled = eventId ? source.loadsByEventId?.get(eventId) : undefined;
   // Navigation can retain the previous selection's snapshot while new load reads start.
   if (eventId && source.status === 'ready' && source.loadsByEventId && !modeled)
@@ -73,14 +79,6 @@ export function buildTrainingSessionImpactView(
   const trainingStressScore = modeled ? modeled.score : resolveEffectiveTrainingLoad(event).score;
   if (trainingStressScore === null) {
     return unavailable('missing-tss', 'Training impact unavailable — this activity has no TSS.', eventId, dayMs);
-  }
-  if (source.status !== 'ready') {
-    const message = source.status === 'error'
-      ? 'Training impact could not be loaded.'
-      : source.status === 'private'
-        ? 'Training impact is private.'
-        : 'Updating Training impact…';
-    return unavailable(source.status, message, eventId, dayMs);
   }
   if (dayMs === null) {
     return unavailable('unavailable', 'Training impact unavailable — this activity has no valid start time.', eventId);
@@ -223,7 +221,7 @@ function dayAvailabilityMessage(
   if (availability === 'excluded') return 'Selected activities are excluded from modeled Training load. History and volume are retained.';
   if (availability === 'updating') return 'Updating Training impact…';
   if (availability === 'error') return 'Training impact could not be loaded.';
-  if (availability === 'private') return 'Training impact is private.';
+  if (availability === 'private') return '';
   return sessions.length
     ? 'Training impact unavailable — no completed activity has usable TSS.'
     : 'No completed activities for this day.';

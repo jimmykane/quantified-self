@@ -6907,7 +6907,13 @@ editor and Settings were exercised with synthetic local data at desktop and
 
 Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
 completed activity's modeled TSS participates in this model. They do not query activity history or create a separate
-derived snapshot. Calendar's lightweight event adapter exposes an empty leg list and retains the complete stored
+derived snapshot. Private/unowned impact renders no heading, placeholder or values in any shared presentation variant.
+An independently identified activity owner sees **Updating Training impact…** during initial hydration, including
+while the profile-backed reader has not yet confirmed that owner; no metric values are inferred. Missing-TSS status
+is resolved after the source is ready. Existing owner fences and listener cleanup remain authoritative. This
+presentation-only distinction changes no calculations, reads, writes, MCP/Assistant contracts, consent or provider behavior.
+
+Calendar's lightweight event adapter exposes an empty leg list and retains the complete stored
 statistics and end time as source fields for fingerprint validation. This avoids treating a summary object as a fully
 hydrated Sports Lib event. Impact validates saved active leg identities and fingerprints as well
 as the parent; the editor also refuses leg edits when a saved active leg is missing from the opened workout.

@@ -191,14 +191,17 @@ export class EventCardComponent implements OnInit {
 
   public trainingImpactState = toSignal(
     toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
-    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+    { initialValue: { status: 'updating', formPoints: null } as TrainingImpactSnapshotState },
   );
 
   public trainingImpact = computed(() => {
     const event = this.event();
-    return event && this.isOwner() && !isBenchmarkEventForTrainingMetrics(event)
-      ? buildTrainingSessionImpactView(event, this.trainingImpactState())
-      : null;
+    if (!event || !this.isOwner() || isBenchmarkEventForTrainingMetrics(event)) return null;
+    const state = this.trainingImpactState();
+    // Auth can identify the owner before the profile-backed impact stream hydrates.
+    return buildTrainingSessionImpactView(event, state.status === 'private'
+      ? { status: 'updating', formPoints: null }
+      : state);
   });
 
   public displayUser = computed(() => this.currentUser() ?? this.publicViewerUser());

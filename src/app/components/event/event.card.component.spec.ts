@@ -50,7 +50,7 @@ import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-c
 import { AppEventService } from '../../services/app.event.service';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
-import { TrainingImpactService } from '../../services/training-impact.service';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
 import type { AppEventInterface } from '@shared/app-event.interface';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
@@ -287,6 +287,41 @@ describe('EventCardComponent', () => {
         expect(component.isOwner()).toBe(false);
         expect(component.trainingImpact()).toBeNull();
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+    });
+
+    it('shows updating before the owner impact stream initializes', () => {
+        const initialFixture = TestBed.createComponent(EventCardComponent);
+        const initialComponent = initialFixture.componentInstance;
+        initialComponent.currentUser.set(mockUser);
+        initialComponent.targetUserID.set(mockUser.uid);
+        initialComponent.event.set(mockEvent as AppEventInterface);
+
+        expect(initialComponent.trainingImpact()).toMatchObject({
+            availability: 'updating', message: 'Updating Training impact…', impact: null,
+        });
+        initialFixture.destroy();
+    });
+
+    it('keeps owner hydration in updating and removes impact immediately when ownership changes', () => {
+        const snapshots$ = new Subject<TrainingImpactSnapshotState>();
+        mockTrainingImpactService.watch.mockReturnValueOnce(snapshots$.asObservable());
+        component.event.set(createEvent('loading', []) as AppEventInterface);
+        fixture.detectChanges();
+        snapshots$.next({ status: 'private', formPoints: null });
+        fixture.detectChanges();
+        expect(component.trainingImpact()).toMatchObject({
+            availability: 'updating', message: 'Updating Training impact…', impact: null,
+        });
+        expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
+
+        snapshots$.next({ status: 'ready', formPoints: [] });
+        fixture.detectChanges();
+        expect(component.trainingImpact()?.availability).toBe('missing-tss');
+        component.currentUser.set(new User('other-user'));
+        expect(component.trainingImpact()).toBeNull();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+        expect(snapshots$.observed).toBe(false);
     });
 
     it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('does not show or load Training impact for benchmark event details %j', classification => {
