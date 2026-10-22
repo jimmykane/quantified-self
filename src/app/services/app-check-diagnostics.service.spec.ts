@@ -219,15 +219,48 @@ describe('AppCheckDiagnosticsService', () => {
   it('caps recovery notifications and timing metadata for noisy or long-lived pages', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
     for (let i = 0; i < 25; i += 1) {
+      service.setAuthState('signed-in');
       error({ code: 'appCheck/recaptcha-error' });
       clock.mockReturnValue(172_800_000);
       next({ token: `private-token-${i}` });
       clock.mockReturnValue(0);
     }
     const outcomes = logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification outcome');
-    expect(outcomes).toHaveLength(20);
+    expect(outcomes).toHaveLength(5);
     expect(outcomes.every(call => call[1].contexts.appCheck.elapsedMs === 86_400_000)).toBe(true);
     expect(sdk.onTokenChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports each outcome/category once across recurring episodes in the same Auth generation', () => {
+    service.setAuthState('signed-in');
+    const failure = { code: 'appCheck/recaptcha-error' };
+    for (let i = 0; i < 3; i += 1) {
+      error(failure);
+      service.reportOperationBlocked(failure, 'profile-load', service.beginOperation());
+      service.reportOperationBlocked(failure, 'callable', service.beginOperation(), 'private-scope');
+      next({ token: `private-token-${i}` });
+      service.reportOperationSucceeded('profile-load', service.beginOperation());
+      service.reportOperationSucceeded('callable', service.beginOperation(), 'private-scope');
+    }
+    const outcomes = logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification outcome');
+    expect(outcomes.map(call => [call[1].contexts.appCheck.outcome, call[1].contexts.appCheck.operation])).toEqual([
+      ['operation-blocked', 'profile-load'], ['operation-blocked', 'callable'], ['token-available', undefined],
+      ['operation-succeeded', 'profile-load'], ['operation-succeeded', 'callable'],
+    ]);
+    expect(service.failureRevision).toBe(3);
+    expect(logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification failed')).toHaveLength(3);
+  });
+
+  it('keeps outcomes from different Auth generations separate within the page budget', () => {
+    for (let i = 0; i < 2; i += 1) {
+      service.setAuthState('signed-in');
+      service.reportOperationBlocked({ code: 'appCheck/recaptcha-error' }, 'callable', service.beginOperation());
+      service.reportOperationSucceeded('callable', service.beginOperation());
+    }
+    const outcomes = logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification outcome');
+    expect(outcomes.map(call => call[1].contexts.appCheck.outcome)).toEqual([
+      'operation-blocked', 'operation-succeeded', 'operation-blocked', 'operation-succeeded',
+    ]);
   });
 
   it('contains outcome reporting failures and still clears recovered state', () => {

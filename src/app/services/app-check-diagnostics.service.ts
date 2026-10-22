@@ -31,7 +31,7 @@ export class AppCheckDiagnosticsService {
   private operationSequence = 0;
   private episode: FailureEpisode | null = null;
   private readonly blockedOperations = new Map<AppCheckOperation, FailureEpisode & { scope?: string; recoveryAfterSequence: number }>();
-  private outcomeReports = 0;
+  private readonly reportedOutcomes = new Set<string>();
   failureRevision = 0;
 
   beginOperation(): AppCheckOperationAttempt {
@@ -134,9 +134,11 @@ export class AppCheckDiagnosticsService {
     episode: FailureEpisode,
     extra: { operation?: AppCheckOperation; tokenChanged?: boolean | null },
   ): void {
-    // Bound additional telemetry per page, including noisy clients. No success traffic without a failure.
-    if (this.outcomeReports >= 20) return;
-    this.outcomeReports += 1;
+    // Report each outcome/category once per Auth generation, with a page-wide budget.
+    // Repeated episodes still update local recovery state without duplicating Sentry messages.
+    const key = `${this.revision}:${outcome}:${extra.operation ?? 'verification'}`;
+    if (this.reportedOutcomes.has(key) || this.reportedOutcomes.size >= 5) return;
+    this.reportedOutcomes.add(key);
     try {
       this.logger.captureMessage('App Check verification outcome', {
         level: outcome === 'operation-blocked' ? 'warning' : 'info',

@@ -10,6 +10,7 @@ import { registerAppLocale } from './app/shared/adapters/date-locale.config';
 import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
 import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
+import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
 
 redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
@@ -22,6 +23,7 @@ if (!environment.localhost) {
     release: environment.appVersion,
     debug: false,
     beforeBreadcrumb: appCheckBeforeBreadcrumb,
+    beforeSend: appCheckBeforeSend,
     integrations: [
       Sentry.browserTracingIntegration(),
     ],
