@@ -7,6 +7,7 @@ import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { LoggerService } from './logger.service';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
+import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
 
 type CallableFailureStage = 'app_check_readiness' | 'callable' | 'app_check_refresh' | 'callable_retry';
 
@@ -73,7 +74,8 @@ export class AppFunctionsService {
         };
         assertCurrent();
 
-        const diagnosticRevision = this.appCheckDiagnostics.authRevision;
+        let diagnosticAttempt: AppCheckOperationAttempt | undefined;
+        try { diagnosticAttempt = this.appCheckDiagnostics.beginOperation(); } catch { /* Diagnostics must not gate requests. */ }
 
         const usesFunctionsEmulator = this.shouldUseFunctionsEmulator();
         const reportFailure = functionKey === 'ensureDerivedMetrics' && environment.localhost !== true;
@@ -94,7 +96,7 @@ export class AppFunctionsService {
                 assertCurrent();
                 stage = 'callable';
                 const response = await callable(data);
-                this.trackAppCheckOutcome('succeeded', diagnosticRevision, functionKey, undefined, options);
+                this.trackAppCheckOutcome('succeeded', diagnosticAttempt, functionKey, undefined, options);
                 return response;
             } catch (error) {
                 if (usesFunctionsEmulator || !this.shouldRetryAfterAppCheckFailure(error)) {
@@ -106,24 +108,25 @@ export class AppFunctionsService {
                 assertCurrent();
                 stage = 'callable_retry';
                 const response = await callable(data);
-                this.trackAppCheckOutcome('succeeded', diagnosticRevision, functionKey, undefined, options);
+                this.trackAppCheckOutcome('succeeded', diagnosticAttempt, functionKey, undefined, options);
                 return response;
             }
         } catch (error) {
-            if (!cancelled) this.trackAppCheckOutcome('blocked', diagnosticRevision, functionKey, error, options);
+            if (!cancelled) this.trackAppCheckOutcome('blocked', diagnosticAttempt, functionKey, error, options);
             if (reportFailure && !cancelled) this.reportEnsureFailure(error, stage, diagnosticUser);
             throw error;
         }
     }
 
     private trackAppCheckOutcome(
-        outcome: 'blocked' | 'succeeded', revision: number, functionKey: FunctionName,
+        outcome: 'blocked' | 'succeeded', attempt: AppCheckOperationAttempt | undefined, functionKey: FunctionName,
         error?: unknown, options?: { canExecute: () => boolean },
     ): void {
         try {
+            if (!attempt) return;
             if (options && !options.canExecute()) return;
-            if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'callable', revision, functionKey);
-            else this.appCheckDiagnostics.reportOperationSucceeded('callable', revision, functionKey);
+            if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'callable', attempt, functionKey);
+            else this.appCheckDiagnostics.reportOperationSucceeded('callable', attempt, functionKey);
         } catch { /* Preserve the callable result, original rejection and retry budget. */ }
     }
 

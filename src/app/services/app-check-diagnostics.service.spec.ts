@@ -83,8 +83,8 @@ describe('AppCheckDiagnosticsService', () => {
 
   it('does not report successes without a failure or treat an empty token as recovery', () => {
     next({ token: '' }); next({ token: 'cached-private-token' });
-    service.reportOperationSucceeded('profile-load', service.authRevision);
-    service.reportOperationSucceeded('callable', service.authRevision);
+    service.reportOperationSucceeded('profile-load', service.beginOperation());
+    service.reportOperationSucceeded('callable', service.beginOperation());
     expect(logger.captureMessage).not.toHaveBeenCalled();
     error({ code: 'appCheck/recaptcha-error' });
     next({ token: '' });
@@ -121,14 +121,14 @@ describe('AppCheckDiagnosticsService', () => {
 
   it('distinguishes token availability from a blocked operation actually succeeding', () => {
     service.setAuthState('signed-in');
-    const revision = service.authRevision;
+    const attempt = service.beginOperation();
     const failure = { code: 'appCheck/recaptcha-error' };
     error(failure);
-    service.reportOperationBlocked(failure, 'profile-load', revision);
-    service.reportOperationBlocked(failure, 'profile-load', revision);
+    service.reportOperationBlocked(failure, 'profile-load', attempt);
+    service.reportOperationBlocked(failure, 'profile-load', attempt);
     next({ token: 'private-token' });
-    service.reportOperationSucceeded('profile-load', revision);
-    service.reportOperationSucceeded('profile-load', revision);
+    service.reportOperationSucceeded('profile-load', service.beginOperation());
+    service.reportOperationSucceeded('profile-load', service.beginOperation());
     const outcomes = logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification outcome');
     expect(outcomes.map(call => call[1].contexts.appCheck.outcome)).toEqual([
       'operation-blocked', 'token-available', 'operation-succeeded',
@@ -139,44 +139,70 @@ describe('AppCheckDiagnosticsService', () => {
   });
 
   it('reports a final server App Check rejection but never attributes generic index or permission errors', () => {
-    const revision = service.authRevision;
+    const attempt = service.beginOperation();
     error({ code: 'appCheck/recaptcha-error' }); logger.captureMessage.mockClear();
     for (const failure of [{ code: 'failed-precondition', message: 'The query requires an index.' },
       { code: 'permission-denied' }, { code: 'functions/internal' }]) {
-      service.reportOperationBlocked(failure, 'callable', revision);
+      service.reportOperationBlocked(failure, 'callable', attempt);
     }
     expect(logger.captureMessage).not.toHaveBeenCalled();
     service.reportOperationBlocked({ code: 'functions/failed-precondition',
-      message: 'App Check verification failed. private-message' }, 'callable', revision);
+      message: 'App Check verification failed. private-message' }, 'callable', attempt);
     expect(logger.captureMessage).toHaveBeenCalledTimes(1);
     expect(logger.captureMessage.mock.calls[0][1].contexts.appCheck.code).toBe('appCheck/unknown');
     expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
   });
 
   it('requires the same callable to succeed before reporting recovery, without serializing its scope', () => {
-    const revision = service.authRevision;
+    const attempt = service.beginOperation();
     const failure = { code: 'appCheck/recaptcha-error' };
-    service.reportOperationBlocked(failure, 'callable', revision, 'private-scope');
-    service.reportOperationBlocked(failure, 'callable', revision, 'private-scope');
-    service.reportOperationSucceeded('callable', revision, 'unrelated-scope');
+    service.reportOperationBlocked(failure, 'callable', attempt, 'private-scope');
+    service.reportOperationBlocked(failure, 'callable', attempt, 'private-scope');
+    service.reportOperationSucceeded('callable', service.beginOperation(), 'unrelated-scope');
     expect(logger.captureMessage).toHaveBeenCalledTimes(1);
-    service.reportOperationSucceeded('callable', revision, 'private-scope');
+    service.reportOperationSucceeded('callable', service.beginOperation(), 'private-scope');
     expect(logger.captureMessage).toHaveBeenCalledTimes(2);
     expect(logger.captureMessage.mock.calls[1][1].contexts.appCheck.failureNotifications).toBe(2);
     expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('scope');
   });
 
+  it.each(['callable', 'profile-load'] as const)('requires a %s attempt to start after the latest blocked failure', operation => {
+    const earlier = service.beginOperation();
+    const failed = service.beginOperation();
+    const concurrent = service.beginOperation();
+    const failure = { code: 'appCheck/recaptcha-error' };
+    service.reportOperationBlocked(failure, operation, failed);
+    for (const attempt of [earlier, failed, concurrent]) service.reportOperationSucceeded(operation, attempt);
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+
+    const firstRetry = service.beginOperation();
+    const failedRetry = service.beginOperation();
+    service.reportOperationBlocked(failure, operation, failedRetry);
+    service.reportOperationSucceeded(operation, firstRetry);
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+
+    const recovery = service.beginOperation();
+    service.reportOperationSucceeded(operation, recovery);
+    expect(logger.captureMessage).toHaveBeenCalledTimes(2);
+    expect(logger.captureMessage.mock.calls[1][1].contexts.appCheck).toMatchObject({
+      outcome: 'operation-succeeded', failureNotifications: 2,
+    });
+    const serialized = JSON.stringify(logger.captureMessage.mock.calls);
+    expect(serialized).not.toContain('sequence');
+    expect(serialized).not.toContain('authRevision');
+  });
+
   it('drops stale operation completions and clears previous-session recovery state on Auth changes', () => {
     service.setAuthState('signed-in');
-    const oldRevision = service.authRevision;
+    const oldAttempt = service.beginOperation();
     const failure = { code: 'appCheck/recaptcha-error' };
-    error(failure); service.reportOperationBlocked(failure, 'callable', oldRevision);
+    error(failure); service.reportOperationBlocked(failure, 'callable', oldAttempt);
     logger.captureMessage.mockClear();
     // Same state can also be a switch between signed-in accounts.
     service.setAuthState('signed-in');
-    service.reportOperationBlocked(failure, 'callable', oldRevision);
-    service.reportOperationSucceeded('callable', oldRevision);
-    service.reportOperationSucceeded('callable', service.authRevision);
+    service.reportOperationBlocked(failure, 'callable', oldAttempt);
+    service.reportOperationSucceeded('callable', oldAttempt);
+    service.reportOperationSucceeded('callable', service.beginOperation());
     next({ token: 'private-token' });
     expect(logger.captureMessage).not.toHaveBeenCalled();
   });
@@ -205,15 +231,15 @@ describe('AppCheckDiagnosticsService', () => {
   });
 
   it('contains outcome reporting failures and still clears recovered state', () => {
-    const revision = service.authRevision;
+    const attempt = service.beginOperation();
     const failure = { code: 'appCheck/recaptcha-error' };
     error(failure);
     logger.captureMessage.mockImplementation(() => { throw new Error('Sentry unavailable'); });
-    expect(() => service.reportOperationBlocked(failure, 'callable', revision)).not.toThrow();
+    expect(() => service.reportOperationBlocked(failure, 'callable', attempt)).not.toThrow();
     expect(() => next({ token: 'private-token' })).not.toThrow();
-    expect(() => service.reportOperationSucceeded('callable', revision)).not.toThrow();
+    expect(() => service.reportOperationSucceeded('callable', service.beginOperation())).not.toThrow();
     logger.captureMessage.mockReset();
-    service.reportOperationSucceeded('callable', revision);
+    service.reportOperationSucceeded('callable', service.beginOperation());
     expect(logger.captureMessage).not.toHaveBeenCalled();
   });
 

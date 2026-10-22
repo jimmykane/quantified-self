@@ -523,7 +523,9 @@ from an earlier generation are ignored, and pending operation recovery state is 
 `App Check verification outcome` distinguishes three observations: `token-available` when the existing token
 observer reports a different nonempty token after a failure; `operation-blocked` when profile loading or a callable
 finally fails with explicit App Check evidence; and `operation-succeeded` when a previously blocked profile loads
-authoritatively or the same callable subsequently succeeds in the same Auth generation. Token availability alone
+authoritatively or the same callable subsequently succeeds in the same Auth generation. Recovery requires an
+operation started after the latest tracked blocked failure; older or already in-flight requests cannot clear it.
+Operation ordering is local and never enters telemetry or request data. Token availability alone
 does not prove application recovery or that the server minted a fresh token. `tokenChanged` is null if there was
 no earlier token to compare. Repeated notifications of the same cached token do not report recovery.
 

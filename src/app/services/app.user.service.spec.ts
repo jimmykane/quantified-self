@@ -56,7 +56,7 @@ describe('AppUserService', () => {
     let mockFunctionsService: any;
     let mockAppCheck: any;
     let mockVerification: any;
-    let diagnostics: { authRevision: number; setAuthState: ReturnType<typeof vi.fn>;
+    let diagnostics: { authRevision: number; beginOperation: ReturnType<typeof vi.fn>; setAuthState: ReturnType<typeof vi.fn>;
         reportOperationBlocked: ReturnType<typeof vi.fn>; reportOperationSucceeded: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
@@ -102,7 +102,9 @@ describe('AppUserService', () => {
             needsVerification: vi.fn().mockImplementation(UserProfileVerificationService.prototype.needsVerification),
             verifyIfIncomplete: vi.fn().mockImplementation((_uid, profile) => Promise.resolve(profile)),
         };
-        diagnostics = { authRevision: 1, setAuthState: vi.fn(), reportOperationBlocked: vi.fn(), reportOperationSucceeded: vi.fn() };
+        let sequence = 0;
+        diagnostics = { authRevision: 1, beginOperation: vi.fn(() => ({ authRevision: diagnostics.authRevision, sequence: ++sequence })),
+            setAuthState: vi.fn(), reportOperationBlocked: vi.fn(), reportOperationSucceeded: vi.fn() };
 
         TestBed.configureTestingModule({
             providers: [
@@ -143,6 +145,19 @@ describe('AppUserService', () => {
         expect(() => TestBed.inject(AppUserService)).not.toThrow();
     });
 
+    it.each([false, true])('preserves the profile outcome when starting diagnostics fails (blocked: %s)', async blocked => {
+        diagnostics.beginOperation.mockImplementation(() => { throw new Error('telemetry failed'); });
+        const failure = { code: 'appCheck/recaptcha-error' };
+        if (blocked) mockAppCheck.getToken.mockRejectedValue(failure);
+        service = TestBed.inject(AppUserService);
+        await firstValueFrom(service.user$);
+        expect(service.profileReadState().status).toBe(blocked ? 'error' : 'ready');
+        expect(mockAppCheck.getToken.mock.calls).toEqual([[false]]);
+        expect(diagnostics.reportOperationBlocked).not.toHaveBeenCalled();
+        expect(diagnostics.reportOperationSucceeded).not.toHaveBeenCalled();
+        expect(setDoc).not.toHaveBeenCalled();
+    });
+
     it('establishes the Auth generation before an initial profile credential rejection', async () => {
         diagnostics.setAuthState.mockImplementation(() => { diagnostics.authRevision += 1; });
         const failure = { code: 'appCheck/recaptcha-error' };
@@ -150,7 +165,7 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         await firstValueFrom(service.user$);
         expect(diagnostics.authRevision).toBe(2);
-        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'profile-load', 2);
+        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'profile-load', { authRevision: 2, sequence: 1 });
         expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
     });
 
@@ -159,7 +174,7 @@ describe('AppUserService', () => {
         mockAppCheck.getToken.mockRejectedValue(failure);
         service = TestBed.inject(AppUserService);
         await firstValueFrom(service.user$);
-        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'profile-load', 1);
+        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'profile-load', { authRevision: 1, sequence: 1 });
         expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
         expect(service.profileReadState().status).toBe('error');
         expect(setDoc).not.toHaveBeenCalled();
@@ -186,7 +201,7 @@ describe('AppUserService', () => {
             const recovering = service.retryProfileRead();
             await vi.waitFor(() => { TestBed.flushEffects(); expect(service.profileReadState().status).toBe('ready'); });
             await expect(recovering).resolves.toBe(true);
-            expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledWith('profile-load', 1);
+            expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledWith('profile-load', { authRevision: 1, sequence: 2 });
             expect(mockAppCheck.getToken.mock.calls).toEqual([[false], [true]]);
             expect(setDoc).not.toHaveBeenCalled();
         } finally { subscription.unsubscribe(); }

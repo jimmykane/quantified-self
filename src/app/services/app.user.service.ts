@@ -68,6 +68,7 @@ import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
+import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
 import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { mergeUserProfileDocuments, UserProfileVerificationService } from './user-profile-verification.service';
 import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
@@ -262,6 +263,7 @@ interface AuthenticatedUserProfile {
   firebaseUser: FirebaseUserType;
   dbUser: AppUserInterface | null;
   readGeneration: number;
+  diagnosticAttempt: AppCheckOperationAttempt | undefined;
 }
 
 interface MergedAuthenticatedUser {
@@ -336,7 +338,8 @@ export class AppUserService implements OnDestroy {
         startWith(false),
         switchMap(forceRefresh => {
           this.beginProfileRead(firebaseUser.uid);
-          const diagnosticRevision = this.appCheckDiagnostics.authRevision;
+          let diagnosticAttempt: AppCheckOperationAttempt | undefined;
+          try { diagnosticAttempt = this.appCheckDiagnostics.beginOperation(); } catch { /* Diagnostics must not gate profile reads. */ }
           return this.getUserProfileWithAuthRetry(firebaseUser, forceRefresh).pipe(
             tap(() => {
               this.markIncompleteProfileRead(firebaseUser.uid);
@@ -346,6 +349,7 @@ export class AppUserService implements OnDestroy {
               firebaseUser,
               dbUser,
               readGeneration: ++this.profileReadGeneration,
+              diagnosticAttempt,
             })),
             catchError((error) => {
               const code = this.getErrorCode(error);
@@ -356,7 +360,7 @@ export class AppUserService implements OnDestroy {
                 ...(appCheckFailure ? { appCheckFailure } : {}),
               });
               if (appCheckFailure) {
-                this.trackAppCheckProfileOutcome('blocked', diagnosticRevision, error);
+                this.trackAppCheckProfileOutcome('blocked', diagnosticAttempt, error);
                 // The App Check observer/readiness boundary owns the safe, deduplicated report.
                 this.logger.warn('[AppUserService] Browser verification blocked profile loading.', appCheckFailure);
               } else {
@@ -400,7 +404,7 @@ export class AppUserService implements OnDestroy {
             uid: tokenUser.uid,
             profileExists: profile.dbUser !== null,
           });
-          this.trackAppCheckProfileOutcome('succeeded', this.appCheckDiagnostics.authRevision);
+          this.trackAppCheckProfileOutcome('succeeded', profile.diagnosticAttempt);
           this.lastPublishedProfileRead = {
             uid: tokenUser.uid,
             generation: profile.readGeneration,
@@ -673,10 +677,11 @@ export class AppUserService implements OnDestroy {
     this.profileReadStateSignal.set({ status: 'loading', uid });
   }
 
-  private trackAppCheckProfileOutcome(outcome: 'blocked' | 'succeeded', revision: number, error?: unknown): void {
+  private trackAppCheckProfileOutcome(outcome: 'blocked' | 'succeeded', attempt: AppCheckOperationAttempt | undefined, error?: unknown): void {
     try {
-      if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'profile-load', revision);
-      else this.appCheckDiagnostics.reportOperationSucceeded('profile-load', revision);
+      if (!attempt) return;
+      if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'profile-load', attempt);
+      else this.appCheckDiagnostics.reportOperationSucceeded('profile-load', attempt);
     } catch { /* Diagnostics cannot change profile recovery or the original error. */ }
   }
 

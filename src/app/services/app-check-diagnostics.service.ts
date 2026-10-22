@@ -6,6 +6,11 @@ import { LoggerService } from './logger.service';
 
 type AuthState = 'restoring' | 'signed-in' | 'signed-out';
 export type AppCheckOperation = 'profile-load' | 'callable';
+/** Local ordering only; never copied into telemetry or request data. */
+export interface AppCheckOperationAttempt {
+  readonly authRevision: number;
+  readonly sequence: number;
+}
 interface FailureEpisode {
   startedAt: number;
   details: AppCheckFailureDetails;
@@ -23,13 +28,15 @@ export class AppCheckDiagnosticsService {
   private readonly reportedFailures = new Set<string>();
   private authState: AuthState = 'restoring';
   private revision = 0;
+  private operationSequence = 0;
   private episode: FailureEpisode | null = null;
-  private readonly blockedOperations = new Map<AppCheckOperation, FailureEpisode & { scope?: string }>();
+  private readonly blockedOperations = new Map<AppCheckOperation, FailureEpisode & { scope?: string; recoveryAfterSequence: number }>();
   private outcomeReports = 0;
   failureRevision = 0;
 
-  /** Local generation only: never a user ID or a serialized correlation identifier. */
-  get authRevision(): number { return this.revision; }
+  beginOperation(): AppCheckOperationAttempt {
+    return { authRevision: this.revision, sequence: ++this.operationSequence };
+  }
 
   /** Fed by the existing Auth subscription; does not initialize Auth or request credentials. */
   setAuthState(state: 'signed-in' | 'signed-out'): void {
@@ -80,25 +87,29 @@ export class AppCheckDiagnosticsService {
     this.reportDetails(details, source);
   }
 
-  reportOperationBlocked(error: unknown, operation: AppCheckOperation, revision: number, scope?: string): void {
-    if (revision !== this.revision || !isAppCheckVerificationFailure(error)
+  reportOperationBlocked(error: unknown, operation: AppCheckOperation, attempt: AppCheckOperationAttempt, scope?: string): void {
+    if (attempt.authRevision !== this.revision || !isAppCheckVerificationFailure(error)
       || (operation !== 'profile-load' && operation !== 'callable')) return;
     const pending = this.blockedOperations.get(operation);
     if (pending) {
-      if (pending.scope === scope) pending.observations = Math.min(1000, pending.observations + 1);
+      if (pending.scope === scope) {
+        pending.observations = Math.min(1000, pending.observations + 1);
+        pending.recoveryAfterSequence = this.operationSequence;
+      }
       return;
     }
     const details = appCheckFailureDetails(error) ?? appCheckFailureDetails({ code: 'appCheck/unknown' })!;
     const episode = this.newEpisode(details);
     // Keep at most two pending operations. The callable name is local matching state, never telemetry.
-    this.blockedOperations.set(operation, { ...episode, scope });
+    this.blockedOperations.set(operation, { ...episode, scope, recoveryAfterSequence: this.operationSequence });
     this.reportOutcome('operation-blocked', episode, { operation });
   }
 
-  reportOperationSucceeded(operation: AppCheckOperation, revision: number, scope?: string): void {
-    if (revision !== this.revision) return;
+  reportOperationSucceeded(operation: AppCheckOperation, attempt: AppCheckOperationAttempt, scope?: string): void {
+    if (attempt.authRevision !== this.revision) return;
     const episode = this.blockedOperations.get(operation);
-    if (!episode || episode.scope !== scope) return;
+    // A request already in flight at the latest failure cannot establish subsequent recovery.
+    if (!episode || episode.scope !== scope || attempt.sequence <= episode.recoveryAfterSequence) return;
     this.blockedOperations.delete(operation);
     this.reportOutcome('operation-succeeded', episode, { operation });
   }

@@ -85,17 +85,17 @@ describe('AppFunctionsService', () => {
     let mockApp: any;
     let appCheckReadinessMock: Pick<AppCheckReadinessService, 'ensureReady' | 'isConfigured'>;
     let loggerMock: { getUser: ReturnType<typeof vi.fn>; captureMessage: ReturnType<typeof vi.fn> };
-    let diagnostics: { authRevision: number; reportOperationBlocked: ReturnType<typeof vi.fn>;
+    let diagnostics: { authRevision: number; beginOperation: ReturnType<typeof vi.fn>; reportOperationBlocked: ReturnType<typeof vi.fn>;
         reportOperationSucceeded: ReturnType<typeof vi.fn> };
 
-    function configureTestingModule(): AppFunctionsService {
+    function configureTestingModule(useRealDiagnostics = false): AppFunctionsService {
         const providers: any[] = [
             AppFunctionsService,
             { provide: Functions, useValue: { region: 'europe-west2-instance' } },
             { provide: FirebaseApp, useValue: mockApp },
             { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
             { provide: LoggerService, useValue: loggerMock },
-            { provide: AppCheckDiagnosticsService, useValue: diagnostics },
+            useRealDiagnostics ? AppCheckDiagnosticsService : { provide: AppCheckDiagnosticsService, useValue: diagnostics },
         ];
 
         TestBed.configureTestingModule({
@@ -125,7 +125,9 @@ describe('AppFunctionsService', () => {
             getUser: vi.fn().mockReturnValue({ id: 'account-a' }),
             captureMessage: vi.fn(),
         };
-        diagnostics = { authRevision: 1, reportOperationBlocked: vi.fn(), reportOperationSucceeded: vi.fn() };
+        let sequence = 0;
+        diagnostics = { authRevision: 1, beginOperation: vi.fn(() => ({ authRevision: diagnostics.authRevision, sequence: ++sequence })),
+            reportOperationBlocked: vi.fn(), reportOperationSucceeded: vi.fn() };
 
         service = configureTestingModule();
     });
@@ -191,7 +193,7 @@ describe('AppFunctionsService', () => {
         const failure = { code: 'appCheck/recaptcha-error' };
         mocks.ensureReadyMock.mockRejectedValueOnce(failure);
         await expect(service.call('defaultRegionFunc' as never)).rejects.toBe(failure);
-        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'callable', 1, 'defaultRegionFunc');
+        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'callable', { authRevision: 1, sequence: 1 }, 'defaultRegionFunc');
         expect(mocks.ensureReadyMock).toHaveBeenCalledTimes(1);
         expect(mocks.callableSpy).not.toHaveBeenCalled();
     });
@@ -202,7 +204,7 @@ describe('AppFunctionsService', () => {
         expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
         expect(mocks.ensureReadyMock.mock.calls).toEqual([[], [true]]);
         expect(diagnostics.reportOperationBlocked).not.toHaveBeenCalled();
-        expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledExactlyOnceWith('callable', 1, 'defaultRegionFunc');
+        expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledExactlyOnceWith('callable', { authRevision: 1, sequence: 1 }, 'defaultRegionFunc');
     });
 
     it('never lets outcome telemetry replace a result or an original rejection', async () => {
@@ -215,13 +217,51 @@ describe('AppFunctionsService', () => {
         expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('preserves callable results and rejections when starting diagnostics fails', async () => {
+        diagnostics.beginOperation.mockImplementation(() => { throw new Error('telemetry failed'); });
+        await expect(service.call('defaultRegionFunc' as never)).resolves.toEqual({ data: 'success' });
+        const failure = { code: 'appCheck/recaptcha-error' };
+        mocks.ensureReadyMock.mockRejectedValueOnce(failure);
+        await expect(service.call('defaultRegionFunc' as never)).rejects.toBe(failure);
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+        expect(mocks.ensureReadyMock.mock.calls).toEqual([[], []]);
+        expect(diagnostics.reportOperationBlocked).not.toHaveBeenCalled();
+        expect(diagnostics.reportOperationSucceeded).not.toHaveBeenCalled();
+    });
+
     it('keeps the starting Auth generation for asynchronous operation outcomes', async () => {
         mocks.callableSpy.mockImplementationOnce(async () => {
             diagnostics.authRevision = 2;
             return { data: 'success' };
         });
         await service.call('defaultRegionFunc' as never);
-        expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledExactlyOnceWith('callable', 1, 'defaultRegionFunc');
+        expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledExactlyOnceWith('callable', { authRevision: 1, sequence: 1 }, 'defaultRegionFunc');
+    });
+
+    it('does not let an older in-flight callable clear a newer App Check failure', async () => {
+        TestBed.resetTestingModule();
+        service = configureTestingModule(true);
+        let finishOlder!: (response: { data: string }) => void;
+        mocks.callableSpy.mockImplementationOnce(() => new Promise(resolve => { finishOlder = resolve; }));
+        const older = service.call('defaultRegionFunc' as never);
+        await vi.waitFor(() => expect(mocks.callableSpy).toHaveBeenCalledTimes(1));
+
+        const failure = { code: 'appCheck/recaptcha-error' };
+        mocks.ensureReadyMock.mockRejectedValueOnce(failure);
+        await expect(service.call('defaultRegionFunc' as never)).rejects.toBe(failure);
+        const outcomes = () => loggerMock.captureMessage.mock.calls
+            .filter(call => call[0] === 'App Check verification outcome')
+            .map(call => call[1].contexts.appCheck.outcome);
+        expect(outcomes()).toEqual(['operation-blocked']);
+
+        finishOlder({ data: 'older' });
+        await expect(older).resolves.toEqual({ data: 'older' });
+        expect(outcomes()).toEqual(['operation-blocked']);
+
+        await expect(service.call('defaultRegionFunc' as never)).resolves.toEqual({ data: 'success' });
+        expect(outcomes()).toEqual(['operation-blocked', 'operation-succeeded']);
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+        expect(mocks.ensureReadyMock.mock.calls).toEqual([[], [], []]);
     });
 
     it('does not report a failure after the caller becomes stale while awaiting a response', async () => {
