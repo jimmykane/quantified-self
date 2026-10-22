@@ -421,7 +421,7 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `23.4.0` in both app and Functions
+- Installed `@sports-alliance/sports-lib`: `23.5.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -6223,7 +6223,7 @@ query paths, queues, triggers or scheduled rebuilds. Refreshed evaluations and c
 metadata/cache writes and invalidation flow; reparsing history still incurs that normal refresh work.
 
 Root and Functions adopted the same published sports-lib 23.1.0 package for that threshold-HR update; the current
-23.4.0 pins retain those HR rules.
+23.5.0 pins retain those HR rules.
 The runtime reparse target resolves from that installed version; version mismatch checks remain strict.
 Historical candidates require the normal approved
 original-file reparse lifecycle and derived refresh; a Training rebuild alone cannot recover file calibration.
@@ -6819,10 +6819,10 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.4.0 with matching package integrity. The direct Functions FIT Parser
+Root and Functions now pin published Sports Lib 23.5.0 with matching package integrity. The direct Functions FIT Parser
 pin remains 6.2.2; Sports Lib retains its own compatible parser dependency.
-Both consumers recognize the expanded 284-type catalog. The earlier 22.0.0 integration and its historical verification
-remain recorded here; package adoption does not deploy either consumer or start a production reparse.
+Both consumers use the installed canonical metric catalog, including the 20 R–R summary types. The earlier 22.0.0
+integration and its historical verification remain recorded here; package adoption does not deploy either consumer or start a production reparse.
 
 #### Sports Lib 23.4.0 sparse distance adoption
 
@@ -6841,18 +6841,16 @@ MCP impact review: selected chart/sample projections retain null gaps and their 
 library interval-support metadata is not exposed. No catalog, scope, consent, registered schema, planning/delivery
 capability or plugin change is needed. See the reparse runbook for the existing operational boundary.
 
-#### Pending Sports Lib power adoption
+#### Sports Lib 23.5.0 power and R–R adoption
 
-Sports Lib [PR #164](https://github.com/sports-alliance/sports-lib/pull/164) changes missing FIT/TCX/GPX power to null,
-while retaining measured zero. This QS preparation is validated with its locally packed candidate; root and Functions
-remain pinned to published 23.4.0 until the library release exists. Do not merge this preparation as completed adoption:
-pin the same published artifact in both manifests and lockfiles, then repeat the focused checks and builds. The ordinary
-`functions/src/shared/power-adoption.spec.ts` regressions deliberately enforce the new behavior and fail with 23.4.0.
+Root and Functions pin the same published 23.5.0 artifact in both manifests and lockfiles. This includes the power
+corrections from [PR #164](https://github.com/sports-alliance/sports-lib/pull/164) and R–R analysis from
+[PR #159](https://github.com/sports-alliance/sports-lib/pull/159). Ordinary consumer regressions exercise the installed
+release through source parsing, sanitized persistence, JSON hydration, Training controls, chart and MCP projections.
 
-The candidate adds approximately 2.9 kB of raw initial JavaScript versus published 23.4.0 in the same QS production
-build. Production and beta initial warning/error limits move together from 1460 to 1464 kB to accommodate that measured
-increase; the total-script error limit remains 13600 kB. Hosting configuration tests pin both limits. Repeat the release
-build and public-startup/service-worker guards with the final published artifact before merge.
+The published release produces 1,472.76 kB of initial JavaScript in the production build, exceeding the earlier
+power-only candidate budget. Production and beta initial warning/error limits are aligned at 1,474 kB; the total-script
+error limit stays at 13,600 kB. Hosting tests pin both limits, and public-startup/service-worker guards remain required.
 
 The library owns interval support, calculated average/work/NP/curves, power TSS eligibility, side watts, FIT balance
 decoding and multisport power aggregation. QS consumes those values without filling unknown watts or adding coverage
@@ -6881,6 +6879,21 @@ consent, planning reads/mutations and provider delivery are unchanged. Missing s
 available. Detailed samples keep aligned nulls; the chart projection keeps only measured points with their original offsets
 and reports missing counts. No coverage metadata is exposed, no plugin refresh is needed, and production reparse,
 deployment and Sports Lib publication remain separate approvals. The reparse runbook owns the adoption checklist.
+
+The release also adds 20 canonical R–R statistics, including RMSSD, SDNN, pNN50, recording coverage and artifact
+counts. These are calculated from recorded beat intervals in supported FIT and Suunto JSON/SML originals; ordinary
+heart-rate samples and resampled 1 Hz IBI charts are not raw beat evidence. Raw IBI elapsed sample times survive native
+JSON hydration, but activity/event Firestore sanitizers still remove streams. Only available finite numeric summaries
+enter existing cards and metric discovery; no new Health, Sleep or Readiness input is introduced. Multisport legs keep
+their own R–R summaries; QS must not average them into an unsupported combined event value.
+
+The SML XML adapter anchors R–R intervals to the first UTC sample rather than a timezone-less local header. Corrected
+beat timing can also change derived HR and calculated load. The same original-file reparse and normal Training
+invalidation apply; existing saved controls and policy snapshots remain authoritative. Historical saved R–R summaries
+require a source-backed reparse; chart hydration alone does not persist them. Neither the R–R change nor power correction
+requires saved-route reparse. These numeric metrics use existing MCP discovery and permissions, without exposing raw
+intervals, timestamps or beat classifications. No new tools, mutations, consent, planning/delivery behavior, plugin or
+registered-schema changes are needed.
 
 #### Earlier published dependency verification
 

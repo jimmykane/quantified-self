@@ -179,6 +179,14 @@ describe('help.content', () => {
     expect(copy).toContain('Opening a power chart reads the retained original file without changing saved statistics');
     expect(copy).toContain('refreshing Training alone does not reparse the file');
   });
+  it('keeps activity beat statistics separate from overnight HRV and source-free recalculation', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('**R–R RMSSD**');
+    expect(copy).toContain('Ordinary heart-rate readings cannot supply these statistics');
+    expect(copy).toContain('separate from overnight HRV and Readiness');
+    expect(copy).toContain('Older saved summaries need an original-file reparse');
+    expect(copy).toContain('Multisport legs keep their own values');
+  });
   it('explains recorded timer recovery and the original-file boundary for historical corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Recorded Suunto pauses and resumes are used in load calculations');

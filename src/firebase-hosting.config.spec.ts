@@ -535,12 +535,12 @@ describe('Firebase Hosting configuration', () => {
     });
   });
 
-  it.each(['production', 'beta'])('bounds the power-parser startup increase for %s', configuration => {
+  it.each(['production', 'beta'])('bounds the sports-lib 23.5 startup output for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
-    // The candidate adds about 2.9 kB to initial output over published 23.4.0.
+    // Published 23.5.0 with power and R-R metrics measures 1,472.76 kB of initial output.
     // Keep a narrow matching limit for both release builds, without relaxing allScript.
     expect(budgets?.find(budget => budget.type === 'initial')).toEqual({
-      type: 'initial', maximumWarning: '1464kb', maximumError: '1464kb',
+      type: 'initial', maximumWarning: '1474kb', maximumError: '1474kb',
     });
   });
 

@@ -39,6 +39,30 @@ import {
 } from './metric-catalog';
 
 describe('MCP Sports Lib metric catalog', () => {
+  it('discovers all released R-R summaries only when persisted, preserving native units and valid zero', () => {
+    const expected = {
+      'R-R Interval Count': 'count', 'R-R Invalid Interval Count': 'count', 'R-R Artifact Count': 'count',
+      'R-R Artifact Percentage': '%', 'R-R Suspected Ectopic Pair Count': 'count',
+      'R-R Suspected Ectopic Pair Rate': 'pairs/h', 'R-R Coverage': '%', 'R-R Gap Count': 'count',
+      'R-R Longest Gap': 's', 'R-R Mean Interval': 'ms', 'R-R Average Heart Rate': 'bpm',
+      'R-R Minimum Heart Rate': 'bpm', 'R-R Maximum Heart Rate': 'bpm', 'R-R RMSSD': 'ms',
+      'R-R SDNN': 'ms', 'R-R pNN50': '%', 'R-R DFA Alpha1 Median': '',
+      'R-R DFA Alpha1 Minimum': '', 'R-R DFA Alpha1 Maximum': '', 'R-R DFA Window Count': 'count',
+    };
+    const catalog = buildSportsLibNumericMetricCatalog().filter(metric => metric.type.startsWith('R-R '));
+    expect(Object.fromEntries(catalog.map(metric => [metric.type, metric.unit]))).toEqual(expected);
+    expect(resolveAvailableSportsLibMetrics([{}]).filter(metric => metric.type.startsWith('R-R '))).toEqual([]);
+    for (const metric of catalog) {
+      expect(resolveAvailableSportsLibMetrics([{ [metric.type]: 0 }])).toContainEqual(metric);
+      expect(projectSportsLibNumericMetricValue(metric.type, 0)).toBe(0);
+      for (const invalid of [null, NaN, Infinity, '', '42']) {
+        expect(projectSportsLibNumericMetricValue(metric.type, invalid)).toBeNull();
+      }
+    }
+    expect(projectSportsLibNumericMetricValue('IBI', [800, 900])).toBeNull();
+    expect(resolveSportsLibNumericMetric('sampleTimes')).toBeNull();
+  });
+
   it('resolves qualified EnergySense terminology without creating duplicate or ambiguous metrics', () => {
     expect(resolveSportsLibNumericMetric('Suunto EnergySense Endurance')?.type).toBe('Stamina');
     expect(resolveSportsLibNumericMetric('Minimum EnergySense Endurance')?.type).toBe('Minimum Stamina');
