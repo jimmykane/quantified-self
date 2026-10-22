@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   EventImporterJSON, ActivityTypes, DataIBI, DataRRArtifactCount, DataRRArtifactPercentage,
   DataRRCoverage, DataRRRMSSD, DataRRDFAAlpha1Median, DataRRDFAAlpha1Min, DataRRDFAAlpha1Max,
+  DataRRSDNN, DataRRPNN50, DataRRSuspectedEctopicPairCount, DataRRSuspectedEctopicPairRate,
   IBIStream, Stream, DistanceUnits,
 } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
@@ -9,6 +10,7 @@ import {
   BENCHMARK_RR_METRICS, buildBenchmarkRRAnalysisInput, buildBenchmarkRRRows,
   formatBenchmarkRRValue, getBenchmarkRRIntervalSource, getBenchmarkRRLabels, hasBenchmarkRRStats,
   buildRRStatSummary,
+  buildBenchmarkRRReportRows,
 } from './benchmark-rr.helper';
 
 function recording(name = 'Strap') {
@@ -21,6 +23,60 @@ function recording(name = 'Strap') {
 }
 
 describe('benchmark R–R summaries', () => {
+  it('includes the seven key report metrics with per-recording quality context', () => {
+    const reference = recording(), test = recording('Watch');
+    for (const activity of [reference, test]) {
+      activity.addStat(new DataRRCoverage(100));
+      activity.addStat(new DataRRArtifactPercentage(0));
+      activity.addStat(new DataRRArtifactCount(0));
+      activity.addStat(new DataRRSuspectedEctopicPairCount(0));
+      activity.addStat(new DataRRSuspectedEctopicPairRate(0));
+      activity.addStat(new DataRRRMSSD(20));
+      activity.addStat(new DataRRSDNN(30));
+      activity.addStat(new DataRRPNN50(10));
+      activity.addStat(new DataRRDFAAlpha1Median(.62));
+      activity.addStat(new DataRRDFAAlpha1Min(.09));
+      activity.addStat(new DataRRDFAAlpha1Max(1.38));
+    }
+    const rows = buildBenchmarkRRReportRows(reference, test);
+    expect(rows.map(row => row.type)).toEqual(BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type));
+    expect(rows.find(row => row.type === DataRRArtifactPercentage.type)?.cells[0].detail).toBe('0 flagged intervals');
+    expect(rows.find(row => row.type === DataRRSuspectedEctopicPairCount.type)?.cells[0].detail)
+      .toBe(formatBenchmarkRRValue(DataRRSuspectedEctopicPairRate.type, 0)?.text);
+    expect(rows.find(row => row.type === DataRRDFAAlpha1Median.type)?.cells[0].detail).toBe('Range 0.09–1.38');
+    expect(rows.every(row => row.difference?.percent === 0)).toBe(true);
+  });
+
+  it('omits unavailable report rows and differences without replacing one-sided or invalid values with zero', () => {
+    const reference = recording(), test = recording('Watch');
+    reference.addStat(new DataRRArtifactPercentage(0));
+    reference.addStat(new DataRRRMSSD(20));
+    const invalid = new DataRRRMSSD(30);
+    vi.spyOn(invalid, 'getValue').mockReturnValue(NaN);
+    test.addStat(invalid);
+    const rows = buildBenchmarkRRReportRows(reference, test);
+    expect(rows.map(row => row.type)).toEqual([DataRRArtifactPercentage.type, DataRRRMSSD.type]);
+    expect(rows[0].cells[0].display).toBe('0.0 %');
+    expect(rows.every(row => row.cells[1].display === null && row.difference === null)).toBe(true);
+    expect(buildBenchmarkRRReportRows(recording(), recording())).toEqual([]);
+  });
+
+  it('formats report comparisons canonically for default and imperial preferences without reading streams or mutating sources', () => {
+    const reference = recording(), test = recording('Watch');
+    reference.addStat(new DataRRRMSSD(20)); test.addStat(new DataRRRMSSD(30));
+    const sourceBefore = [reference, test].map(activity => JSON.stringify(activity.toJSON()));
+    const readReferenceStreams = vi.spyOn(reference, 'getAllStreams');
+    const readTestStreams = vi.spyOn(test, 'getAllStreams');
+    const defaults = getDefaultUserUnitSettings();
+    for (const settings of [defaults, { ...defaults, distanceUnits: DistanceUnits.Miles }]) {
+      const [row] = buildBenchmarkRRReportRows(reference, test, settings);
+      expect(row.cells.map(cell => cell.display)).toEqual(['20.0 ms', '30.0 ms']);
+      expect(row.difference).toEqual({ display: '10.0 ms', percent: 40 });
+    }
+    expect(readReferenceStreams).not.toHaveBeenCalled(); expect(readTestStreams).not.toHaveBeenCalled();
+    expect([reference, test].map(activity => JSON.stringify(activity.toJSON()))).toEqual(sourceBefore);
+  });
+
   it('groups only valid saved R–R statistics, preserving zero and the original stat instances', () => {
     const zero = new DataRRArtifactPercentage(0), rmssd = new DataRRRMSSD(8.14), count = new DataRRArtifactCount(0);
     const invalid = new DataRRCoverage(100);

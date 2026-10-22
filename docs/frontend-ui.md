@@ -421,6 +421,15 @@ and category changes and the shared disclosure own one selection haptic. This su
 start a worker, fetch originals, reparse, persist statistics or add backend reads. MCP metric projections, consent,
 catalog discovery and query/index contracts are unchanged; this is presentation of already-adopted saved metrics.
 
+`BenchmarkReportComponent` includes the seven primary R–R metrics as a
+reference/test table, using the exact report participant IDs and the common canonical formatter. It omits all-missing
+rows, preserves one-sided and zero values, and includes available artifact counts, pair rates and DFA ranges. Neutral
+absolute/percentage differences require valid values in both recordings. These whole-recording summaries are not
+trimmed to the aligned benchmark overlap. R–R metrics are excluded from stat-difference chips and the hardware
+agreement grade. Stale reports, unresolved or ambiguous participant links and missing activities do not show current
+R–R values. The section is inside the existing share/image export frame and uses the global scrollbar skin on phones.
+It reads no streams, starts no worker and changes no saved report schema, Firestore query/index or MCP contract.
+
 `BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
 (including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
 full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.

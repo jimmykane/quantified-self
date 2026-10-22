@@ -16,6 +16,8 @@ import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-
 import { BenchmarkQualityIssue, BenchmarkResult } from '@shared/app-event.interface';
 import { BenchmarkAtAGlanceItem, BenchmarkReviewerSummary, BenchmarkGrade, resolveBenchmarkGnssGrade, resolveBenchmarkCorrelationGrade, resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
+import { RR_METRICS } from '../../constants/rr-metrics';
+import { buildBenchmarkRRReportRows, type BenchmarkRRReportRow } from '../../helpers/benchmark-rr.helper';
 
 // Grade thresholds for correlation (0-1)
 const CORRELATION_THRESHOLDS = {
@@ -23,6 +25,7 @@ const CORRELATION_THRESHOLDS = {
     good: 0.95,
     fair: 0.90
 };
+const RR_METRIC_TYPES = new Set<string>(RR_METRICS.map(metric => metric.type));
 
 type Grade = BenchmarkGrade;
 
@@ -149,6 +152,50 @@ interface InsightItem {
           </div>
         </div>
       </div>
+
+      <section class="metric-card rr-summary-card qs-overlay-section" *ngIf="rrRows.length > 0">
+        <div class="metric-card-header">
+          <div class="grade-avatar"><mat-icon>ecg_heart</mat-icon></div>
+          <div class="metric-card-heading">
+            <div class="metric-card-title">R–R &amp; HRV</div>
+            <div class="metric-card-subtitle">Full-recording summaries · excluded from the agreement grade</div>
+          </div>
+        </div>
+        <div class="metric-card-content">
+          <div class="rr-table-region qs-scrollbar" tabindex="0" role="region" aria-label="R–R and HRV recording comparison">
+            <table class="rr-summary-table">
+              <thead>
+                <tr>
+                  <th scope="col">Statistic</th>
+                  <th scope="col">
+                    <span class="rr-recording-label" [style.color]="referenceColor || 'var(--mat-sys-primary)'">{{ result.referenceName || 'Device A' }}</span>
+                    <span class="rr-detail">Reference</span>
+                  </th>
+                  <th scope="col">
+                    <span class="rr-recording-label" [style.color]="testColor || 'var(--mat-sys-tertiary)'">{{ result.testName || 'Device B' }}</span>
+                    <span class="rr-detail">Test</span>
+                  </th>
+                  <th scope="col">Absolute difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of rrRows">
+                  <th scope="row">{{ row.label }}</th>
+                  <td *ngFor="let cell of row.cells" [class.rr-unavailable]="cell.display === null">
+                    <span class="rr-value rr-recording-value">{{ cell.display ?? 'Unavailable' }}</span>
+                    <span class="rr-detail" *ngIf="cell.detail">{{ cell.detail }}</span>
+                  </td>
+                  <td [class.rr-unavailable]="row.difference === null">
+                    <span class="rr-value">{{ row.difference?.display ?? 'Unavailable' }}</span>
+                    <span class="rr-detail" *ngIf="row.difference as difference">{{ difference.percent | number:'1.1-1' }}%</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="rr-scroll-hint">Scroll horizontally to compare recordings.</p>
+        </div>
+      </section>
 
       <!-- GNSS Section -->
       <section class="metric-card gnss-card qs-overlay-section" *ngIf="result.metrics.gnss as gnss; else noGps">
@@ -291,6 +338,7 @@ export class BenchmarkReportComponent implements OnChanges {
     @Input() benchmarkReviewTags: string[] = [];
     objectKeys = Object.keys;
     diffChips: BenchmarkDiffChip[] = [];
+    rrRows: BenchmarkRRReportRow[] = [];
     qualityIssueGroups: BenchmarkIssueGroup[] = [];
     expandedIssueGroups = new Set<string>();
     reviewerSummary: BenchmarkReviewerSummary | null = null;
@@ -304,6 +352,7 @@ export class BenchmarkReportComponent implements OnChanges {
     ngOnChanges(changes: SimpleChanges) {
         if (changes['result'] || changes['event'] || changes['unitSettings'] || changes['summariesSettings']) {
             this.updateDiffChips();
+            this.updateRRRows();
             this.updateQualityIssueGroups();
         }
         if (changes['result'] || changes['benchmarkReviewTags']) {
@@ -525,6 +574,19 @@ export class BenchmarkReportComponent implements OnChanges {
         return this.expandedIssueGroups.has(key);
     }
 
+    private updateRRRows(): void {
+        this.rrRows = [];
+        const result = this.result;
+        if (!result || !this.event || result.requiresRegeneration || result.activityLinksResolved === false
+            || !result.referenceId || !result.testId || result.referenceId === result.testId) return;
+
+        const activities = this.event.getActivities();
+        const references = activities.filter(activity => activity.getID() === result.referenceId);
+        const tests = activities.filter(activity => activity.getID() === result.testId);
+        if (references.length !== 1 || tests.length !== 1) return;
+        this.rrRows = buildBenchmarkRRReportRows(references[0], tests[0], this.unitSettings);
+    }
+
     private updateDiffChips() {
         if (!this.result || !this.event || this.result.requiresRegeneration) {
             this.diffChips = [];
@@ -563,7 +625,7 @@ export class BenchmarkReportComponent implements OnChanges {
             }
         });
 
-        const statsList = Array.from(statsByType.values());
+        const statsList = Array.from(statsByType.values()).filter(stat => !RR_METRIC_TYPES.has(stat.getType()));
         const displayedStatsToShow = statsList.map(stat => stat.getType());
         const displayList = buildStatDisplayList(statsList, displayedStatsToShow, unitSettings, compareActivities.map(activity => activity.type));
         const diffMap = buildDiffMapForStats(statsList, displayedStatsToShow, compareActivities, unitSettings);

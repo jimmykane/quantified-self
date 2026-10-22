@@ -190,6 +190,11 @@ describe('help.content', () => {
     expect(copy).toContain('a separate category alongside Performance, Device');
     expect(copy).toContain('statistics present and valid in both recordings');
     expect(copy).toContain('Ordinary events and multisport legs do not show benchmark deltas');
+    expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
+    expect(copy).toContain('seven key R–R & HRV statistics side by side');
+    expect(copy).toContain('differences appear only when both recordings have a valid value');
+    expect(copy).toContain('cover each entire recording, not only the aligned overlap');
+    expect(copy).toContain('do not affect the hardware agreement grade');
     expect(copy).toContain('On **benchmark event details**, **R–R & HRV**');
     expect(copy).toContain('all 20 recorded R–R metrics');
     expect(copy).toContain('Missing values show a dash; a recorded zero stays zero');
