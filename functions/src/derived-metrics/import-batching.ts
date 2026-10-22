@@ -6,6 +6,10 @@ const IMPORT_BUILD_INTERVAL_MS = 5 * 60_000;
 const IMPORT_CHECKPOINT_MAX_AGE_MS = 15 * 60_000;
 const HISTORY_SERVICES = [ServiceNames.SuuntoApp, ServiceNames.GarminAPI, ServiceNames.COROSAPI, ServiceNames.WahooAPI];
 
+export function isDerivedImportService(value: unknown): value is ServiceNames {
+    return HISTORY_SERVICES.some(service => service === value);
+}
+
 /** Default-off server configuration. No wildcard and no client-supplied rollout flag. */
 export function isDerivedImportBatchingEnabled(uid: string): boolean {
     return !!uid && uid !== '*' && (process.env.DERIVED_METRICS_IMPORT_BATCH_UIDS ?? '')

@@ -244,10 +244,20 @@ export const onConnectionHistoryImportWritten = onDocumentWritten({ region, docu
   if (!run) return;
   if (run.processed) {
     const before = event.data?.before;
-    if (isDerivedImportBatchingEnabled(run.userID) && before?.exists && before.data()?.processed === false
-      && before.data()?.userID === run.userID && run.id === event.params.runId && isConnectionHistoryRunId(run.id)) {
+    const previous = before?.exists ? before.data() as ConnectionHistoryRun : undefined;
+    const receipt = run.derivedMetricsFlush;
+    const receiptCommitted = previous?.processed === true && !!receipt && receipt.revision === run.revision
+      && Number.isSafeInteger(receipt.generation) && Number(receipt.generation) > 0
+      && (previous.derivedMetricsFlush?.revision !== receipt.revision
+        || previous.derivedMetricsFlush?.generation !== receipt.generation);
+    const firstTerminal = previous?.processed === false && isDerivedImportBatchingEnabled(run.userID);
+    if ((firstTerminal || receiptCommitted) && previous?.userID === run.userID
+      && run.id === event.params.runId && isConnectionHistoryRunId(run.id)) {
       const { flushPendingDerivedMetricsAfterHistory } = await import('../derived-metrics/derived-metrics.service');
-      await flushPendingDerivedMetricsAfterHistory(run.userID, run.id, run.revision);
+      // The receipt's own event retries its exact enqueue even after pilot opt-out.
+      // That repair never writes another receipt, so it cannot retrigger itself.
+      if (receiptCommitted) await flushPendingDerivedMetricsAfterHistory(run.userID, run.id, run.revision, { repairOnly: true });
+      else await flushPendingDerivedMetricsAfterHistory(run.userID, run.id, run.revision);
     }
     return;
   }

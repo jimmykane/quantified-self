@@ -111,7 +111,9 @@ describe('connection history contract', () => {
     expect(run.id).toBe('11111111-1111-4111-8111-111111111111');
     expect(run.steps[0].capability).not.toBe(historyCapabilities(ServiceNames.COROSAPI)[0]);
     run.steps[0].routeAfterId = 'private-route-cursor'; run.steps[0].hadUnavailableRoutes = true;
+    run.derivedMetricsFlush = { revision: 17, generation: 29 };
     const projection = historyProjection(run);
+    expect(projection).not.toHaveProperty('derivedMetricsFlush');
     expect(projection.steps.some(step => 'hadUnavailableRoutes' in step || 'routeAfterId' in step)).toBe(false);
     expect(JSON.stringify(projection)).not.toMatch(/private|credential|lease|nextStart|connectionGeneration/);
     expect(projection.active).toBe(true);

@@ -1170,7 +1170,9 @@ Derived refreshes have an optional default-off account pilot for a five-minute f
 history checkpoint is active and recent. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
 checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,
 with owner/run-revision/deletion rechecks and retryable enqueue failure; late child/source writes still invalidate
-normally. See [Training scheduling](training-workspace.md#import-specific-five-minute-pilot) for the exact server gate,
+normally. A private per-run completion receipt prevents duplicate or superseded terminal events from advancing later
+work; enqueue recovery retains the exact original generation and retry budget. The receipt stays out of public history
+projections and uses existing run retention/cleanup. See [Training scheduling](training-workspace.md#import-specific-five-minute-pilot) for the exact server gate,
 bounded metadata reads, completion/race tests, monitoring apply boundary and rollback. This adds no provider request,
 Function, queue, index, secret, public MCP field or new history import action.
 

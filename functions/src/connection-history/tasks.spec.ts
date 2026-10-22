@@ -357,6 +357,33 @@ describe('durable history coordinator', () => {
     vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', ''); await trigger(event);
     expect(mocks.flushDerived).not.toHaveBeenCalled();
   });
+  it('repairs a newly committed flush receipt after pilot opt-out without recursing on unchanged receipts', async () => {
+    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', '');
+    run.processed = true; run.revision = 1;
+    const before = structuredClone(run);
+    run.derivedMetricsFlush = { revision: 1, generation: 2 };
+    const trigger = onConnectionHistoryImportWritten as unknown as (event: {
+      params: { runId: string };
+      data: { before: { exists: boolean; data: () => ConnectionHistoryRun }; after: { data: () => ConnectionHistoryRun } };
+    }) => Promise<void>;
+    const event = { params: { runId: run.id }, data: { before: { exists: true, data: () => before }, after: { data: () => run } } };
+    await trigger(event);
+    expect(mocks.flushDerived).toHaveBeenCalledExactlyOnceWith('owner', run.id, 1, { repairOnly: true });
+    mocks.flushDerived.mockClear();
+    await trigger({ ...event, data: { ...event.data, before: { exists: true, data: () => run } } });
+    run.derivedMetricsFlush = { revision: 1, generation: null }; await trigger(event);
+    run.derivedMetricsFlush = { revision: 0, generation: 2 }; await trigger(event);
+    expect(mocks.flushDerived).not.toHaveBeenCalled();
+  });
+  it('ignores malformed terminal updates with no run revision or completion receipt', async () => {
+    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', '');
+    const malformed = { ...run, processed: true, revision: undefined };
+    const trigger = onConnectionHistoryImportWritten as unknown as (event: unknown) => Promise<void>;
+    await expect(trigger({ params: { runId: run.id }, data: {
+      before: { exists: true, data: () => malformed }, after: { data: () => malformed },
+    } })).resolves.toBeUndefined();
+    expect(mocks.flushDerived).not.toHaveBeenCalled();
+  });
   it('a failed or saturated recovery still probes on its scheduled tick without masking the original result', async () => {
     const recovery = recoverConnectionHistoryImports as unknown as (event: any) => Promise<void>;
     mocks.depth.mockRejectedValueOnce(new Error('PRIVATE_DEPTH'));

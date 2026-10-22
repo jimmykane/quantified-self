@@ -225,7 +225,8 @@ import { getEventTags } from '../../../shared/event-tags';
 import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import { recordDerivedMetricCommit } from './monitoring';
-import { derivedImportBuildIntervalMs, isDerivedImportBatchingEnabled } from './import-batching';
+import { derivedImportBuildIntervalMs, isDerivedImportBatchingEnabled, isDerivedImportService } from './import-batching';
+import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId } from '../connection-history/model';
 import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
@@ -5901,10 +5902,13 @@ export async function fetchRecoveryLookbackEventDocs(
 }
 
 /** Completion only expedites durable pending work; repeated/obsolete events cannot create a rebuild. */
-export async function flushPendingDerivedMetricsAfterHistory(uid: string, runId: string, revision: number): Promise<void> {
-    if (!isDerivedImportBatchingEnabled(uid)) return;
+export async function flushPendingDerivedMetricsAfterHistory(
+    uid: string, runId: string, revision: number, options?: { repairOnly: true },
+): Promise<void> {
+    if ((!options?.repairOnly && !isDerivedImportBatchingEnabled(uid)) || !isConnectionHistoryRunId(runId)
+        || !Number.isSafeInteger(revision) || revision < 0) return;
     const result = await markDerivedMetricsDirtyAndMaybeQueue(uid, [], {
-        completedHistory: { runId, revision },
+        completedHistory: { runId, revision, repairOnly: options?.repairOnly },
     });
     if (!result.accepted && result.generation !== null) throw new Error('derived_metrics_history_flush_enqueue_failed');
 }
@@ -5919,7 +5923,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         // Automatic ingress/freshness probes batch; explicit owner edits retain priority.
         background?: boolean;
         // Internal history completion only: promote the pending union without invalidating inputs.
-        completedHistory?: { runId: string; revision: number };
+        completedHistory?: { runId: string; revision: number; repairOnly?: boolean };
     },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
@@ -5972,13 +5976,44 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         nowMs = Date.now();
         const rawCoordinatorData = coordinatorSnapshot.data();
         const coordinator = parseCoordinator(rawCoordinatorData);
-        const flushPending = options?.completedHistory !== undefined;
-        if (flushPending) {
-            if (!coordinator.dirtyMetricKinds.length) return;
-            const history = await transaction.get(admin.firestore().doc(`connectionHistoryImports/${options.completedHistory!.runId}`));
+        const completedHistory = options?.completedHistory;
+        const flushPending = completedHistory !== undefined;
+        let historyFlushRef: FirebaseFirestore.DocumentReference | undefined;
+        const recordHistoryFlush = (generation: number | null): void => {
+            if (historyFlushRef && completedHistory) transaction.update(historyFlushRef, {
+                derivedMetricsFlush: { revision: completedHistory.revision, generation },
+            });
+        };
+        if (completedHistory) {
+            const history = await transaction.get(admin.firestore().doc(`${CONNECTION_HISTORY_COLLECTION}/${completedHistory.runId}`));
             const current = history.data();
             if (!history.exists || current?.userID !== uid || current.processed !== true
-                || current.revision !== options.completedHistory!.revision) return;
+                || current.revision !== completedHistory.revision) return;
+            const receipt = current.derivedMetricsFlush;
+            if (receipt?.revision === completedHistory.revision) {
+                // A lost enqueue response may repair only this event's exact,
+                // still-unclaimed generation. Never promote a later generation.
+                if (Number.isSafeInteger(receipt.generation) && receipt.generation > 0 && receipt.generation === coordinator.generation
+                    && coordinator.dirtyMetricKinds.length
+                    && (coordinator.status === 'queued' || coordinator.status === 'failed')) {
+                    shouldEnqueue = true;
+                    generationToQueue = coordinator.generation;
+                    notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+                }
+                return;
+            }
+            if (completedHistory.repairOnly) return;
+            if (!isDerivedImportService(current.serviceName)) return;
+            const [meta] = await transaction.getAll(admin.firestore().doc(`users/${uid}/meta/${current.serviceName}`),
+                { fieldMask: ['connectionHistoryImport'] });
+            const projection = meta.data()?.connectionHistoryImport;
+            // A first delivery can itself be obsolete after a newer import starts.
+            if (projection?.runId !== completedHistory.runId || projection.active !== false) return;
+            historyFlushRef = history.ref;
+            if (!coordinator.dirtyMetricKinds.length) {
+                recordHistoryFlush(null);
+                return;
+            }
         }
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
@@ -6023,6 +6058,11 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             && !invalidateWorkoutInputs) {
             shouldEnqueue = false;
             generationToQueue = coordinator.generation;
+            recordHistoryFlush(coordinator.status === 'queued' ? coordinator.generation : null);
+            if (historyFlushRef && coordinator.status === 'queued') {
+                shouldEnqueue = true;
+                notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+            }
             return;
         }
 
@@ -6071,6 +6111,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         }
 
         transaction.set(coordinatorRef, coordinatorUpdatePayload, { merge: true });
+        recordHistoryFlush(shouldEnqueue ? nextGeneration : null);
     });
 
     if (blockedByDeletion) {

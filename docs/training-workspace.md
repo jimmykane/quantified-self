@@ -5406,6 +5406,19 @@ redeliver it. A restarted run or stale completion event cannot expedite another 
 acceptance: queued children, asynchronous callbacks and ingress arriving later still use normal source invalidation.
 Those late writes can create the final rebuild after the parent event; they are not suppressed by a completed import.
 
+Terminal delivery is consumed once per run revision using the private `derivedMetricsFlush` receipt on the existing
+history run. Its first transaction also checks that the provider's current projected run still matches and is terminal.
+The receipt commits atomically with the coordinator decision, including a null generation when there is no pending
+work or the current worker owns the follow-up. A clean completion records no new coordinator or calculation task.
+Duplicate delivery can only re-enqueue its recorded, still-unclaimed queued/failed generation at the stored deadline;
+it cannot promote later pending work, increment generations or reset the task's retry budget. A first delivery after
+a newer same-provider import starts is ignored. This handles failed/lost enqueue responses and concurrent duplicates.
+The receipt is one bounded field on the retained run, excluded from public history projections and MCP. Its update
+preserves the run revision, progress clock and TTL. The existing trigger treats that one receipt-bearing update as
+an enqueue-repair notification. It may repair only the matching persisted receipt, even after pilot opt-out; it cannot
+admit new completion work or write another receipt. Null/unchanged receipts and other terminal-to-terminal updates
+remain no-ops, so this notification cannot recurse. Existing history retention and account cleanup cover the receipt.
+
 Even without a terminal event, the final dirty generation remains scheduled at a fixed deadline and runs without a new
 source write. Concurrent imports share one account coordinator; another provider's active checkpoint can retain the
 five-minute interval. Releasing the allowlist leaves already scheduled work valid, with at most its existing bounded
@@ -5414,7 +5427,10 @@ wait; it does not require replay, queue deletion, a migration, new index or a sc
 Verification uses real Firestore and synthetic recorded TSS events: compare ordinary and pilot scheduling over fourteen
 arrivals, including a correction and deletion, then require identical final Form payloads and complete input versions.
 Additional cases cover concurrent dirty arrivals/completion, obsolete terminal revisions, restart, foreign owner,
-account deletion, manual priority, late writes and failed enqueue handoffs. These fixtures are not production savings.
+account deletion, manual priority, late writes and failed enqueue handoffs. Completion regressions cover old events
+after later work, superseded projected runs, clean/missing coordinators, concurrent duplicates and lost enqueue replies
+after a claim, plus committed receipt repair after pilot opt-out without new admissions. Public history projection
+tests exclude the receipt. These fixtures are not production savings.
 
 Monitoring: **covered** by existing native derived queues, eligible-age probes and committed outcome metrics. The
 source bundle extends guarded enqueue-failure coverage to `onconnectionhistoryimportwritten`; worker-attempt metrics

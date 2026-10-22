@@ -110,7 +110,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         } });
     }
     async function terminalImport(revision = 1) {
-        await db.doc(`connectionHistoryImports/${historyId}`).set({ userID: uid, processed: true, revision });
+        await db.doc(`connectionHistoryImports/${historyId}`).set({ userID: uid, serviceName: ServiceNames.SuuntoApp, processed: true, revision });
         await user().collection('meta').doc(ServiceNames.SuuntoApp).set({ connectionHistoryImport: {
             active: false, runId: historyId, updatedAtMs: Date.now(),
         } });
@@ -244,8 +244,115 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         await expect(flushPendingDerivedMetricsAfterHistory(uid, historyId, 1)).rejects.toThrow('derived_metrics_history_flush_enqueue_failed');
         const before = (await coordinator().get()).data()!;
         await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
-        expect((await coordinator().get()).data()).toMatchObject({ status: 'queued', generation: before.generation + 1,
-            eventMutationVersion: before.eventMutationVersion, workoutInputsVersion: before.workoutInputsVersion });
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(mocks.enqueue).toHaveBeenLastCalledWith(uid, before.generation);
+        expect((await db.doc(`connectionHistoryImports/${historyId}`).get()).data()?.derivedMetricsFlush)
+            .toEqual({ revision: 1, generation: before.generation });
+        const worker = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+        await worker({ data: { uid, generation: before.generation } });
+        expect((await coordinator().get()).data()?.status).toBe('idle');
+    });
+
+    it.each(['clean completion', 'completed rebuild'] as const)('does not let a duplicate terminal event expedite later work after %s', async path => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport();
+        if (path === 'completed rebuild') await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport(); await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        if (path === 'completed rebuild') {
+            const pending = (await coordinator().get()).data()!;
+            const worker = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+            await worker({ data: { uid, generation: pending.generation } });
+        }
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true, incrementEventMutationVersion: true });
+        const before = (await coordinator().get()).data(); const calls = mocks.enqueue.mock.calls.length;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+    });
+
+    it('ignores the first late completion event when provider metadata already belongs to a newer import', async () => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport();
+        await user().collection('meta').doc(ServiceNames.SuuntoApp).set({ connectionHistoryImport: {
+            active: true, runId: '22222222-2222-4222-8222-222222222222', updatedAtMs: Date.now(),
+        } });
+        const before = (await coordinator().get()).data(); const calls = mocks.enqueue.mock.calls.length;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+    });
+
+    it('consumes a clean terminal event without creating a coordinator or affecting later work', async () => {
+        await activeImport(); await terminalImport();
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect((await coordinator().get()).exists).toBe(false);
+        expect((await db.doc(`connectionHistoryImports/${historyId}`).get()).data()?.derivedMetricsFlush)
+            .toEqual({ revision: 1, generation: null });
+        const queued = await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        const before = (await coordinator().get()).data(); const calls = mocks.enqueue.mock.calls.length;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(before?.generation).toBe(queued.generation);
+    });
+
+    it('confirms an already prompt queued generation without replacing it on first terminal delivery', async () => {
+        await activeImport();
+        const queued = await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport(); mocks.enqueue.mockClear();
+        const before = (await coordinator().get()).data();
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith(uid, queued.generation);
+    });
+
+    it('coalesces simultaneous duplicate terminal events into one generation', async () => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        const before = (await coordinator().get()).data()!;
+        await terminalImport(); mocks.enqueue.mockClear();
+        await Promise.all([flushPendingDerivedMetricsAfterHistory(uid, historyId, 1),
+            flushPendingDerivedMetricsAfterHistory(uid, historyId, 1)]);
+        const after = (await coordinator().get()).data()!;
+        expect(after).toMatchObject({ generation: before.generation + 1, eventMutationVersion: before.eventMutationVersion,
+            workoutInputsVersion: before.workoutInputsVersion });
+        expect(mocks.enqueue.mock.calls.length).toBeGreaterThan(0);
+        expect(mocks.enqueue.mock.calls.every(call => call[1] === after.generation)).toBe(true);
+    }, 30_000);
+
+    it('does not repair a completion enqueue after its task has already claimed the generation', async () => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport();
+        mocks.enqueue.mockImplementationOnce(async (...args: unknown[]) => {
+            expect(await startDerivedMetricsProcessing(uid, Number(args[1]))).not.toBeNull();
+            throw new Error('synthetic lost enqueue response');
+        });
+        await expect(flushPendingDerivedMetricsAfterHistory(uid, historyId, 1)).rejects.toThrow('derived_metrics_history_flush_enqueue_failed');
+        const before = (await coordinator().get()).data(); const calls = mocks.enqueue.mock.calls.length;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+    });
+
+    it('repairs an existing receipt after pilot opt-out without admitting another terminal event', async () => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport();
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic outage'));
+        await expect(flushPendingDerivedMetricsAfterHistory(uid, historyId, 1)).rejects.toThrow('derived_metrics_history_flush_enqueue_failed');
+        const before = (await coordinator().get()).data()!;
+        vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', ''); mocks.enqueue.mockClear();
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1, { repairOnly: true });
+        expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith(uid, before.generation);
+        expect((await coordinator().get()).data()).toEqual(before);
+        // A repair event cannot consume a newer run revision without its own receipt.
+        await terminalImport(2); mocks.enqueue.mockClear();
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 2, { repairOnly: true });
+        expect(mocks.enqueue).not.toHaveBeenCalled();
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect((await db.doc(`connectionHistoryImports/${historyId}`).get()).data()).not.toHaveProperty('derivedMetricsFlush');
     });
 
     it('coalesces simultaneous ingress and automatic/MCP freshness requests without moving the deadline', async () => {
