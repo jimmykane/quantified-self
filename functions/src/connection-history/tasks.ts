@@ -25,6 +25,7 @@ import { advanceHistoryRun, type HistoryChildObservation } from './advance';
 import { withHistoryExecution } from './context';
 import { emitHistoryMonitoring, historyMonitoringProvider, historyExpectedContention } from './monitoring';
 import { historyProbeDue, observeConnectionHistory, recordHistoryProbeUnavailable } from './monitoring-probe';
+import { isDerivedImportBatchingEnabled } from '../derived-metrics/import-batching';
 
 const region = FUNCTIONS_MANIFEST.processConnectionHistoryTask.region;
 const refFor = (id: string) => admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(id);
@@ -240,7 +241,17 @@ export const processConnectionHistoryTask = onTaskDispatched({ region, timeoutSe
 });
 export const onConnectionHistoryImportWritten = onDocumentWritten({ region, document: `${CONNECTION_HISTORY_COLLECTION}/{runId}`, retry: true }, async event => {
   const run = event.data?.after.data() as ConnectionHistoryRun | undefined;
-  if (!run || run.processed || (event.data?.before.exists && event.data.before.data()?.revision === run.revision)) return;
+  if (!run) return;
+  if (run.processed) {
+    const before = event.data?.before;
+    if (isDerivedImportBatchingEnabled(run.userID) && before?.exists && before.data()?.processed === false
+      && before.data()?.userID === run.userID && run.id === event.params.runId && isConnectionHistoryRunId(run.id)) {
+      const { flushPendingDerivedMetricsAfterHistory } = await import('../derived-metrics/derived-metrics.service');
+      await flushPendingDerivedMetricsAfterHistory(run.userID, run.id, run.revision);
+    }
+    return;
+  }
+  if (event.data?.before.exists && event.data.before.data()?.revision === run.revision) return;
   await dispatchConnectionHistoryRun(run);
 });
 export const recoverConnectionHistoryImports = onSchedule({ region, schedule: '* * * * *', timeoutSeconds: 120 }, async event => {

@@ -1166,6 +1166,14 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
+Derived refreshes have an optional default-off account pilot for a five-minute fixed build interval while an existing
+history checkpoint is active and recent. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
+checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,
+with owner/run-revision/deletion rechecks and retryable enqueue failure; late child/source writes still invalidate
+normally. See [Training scheduling](training-workspace.md#import-specific-five-minute-pilot) for the exact server gate,
+bounded metadata reads, completion/race tests, monitoring apply boundary and rollback. This adds no provider request,
+Function, queue, index, secret, public MCP field or new history import action.
+
 Manual Suunto/COROS/Wahoo activity imports from updated clients now reuse the existing coordinator through the additive
 `background: true` option on their current callables. Admission atomically binds the existing account and credential/
 connection generations, exact custom dates, activity-only capability, reservation and owner-safe progress. Older

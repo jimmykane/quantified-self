@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
@@ -11,7 +12,7 @@ vi.mock('firebase-functions/v2/tasks', () => ({ onTaskDispatched: (_options: unk
 
 import {
     abandonDerivedMetricsProcessingAfterWriteBlock,
-    completeDerivedMetricsProcessing, failDerivedMetricsProcessing, fetchTrainingBuildWorkoutSeed,
+    completeDerivedMetricsProcessing, failDerivedMetricsProcessing, fetchTrainingBuildWorkoutSeed, flushPendingDerivedMetricsAfterHistory,
     markDerivedMetricsDirtyAndMaybeQueue, markDerivedMetricSnapshotsBuilding, markDerivedMetricSnapshotsFailed,
     startDerivedMetricsProcessing, writeDerivedMetricSnapshotsReady,
 } from './derived-metrics.service';
@@ -38,12 +39,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         uid = `reuse-fixture-${randomUUID()}`; owners.push(uid);
         await user().set({ fixture: true });
     });
-    afterEach(() => vi.restoreAllMocks());
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
     afterAll(async () => {
         for (const owner of owners) {
             await db.recursiveDelete(db.doc(`users/${owner}`));
             await db.doc(`userDeletionTombstones/${owner}`).delete();
         }
+        await db.doc('connectionHistoryImports/11111111-1111-4111-8111-111111111111').delete(); // Synthetic leaf fixture.
         await db.terminate();
     });
     async function warm() {
@@ -98,6 +100,152 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         expect((await coordinator().get()).data()).toMatchObject({ status: 'idle', dirtyMetricKinds: [],
             eventMutationVersion: 14, workoutInputsVersion: 14 });
         expect((await metric().get()).data()).toMatchObject({ status: 'ready', builtFromEventMutationVersion: 14 });
+    });
+
+    const historyId = '11111111-1111-4111-8111-111111111111';
+    async function activeImport() {
+        vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', uid);
+        await user().collection('meta').doc(ServiceNames.SuuntoApp).set({ connectionHistoryImport: {
+            active: true, runId: historyId, updatedAtMs: Date.now(),
+        } });
+    }
+    async function terminalImport(revision = 1) {
+        await db.doc(`connectionHistoryImports/${historyId}`).set({ userID: uid, processed: true, revision });
+        await user().collection('meta').doc(ServiceNames.SuuntoApp).set({ connectionHistoryImport: {
+            active: false, runId: historyId, updatedAtMs: Date.now(),
+        } });
+    }
+
+    it('reduces fourteen-arrival imports while producing identical Form after a correction and deletion', async () => {
+        const finalPayloads: unknown[] = [];
+        const base = Date.parse('2026-10-22T12:00:00Z');
+        for (const pilot of [false, true]) {
+            mocks.firestore.mockReturnValue(db);
+            uid = `reuse-fixture-${randomUUID()}`; owners.push(uid); await user().set({ fixture: true });
+            let now = base;
+            vi.spyOn(Date, 'now').mockImplementation(() => now);
+            await activeImport();
+            if (!pilot) vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', '');
+            const tasks: { generation: number; due: number }[] = [];
+            mocks.enqueue.mockImplementation(async (...args: unknown[]) => {
+                tasks.push({ generation: Number(args[1]), due: now + Number(args[2] ?? 0) * 1000 });
+            });
+            const starts: number[] = [];
+            let arrivals = 0;
+            const dirty = () => markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form],
+                { background: true, incrementEventMutationVersion: true });
+            const worker = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+            while (arrivals < 14 || tasks.length) {
+                const arrival = arrivals < 14 ? base + arrivals * 30_000 : Infinity;
+                now = Math.min(arrival, ...tasks.map(task => task.due));
+                if (now === arrival) {
+                    await user().collection('events').doc(`event-${arrivals}`).set({
+                        startDate: new Date(base - 2 * 86_400_000), stats: { 'Training Stress Score': arrivals },
+                    });
+                    await dirty();
+                    if (arrivals === 5) {
+                        await user().collection('events').doc('event-0').update({ 'stats.Training Stress Score': 77 });
+                        await dirty();
+                    }
+                    if (arrivals === 9) {
+                        // Synthetic leaf fixture with no descendants.
+                        await user().collection('events').doc('event-1').delete(); await dirty();
+                    }
+                    arrivals++;
+                }
+                const index = tasks.findIndex(task => task.due <= now);
+                if (index < 0) continue;
+                const [task] = tasks.splice(index, 1);
+                starts.push(now - base);
+                await worker({ data: { uid, generation: task.generation } });
+                now += 21_000;
+            }
+            expect(starts).toEqual(pilot ? [0, 300_000, 600_000] : [0, 120_000, 240_000, 360_000, 480_000]);
+            const form = (await user().collection('derivedMetrics').doc(DERIVED_METRIC_KINDS.Form).get()).data()!;
+            expect(form).toMatchObject({ status: 'ready', builtFromEventMutationVersion: 16, sourceEventCount: 13 });
+            expect(form.payload.dailyLoads).toEqual([expect.objectContaining({ load: 167 })]);
+            finalPayloads.push(form.payload);
+            expect((await coordinator().get()).data()).toMatchObject({ status: 'idle', dirtyMetricKinds: [],
+                eventMutationVersion: 16, workoutInputsVersion: 16 });
+            vi.restoreAllMocks();
+        }
+        expect(finalPayloads[1]).toEqual(finalPayloads[0]);
+    });
+
+    it.each(['complete', 'abandon'] as const)('keeps import pending work durable after %s and retries a failed five-minute handoff', async path => {
+        const { claim } = await warm(); await activeImport();
+        vi.spyOn(Date, 'now').mockReturnValue(claim.startedAtMs + 30_000);
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form],
+            { background: true, incrementEventMutationVersion: true });
+        mocks.enqueue.mockRejectedValueOnce(new Error('synthetic import enqueue outage'));
+        const handoff = path === 'complete' ? completeDerivedMetricsProcessing(uid, claim.generation, claim)
+            : abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds, 'fixture write block', claim);
+        await expect(handoff).rejects.toThrow('synthetic import enqueue outage');
+        const pending = (await coordinator().get()).data()!;
+        expect(pending).toMatchObject({ status: 'failed', buildNotBeforeMs: claim.startedAtMs + 300_000,
+            eventMutationVersion: 2, workoutInputsVersion: 2 });
+        expect(await startDerivedMetricsProcessing(uid, claim.generation)).toBeNull();
+        expect(mocks.enqueue).toHaveBeenLastCalledWith(uid, pending.generation, 270);
+    });
+
+    it('promotes only pending work on history completion without advancing inputs or losing newer kinds', async () => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport();
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true, incrementEventMutationVersion: true });
+        const waiting = (await coordinator().get()).data()!;
+        await terminalImport();
+        await Promise.all([flushPendingDerivedMetricsAfterHistory(uid, historyId, 1),
+            markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form], { background: true, incrementEventMutationVersion: true })]);
+        const next = (await coordinator().get()).data()!;
+        expect(next).toMatchObject({ status: 'queued', generation: waiting.generation + 1,
+            eventMutationVersion: 3, workoutInputsVersion: 3 });
+        expect(next.buildNotBeforeMs).toBeLessThanOrEqual(Date.now());
+        expect(new Set(next.dirtyMetricKinds)).toEqual(new Set([...kinds, DERIVED_METRIC_KINDS.Form]));
+        expect(await startDerivedMetricsProcessing(uid, waiting.generation)).toBeNull();
+        const worker = processDerivedMetricsTask as unknown as (request: unknown) => Promise<void>;
+        await worker({ data: { uid, generation: next.generation } });
+        const before = (await coordinator().get()).data(); const calls = mocks.enqueue.mock.calls.length;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+        expect((await coordinator().get()).data()).toEqual(before);
+        // A source arriving after completion retains normal invalidation and the ordinary two-minute bound.
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form], { background: true, incrementEventMutationVersion: true });
+        expect((await coordinator().get()).data()?.buildNotBeforeMs).toBeLessThanOrEqual(Date.now() + 120_000);
+    }, 30_000);
+
+    it('retains manual edit priority through import completion while a build is processing', async () => {
+        const { claim } = await warm(); await activeImport();
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.Form]);
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport(); await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        const result = await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        expect(mocks.enqueue).toHaveBeenLastCalledWith(uid, result.nextGeneration);
+        expect((await coordinator().get()).data()?.pendingImmediate).toBe(false);
+    });
+
+    it.each(['restarted', 'stale revision', 'foreign owner', 'deleted'] as const)('fences terminal history flush after %s', async change => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport();
+        if (change === 'restarted') await db.doc(`connectionHistoryImports/${historyId}`).update({ processed: false });
+        if (change === 'stale revision') await db.doc(`connectionHistoryImports/${historyId}`).update({ revision: 2 });
+        if (change === 'foreign owner') await db.doc(`connectionHistoryImports/${historyId}`).update({ userID: 'another-owner' });
+        if (change === 'deleted') await tombstone().set({ fixture: true });
+        const before = (await coordinator().get()).data(); const calls = mocks.enqueue.mock.calls.length;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect(mocks.enqueue).toHaveBeenCalledTimes(calls);
+        expect((await coordinator().get()).data()).toEqual(before);
+    });
+
+    it('retries failed completion flush enqueue from the same terminal event', async () => {
+        const { claim } = await warm(); await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await activeImport(); await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        await terminalImport(); mocks.enqueue.mockRejectedValueOnce(new Error('synthetic outage'));
+        await expect(flushPendingDerivedMetricsAfterHistory(uid, historyId, 1)).rejects.toThrow('derived_metrics_history_flush_enqueue_failed');
+        const before = (await coordinator().get()).data()!;
+        await flushPendingDerivedMetricsAfterHistory(uid, historyId, 1);
+        expect((await coordinator().get()).data()).toMatchObject({ status: 'queued', generation: before.generation + 1,
+            eventMutationVersion: before.eventMutationVersion, workoutInputsVersion: before.workoutInputsVersion });
     });
 
     it('coalesces simultaneous ingress and automatic/MCP freshness requests without moving the deadline', async () => {

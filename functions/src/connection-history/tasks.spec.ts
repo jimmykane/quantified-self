@@ -1,8 +1,8 @@
 import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({
-  replayFinalCommit: false, rejectFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), routeEnqueue: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(), skip: vi.fn(), probe: vi.fn(), probeUnavailable: vi.fn(),
+  flushDerived: vi.fn(), replayFinalCommit: false, rejectFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), routeEnqueue: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(), skip: vi.fn(), probe: vi.fn(), probeUnavailable: vi.fn(),
 }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn() }));
 vi.mock('./monitoring-probe', () => ({ historyProbeDue: (time: string) => time.endsWith(':00:00Z'), observeConnectionHistory: mocks.probe, recordHistoryProbeUnavailable: mocks.probeUnavailable }));
@@ -15,6 +15,7 @@ vi.mock('../utils', () => ({ hasProAccess: mocks.pro, enforceAppCheck: mocks.app
 vi.mock('../config', () => ({ config: { cloudtasks: { workoutQueue: 'workout', sleepSyncQueue: 'sleep', garminHealthBackfillQueue: 'health', connectionHistoryQueue: 'history' } } }));
 vi.mock('../secrets', () => ({ FUNCTION_SECRET_BINDINGS: { processConnectionHistoryTask: [] } }));
 vi.mock('../shared/cloud-tasks', () => ({ enqueueConnectionHistoryTask: mocks.enqueue, getCloudTaskQueueDepthForQueue: mocks.depth }));
+vi.mock('../derived-metrics/derived-metrics.service', () => ({ flushPendingDerivedMetricsAfterHistory: mocks.flushDerived }));
 vi.mock('../queue-utils', () => ({ markQueueItemSkipped: mocks.skip }));
 vi.mock('./adapters', () => ({ executeHistoryOperation: mocks.execute, historyAdmissionQueue: () => ({ taskQueue: 'workout', collection: 'workoutQueue' }), historySleepProvider: () => 'garmin', historyCooldownUntil: (_: unknown, meta: any) => Number(meta?.testCooldownUntil || 0), isHistoryWindowTooLarge: () => false,
   HistorySkippedError: class HistorySkippedError extends Error {} }));
@@ -71,6 +72,7 @@ beforeEach(() => {
   mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
   mocks.execute.mockReset().mockResolvedValue({ count: 0, nextStartMs: now + 1000, nextPage: 1 });
 });
+afterEach(() => vi.unstubAllEnvs());
 const signals = () => [...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]
   .filter(([, fields]) => fields?.telemetryVersion === 1).map(([, fields]) => fields);
 describe('durable history coordinator', () => {
@@ -336,6 +338,24 @@ describe('durable history coordinator', () => {
     await expect(trigger(event)).rejects.toThrow('not accepted');
     expect(signals().at(-1)).toMatchObject({ event: 'dispatch_attempt', outcome: 'failed', provider: 'wahoo' });
     run.processed = true; await trigger(event); expect(signals()).toHaveLength(1);
+  });
+  it.each(['processed', 'failed', 'skipped'] as const)('flushes pending derived work on a committed terminal %s transition for a pilot owner', async status => {
+    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', 'owner');
+    const before = structuredClone(run); run.processed = true; run.revision++; run.steps[0].status = status;
+    const trigger = onConnectionHistoryImportWritten as unknown as (event: {
+      params: { runId: string };
+      data: { before: { exists: boolean; data: () => ConnectionHistoryRun }; after: { data: () => ConnectionHistoryRun } };
+    }) => Promise<void>;
+    const event = { params: { runId: run.id }, data: { before: { exists: true, data: () => before }, after: { data: () => run } } };
+    await trigger(event);
+    expect(mocks.flushDerived).toHaveBeenCalledWith('owner', run.id, run.revision);
+    mocks.flushDerived.mockRejectedValueOnce(new Error('synthetic outage'));
+    await expect(trigger(event)).rejects.toThrow('synthetic outage');
+    mocks.flushDerived.mockClear();
+    await trigger({ ...event, data: { ...event.data, before: { exists: true, data: () => run } } });
+    await trigger({ ...event, params: { runId: 'another-run' } });
+    vi.stubEnv('DERIVED_METRICS_IMPORT_BATCH_UIDS', ''); await trigger(event);
+    expect(mocks.flushDerived).not.toHaveBeenCalled();
   });
   it('a failed or saturated recovery still probes on its scheduled tick without masking the original result', async () => {
     const recovery = recoverConnectionHistoryImports as unknown as (event: any) => Promise<void>;

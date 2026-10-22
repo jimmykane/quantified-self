@@ -95,6 +95,13 @@ test('admission and ACKs never imply ready publication; intentional lifecycle tr
   assert.equal(selected('calculation_failures', entry('coordinator_commit', { outcome: 'failed', metricKind: 'private-canary' })), false);
   assert.equal(selected('calculation_failures', entry('coordinator_commit', { outcome: 'failed', telemetryVersion: 2 })), false);
 });
+test('history completion flush failures share guarded enqueue coverage without becoming calculation attempts', () => {
+  const service = 'onconnectionhistoryimportwritten';
+  assert.ok(SERVICES.includes(service));
+  assert.equal(selected('enqueue_failures', entry('coordinator_commit', { outcome: 'enqueue_failed' }, service)), true);
+  assert.equal(selected('snapshot_commits', entry('coordinator_commit', { outcome: 'enqueue_failed' }, service)), false);
+  assert.equal(selected('worker_attempts', entry('worker_attempt', { outcome: 'failed', stage: 'calculation' }, service)), false);
+});
 test('real idle, partial, malformed and capped observations do not fabricate healthy zeroes', () => {
   const sample = fields => entry('queue_sample', { state: 'queued', unknownSample: 0, truncated: false, ...fields }, SERVICES[2]);
   for (const state of ['queued', 'processing', 'failed']) assert.equal(selected('queue_samples', sample({ state })), true);

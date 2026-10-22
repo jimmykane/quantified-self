@@ -5381,6 +5381,53 @@ MCP impact: **no wire or authority change**. Existing prepare/read contracts ret
 retry guidance; the private scheduling fields are never projected into their responses. No additional scopes, tools,
 planning fields, provider actions, registered-schema changes or plugin rebuild are required.
 
+### Import-specific five-minute pilot
+
+`DERIVED_METRICS_IMPORT_BATCH_UIDS` is a default-off, comma-separated exact account allowlist in the server
+runtime environment. An empty value disables this pilot; `*` does not enable all accounts. Set the same value for
+all deployed Functions that schedule derived work, including `onConnectionHistoryImportWritten`. Configuration
+activation and deployment require separate approval. No actual account identifiers belong in this document or Git.
+
+For an enabled account, a new background generation reads the four existing Suunto/Garmin/COROS/Wahoo metadata
+leaves inside its coordinator transaction, projected to `connectionHistoryImport` only. An active UUID-bound import
+checkpoint updated within fifteen minutes changes the fixed build-start interval from two to five minutes.
+Missing, completed, malformed, future-dated or stale checkpoints retain the ordinary interval. The first build and
+manual control/benchmark edits retain prompt scheduling. Coalescing an already queued generation performs no extra
+metadata reads and never slides its deadline. The existing generation, claim, revision and account-deletion fences
+remain authoritative. Completion and write-block handoffs use this same bounded interval and durable enqueue recovery.
+Automatic freshness and MCP preparation join the account's scheduled work, retaining truthful preparing/last-result states.
+
+The existing history-write trigger expedites the coordinator's pending union when a run changes from active to
+terminal, including failed/skipped partial imports. Its transaction rechecks the exact terminal run revision and owner
+alongside the coordinator and deletion guard. It never increments source/input versions, adds metric kinds or creates
+work for a clean coordinator. During a build it preserves prompt pending priority; a delayed queued generation is
+replaced and its stale task is fenced. An enqueue failure rejects the terminal event so its existing retry policy can
+redeliver it. A restarted run or stale completion event cannot expedite another run's work. Completion is not provider
+acceptance: queued children, asynchronous callbacks and ingress arriving later still use normal source invalidation.
+Those late writes can create the final rebuild after the parent event; they are not suppressed by a completed import.
+
+Even without a terminal event, the final dirty generation remains scheduled at a fixed deadline and runs without a new
+source write. Concurrent imports share one account coordinator; another provider's active checkpoint can retain the
+five-minute interval. Releasing the allowlist leaves already scheduled work valid, with at most its existing bounded
+wait; it does not require replay, queue deletion, a migration, new index or a scanner.
+
+Verification uses real Firestore and synthetic recorded TSS events: compare ordinary and pilot scheduling over fourteen
+arrivals, including a correction and deletion, then require identical final Form payloads and complete input versions.
+Additional cases cover concurrent dirty arrivals/completion, obsolete terminal revisions, restart, foreign owner,
+account deletion, manual priority, late writes and failed enqueue handoffs. These fixtures are not production savings.
+
+Monitoring: **covered** by existing native derived queues, eligible-age probes and committed outcome metrics. The
+source bundle extends guarded enqueue-failure coverage to `onconnectionhistoryimportwritten`; worker-attempt metrics
+still select only ingress/calculation workers. Intentional future deadlines remain excluded from overdue samples.
+The filter extension needs separately approved monitoring apply/readback. Pilot evaluation compares worker starts,
+scanned document counters, source/publication revisions, failures and refresh latency using existing logs; it adds no
+per-record logging or duplicate production calculations. Roll back the allowlist for a regression.
+
+MCP impact: **no wire or authority change**. Calculation payloads, schemas, scopes, consent, planning reads/writes,
+provider actions and bounded preparation contracts are unchanged. Only a private background scheduling deadline can
+extend during an active import; pending results remain preparing. No registered-contract promotion, extra plan read,
+plugin change, reparse or schema migration is required. App Help documents the longer import wait.
+
 ### Frontend freshness probe
 
 On `/training`, the frontend:
