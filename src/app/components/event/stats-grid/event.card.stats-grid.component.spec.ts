@@ -24,6 +24,7 @@ import {
     DataGroundContactTimePercentageAvg,
     DataGroundContactTimePercentageMax,
     DataGroundContactTimePercentageMin,
+    DataHeartRateAvg,
     DataPaceAvg,
     DataPotentialStaminaAvg,
     DataPowerAvg,
@@ -319,6 +320,37 @@ describe('EventCardStatsGridComponent', () => {
             expect(button.getAttribute('aria-expanded')).toBe('false');
             expect(haptics.selection).toHaveBeenCalledTimes(2);
         }
+
+        // An ordinary event with heart rate, but no beat-interval statistics,
+        // keeps its other summaries and removes the R–R category entirely.
+        const ordinary = EventImporterJSON.getActivityFromJSON({ ...activity.toJSON(), stats: {}, streams: [] });
+        ordinary.setID('ordinary');
+        ordinary.addStat(new DataDuration(10));
+        ordinary.addStat(new DataHeartRateAvg(140));
+        const ordinaryEvent = { isMerge: false, getActivities: () => [ordinary], getStats: () => ordinary.getStats() };
+        fixture.componentRef.setInput('event', ordinaryEvent);
+        fixture.componentRef.setInput('selectedActivities', [ordinary]);
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const renderedTabs = () => Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]'));
+        expect(renderedTabs().length).toBeGreaterThan(0);
+        expect(renderedTabs().some(tab => tab.textContent?.includes('R–R & HRV'))).toBe(false);
+        expect(host.querySelector('.rr-recording-summary')).toBeNull();
+        expect(fixture.componentInstance.metricTabs.flatMap(tab => tab.metricTypes)).toContain(DataDuration.type);
+
+        // Saved HRV makes the category available without a benchmark, including
+        // a genuine zero, and never retains the previous benchmark's deltas.
+        ordinary.addStat(new DataRRRMSSD(0));
+        fixture.componentRef.setInput('selectedActivities', [ordinary]);
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const rrTab = renderedTabs().find(tab => tab.textContent?.includes('R–R & HRV'));
+        expect(rrTab).toBeDefined();
+        rrTab!.click();
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(host.querySelector('.rr-recording-summary .stat-value-grid')?.textContent).toContain('0.0 ms');
+        expect(fixture.componentInstance.rrShowDiff).toBe(false);
+        expect(host.querySelector('.rr-recording-summary .stat-diff-value')).toBeNull();
+        expect(host.querySelector('.rr-recording-summary mat-select')).toBeNull();
+        expect(host.querySelector('app-summary-disclosure button')).toBeNull();
         fixture.componentRef.setInput('selectedActivities', []); fixture.detectChanges();
         expect(host.querySelector('.rr-recording-summary')).toBeNull();
     });
