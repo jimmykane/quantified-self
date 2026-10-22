@@ -1,6 +1,10 @@
 <section class="summary-disclosure" [class.summary-disclosure-rail]="variant() === 'rail'"
-  [attr.data-tone]="variant() === 'rail' ? tone() : null" [attr.aria-labelledby]="summaryId() + '-title'">
+  [class.summary-disclosure-plain]="variant() === 'plain'"
+  [attr.data-tone]="variant() === 'rail' ? tone() : null"
+  [attr.aria-labelledby]="variant() === 'plain' ? null : summaryId() + '-title'"
+  [attr.aria-label]="variant() === 'plain' ? title() : null">
   <div class="summary-disclosure-heading">
+    @if (variant() !== 'plain') {
     <div class="summary-disclosure-intro">
       @switch (headingLevel()) {
         @case (3) { <h3 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h3> }
@@ -11,6 +15,7 @@
         <p class="summary-disclosure-headline" role="status" aria-atomic="true">{{ headline() }}</p>
       }
     </div>
+    }
     @if (detailsAvailable()) {
       <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
         (click)="toggleDetails()">

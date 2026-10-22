@@ -17,20 +17,18 @@
         </app-header-stats>
         }
         @if (tab.id === 'rr' && activeRRRecording(); as recording) {
-        <section class="rr-recording-summary" [attr.aria-labelledby]="rrRegionId + '-title'">
-            <h3 [id]="rrRegionId + '-title'">R–R &amp; HRV</h3>
+        <div class="rr-recording-summary">
+            @if (rrRecordings.length > 1) {
             <div class="rr-recording-toolbar">
-                @if (rrRecordings.length > 1) {
                 <mat-form-field appearance="outline" subscriptSizing="dynamic">
                     <mat-label>Recording</mat-label>
                     <mat-select [value]="recording.key" (selectionChange)="onRRRecordingChange($event.value)">
                         @for (source of rrRecordings; track source.key) { <mat-option [value]="source.key">{{ source.label }}</mat-option> }
                     </mat-select>
                 </mat-form-field>
-                }
-                <p class="rr-recording-note mat-body-small">Values describe this full recording. @if (rrDiffByType.size) { Δ compares with {{ rrComparisonLabel }}. }</p>
             </div>
-            <app-summary-disclosure [title]="recording.label" [headingLevel]="4" [summaryId]="recording.summaryId"
+            }
+            <app-summary-disclosure variant="plain" [title]="recording.label" [summaryId]="recording.summaryId"
                 [scopeKey]="recording.key" [detailsAvailable]="recording.detailTypes.length > 0">
                 <app-header-stats summaryOverview [statsToShow]="recording.primaryTypes" [stats]="recording.stats"
                     [singleValueTypes]="recording.primaryTypes" [unitSettings]="unitSettings" [layout]="layout"
@@ -41,8 +39,7 @@
                     [statLabels]="rrStatLabels" [showDiff]="rrShowDiff" [diffByType]="rrDiffByType">
                 </app-header-stats>
             </app-summary-disclosure>
-            <p class="rr-recording-note mat-body-small">Workout HRV is separate from overnight HRV and Readiness. Suspected ectopic pairs are algorithm flags.</p>
-        </section>
+        </div>
         }
         @if (tab.id === 'diving') {
         <app-event-dive-gas-tanks [selectedActivities]="selectedActivities"></app-event-dive-gas-tanks>

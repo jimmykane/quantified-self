@@ -292,7 +292,15 @@ describe('EventCardStatsGridComponent', () => {
         fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
         const host = fixture.nativeElement as HTMLElement;
         expect(host.querySelector('[role="tab"]')?.textContent).toContain('R–R & HRV');
-        expect(host.textContent).toContain('R–R & HRV'); expect(host.textContent).toContain('8.1 ms');
+        expect(host.textContent).toContain('8.1 ms');
+        const summary = host.querySelector('.rr-recording-summary')!;
+        expect(summary.querySelector('h2, h3, h4, p')).toBeNull();
+        expect(summary.textContent).not.toContain('R–R & HRV');
+        expect(summary.textContent).not.toContain('Values describe this full recording');
+        expect(summary.textContent).not.toContain('Workout HRV is separate');
+        expect(summary.textContent).not.toContain('Suspected ectopic pairs are algorithm flags');
+        expect(summary.querySelector('.summary-disclosure-plain')).not.toBeNull();
+        expect(!!summary.querySelector('mat-select')).toBe(benchmark);
         expect(host.querySelector('.stat-avatar mat-icon')?.textContent?.trim()).toBe('ecg_heart');
         expect(host.querySelector('.stat-label')?.textContent?.trim()).toBe('RMSSD');
         expect(readStreams).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
@@ -308,6 +316,7 @@ describe('EventCardStatsGridComponent', () => {
             });
             fixture.detectChanges();
             expect(host.querySelector('.stat-value-grid')?.textContent).toContain('17.2 ms');
+            expect(button.getAttribute('aria-expanded')).toBe('false');
             expect(haptics.selection).toHaveBeenCalledTimes(2);
         }
         fixture.componentRef.setInput('selectedActivities', []); fixture.detectChanges();

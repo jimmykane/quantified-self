@@ -77,7 +77,8 @@ Health All and the owner Dashboard Today share the surface-free summary from
 `components/shared/health-change-summary/`. Its presentation delegates to
 `components/shared/summary-disclosure/`, shared with the saved-note and public-example
 `components/shared/note-comparison-summary/`. The shell owns headings, flat/rail layout, Material disclosure, haptics
-and local scope resets only; domain adapters retain their existing calculations. Note comparisons keep source-labelled
+and local scope resets only; its plain variant keeps just the disclosure control and accessible region label without
+visible headings or a surrounding border. Domain adapters retain their existing calculations. Note comparisons keep source-labelled
 differences and coverage visible and put the median table under **Show details**, without hiding the history chart.
 Their rail stays neutral regardless of the sign of a difference. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
 Health and note comparisons use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls`
@@ -408,8 +409,9 @@ benchmark charts, particularly overlapping lines and map backgrounds.
 
 All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
 alongside the existing categories. It is not part of Device or Physiological. The existing metric-card renderer
-shows up to seven primary statistics with short contextual labels; the shared flat disclosure contains the other
-available statistics. If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
+shows up to seven primary statistics with short contextual labels, matching the other summary tabs without extra
+headings, recording captions or explanatory paragraphs. The shared plain disclosure retains **Show/Hide details** for
+the other available statistics. If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
 and recorded zero remains zero. `rr-metrics.ts` owns the common catalog; values and units remain Sports Lib's.
 Each selected activity is inspected separately; parent-event and multisport aggregates are never used for R–R.
 A local Recording selector preserves source identity across filtering. Two-source benchmarks use the shared stat

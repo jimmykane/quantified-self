@@ -14,7 +14,7 @@ import { SummaryDisclosureComponent } from './summary-disclosure.component';
 class ProjectedSummaryHost {
   readonly scope = signal('fixture');
   readonly details = signal(true);
-  readonly variant = signal<'flat' | 'rail'>('rail');
+  readonly variant = signal<'flat' | 'rail' | 'plain'>('rail');
   readonly headingLevel = signal<2 | 3 | 4>(2);
 }
 
@@ -86,5 +86,27 @@ describe('shared summary disclosure shell', () => {
     expect(host.querySelector('h2')).toBeNull();
     expect(host.querySelectorAll('h4')).toHaveLength(1);
     expect(host.querySelector('h4')?.id).toBe('sample-title');
+  });
+  it('keeps only the disclosure control and projected readings in plain mode', async () => {
+    const { fixture, host, haptics } = await render();
+    fixture.componentInstance.variant.set('plain'); fixture.detectChanges();
+    const section = host.querySelector('section')!;
+    expect(section.classList.contains('summary-disclosure-plain')).toBe(true);
+    expect(section.getAttribute('aria-label')).toBe('Before & after');
+    expect(section.hasAttribute('aria-labelledby')).toBe(false);
+    expect(host.querySelector('h2, h3, h4, [role="status"]')).toBeNull();
+    expect(host.textContent).not.toContain('Before & after');
+    expect(host.textContent).not.toContain('Recorded differences');
+    expect(host.querySelector('[summaryOverview]')?.closest('[hidden]')).toBeNull();
+    const button = host.querySelector('button')!;
+    expect(button.textContent).toContain('Show details');
+    button.click(); fixture.detectChanges();
+    expect(button.textContent).toContain('Hide details');
+    expect(button.getAttribute('aria-controls')).toBe('sample-details');
+    expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    button.click(); fixture.detectChanges();
+    expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 });

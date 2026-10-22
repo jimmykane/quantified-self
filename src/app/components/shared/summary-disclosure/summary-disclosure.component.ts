@@ -18,7 +18,7 @@ export class SummaryDisclosureComponent {
   readonly summaryId = input.required<string>();
   readonly scopeKey = input.required<string>();
   readonly headline = input<string | null>(null);
-  readonly variant = input<'flat' | 'rail'>('flat');
+  readonly variant = input<'flat' | 'rail' | 'plain'>('flat');
   readonly tone = input<SummaryDisclosureTone>('neutral');
   readonly detailsAvailable = input(false);
   readonly expanded = signal(false);

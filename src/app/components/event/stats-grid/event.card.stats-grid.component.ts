@@ -79,7 +79,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   public rrRecordings: RRRecording[] = [];
   readonly activeRRRecording = signal<RRRecording | null>(null);
   public rrShowDiff = false;
-  public rrComparisonLabel = '';
   public rrDiffByType = new Map<string, { display: string; percent: number; color: string }>();
   readonly rrStatLabels = RR_STAT_LABELS;
   readonly rrRegionId = `event-rr-summary-${++nextRRRegionId}`;
@@ -302,7 +301,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private updateRRDiffMap(unitSettings = this.unitSettings): void {
-    this.rrDiffByType = new Map(); this.rrComparisonLabel = '';
+    this.rrDiffByType = new Map();
     this.rrShowDiff = isBenchmarkEvent(this.event) && this.selectedActivities.length === 2;
     const source = this.activeRRRecording();
     if (!this.rrShowDiff || !source || !unitSettings) return;
@@ -315,7 +314,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     differences.forEach((diff, type) => this.rrDiffByType.set(type, {
       ...diff, color: this.eventColorService.getDifferenceColor(diff.percent),
     }));
-    this.rrComparisonLabel = other.label;
   }
 
   private buildDiffMap(unitSettings: UserUnitSettingsInterface): Map<string, { display: string; percent: number; color: string }> {
