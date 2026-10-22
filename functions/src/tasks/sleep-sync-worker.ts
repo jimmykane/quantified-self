@@ -132,6 +132,13 @@ export const processSleepSyncTask = onTaskDispatched({
                 outcome = 'deferred';
                 logger.warn(`[SleepSyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 return;
+            case QueueResult.HealthContinuationScheduled:
+                // Preserve the existing incomplete-work monitoring outcome and ACK.
+                outcome = 'deferred';
+                try {
+                    logger.info('[SleepSyncTaskWorker] Health progress saved; remaining work scheduled.', { queueItemId });
+                } catch { /* Diagnostic logging must not change the continuation ACK. */ }
+                return;
             case QueueResult.MovedToDLQ:
                 outcome = 'moved_to_dlq';
                 logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);

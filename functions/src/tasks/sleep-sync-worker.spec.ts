@@ -53,6 +53,7 @@ vi.mock('../queue-utils', () => ({
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
+    HealthContinuationScheduled: 'HEALTH_CONTINUATION_SCHEDULED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -227,6 +228,48 @@ describe('processSleepSyncTask', () => {
     mockProcessSleepSyncQueueItem.mockResolvedValueOnce('DEFERRED');
 
     await expect(invokeWorker({ data: { queueItemId: 'sleep-item-1' } })).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[SleepSyncTaskWorker] Deferred item sleep-item-1; it remains queued for a future dispatcher run.',
+    );
+  });
+
+  it.each([
+    ['SuuntoApp', 'suunto_health_poll'],
+    ['GarminAPI', 'garmin_ping'],
+  ])('logs a confirmed %s Health continuation as INFO without claiming completion', async (provider, type) => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'health-item',
+      ref: { path: 'sleepSyncQueue/health-item' },
+      data: () => ({ processed: false, provider, type, userID: 'private-user',
+        providerUserId: 'private-account', callbackURL: 'https://private.example/token', payload: 'private-payload' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('HEALTH_CONTINUATION_SCHEDULED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'health-item' } })).resolves.toBeUndefined();
+
+    expect(mockProcessSleepSyncQueueItem).toHaveBeenCalledOnce();
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      '[SleepSyncTaskWorker] Health progress saved; remaining work scheduled.', { queueItemId: 'health-item' },
+    );
+    expect(logger.info).toHaveBeenCalledWith('[SleepSyncTaskWorker] Invocation summary', expect.objectContaining({ outcome: 'deferred' }));
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('private-');
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('private.example');
+  });
+
+  it('acknowledges a scheduled continuation even when its progress log fails', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true, id: 'health-item', ref: { path: 'sleepSyncQueue/health-item' },
+      data: () => ({ processed: false, provider: 'SuuntoApp', type: 'suunto_health_poll' }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('HEALTH_CONTINUATION_SCHEDULED');
+    vi.mocked(logger.info).mockImplementationOnce(() => { throw new Error('logger unavailable'); });
+
+    await expect(invokeWorker({ data: { queueItemId: 'health-item' } })).resolves.toBeUndefined();
+    expect(mockProcessSleepSyncQueueItem).toHaveBeenCalledOnce();
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[SleepSyncTaskWorker] Invocation summary', expect.objectContaining({ outcome: 'deferred' }));
   });
 
   it('records a safe Suunto Health workload summary without account or payload fields', async () => {
