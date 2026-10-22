@@ -1051,7 +1051,7 @@
           <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
           Deleted workouts ({{ deletedWorkoutRecoveryDays }} days)
         </button>
-        <mat-list id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
+        <div id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
           @if (deletedWorkoutPanel()?.status === 'loading' && !deletedWorkoutRows().length) {
             <div class="history-status"><mat-spinner diameter="24"></mat-spinner><span>Loading deleted workouts…</span></div>
           }
@@ -1064,40 +1064,50 @@
           @if (deletedWorkoutPanel()?.status === 'ready' && !deletedWorkoutRows().length) {
             <p>No deleted workouts in this {{ view() === 'plans' ? 'plan' : 'Standalone view' }}.</p>
           }
-          @for (row of deletedWorkoutRows(); track row.workout.id) {
-            <mat-list-item>
-              <mat-icon matListItemIcon aria-hidden="true">delete</mat-icon>
-              <span matListItemTitle>{{ row.workout.title }}</span>
-              <span matListItemLine>
-                {{ row.workout.localDate }} · Open {{ row.workout.planId ? 'plan' : 'workout' }} history to restore
-              </span>
-              <div matListItemMeta class="deleted-workout-actions">
-                <button appHapticTap mat-button type="button" (click)="openHistory(row.historyScope)" [disabled]="busyAction() !== null">
-                  <mat-icon aria-hidden="true">history</mat-icon><span>History</span>
-                </button>
-                <button appHapticTap mat-icon-button type="button" matTooltip="Delete permanently" aria-label="Delete workout permanently"
-                  (click)="permanentlyDeleteWorkout(row.workout)" [disabled]="busyAction() !== null">
-                  @if (busyAction() === 'permanent-' + row.workout.id) {
-                    <mat-spinner diameter="18"></mat-spinner>
-                  } @else {
-                    <mat-icon>delete_forever</mat-icon>
-                  }
-                </button>
-              </div>
-            </mat-list-item>
-          }
+          <ul class="deleted-workout-rows" aria-label="Recoverable workouts">
+            @for (row of deletedWorkoutRows(); track row.workout.id; let last = $last) {
+              <li>
+                <app-compact-row class="deleted-workout-row" [title]="row.workout.title"
+                  [titleId]="'deleted-workout-' + row.workout.id" [headingLevel]="3"
+                  layout="stacked" density="compact" [mobileActionFullWidth]="true" [showDivider]="!last">
+                  <app-activity-type-icon compactRowTitlePrefix [activityType]="row.workout.structure.sport"
+                    size="24px" aria-hidden="true"></app-activity-type-icon>
+                  <p class="deleted-workout-details">
+                    {{ row.workout.structure.sport }} · {{ row.workout.localDate | date:'mediumDate' }}
+                  </p>
+                  <p class="deleted-workout-details">Open {{ row.workout.planId ? 'plan' : 'workout' }} history to restore.</p>
+                  <div compactRowAction class="deleted-workout-actions">
+                    <button appHapticTap mat-button type="button" (click)="openHistory(row.historyScope)"
+                      [attr.aria-describedby]="'deleted-workout-' + row.workout.id" [disabled]="busyAction() !== null">
+                      <mat-icon aria-hidden="true">history</mat-icon><span>History</span>
+                    </button>
+                    <button appHapticTap mat-icon-button type="button" matTooltip="Delete permanently" aria-label="Delete workout permanently"
+                      [attr.aria-describedby]="'deleted-workout-' + row.workout.id"
+                      (click)="permanentlyDeleteWorkout(row.workout)" [disabled]="busyAction() !== null">
+                      @if (busyAction() === 'permanent-' + row.workout.id) {
+                        <mat-spinner diameter="18"></mat-spinner>
+                      } @else {
+                        <mat-icon>delete_forever</mat-icon>
+                      }
+                    </button>
+                  </div>
+                </app-compact-row>
+              </li>
+            }
+          </ul>
           @if (deletedWorkoutPanel()?.nextCursor) {
             <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()"
               [disabled]="deletedWorkoutPanel()?.status === 'loading'">
               Show more deleted workouts
             </button>
           }
-        </mat-list>
+        </div>
       </section>
     }
 
     @if (historyPanel(); as history) {
-      <app-compact-row class="history-panel" title="Revision history" titleId="history-panel-title"
+      <app-compact-row class="history-panel" id="history-panel" role="region" tabindex="-1"
+        aria-labelledby="history-panel-title" title="Revision history" titleId="history-panel-title"
         [headingLevel]="2" summary="Restoring creates a new revision; it never rewrites history."
         layout="stacked" density="compact" [showDivider]="false">
           <button compactRowAction appHapticTap mat-icon-button type="button" matTooltip="Close history" aria-label="Close history" (click)="closeHistory()">

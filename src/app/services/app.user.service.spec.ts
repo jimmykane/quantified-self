@@ -16,6 +16,7 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import { appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { UserProfileVerificationService } from './user-profile-verification.service';
 import { defaultSuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
@@ -55,6 +56,8 @@ describe('AppUserService', () => {
     let mockFunctionsService: any;
     let mockAppCheck: any;
     let mockVerification: any;
+    let diagnostics: { authRevision: number; beginOperation: ReturnType<typeof vi.fn>; setAuthState: ReturnType<typeof vi.fn>;
+        reportOperationBlocked: ReturnType<typeof vi.fn>; reportOperationSucceeded: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -99,6 +102,9 @@ describe('AppUserService', () => {
             needsVerification: vi.fn().mockImplementation(UserProfileVerificationService.prototype.needsVerification),
             verifyIfIncomplete: vi.fn().mockImplementation((_uid, profile) => Promise.resolve(profile)),
         };
+        let sequence = 0;
+        diagnostics = { authRevision: 1, beginOperation: vi.fn(() => ({ authRevision: diagnostics.authRevision, sequence: ++sequence })),
+            setAuthState: vi.fn(), reportOperationBlocked: vi.fn(), reportOperationSucceeded: vi.fn() };
 
         TestBed.configureTestingModule({
             providers: [
@@ -107,6 +113,7 @@ describe('AppUserService', () => {
                 { provide: Firestore, useValue: {} },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: AppCheckReadinessService, useValue: mockAppCheck },
+                { provide: AppCheckDiagnosticsService, useValue: diagnostics },
                 { provide: UserProfileVerificationService, useValue: mockVerification },
                 { provide: HttpClient, useValue: {} },
                 { provide: AppEventService, useValue: { getUserEvents: vi.fn().mockReturnValue(of([])) } },
@@ -122,6 +129,82 @@ describe('AppUserService', () => {
     it('should be created', () => {
         service = TestBed.inject(AppUserService);
         expect(service).toBeTruthy();
+    });
+
+    it('feeds only resolved Auth state from the existing subscription, never user details', () => {
+        const states = new BehaviorSubject(mockAuth.currentUser);
+        vi.mocked(authState).mockReturnValue(states);
+        service = TestBed.inject(AppUserService);
+        states.next(null);
+        expect(diagnostics.setAuthState.mock.calls).toEqual([['signed-in'], ['signed-out']]);
+        expect(JSON.stringify(diagnostics.setAuthState.mock.calls)).not.toContain('u1');
+    });
+
+    it('does not let diagnostic Auth failures break the existing Auth observer', () => {
+        diagnostics.setAuthState.mockImplementation(() => { throw new Error('telemetry failed'); });
+        expect(() => TestBed.inject(AppUserService)).not.toThrow();
+    });
+
+    it.each([false, true])('preserves the profile outcome when starting diagnostics fails (blocked: %s)', async blocked => {
+        diagnostics.beginOperation.mockImplementation(() => { throw new Error('telemetry failed'); });
+        const failure = { code: 'appCheck/recaptcha-error' };
+        if (blocked) mockAppCheck.getToken.mockRejectedValue(failure);
+        service = TestBed.inject(AppUserService);
+        await firstValueFrom(service.user$);
+        expect(service.profileReadState().status).toBe(blocked ? 'error' : 'ready');
+        expect(mockAppCheck.getToken.mock.calls).toEqual([[false]]);
+        expect(diagnostics.reportOperationBlocked).not.toHaveBeenCalled();
+        expect(diagnostics.reportOperationSucceeded).not.toHaveBeenCalled();
+        expect(setDoc).not.toHaveBeenCalled();
+    });
+
+    it('establishes the Auth generation before an initial profile credential rejection', async () => {
+        diagnostics.setAuthState.mockImplementation(() => { diagnostics.authRevision += 1; });
+        const failure = { code: 'appCheck/recaptcha-error' };
+        mockAppCheck.getToken.mockRejectedValue(failure);
+        service = TestBed.inject(AppUserService);
+        await firstValueFrom(service.user$);
+        expect(diagnostics.authRevision).toBe(2);
+        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'profile-load', { authRevision: 2, sequence: 1 });
+        expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a blocked profile only after the existing App Check request fails, preserving the rejection state', async () => {
+        const failure = { code: 'appCheck/recaptcha-error' };
+        mockAppCheck.getToken.mockRejectedValue(failure);
+        service = TestBed.inject(AppUserService);
+        await firstValueFrom(service.user$);
+        expect(diagnostics.reportOperationBlocked).toHaveBeenCalledExactlyOnceWith(failure, 'profile-load', { authRevision: 1, sequence: 1 });
+        expect(mockAppCheck.getToken).toHaveBeenCalledTimes(1);
+        expect(service.profileReadState().status).toBe('error');
+        expect(setDoc).not.toHaveBeenCalled();
+    });
+
+    it('keeps profile recovery working when blocked-outcome reporting throws', async () => {
+        const failure = { code: 'appCheck/recaptcha-error' };
+        mockAppCheck.getToken.mockRejectedValue(failure);
+        diagnostics.reportOperationBlocked.mockImplementation(() => { throw new Error('telemetry failed'); });
+        service = TestBed.inject(AppUserService);
+        await firstValueFrom(service.user$);
+        expect(service.profileReadState()).toMatchObject({ status: 'error', code: failure.code });
+    });
+
+    it('observes a completed profile recovery without changing credential request counts or writing data', async () => {
+        mockAppCheck.getToken.mockRejectedValueOnce({ code: 'appCheck/recaptcha-error' });
+        vi.mocked(docData).mockReturnValue(of({ uid: 'u1', acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true }));
+        service = TestBed.inject(AppUserService);
+        const subscription = service.user$.subscribe();
+        try {
+            await vi.waitFor(() => expect(service.profileReadState().status).toBe('error'));
+            diagnostics.reportOperationSucceeded.mockImplementation(() => { throw new Error('telemetry failed'); });
+            const recovering = service.retryProfileRead();
+            await vi.waitFor(() => { TestBed.flushEffects(); expect(service.profileReadState().status).toBe('ready'); });
+            await expect(recovering).resolves.toBe(true);
+            expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledWith('profile-load', { authRevision: 1, sequence: 2 });
+            expect(mockAppCheck.getToken.mock.calls).toEqual([[false], [true]]);
+            expect(setDoc).not.toHaveBeenCalled();
+        } finally { subscription.unsubscribe(); }
     });
 
     it('should classify terminal, timed-out, and repeatedly failing profile reads as actionable', () => {

@@ -1,3 +1,4 @@
+import { ActivityTypesMultiSelectComponent } from '../activity-types-multi-select/activity-types-multi-select.component';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -1783,6 +1784,58 @@ describe('UserSettingsComponent', () => {
 
         // Should be unique
         expect(new Set(formValue).size).toBe(formValue.length);
+    });
+
+    it('stages searchable elevation exclusions without saving, preserves mandatory sports and hydrates silently', async () => {
+        await renderSettings();
+        component.user = { ...component.user, settings: { ...component.user.settings,
+            summariesSettings: { removeAscentForEventTypes: [], removeDescentForEventTypes: [] },
+        } };
+        component.ngOnChanges();
+        component.activeSection = 'dashboard'; fixture.detectChanges();
+        const selectors = fixture.debugElement.queryAll(By.directive(ActivityTypesMultiSelectComponent))
+            .map(element => element.componentInstance as ActivityTypesMultiSelectComponent);
+        expect(selectors).toHaveLength(2);
+        const [ascent, descent] = selectors;
+        expect(ascent.lockedActivityTypes).toEqual(ACTIVITIES_EXCLUDED_FROM_ASCENT);
+        expect(descent.lockedActivityTypes).toEqual(ACTIVITIES_EXCLUDED_FROM_DESCENT);
+        expect(fixture.nativeElement.querySelector('input[aria-label="Exclude Ascent for Sport Types"]')).toBeTruthy();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+        ascent.selectSports([...ascent.selectedActivityTypes, ActivityTypes.Running]); fixture.detectChanges();
+        expect(component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value).toContain(ActivityTypes.Running);
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeTruthy();
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+        ascent.selectSports([]); fixture.detectChanges();
+        expect(new Set(component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value)).toEqual(new Set(ACTIVITIES_EXCLUDED_FROM_ASCENT));
+        ascent.selectSports([]); component.changeElevationExclusions('ascent', []);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+        descent.selectSports([...descent.selectedActivityTypes, ActivityTypes.Running]); fixture.detectChanges();
+        expect(component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value).toContain(ActivityTypes.Running);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
+        const stagedDescent = [...component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value];
+        component.ngOnChanges(); fixture.detectChanges();
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
+        expect(component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value).toEqual(stagedDescent);
+        expect(ascent.selectedActivityTypes).not.toContain(ActivityTypes.Running);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(3);
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('blocks elevation edits while saving or deleting, including an already-open picker', async () => {
+        await renderSettings(); component.activeSection = 'dashboard'; fixture.detectChanges();
+        const picker = fixture.debugElement.query(By.directive(ActivityTypesMultiSelectComponent)).componentInstance as ActivityTypesMultiSelectComponent;
+        const initial = [...component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value];
+        component.isSaving = true; fixture.detectChanges(); expect(picker.disabled).toBe(true);
+        picker.selectSports([...initial, ActivityTypes.Running]); component.changeElevationExclusions('ascent', [ActivityTypes.Running]);
+        component.isSaving = false; component.isDeleting = true; fixture.detectChanges(); expect(picker.disabled).toBe(true);
+        picker.selectSports([]); component.changeElevationExclusions('ascent', []);
+        expect(component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value).toEqual(initial);
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
     });
 
     it('should make every Diving-group activity mandatory for both elevation exclusions', async () => {

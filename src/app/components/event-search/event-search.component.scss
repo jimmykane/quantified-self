@@ -187,8 +187,10 @@ mat-button-toggle:active {
 }
 
 :host(.compact-filter-layout) .activity-filter-field {
-  align-self: center;
-  flex: 0 0 auto;
+  align-self: flex-start;
+  flex: 0 1 170px;
+  width: 170px;
+  min-width: 0;
 }
 
 :host(.compact-filter-layout) .date-range-field {
@@ -310,7 +312,7 @@ mat-button-toggle:active {
   :host(.compact-filter-layout) .filters-row {
     align-items: center;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   :host(.compact-filter-layout) .date-range-field {
@@ -320,8 +322,8 @@ mat-button-toggle:active {
   }
 
   :host(.compact-filter-layout) .activity-filter-field {
-    align-self: center;
-    flex: 0 0 auto;
+    flex: 1 1 140px;
+    width: auto;
   }
 
   :host(.compact-filter-layout) .button-groups {

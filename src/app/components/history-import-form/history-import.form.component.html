@@ -76,37 +76,19 @@
   </app-status-info>
   }
   @if (!isActivityCooldownResponse() && userMetaForService && userMetaForService.didLastHistoryImport) {
+  <div class="history-import-timing" role="status" aria-label="Activity history import timing">
+    <p>Last requested: {{ userMetaForService.didLastHistoryImport | date:'medium' }}</p>
+    <p>Next available: {{ nextImportAvailableDate | date:'medium' }}</p>
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
-  <app-status-info type="success" title="History import cooldown">
-    {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.
-    Cooldown active for {{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}.
-  </app-status-info>
-
-  <app-status-info title="Next Available Import">
-    {{ nextImportAvailableDate | date: 'medium' }}
-    @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
-    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
-      userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
-    </div>
-    }
-  </app-status-info>
-
-  } @else if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info type="success" title="History import cooldown">
-    Garmin may deliver requested activities gradually.
-  </app-status-info>
-
-  <app-status-info title="Next Available Import">
-    New import available on {{ nextImportAvailableDate | date: 'medium' }}.
-    @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
-    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
-      userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
-    </div>
-    }
-  </app-status-info>
+    <p>{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.</p>
   }
+    @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
+    <p>
+      Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
+      userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
+    </p>
+    }
+  </div>
   }
 </div>
 }
@@ -134,7 +116,7 @@
   </div>
   }
   @if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • ' + garminHistoryLimitYears + '-Year History'">
+  <app-status-info title="Available Garmin history">
     Garmin's API limits history imports to once per month. Dates before {{ minDate | date:'mediumDate' }} are disabled
     because Garmin only makes the latest {{ garminHistoryLimitYears }} years available. The picker starts with the latest
     {{ historyImportDefaultRangeYears }} years selected; you can expand it to any allowed range before importing.
@@ -249,9 +231,6 @@
       from Suunto can be imported. Existing records are updated instead of duplicated.
     </p>
     }
-    <p class="sleep-backfill-note">
-      This can run once every {{ sleepBackfillCooldownDays }} days.
-    </p>
     @if (sleepSyncStatus() === 'loading') {
     <p class="sleep-backfill-note" role="status">Checking when the next import is available...</p>
     } @else if (sleepSyncStatus() === 'error') {
@@ -271,10 +250,17 @@
       Reconnect Garmin and allow Historical Data Export and Health Export before importing sleep history.
     </p>
     }
-    @if (isSleepBackfillCooldownActive && sleepBackfillNextAllowedAtMs) {
-    <p class="sleep-backfill-note">
-      Next available {{ sleepBackfillNextAllowedAtMs | date:'medium' }}.
-    </p>
+    @if (sleepSyncStatus() === 'ready' || isSleepBackfillCooldownActive) {
+    <div class="history-import-timing" role="status" aria-label="Sleep history import timing">
+      @if (sleepBackfillSyncState()?.lastBackfillQueuedAtMs; as lastRequestedAt) {
+      <p>Last requested: {{ lastRequestedAt | date:'medium' }}</p>
+      }
+      @if (isSleepBackfillCooldownActive && sleepBackfillNextAllowedAtMs) {
+      <p>Next available: {{ sleepBackfillNextAllowedAtMs | date:'medium' }}</p>
+      } @else if (canSubmitSleepBackfill) {
+      <p>Available now</p>
+      }
+    </div>
     }
     @if (pendingSleepBackfillResult()) {
     <p class="sleep-backfill-note" role="status" aria-live="polite">

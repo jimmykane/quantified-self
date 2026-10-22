@@ -92,6 +92,14 @@ repair write succeeds. Expected bounded queue/route pages and route-restoration
 lifecycle supersession remain deferrals, not failures. Logger failures cannot change
 original results, errors or retries.
 
+Private `[ExplicitDisconnectCleanup]` page-outcome logs distinguish changed leases,
+changed connections, guarded deferrals and retained retries. Superseded/deferred
+attempts are INFO; retained failures remain WARNING. These diagnostics include only
+the opaque cleanup job ID, service, outcome/reason and an allowlisted Firestore RPC
+error code (otherwise `unknown`), never raw exceptions or account/credential data.
+They are separate from `[CleanupHealth]`: metric labels, alerts and cleanup behavior
+are unchanged.
+
 Failure age is deliberately narrow:
 
 - Operational retry: original credential-removal `cutoffAt`, never its renewable lease.

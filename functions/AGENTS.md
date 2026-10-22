@@ -9,6 +9,9 @@ Functions-only rules:
 Workflows:
 - `../.agent/workflows/start-emulators.md`
 
+- In concurrent fan-out specs, bind recipient-specific mock outcomes to the recipient/job ID. Async work such as
+  queue-ID hashing can reorder calls; assert exact recipients and canonical IDs without depending on call position.
+  Cover partial success for either recipient and both binding orders.
 - For activity import/upload parser failures, check `quantified-self-io-debug-files` before asking for originals.
   Follow `../docs/provider-integration-guide.md#failed-file-debug-captures` for prefixes and log correlation; capture
   is best effort, not guaranteed. Inspect metadata first and keep any authorized private-file downloads in temporary

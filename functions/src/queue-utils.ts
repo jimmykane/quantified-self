@@ -41,6 +41,8 @@ export enum QueueResult {
     AcknowledgedStale = 'ACKNOWLEDGED_STALE',
     Skipped = 'SKIPPED',
     Deferred = 'DEFERRED',
+    /** Incomplete Health work with an enqueued, dispatch-marked continuation. */
+    HealthContinuationScheduled = 'HEALTH_CONTINUATION_SCHEDULED',
     TokenRefreshDeferred = 'TOKEN_REFRESH_DEFERRED',
     ProviderStatusPending = 'PROVIDER_STATUS_PENDING',
     MovedToDLQ = 'MOVED_TO_DLQ',

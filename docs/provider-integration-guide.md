@@ -1166,6 +1166,16 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
+Derived refreshes automatically use a five-minute fixed build interval while an existing history checkpoint is active
+and recent. No per-account allowlist or environment activation is required. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
+checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,
+with owner/run-revision/deletion rechecks and retryable enqueue failure; late child/source writes still invalidate
+normally. A private per-run completion receipt prevents duplicate or superseded terminal events from advancing later
+work; enqueue recovery retains the exact original generation and retry budget. The receipt stays out of public history
+projections and uses existing run retention/cleanup. See [Training scheduling](training-workspace.md#import-specific-five-minute-batching) for the scheduling policy,
+bounded metadata reads, completion/race tests, monitoring deployment workflow and rollback. This adds no provider request,
+Function, queue, index, secret, public MCP field or new history import action.
+
 Manual Suunto/COROS/Wahoo activity imports from updated clients now reuse the existing coordinator through the additive
 `background: true` option on their current callables. Admission atomically binds the existing account and credential/
 connection generations, exact custom dates, activity-only capability, reservation and owner-safe progress. Older

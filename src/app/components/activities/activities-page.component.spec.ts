@@ -823,4 +823,69 @@ describe('Activity filter picker Material integration', () => {
     expect(document.activeElement).toBe(trigger);
     expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
+  it('retains locked choices on clear, family toggles and attempted removal, including while searched', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [
+      { provide: AppHapticsService, useValue: haptics },
+      { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+    ] });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Excluded sports'); fixture.componentRef.setInput('allLabel', 'None excluded');
+    fixture.componentRef.setInput('searchLabel', 'Search sports');
+    fixture.componentRef.setInput('options', [
+      { value: 'Cycling', label: 'Cycling', disabled: true, description: 'Required exclusion' },
+      { value: 'Running', label: 'Running' }, { value: 'Yoga', label: 'Yoga', disabled: true },
+    ]);
+    fixture.componentRef.setInput('selectedValues', ['Cycling', 'Running']);
+    fixture.componentRef.setInput('shortcuts', [{ label: 'Family', values: ['Cycling', 'Running', 'Yoga'] }]);
+    const selected = vi.fn((values: string[]) => fixture.componentRef.setInput('selectedValues', values));
+    fixture.componentInstance.selectionChange.subscribe(selected);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle(); fixture.componentInstance.openPicker(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelector('[aria-label="Cycling"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(overlay.textContent).toContain('Required exclusion');
+    const lockedOption = overlay.querySelector('[aria-label="Cycling"]')!;
+    const descriptionId = lockedOption.getAttribute('aria-describedby');
+    expect(descriptionId).toBeTruthy();
+    expect(document.getElementById(descriptionId!)?.textContent).toBe('Required exclusion');
+    expect(overlay.querySelector('[aria-label="Running"]')?.hasAttribute('aria-describedby')).toBe(false);
+    fixture.componentInstance.search.set('run'); await settle();
+    fixture.componentInstance.clearSelection(); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling']);
+    fixture.componentInstance.toggleShortcut({ label: 'Family', values: ['Cycling', 'Running', 'Yoga'] }, true); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling', 'Running']);
+    fixture.componentInstance.toggleShortcut({ label: 'Family', values: ['Cycling', 'Running', 'Yoga'] }, false); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling']);
+    const calls = selected.mock.calls.length;
+    fixture.componentInstance.clearSelection(); expect(selected).toHaveBeenCalledTimes(calls);
+    fixture.componentInstance.search.set(''); await settle();
+    const clear = [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Clear selection');
+    expect(clear?.disabled).toBe(true);
+  });
+
+  it('uses an accessible compact trigger and ignores disabled or unchanged selections', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [{ provide: AppHapticsService, useValue: haptics }] });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Sports'); fixture.componentRef.setInput('allLabel', 'All sports');
+    fixture.componentRef.setInput('searchLabel', 'Search sports'); fixture.componentRef.setInput('options', [{ value: 'Running', label: 'Running' }]);
+    fixture.componentRef.setInput('compact', true); fixture.componentRef.setInput('triggerLabel', 'Filter tile activities');
+    fixture.componentRef.setInput('disabled', true);
+    const emit = vi.spyOn(fixture.componentInstance.selectionChange, 'emit'); fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe('Filter tile activities: All sports');
+    expect(trigger.disabled).toBe(true); trigger.click(); fixture.componentInstance.openPicker();
+    fixture.componentInstance.toggleShortcut({ label: 'Running', values: ['Running'] }, true);
+    expect(emit).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges(); trigger.focus(); trigger.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges();
+    fixture.componentInstance.clearSelection(); fixture.componentInstance.toggleShortcut({ label: 'Running', values: ['Running'] }, true);
+    expect(emit).not.toHaveBeenCalled();
+    fixture.componentInstance.closePicker(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement === trigger || trigger.disabled).toBe(true);
+  });
+
 });

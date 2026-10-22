@@ -6,6 +6,8 @@ import { environment } from '../../environments/environment';
 import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { LoggerService } from './logger.service';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
+import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
 
 type CallableFailureStage = 'app_check_readiness' | 'callable' | 'app_check_refresh' | 'callable_retry';
 
@@ -27,6 +29,7 @@ export class AppFunctionsService {
     private app = inject(FirebaseApp);
     private appCheckReadiness = inject(AppCheckReadinessService);
     private logger = inject(LoggerService);
+    private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
     private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
     private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private functionsByRegion = new Map<string, FirebaseFunctions>();
@@ -71,6 +74,9 @@ export class AppFunctionsService {
         };
         assertCurrent();
 
+        let diagnosticAttempt: AppCheckOperationAttempt | undefined;
+        try { diagnosticAttempt = this.appCheckDiagnostics.beginOperation(); } catch { /* Diagnostics must not gate requests. */ }
+
         const usesFunctionsEmulator = this.shouldUseFunctionsEmulator();
         const reportFailure = functionKey === 'ensureDerivedMetrics' && environment.localhost !== true;
         // Retain only the existing Sentry identity, captured before asynchronous work.
@@ -89,7 +95,9 @@ export class AppFunctionsService {
             try {
                 assertCurrent();
                 stage = 'callable';
-                return await callable(data);
+                const response = await callable(data);
+                this.trackAppCheckOutcome('succeeded', diagnosticAttempt, functionKey, undefined, options);
+                return response;
             } catch (error) {
                 if (usesFunctionsEmulator || !this.shouldRetryAfterAppCheckFailure(error)) {
                     throw error;
@@ -99,12 +107,27 @@ export class AppFunctionsService {
                 await this.appCheckReadiness.ensureReady(true);
                 assertCurrent();
                 stage = 'callable_retry';
-                return await callable(data);
+                const response = await callable(data);
+                this.trackAppCheckOutcome('succeeded', diagnosticAttempt, functionKey, undefined, options);
+                return response;
             }
         } catch (error) {
+            if (!cancelled) this.trackAppCheckOutcome('blocked', diagnosticAttempt, functionKey, error, options);
             if (reportFailure && !cancelled) this.reportEnsureFailure(error, stage, diagnosticUser);
             throw error;
         }
+    }
+
+    private trackAppCheckOutcome(
+        outcome: 'blocked' | 'succeeded', attempt: AppCheckOperationAttempt | undefined, functionKey: FunctionName,
+        error?: unknown, options?: { canExecute: () => boolean },
+    ): void {
+        try {
+            if (!attempt) return;
+            if (options && !options.canExecute()) return;
+            if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'callable', attempt, functionKey);
+            else this.appCheckDiagnostics.reportOperationSucceeded('callable', attempt, functionKey);
+        } catch { /* Preserve the callable result, original rejection and retry budget. */ }
     }
 
     private reportEnsureFailure(

@@ -85,10 +85,10 @@
       </mat-form-field>
       }
       @if (showActivityTypePicker) {
-      <app-activity-types-filter-menu class="activity-filter-field" [selectedActivityTypes]="selectedActivityTypes"
+      <app-activity-types-multi-select class="activity-filter-field" [selectedActivityTypes]="selectedActivityTypes"
         [availableActivityTypes]="availableActivityTypes"
-        ariaLabel="Filter activities"
-        (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-filter-menu>
+        [disabled]="isLoading" ariaLabel="Filter activities"
+        (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
       }
     </section>
     <section class="button-groups">

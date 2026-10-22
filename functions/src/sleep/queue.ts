@@ -1235,14 +1235,14 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
             queueDateCreated: writeResult.dateCreated,
         });
         if (wasTaskEnqueued) {
-            const didMarkDispatched = await markSleepQueueItemDispatched(
+            const dispatchMarkerResult = await markSleepQueueItemDispatched(
                 docRef,
                 queueId,
                 userID,
                 nowMs,
                 writeResult,
             );
-            if (!didMarkDispatched) {
+            if (dispatchMarkerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 throw new ProviderQueueUserDeletedOrDeletingError(
                     serviceNameForProvider(input.provider),
                     userID,
@@ -1272,7 +1272,7 @@ async function markSleepQueueItemDispatched(
     userID: string,
     dispatchedAtMs: number,
     identity: Pick<SleepSyncQueueItemInterface, 'queueRevision' | 'dateCreated'>,
-): Promise<boolean> {
+): Promise<QueueDispatchMarkerResult> {
     try {
         const result = await markQueueItemDispatchedIfUserActive({
             queueItemDocument,
@@ -1283,7 +1283,7 @@ async function markSleepQueueItemDispatched(
             logPrefix: 'SleepSync',
             isCurrent: currentQueueItem => isCurrentSleepQueueRevision(currentQueueItem, identity),
         });
-        return result !== QueueDispatchMarkerResult.SkippedDeletedUser;
+        return result;
     } catch (error) {
         if (!isFirestoreNotFoundError(error)) {
             throw error;
@@ -1293,7 +1293,7 @@ async function markSleepQueueItemDispatched(
         const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
         if (failedJob?.originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
             logger.info(`[SleepSync] Queue item ${queueItemId} was already moved to failed_jobs before dispatch timestamp update.`);
-            return true;
+            return QueueDispatchMarkerResult.NotCurrent;
         }
 
         throw error;
@@ -2380,7 +2380,8 @@ async function dispatchHealthContinuation(
             Date.now(),
             queueIdentity,
         );
-        return marked ? QueueResult.Deferred : QueueResult.Processed;
+        return marked === QueueDispatchMarkerResult.Marked ? QueueResult.HealthContinuationScheduled
+            : marked === QueueDispatchMarkerResult.SkippedDeletedUser ? QueueResult.Processed : QueueResult.Deferred;
     } catch (error) {
         // The durable row has already moved to an undispatched continuation
         // revision. Scheduled reconciliation can recover an enqueue/marker

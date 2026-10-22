@@ -438,7 +438,7 @@ describe('SideNavComponent', () => {
         expect(plansItem.classList.contains('active')).toBe(false);
     });
 
-    it('shows Plans as a full-level Beta row after Training and closes on selection', () => {
+    it('shows Plans as a full-level row without a beta label after Training and closes on selection', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
@@ -453,7 +453,7 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
         expect(plansItem?.nativeElement.querySelector('mat-icon')?.textContent).toBe('event_note');
-        expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
+        expect(plansItem?.nativeElement.textContent).not.toMatch(/beta/i);
         expect(plansItem?.nativeElement.parentElement?.getAttribute('aria-labelledby')).toBe('sidenav-training-health-heading');
         expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
@@ -475,7 +475,7 @@ describe('SideNavComponent', () => {
             .find(item => item.nativeElement.textContent.includes('Plans'));
 
         expect(plansItem).toBeTruthy();
-        expect(plansItem?.nativeElement.querySelector('.sidenav-status-label')?.textContent.trim()).toBe('Beta');
+        expect(plansItem?.nativeElement.textContent).not.toMatch(/beta/i);
     });
 
     it('opens the profile section when the signed-in profile shortcut is selected', () => {
