@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import { LoggerService } from './logger.service';
 import { Logger as FirebaseLogger } from '@firebase/logger';
@@ -33,6 +33,7 @@ describe('AppCheckDiagnosticsService', () => {
     service.monitor(app);
     service.monitor(app);
   });
+  afterEach(() => vi.restoreAllMocks());
 
   it('observes the initial rejection once and discards private error fields', () => {
     const failure = Object.assign(new Error('private-message'), {
@@ -45,7 +46,8 @@ describe('AppCheckDiagnosticsService', () => {
     expect(logger.captureMessage).toHaveBeenCalledTimes(1);
     expect(logger.captureMessage).toHaveBeenCalledWith('App Check verification failed', expect.objectContaining({
       fingerprint: ['app-check-verification', 'initial-rejection', '403'],
-      tags: { appCheckPhase: 'initial-rejection', appCheckErrorCode: 'appCheck/initial-throttle', appCheckHttpStatus: '403' },
+      tags: { appCheckPhase: 'initial-rejection', appCheckErrorCode: 'appCheck/initial-throttle', appCheckHttpStatus: '403',
+        appCheckAuthState: 'restoring' },
       contexts: { appCheck: expect.objectContaining({ httpStatus: 403, retryAfterSeconds: 86400, source: 'token-observer', cooldown: true }) },
     }));
     expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
@@ -62,7 +64,157 @@ describe('AppCheckDiagnosticsService', () => {
     error(failure); error(failure);
     next({ token: 'fresh-private-token' });
     error(failure);
+    expect(logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification failed')).toHaveLength(2);
+    expect(logger.captureMessage).toHaveBeenCalledWith('App Check verification outcome', expect.objectContaining({
+      tags: expect.objectContaining({ appCheckOutcome: 'token-available' }),
+    }));
+  });
+
+  it('distinguishes unresolved Auth restoration from a resolved signed-out or signed-in state', () => {
+    error({ code: 'appCheck/recaptcha-error' });
+    expect(logger.captureMessage.mock.calls[0][1].contexts.appCheck.authState).toBe('restoring');
+    service.setAuthState('signed-out');
+    error({ code: 'appCheck/fetch-network-error' });
+    expect(logger.captureMessage.mock.calls[1][1].contexts.appCheck.authState).toBe('signed-out');
+    service.setAuthState('signed-in');
+    error({ code: 'appCheck/recaptcha-error' });
+    expect(logger.captureMessage.mock.calls[2][1].contexts.appCheck.authState).toBe('signed-in');
+  });
+
+  it('does not report successes without a failure or treat an empty token as recovery', () => {
+    next({ token: '' }); next({ token: 'cached-private-token' });
+    service.reportOperationSucceeded('profile-load', service.authRevision);
+    service.reportOperationSucceeded('callable', service.authRevision);
+    expect(logger.captureMessage).not.toHaveBeenCalled();
+    error({ code: 'appCheck/recaptcha-error' });
+    next({ token: '' });
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('records one bounded recovery with notification count and elapsed time, without serializing tokens', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    next({ token: 'old-private-token' });
+    const failure = { code: 'appCheck/recaptcha-error', message: 'private-message', customData: { token: 'private-token' } };
+    error(failure); error(failure); service.reportFailure(failure, 'token-request');
+    clock.mockReturnValue(6000);
+    next({ token: 'new-private-token' }); next({ token: 'new-private-token' });
     expect(logger.captureMessage).toHaveBeenCalledTimes(2);
+    expect(logger.captureMessage.mock.calls[1][1]).toMatchObject({
+      level: 'info', contexts: { appCheck: { outcome: 'token-available', elapsedMs: 5000,
+        failureNotifications: 3, tokenChanged: true } },
+    });
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
+  });
+
+  it('labels the first observed token honestly when there was no earlier token to compare', () => {
+    error({ code: 'appCheck/recaptcha-error' });
+    next({ token: 'private-token' });
+    expect(logger.captureMessage.mock.calls[1][1].contexts.appCheck.tokenChanged).toBeNull();
+  });
+
+  it('does not call a cached-token notification a verification recovery', () => {
+    next({ token: 'cached-private-token' });
+    error({ code: 'appCheck/recaptcha-error' });
+    next({ token: 'cached-private-token' }); error({ code: 'appCheck/recaptcha-error' });
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes token availability from a blocked operation actually succeeding', () => {
+    service.setAuthState('signed-in');
+    const revision = service.authRevision;
+    const failure = { code: 'appCheck/recaptcha-error' };
+    error(failure);
+    service.reportOperationBlocked(failure, 'profile-load', revision);
+    service.reportOperationBlocked(failure, 'profile-load', revision);
+    next({ token: 'private-token' });
+    service.reportOperationSucceeded('profile-load', revision);
+    service.reportOperationSucceeded('profile-load', revision);
+    const outcomes = logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification outcome');
+    expect(outcomes.map(call => call[1].contexts.appCheck.outcome)).toEqual([
+      'operation-blocked', 'token-available', 'operation-succeeded',
+    ]);
+    expect(outcomes[0][1].level).toBe('warning');
+    expect(outcomes[2][1].level).toBe('info');
+    expect(outcomes[2][1].tags.appCheckOperation).toBe('profile-load');
+  });
+
+  it('reports a final server App Check rejection but never attributes generic index or permission errors', () => {
+    const revision = service.authRevision;
+    error({ code: 'appCheck/recaptcha-error' }); logger.captureMessage.mockClear();
+    for (const failure of [{ code: 'failed-precondition', message: 'The query requires an index.' },
+      { code: 'permission-denied' }, { code: 'functions/internal' }]) {
+      service.reportOperationBlocked(failure, 'callable', revision);
+    }
+    expect(logger.captureMessage).not.toHaveBeenCalled();
+    service.reportOperationBlocked({ code: 'functions/failed-precondition',
+      message: 'App Check verification failed. private-message' }, 'callable', revision);
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+    expect(logger.captureMessage.mock.calls[0][1].contexts.appCheck.code).toBe('appCheck/unknown');
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
+  });
+
+  it('requires the same callable to succeed before reporting recovery, without serializing its scope', () => {
+    const revision = service.authRevision;
+    const failure = { code: 'appCheck/recaptcha-error' };
+    service.reportOperationBlocked(failure, 'callable', revision, 'private-scope');
+    service.reportOperationBlocked(failure, 'callable', revision, 'private-scope');
+    service.reportOperationSucceeded('callable', revision, 'unrelated-scope');
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+    service.reportOperationSucceeded('callable', revision, 'private-scope');
+    expect(logger.captureMessage).toHaveBeenCalledTimes(2);
+    expect(logger.captureMessage.mock.calls[1][1].contexts.appCheck.failureNotifications).toBe(2);
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('scope');
+  });
+
+  it('drops stale operation completions and clears previous-session recovery state on Auth changes', () => {
+    service.setAuthState('signed-in');
+    const oldRevision = service.authRevision;
+    const failure = { code: 'appCheck/recaptcha-error' };
+    error(failure); service.reportOperationBlocked(failure, 'callable', oldRevision);
+    logger.captureMessage.mockClear();
+    // Same state can also be a switch between signed-in accounts.
+    service.setAuthState('signed-in');
+    service.reportOperationBlocked(failure, 'callable', oldRevision);
+    service.reportOperationSucceeded('callable', oldRevision);
+    service.reportOperationSucceeded('callable', service.authRevision);
+    next({ token: 'private-token' });
+    expect(logger.captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('preserves the initial Auth-restoration label when a token arrives after Auth resolves', () => {
+    error({ code: 'appCheck/recaptcha-error' });
+    service.setAuthState('signed-out');
+    next({ token: 'private-token' });
+    expect(logger.captureMessage.mock.calls[1][1].contexts.appCheck).toMatchObject({
+      authStateAtFailure: 'restoring', authState: 'signed-out',
+    });
+  });
+
+  it('caps recovery notifications and timing metadata for noisy or long-lived pages', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
+    for (let i = 0; i < 25; i += 1) {
+      error({ code: 'appCheck/recaptcha-error' });
+      clock.mockReturnValue(172_800_000);
+      next({ token: `private-token-${i}` });
+      clock.mockReturnValue(0);
+    }
+    const outcomes = logger.captureMessage.mock.calls.filter(call => call[0] === 'App Check verification outcome');
+    expect(outcomes).toHaveLength(20);
+    expect(outcomes.every(call => call[1].contexts.appCheck.elapsedMs === 86_400_000)).toBe(true);
+    expect(sdk.onTokenChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains outcome reporting failures and still clears recovered state', () => {
+    const revision = service.authRevision;
+    const failure = { code: 'appCheck/recaptcha-error' };
+    error(failure);
+    logger.captureMessage.mockImplementation(() => { throw new Error('Sentry unavailable'); });
+    expect(() => service.reportOperationBlocked(failure, 'callable', revision)).not.toThrow();
+    expect(() => next({ token: 'private-token' })).not.toThrow();
+    expect(() => service.reportOperationSucceeded('callable', revision)).not.toThrow();
+    logger.captureMessage.mockReset();
+    service.reportOperationSucceeded('callable', revision);
+    expect(logger.captureMessage).not.toHaveBeenCalled();
   });
 
   it('does not record tokens or unknown errors on success and detaches on destruction', () => {

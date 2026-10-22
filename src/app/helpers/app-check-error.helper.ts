@@ -12,6 +12,14 @@ export interface AppCheckFailureDetails {
   retryable: boolean;
 }
 
+/** A generic failed-precondition (for example a missing index) is not App Check evidence. */
+export function isAppCheckVerificationFailure(error: unknown): boolean {
+  if (appCheckFailureDetails(error)) return true;
+  const value = error as { code?: unknown; message?: unknown } | null;
+  return (value?.code === 'functions/failed-precondition' || value?.code === 'failed-precondition')
+    && typeof value.message === 'string' && /app check verification failed/i.test(value.message);
+}
+
 // Read only bounded SDK fields. Never copy a message, stack, token or arbitrary customData.
 export function appCheckFailureDetails(error: unknown): AppCheckFailureDetails | null {
   const value = error && typeof error === 'object'

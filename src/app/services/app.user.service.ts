@@ -67,6 +67,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { mergeUserProfileDocuments, UserProfileVerificationService } from './user-profile-verification.service';
 import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
@@ -295,6 +296,7 @@ export class AppUserService implements OnDestroy {
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
   private readonly appCheckReadiness = inject(AppCheckReadinessService);
+  private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
   private readonly profileVerification = inject(UserProfileVerificationService);
   private readonly profileReload$ = new Subject<boolean>();
   private profileRecoveryPromise: Promise<boolean> | null = null;
@@ -318,6 +320,11 @@ export class AppUserService implements OnDestroy {
   private readonly authenticatedUserProfile$ = authState(this.auth).pipe(
     distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
     switchMap((firebaseUser): Observable<AuthenticatedUserProfile | null> => {
+      // This stream starts before the constructor's logging subscription. Establish the generation
+      // before profile credential requests, including an already restored synchronous Auth snapshot.
+      try {
+        this.appCheckDiagnostics.setAuthState(firebaseUser ? 'signed-in' : 'signed-out');
+      } catch { /* Keep the existing Auth/profile stream independent of telemetry. */ }
       if (!firebaseUser) {
         this.usersWithIncompleteProfileReads.clear();
         this.lastPublishedProfileRead = null;
@@ -329,6 +336,7 @@ export class AppUserService implements OnDestroy {
         startWith(false),
         switchMap(forceRefresh => {
           this.beginProfileRead(firebaseUser.uid);
+          const diagnosticRevision = this.appCheckDiagnostics.authRevision;
           return this.getUserProfileWithAuthRetry(firebaseUser, forceRefresh).pipe(
             tap(() => {
               this.markIncompleteProfileRead(firebaseUser.uid);
@@ -348,6 +356,7 @@ export class AppUserService implements OnDestroy {
                 ...(appCheckFailure ? { appCheckFailure } : {}),
               });
               if (appCheckFailure) {
+                this.trackAppCheckProfileOutcome('blocked', diagnosticRevision, error);
                 // The App Check observer/readiness boundary owns the safe, deduplicated report.
                 this.logger.warn('[AppUserService] Browser verification blocked profile loading.', appCheckFailure);
               } else {
@@ -391,6 +400,7 @@ export class AppUserService implements OnDestroy {
             uid: tokenUser.uid,
             profileExists: profile.dbUser !== null,
           });
+          this.trackAppCheckProfileOutcome('succeeded', this.appCheckDiagnostics.authRevision);
           this.lastPublishedProfileRead = {
             uid: tokenUser.uid,
             generation: profile.readGeneration,
@@ -661,6 +671,13 @@ export class AppUserService implements OnDestroy {
     this.profileReadGeneration += 1;
     this.markIncompleteProfileRead(uid);
     this.profileReadStateSignal.set({ status: 'loading', uid });
+  }
+
+  private trackAppCheckProfileOutcome(outcome: 'blocked' | 'succeeded', revision: number, error?: unknown): void {
+    try {
+      if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'profile-load', revision);
+      else this.appCheckDiagnostics.reportOperationSucceeded('profile-load', revision);
+    } catch { /* Diagnostics cannot change profile recovery or the original error. */ }
   }
 
   public retryProfileRead(): Promise<boolean> {

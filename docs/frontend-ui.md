@@ -514,6 +514,33 @@ is memory-only. An already active cooldown is labelled honestly when the origina
 diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
 warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
 
+App Check failure events also record `appCheckAuthState`: `restoring` until the existing Auth subscription first
+resolves, then `signed-in` or `signed-out`. This includes startup before that subscription has initialized; it is
+not a claim that an unidentified visitor is signed out or automated. No additional Auth subscription or credential
+request is introduced. Each resolved Auth notification advances an in-memory generation. Operation completions
+from an earlier generation are ignored, and pending operation recovery state is cleared when Auth changes.
+
+`App Check verification outcome` distinguishes three observations: `token-available` when the existing token
+observer reports a different nonempty token after a failure; `operation-blocked` when profile loading or a callable
+finally fails with explicit App Check evidence; and `operation-succeeded` when a previously blocked profile loads
+authoritatively or the same callable subsequently succeeds in the same Auth generation. Token availability alone
+does not prove application recovery or that the server minted a fresh token. `tokenChanged` is null if there was
+no earlier token to compare. Repeated notifications of the same cached token do not report recovery.
+
+Outcome fields use fixed operation/auth/code labels, elapsed time capped at one day, and notification counts capped
+at 1000. Notifications can duplicate a single failed verification across observer, console and request sources;
+they are not unique users or exact verification-attempt counts. Repeated final failures of the tracked operation
+are deduplicated and included in its eventual success count. At most one blocked profile and one blocked callable
+are tracked in memory, and additional outcome messages are capped at 20 per page. Callable names are used only
+for local matching and never copied into these event fields. No tokens, identifiers, request data or raw URLs/errors
+are added; existing Sentry session context remains unchanged. Generic permission, internal and index errors are
+not attributed to App Check. Diagnostic failures cannot replace application results or modify the retry budget.
+
+These diagnostics observe existing callbacks and completions only: they add no Firestore reads/writes, token
+requests, probes or timers. They do not identify bots or expose failures inside Google's cross-origin reCAPTCHA
+iframe. For a 403 investigation, compare Firebase's existing App Check request metrics and the reCAPTCHA Admin
+console score distribution before proposing any change to thresholds, TTLs, enforcement or allowed domains.
+
 Monitoring impact: **unchanged** for Cloud Monitoring queues, dashboards and alert policies. This is browser-only
 App Check recovery; no workers, schedules, backlog/lease/dead-letter semantics, provider connections or monitoring
 bundle definitions change. Existing import monitoring remains authoritative for server queues; browser verification
