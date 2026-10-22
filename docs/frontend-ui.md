@@ -507,12 +507,55 @@ payloads before filtering, which can add work to unrelated Firestore/Auth operat
 levels stay unchanged. `AppCheckReadinessService` also reports explicit token-request failures and invalidates memoized readiness
 after a background failure. The single `App Check verification failed` Sentry message uses fixed phase/code labels,
 a bounded HTTP status, a validated SDK retry duration (up to one day), source, online hint and document visibility.
-It never copies raw error messages/stacks, SDK custom data, response bodies, URLs, identifiers or tokens. Existing
-Sentry session context is retained. An initial rejection and its subsequent cooldown share one report until a usable
+Its custom diagnostic fields never copy raw error messages/stacks, SDK custom data, response bodies, URLs,
+identifiers or tokens. Useful existing Sentry identity and navigation context is retained through the targeted
+sanitizer described below. An initial rejection and its subsequent cooldown share one report until a usable
 fresh token arrives; repeated notifications of the same cached token do not reset deduplication. Token comparison
 is memory-only. An already active cooldown is labelled honestly when the original rejection was unavailable. These
 diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
 warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
+
+App Check failure events also record `appCheckAuthState`: `restoring` until the existing Auth subscription first
+resolves, then `signed-in` or `signed-out`. This includes startup before that subscription has initialized; it is
+not a claim that an unidentified visitor is signed out or automated. No additional Auth subscription or credential
+request is introduced. Each resolved Auth notification advances an in-memory generation. Operation completions
+from an earlier generation are ignored, and pending operation recovery state is cleared when Auth changes.
+
+`App Check verification outcome` distinguishes three observations: `token-available` when the existing token
+observer reports a different nonempty token after a failure; `operation-blocked` when profile loading or a callable
+finally fails with explicit App Check evidence; and `operation-succeeded` when a previously blocked profile loads
+authoritatively or the same callable subsequently succeeds in the same Auth generation. Recovery requires an
+operation started after the latest tracked blocked failure; older or already in-flight requests cannot clear it.
+Operation ordering is local and never enters telemetry or request data. Token availability alone
+does not prove application recovery or that the server minted a fresh token. `tokenChanged` is null if there was
+no earlier token to compare. Repeated notifications of the same cached token do not report recovery.
+
+Outcome fields use fixed operation/auth/code labels, elapsed time capped at one day, and notification counts capped
+at 1000. Notifications can duplicate a single failed verification across observer, console and request sources;
+they are not unique users or exact verification-attempt counts. Repeated final failures of the tracked operation
+are deduplicated and included in its eventual success count. At most one blocked profile and one blocked callable
+are tracked in memory. Each outcome/category is reported once per Auth generation, with at most **five additional
+outcome messages per page**, including across account changes. The budget does not reset on Auth changes and does
+not suppress the existing deduplicated failure reports. Local recovery tracking continues when telemetry is suppressed.
+Callable names are used only for local matching and never copied into the custom diagnostic fields. Generic permission, internal and index errors are
+not attributed to App Check. Diagnostic failures cannot replace application results or modify the retry budget.
+
+The `appCheckBeforeSend` callback sanitizes the complete outgoing event for the two fixed App Check diagnostic
+messages. It deliberately keeps the existing UID/email, release/environment, trace IDs, browser user agent and page
+paths, including path identifiers useful for investigation. It strips URL query strings, fragments and userinfo;
+request bodies, cookies and credential headers; arbitrary tags, contexts, extras and raw errors; and event attachments.
+Navigation/request breadcrumbs retain paths, methods, statuses, timestamps and levels. Console/click breadcrumbs
+retain their category, timestamp and level without arbitrary text, arguments or selectors; other categories are omitted.
+The shared Sentry scope is not changed. Other Sentry events keep their existing behavior and are not covered by this
+App Check-specific sanitizer. SDK tests inspect the final envelope with an in-memory transport, including inherited
+scope data and attachments, while verifying that a subsequent unrelated event still retains its original context.
+The scrubber is lazy-loaded only for these diagnostics, keeping it out of the initial public bundle. If that asset
+cannot load, the affected diagnostic is dropped rather than sent without scrubbing; unrelated errors remain synchronous.
+
+These diagnostics observe existing callbacks and completions only: they add no Firestore reads/writes, token
+requests, probes or timers. They do not identify bots or expose failures inside Google's cross-origin reCAPTCHA
+iframe. For a 403 investigation, compare Firebase's existing App Check request metrics and the reCAPTCHA Admin
+console score distribution before proposing any change to thresholds, TTLs, enforcement or allowed domains.
 
 Monitoring impact: **unchanged** for Cloud Monitoring queues, dashboards and alert policies. This is browser-only
 App Check recovery; no workers, schedules, backlog/lease/dead-letter semantics, provider connections or monitoring
