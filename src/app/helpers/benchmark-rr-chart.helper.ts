@@ -51,13 +51,14 @@ export function buildBenchmarkRRChartOptions(input: BenchmarkRRChartOptions): { 
   const data = buildBenchmarkRRSeries(analysis, input.excludeFlagged);
   const theme = buildOfficialEChartsThemeTokens(input.darkTheme);
   const formatTime = (value: number) => resolveUnitAwareDisplayStat(new DataDuration(value / 1000), unitSettings, { compactDuration: true })?.value ?? '';
+  const formatHoverTime = (value: number) => resolveUnitAwareDisplayStat(new DataDuration(value / 1000), unitSettings)?.text ?? '';
   const intervalUnit = formatBenchmarkRRValue(DataRRMeanInterval.type, 0, unitSettings)?.unit ?? '';
   const zoom = { start: input.zoom?.start ?? 0, end: input.zoom?.end ?? 100 };
   const xAxis = {
     type: 'value' as const, min: 0, max: input.durationMs,
     splitNumber: input.width < 500 ? 3 : 6,
     axisLabel: { formatter: formatTime, hideOverlap: true },
-    axisPointer: { label: { formatter: (params: { value: number }) => formatTime(params.value) } },
+    axisPointer: { label: { formatter: (params: { value: number }) => formatHoverTime(params.value) } },
     axisTick: { show: false }, splitLine: { show: false },
   };
   const tooltip = { trigger: 'axis' as const, backgroundColor: theme.tooltipBackgroundColor,
@@ -80,7 +81,7 @@ export function buildBenchmarkRRChartOptions(input: BenchmarkRRChartOptions): { 
   const alphaMax = alphas.reduce((max, value) => Math.max(max, value), 1.5);
   return {
     markerSampling: data.markerSampling,
-    rr: { ...base, tooltip: { ...tooltip, valueFormatter: value => formatBenchmarkRRValue(DataRRMeanInterval.type, Number(value), unitSettings)?.text ?? 'Unavailable' },
+    rr: { ...base, tooltip: { ...tooltip, valueFormatter: value => formatBenchmarkRRValue(DataRRMeanInterval.type, value, unitSettings)?.text ?? 'Unavailable' },
       yAxis: { type: 'value', min: Number.isFinite(min) ? Math.max(0, min - pad) : 0, max: Number.isFinite(max) ? max + pad : 1,
         name: intervalUnit, axisLabel: { formatter: (value: number) => formatBenchmarkRRValue(DataRRMeanInterval.type, value, unitSettings)?.value ?? '' },
         splitLine: { lineStyle: { color: theme.splitLineColor } } },
@@ -96,7 +97,7 @@ export function buildBenchmarkRRChartOptions(input: BenchmarkRRChartOptions): { 
       ],
     },
     dfa: { ...base, grid: { ...grid, bottom: 32 },
-      tooltip: { ...tooltip, valueFormatter: value => formatBenchmarkRRValue(DataRRDFAAlpha1Median.type, Number(value), unitSettings)?.text ?? 'Unavailable' },
+      tooltip: { ...tooltip, valueFormatter: value => formatBenchmarkRRValue(DataRRDFAAlpha1Median.type, value, unitSettings)?.text ?? 'Unavailable' },
       yAxis: { type: 'value', min: alphaMin, max: alphaMax + (alphaMax - alphaMin) * .05,
         axisLabel: { formatter: (value: number) => formatBenchmarkRRValue(DataRRDFAAlpha1Median.type, value, unitSettings)?.value ?? '' },
         splitLine: { lineStyle: { color: theme.splitLineColor } } }, dataZoom: [insideZoom, { ...sliderZoom, show: false }],

@@ -51,7 +51,7 @@ function chartStub() {
 }
 
 describe('benchmark R–R panel', () => {
-  async function render(mergeType = 'benchmark') {
+  async function render(mergeType = 'benchmark', activities = [recording('Strap', true), recording('Watch')]) {
     const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     const analysis = analyzeRRIntervals([{ time: 800, interval: 800 }, { time: 1600, interval: 800 }], 10000)!;
     const worker = { analyze: vi.fn().mockResolvedValue(analysis), cancel: vi.fn() };
@@ -75,7 +75,6 @@ describe('benchmark R–R panel', () => {
       providers: [{ provide: BenchmarkRRAnalysisService, useValue: worker }],
     } }).compileComponents();
     const fixture = TestBed.createComponent(BenchmarkRRComponent);
-    const activities = [recording('Strap', true), recording('Watch')];
     fixture.componentRef.setInput('event', { mergeType, isMerge: true, getActivities: () => activities } as unknown as AppEventInterface);
     fixture.componentRef.setInput('activities', activities);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -215,5 +214,51 @@ describe('benchmark R–R panel', () => {
     expect(panel.plotColor('#000000')).not.toBe('#000000');
     expect(charts[0].dispose).toHaveBeenCalledOnce(); expect(charts[1].dispose).toHaveBeenCalledOnce();
     expect(worker.analyze).toHaveBeenCalledOnce();
+  });
+
+  it('does not materialize raw beat arrays until the Charts tab is opened', async () => {
+    const strap = recording('Strap', true);
+    const readBeats = vi.spyOn(strap.getStream('IBI'), 'getStreamDataByDuration');
+    const { openCharts, worker } = await render('benchmark', [strap]);
+    expect(readBeats).not.toHaveBeenCalled();
+    await openCharts();
+    expect(readBeats).toHaveBeenCalledOnce();
+    expect(worker.analyze).toHaveBeenCalledWith({
+      durationMs: 10000,
+      samples: [{ time: 800, interval: 800 }, { time: 1600, interval: 800 }, { time: 2400, interval: 800 }],
+    });
+  });
+
+  it.each([true, false])('keeps the selected source when an earlier recording is deselected (saved IDs: %s)', async hasIDs => {
+    const recordings = [recording('First', true), recording('Second', true), recording('Third', true)];
+    if (!hasIDs) recordings.forEach(activity => activity.setID(''));
+    const { fixture, panel, openCharts, haptics } = await render('benchmark', recordings);
+    await openCharts();
+    panel.onSourceChange(panel.sources()[2].key); fixture.detectChanges(); await fixture.whenStable();
+    const key = panel.selectedSourceKey();
+    fixture.componentRef.setInput('activities', recordings.slice(1)); fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.selectedSource()?.activity).toBe(recordings[2]);
+    expect(panel.selectedSourceKey()).toBe(key);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps saved summaries usable when original interval timing cannot be read', async () => {
+    const strap = recording('Strap', true);
+    strap.getStream('IBI').getData().push(800); // Explicit sample times no longer align.
+    const { panel, worker, openCharts, fixture, host } = await render('benchmark', [strap]);
+    expect(panel.summaryRows()[0].cells[0].display).toBe('0.0 %');
+    await openCharts(); fixture.detectChanges();
+    expect(panel.status()).toBe('error');
+    expect(host.textContent).toContain('recorded R–R timing could not be read');
+    expect(worker.analyze).not.toHaveBeenCalled();
+    expect(panel.summaryRows()[0].cells[0].display).toBe('0.0 %');
+  });
+
+  it('releases a partially initialized chart immediately when its partner fails', async () => {
+    const { loader, openCharts, panel, charts } = await render();
+    loader.init.mockResolvedValueOnce(null as any);
+    await openCharts();
+    expect(panel.status()).toBe('error'); expect(charts).toHaveLength(1);
+    expect(charts[0].dispose).toHaveBeenCalledOnce();
   });
 });

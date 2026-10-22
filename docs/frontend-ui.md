@@ -414,8 +414,13 @@ the local selector includes all 20 canonical R–R metrics. Values and units use
 unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
 Artifact counts/rates and the DFA range stay attached to their source. The horizontal table keeps metric labels sticky,
 uses the global scrollbar skin and supports keyboard scrolling; phone layouts include a scrolling hint.
+The selected chart source follows its activity ID (or full-event position for unsaved recordings), so hiding an
+earlier recording does not silently select a different device.
 
 Charts are lazy: opening the tab analyzes an already-loaded original `IBIStream` in a component-scoped module worker.
+The summary view inspects eligibility only; it does not expand or copy beat arrays. Unreadable timing is handled
+inside the chart request, leaving saved summaries and other recordings usable.
+Eligibility and analysis ignore any stream display filter and preserve the original unsmoothed intervals.
 Regular one-second `Stream` data is ineligible. Original elapsed beat times and invalid-observation barriers are preserved.
 The worker calls Sports Lib's `analyzeRRIntervals`; QS does not implement another artifact or DFA algorithm.
 Sports Lib 23.5.0 has no analysis-only public entry, and its root barrel emits unused parser chunks in a separate
@@ -424,6 +429,7 @@ checks parity with the public API, a single small output and absence of parser/A
 path on library upgrades and replace it with a public analysis-only entry when available; do not copy the algorithm.
 Analysis stays in memory, with cancellation on source/input changes and teardown, a 30-second timeout, and stale-result
 fences for both calculation and chart initialization. Worker failures keep saved summaries available and offer Retry.
+Chart rendering failures dispose both hosts, including a partially initialized partner, before offering Retry.
 This panel introduces no Firestore query, write, index, reparse, original-file fetch or server endpoint.
 
 The two ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
@@ -433,6 +439,8 @@ Flag exclusion masks plot values only; null windows and recording segment bounda
 because it can join unrelated points around null barriers. Dense artifact/pair markers are capped at 4,000 per kind by
 sampling the complete time domain, with a visible notice; recorded summary counts remain complete. Zoom and exclusion
 never recalculate persisted statistics. DFA guides at 0.75 and 0.50 carry no automatic intensity or medical conclusion.
+Axis ticks stay compact; hover timing retains canonical seconds. Tooltip metric values use
+strict numeric validation, preserving a missing value instead of coercing it to zero.
 
 MCP impact review: browser-only benchmark presentation, with no version/parser/persistence or wire-contract change.
 The existing canonical numeric metric catalog and consent stay unchanged; benchmark events remain excluded from that

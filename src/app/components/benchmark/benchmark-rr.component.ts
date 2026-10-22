@@ -19,7 +19,7 @@ import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import { resolveDeviceChartColor } from '../../helpers/device-chart-appearance.helper';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS, resolveEChartsTooltipSurfaceConfig, resolveEChartsTooltipTriggerOn } from '../../helpers/echarts-tooltip-interaction.helper';
 import { buildBenchmarkRRChartOptions } from '../../helpers/benchmark-rr-chart.helper';
-import { BENCHMARK_RR_METRICS, buildBenchmarkRRAnalysisInput, buildBenchmarkRRRows, getBenchmarkRRLabels, hasBenchmarkRRStats, type BenchmarkRRAnalysisInput } from '../../helpers/benchmark-rr.helper';
+import { BENCHMARK_RR_METRICS, buildBenchmarkRRAnalysisInput, buildBenchmarkRRRows, getBenchmarkRRIntervalSource, getBenchmarkRRLabels, hasBenchmarkRRStats, type BenchmarkRRIntervalSource } from '../../helpers/benchmark-rr.helper';
 
 interface RRSource {
   key: string;
@@ -28,7 +28,7 @@ interface RRSource {
   color: string;
   activity: ActivityInterface;
   hasStats: boolean;
-  input: BenchmarkRRAnalysisInput | null;
+  raw: BenchmarkRRIntervalSource | null;
 }
 
 @Component({
@@ -58,7 +58,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly selectedStats = signal<string[]>(BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type));
   readonly columns = computed(() => ['metric', ...this.sources().map(source => source.column)]);
   readonly summaryRows = computed(() => buildBenchmarkRRRows(this.sources().map(source => source.activity), this.selectedStats(), this.units()));
-  readonly hasAnyRR = computed(() => this.sources().some(source => source.hasStats || source.input));
+  readonly hasAnyRR = computed(() => this.sources().some(source => source.hasStats || source.raw));
   readonly tab = signal(0);
   readonly selectedSourceKey = signal('');
   readonly selectedSource = computed(() => this.sources().find(source => source.key === this.selectedSourceKey()) ?? null);
@@ -70,6 +70,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly markerSampling = signal(false);
   readonly hasDFA = computed(() => this.analysis()?.windows.some(window => window.dfaAlpha1 !== null) ?? false);
   private generation = 0;
+  private analysisDurationMs = 0;
   private chartGeneration = 0;
   private destroyed = false;
   private rrElement?: HTMLElement;
@@ -94,13 +95,18 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
       this.visible.set(isBenchmarkEvent(this.event) && this.activities.length > 0);
       const labels = getBenchmarkRRLabels(this.activities);
       const allActivities = this.event?.getActivities() ?? this.activities;
-      const sources = this.visible() ? this.activities.map((activity, index): RRSource => ({
-        key: `${activity.getID() || 'recording'}:${index}`, column: `recording-${index}`,
-        label: labels[index], color: this.colors.getActivityColor(allActivities, activity), activity,
-        hasStats: hasBenchmarkRRStats(activity), input: buildBenchmarkRRAnalysisInput(activity),
-      })) : [];
+      const sources = this.visible() ? this.activities.map((activity, index): RRSource => {
+        const id = activity.getID();
+        const eventIndex = allActivities.indexOf(activity);
+        return {
+          key: id ? `activity:${id}` : `recording:${eventIndex >= 0 ? eventIndex : index}`,
+          column: `recording-${index}`,
+          label: labels[index], color: this.colors.getActivityColor(allActivities, activity), activity,
+          hasStats: hasBenchmarkRRStats(activity), raw: getBenchmarkRRIntervalSource(activity),
+        };
+      }) : [];
       this.sources.set(sources);
-      const source = sources.find(item => item.key === this.selectedSourceKey()) ?? sources.find(item => item.input) ?? sources[0];
+      const source = sources.find(item => item.key === this.selectedSourceKey()) ?? sources.find(item => item.raw) ?? sources[0];
       this.selectedSourceKey.set(source?.key ?? '');
       if (this.tab() === 1) void this.loadAnalysis();
     } else {
@@ -143,12 +149,15 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   async loadAnalysis(): Promise<void> {
     const generation = ++this.generation;
     this.worker.cancel(); this.disposeCharts(); this.analysis.set(null); this.errorMessage.set('');
-    const input = this.selectedSource()?.input;
-    if (!input) { this.status.set('unavailable'); return; }
+    const source = this.selectedSource();
+    if (!source?.raw) { this.status.set('unavailable'); return; }
     this.status.set('loading');
     try {
+      const input = buildBenchmarkRRAnalysisInput(source.activity);
+      if (!input) { this.status.set('unavailable'); return; }
       const analysis = await this.worker.analyze(input);
       if (generation !== this.generation || this.destroyed) return;
+      this.analysisDurationMs = input.durationMs;
       this.analysis.set(analysis); this.status.set(analysis ? 'ready' : 'unavailable');
       this.scheduleCharts();
     } catch (error) {
@@ -173,6 +182,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
     const generation = ++this.chartGeneration;
     void this.renderCharts(generation).catch(error => {
       if (this.destroyed || generation !== this.chartGeneration) return;
+      this.disposeCharts();
       this.logger.error('[BenchmarkRR] Chart rendering failed', error instanceof Error ? error : new Error('Chart rendering failed'));
       this.errorMessage.set('R–R charts could not be displayed. Please try again.'); this.status.set('error');
     });
@@ -185,12 +195,12 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
 
   private async renderCharts(generation: number): Promise<void> {
     const analysis = this.analysis(); const source = this.selectedSource();
-    if (!analysis || !source?.input || this.tab() !== 1 || !this.rrElement || !this.dfaElement || this.destroyed) return;
+    if (!analysis || !source?.raw || this.tab() !== 1 || !this.rrElement || !this.dfaElement || this.destroyed) return;
     const zoom = this.zoomRange();
     const charts = await Promise.all([this.rrHost.init(this.rrElement, resolveEChartsThemeName(this.darkTheme)), this.dfaHost.init(this.dfaElement, resolveEChartsThemeName(this.darkTheme))]);
     if (generation !== this.chartGeneration || this.destroyed) return;
     if (charts.some(chart => !chart)) throw new Error('R–R chart initialization failed');
-    const options = buildBenchmarkRRChartOptions({ analysis, durationMs: source.input.durationMs,
+    const options = buildBenchmarkRRChartOptions({ analysis, durationMs: this.analysisDurationMs,
       excludeFlagged: this.excludeFlagged(), darkTheme: this.darkTheme, color: this.plotColor(source.color),
       artifactColor: this.plotColor(AppColors.Orange), width: this.rrElement.clientWidth, unitSettings: this.units(), zoom });
     const tooltip = { ...resolveEChartsTooltipSurfaceConfig(), triggerOn: resolveEChartsTooltipTriggerOn() };

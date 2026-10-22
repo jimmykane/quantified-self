@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   EventImporterJSON, ActivityTypes, DataIBI, DataRRArtifactCount, DataRRArtifactPercentage,
   DataRRCoverage, DataRRRMSSD, DataRRDFAAlpha1Median, DataRRDFAAlpha1Min, DataRRDFAAlpha1Max,
@@ -7,7 +7,7 @@ import {
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import {
   BENCHMARK_RR_METRICS, buildBenchmarkRRAnalysisInput, buildBenchmarkRRRows,
-  formatBenchmarkRRValue, getBenchmarkRRLabels, hasBenchmarkRRStats,
+  formatBenchmarkRRValue, getBenchmarkRRIntervalSource, getBenchmarkRRLabels, hasBenchmarkRRStats,
 } from './benchmark-rr.helper';
 
 function recording(name = 'Strap') {
@@ -61,6 +61,18 @@ describe('benchmark R–R summaries', () => {
     expect(buildBenchmarkRRAnalysisInput(a)).toBeNull();
     const b = recording(); b.addStream(new IBIStream([800])); b.endDate = new Date(0);
     expect(buildBenchmarkRRAnalysisInput(b)).toBeNull();
+  });
+
+  it('ignores display filters and reads original timing only when requested', () => {
+    const a = recording();
+    const stream = new IBIStream([800, 900], [800, 5000]);
+    const filterData = vi.fn(() => []);
+    stream.useFilter({ filterData }); a.addStream(stream);
+    const readTiming = vi.spyOn(stream, 'getStreamDataByDuration');
+    expect(getBenchmarkRRIntervalSource(a)).toEqual({ stream, durationMs: 10000 });
+    expect(readTiming).not.toHaveBeenCalled(); expect(filterData).not.toHaveBeenCalled();
+    expect(buildBenchmarkRRAnalysisInput(a)?.samples).toEqual([{ time: 800, interval: 800 }, { time: 5000, interval: 900 }]);
+    expect(filterData).not.toHaveBeenCalled(); expect(stream.hasFilter()).toBe(true);
   });
 
   it('disambiguates repeated device labels and labels unnamed recordings', () => {

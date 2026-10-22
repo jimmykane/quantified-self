@@ -47,7 +47,7 @@
         <ng-template matTabContent>
           <div class="rr-chart-toolbar">
             @if (sources().length > 1) {
-              <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Recording</mat-label><mat-select [value]="selectedSourceKey()" (selectionChange)="onSourceChange($event.value)">@for (source of sources(); track source.key) { <mat-option [value]="source.key">{{ source.label }}{{ source.input ? '' : ' · no raw R–R' }}</mat-option> }</mat-select></mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Recording</mat-label><mat-select [value]="selectedSourceKey()" (selectionChange)="onSourceChange($event.value)">@for (source of sources(); track source.key) { <mat-option [value]="source.key">{{ source.label }}{{ source.raw ? '' : ' · no raw R–R' }}</mat-option> }</mat-select></mat-form-field>
             } @else { <span>{{ selectedSource()?.label }}</span> }
             @if (status() === 'ready') {
               <mat-checkbox [checked]="excludeFlagged()" (change)="onExcludeFlagged($event.checked)">Exclude flagged intervals</mat-checkbox>

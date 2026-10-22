@@ -33,6 +33,7 @@ export const BENCHMARK_RR_METRICS = [
 ] as const;
 
 export interface BenchmarkRRAnalysisInput { samples: RRIntervalSample[]; durationMs: number; }
+export interface BenchmarkRRIntervalSource { stream: IBIStream; durationMs: number; }
 export type BenchmarkRRWorkerResponse = { analysis: RRAnalysis | null } | { error: string };
 export interface BenchmarkRRCell { display: string | null; detail: string | null; }
 export interface BenchmarkRRRow { type: string; label: string; cells: BenchmarkRRCell[]; }
@@ -80,14 +81,27 @@ export function hasBenchmarkRRStats(activity: ActivityInterface): boolean {
   return BENCHMARK_RR_METRICS.some(metric => readStat(activity, metric.type) !== null);
 }
 
+/** Inspect eligibility without copying beat arrays or expanding original timing. */
+export function getBenchmarkRRIntervalSource(activity: ActivityInterface): BenchmarkRRIntervalSource | null {
+  const durationMs = activity.endDate?.getTime() - activity.startDate?.getTime();
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return null;
+  const stream = activity.getAllStreams().find(candidate => candidate.type === DataIBI.type);
+  if (!(stream instanceof IBIStream)) return null;
+  // Display filters must not run while checking or analyzing original intervals.
+  // A filtered empty stream is handled on demand by getStreamDataByDuration().
+  return stream.hasFilter() || stream.getData().length ? { stream, durationMs } : null;
+}
+
 /** Reject regular one-second chart streams; retain original per-beat timing and gaps. */
 export function buildBenchmarkRRAnalysisInput(activity: ActivityInterface): BenchmarkRRAnalysisInput | null {
-  const durationMs = activity.endDate?.getTime() - activity.startDate?.getTime();
-  if (!Number.isFinite(durationMs) || durationMs <= 0 || !activity.hasStreamData(DataIBI.type)) return null;
-  const stream = activity.getStream(DataIBI.type);
-  if (!(stream instanceof IBIStream)) return null;
-  const samples = stream.getStreamDataByDuration().map(sample => ({ time: sample.time, interval: sample.value ?? NaN }));
-  return samples.length ? { durationMs, samples } : null;
+  const source = getBenchmarkRRIntervalSource(activity);
+  if (!source) return null;
+  try {
+    const samples = source.stream.getStreamDataByDuration().map(sample => ({ time: sample.time, interval: sample.value ?? NaN }));
+    return samples.length ? { durationMs: source.durationMs, samples } : null;
+  } catch {
+    throw new Error('The recorded R–R timing could not be read. Summary statistics remain available.');
+  }
 }
 
 export function getBenchmarkRRLabels(activities: readonly ActivityInterface[]): string[] {

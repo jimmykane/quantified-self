@@ -38,4 +38,22 @@ describe('benchmark R–R charts', () => {
       expect(result.rr.series?.[0]).not.toHaveProperty('sampling');
     }
   });
+
+  it('keeps seconds in hover timing while axis ticks stay compact', () => {
+    const result = buildBenchmarkRRChartOptions({ analysis: analysis(), durationMs: 300000, excludeFlagged: false,
+      darkTheme: false, color: '#123456', artifactColor: '#654321', width: 600 });
+    const axis = result.rr.xAxis as { axisLabel: { formatter: (value: number) => string }; axisPointer: { label: { formatter: (params: { value: number }) => string } } };
+    expect(axis.axisLabel.formatter(123456)).toBe('02m');
+    expect(axis.axisPointer.label.formatter({ value: 123456 })).toBe('02m 03s');
+  });
+
+  it('does not turn a missing tooltip value into a recorded zero', () => {
+    const result = buildBenchmarkRRChartOptions({ analysis: analysis(), durationMs: 5000, excludeFlagged: false,
+      darkTheme: true, color: '#123456', artifactColor: '#654321', width: 320 });
+    for (const option of [result.rr, result.dfa]) {
+      const tooltip = option.tooltip as { valueFormatter: (value: unknown) => string };
+      for (const value of [null, undefined, '', false, NaN, Infinity]) expect(tooltip.valueFormatter(value)).toBe('Unavailable');
+      expect(tooltip.valueFormatter(0)).not.toBe('Unavailable');
+    }
+  });
 });
