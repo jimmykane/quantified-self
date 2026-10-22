@@ -410,8 +410,8 @@ benchmark charts, particularly overlapping lines and map backgrounds.
 All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
 alongside the existing categories. It is not part of Device or Physiological. The existing metric-card renderer
 shows up to seven primary statistics with short contextual labels, matching the other summary tabs without extra
-headings, recording captions or explanatory paragraphs. The shared plain disclosure retains **Show/Hide details** for
-the other available statistics. If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
+headings, recording captions or explanatory paragraphs. The shared plain disclosure places **Show/Hide details** below
+the readings, including expanded details. If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
 and recorded zero remains zero. `rr-metrics.ts` owns the common catalog; values and units remain Sports Lib's.
 Each selected activity is inspected separately; parent-event and multisport aggregates are never used for R–R.
 A local Recording selector preserves source identity across filtering. Two-source benchmarks use the shared stat

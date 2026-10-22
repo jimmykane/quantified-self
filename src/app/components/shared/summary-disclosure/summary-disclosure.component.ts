@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -8,7 +9,7 @@ export type SummaryDisclosureTone = 'neutral' | 'positive' | 'caution' | 'error'
 /** Presentation only: callers own the meaning, evidence and tone of their summaries. */
 @Component({
   selector: 'app-summary-disclosure', standalone: true,
-  imports: [MatButtonModule, MatIconModule],
+  imports: [MatButtonModule, MatIconModule, NgTemplateOutlet],
   templateUrl: './summary-disclosure.component.html', styleUrl: './summary-disclosure.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

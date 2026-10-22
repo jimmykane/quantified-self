@@ -306,8 +306,11 @@ describe('EventCardStatsGridComponent', () => {
         expect(host.querySelector('.stat-label')?.textContent?.trim()).toBe('RMSSD');
         expect(readStreams).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
         const button = host.querySelector<HTMLButtonElement>('app-summary-disclosure button')!;
+        expect(summary.querySelector('section')?.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
+        expect(summary.querySelector('app-header-stats')!.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(button.getAttribute('aria-expanded')).toBe('false'); button.click(); fixture.detectChanges();
         expect(button.getAttribute('aria-expanded')).toBe('true'); expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(summary.querySelector('section')?.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
         expect(fixture.debugElement.queryAll(By.directive(HeaderStatsComponent)).every(node => node.componentInstance.showDiff === benchmark)).toBe(true);
         if (benchmark) {
             expect(host.querySelector('.stat-diff-value')?.textContent).toContain('9.1 ms');

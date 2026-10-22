@@ -4,12 +4,12 @@
 .summary-disclosure-intro { min-width: 0; }
 .summary-disclosure-title { font: var(--mat-sys-title-medium); margin: 0; }
 .summary-disclosure-headline { margin: 0; font: var(--mat-sys-body-medium); overflow-wrap: anywhere; }
-.summary-disclosure-heading button { flex: 0 0 auto; min-height: 44px; }
+.summary-disclosure-heading button, .summary-disclosure-footer button { flex: 0 0 auto; min-height: 44px; }
+.summary-disclosure-footer { display: flex; justify-content: flex-end; }
 .summary-disclosure-plain {
   border-bottom: 0;
   padding-block: 0;
   margin-bottom: 0;
-  .summary-disclosure-heading { justify-content: flex-end; }
 }
 .summary-disclosure-rail {
   --summary-accent: var(--mat-sys-outline);

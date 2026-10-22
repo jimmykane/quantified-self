@@ -39,9 +39,12 @@ describe('shared summary disclosure shell', () => {
     expect(host.querySelector('section')?.getAttribute('data-tone')).toBe('neutral');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
-  it('uses the Material disclosure with one feedback owner', async () => {
+  it.each(['flat', 'rail'] as const)('keeps the %s Material disclosure in its heading with one feedback owner', async variant => {
     const { fixture, host, haptics } = await render();
+    fixture.componentInstance.variant.set(variant); fixture.detectChanges();
     const button = host.querySelector('button')!;
+    expect(button.closest('.summary-disclosure-heading')).not.toBeNull();
+    expect(host.querySelector('.summary-disclosure-footer')).toBeNull();
     expect(button.getAttribute('aria-controls')).toBe('sample-details');
     button.click(); fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('true');
@@ -99,11 +102,18 @@ describe('shared summary disclosure shell', () => {
     expect(host.textContent).not.toContain('Recorded differences');
     expect(host.querySelector('[summaryOverview]')?.closest('[hidden]')).toBeNull();
     const button = host.querySelector('button')!;
+    const overview = host.querySelector('[summaryOverview]')!;
+    const details = host.querySelector('#sample-details')!;
+    expect(host.querySelectorAll('button')).toHaveLength(1);
+    expect(section.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
+    expect(overview.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(details.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(button.textContent).toContain('Show details');
     button.click(); fixture.detectChanges();
     expect(button.textContent).toContain('Hide details');
     expect(button.getAttribute('aria-controls')).toBe('sample-details');
     expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(false);
+    expect(section.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
     expect(haptics.selection).toHaveBeenCalledOnce();
     button.click(); fixture.detectChanges();
     expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(true);

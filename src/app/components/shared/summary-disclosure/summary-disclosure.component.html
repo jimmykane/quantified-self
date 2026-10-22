@@ -3,27 +3,21 @@
   [attr.data-tone]="variant() === 'rail' ? tone() : null"
   [attr.aria-labelledby]="variant() === 'plain' ? null : summaryId() + '-title'"
   [attr.aria-label]="variant() === 'plain' ? title() : null">
-  <div class="summary-disclosure-heading">
-    @if (variant() !== 'plain') {
-    <div class="summary-disclosure-intro">
-      @switch (headingLevel()) {
-        @case (3) { <h3 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h3> }
-        @case (4) { <h4 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h4> }
-        @default { <h2 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h2> }
-      }
-      @if (variant() === 'rail' && headline()) {
-        <p class="summary-disclosure-headline" role="status" aria-atomic="true">{{ headline() }}</p>
-      }
+  @if (variant() !== 'plain') {
+    <div class="summary-disclosure-heading">
+      <div class="summary-disclosure-intro">
+        @switch (headingLevel()) {
+          @case (3) { <h3 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h3> }
+          @case (4) { <h4 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h4> }
+          @default { <h2 class="summary-disclosure-title" [id]="summaryId() + '-title'">{{ title() }}</h2> }
+        }
+        @if (variant() === 'rail' && headline()) {
+          <p class="summary-disclosure-headline" role="status" aria-atomic="true">{{ headline() }}</p>
+        }
+      </div>
+      <ng-container [ngTemplateOutlet]="detailsControl" />
     </div>
-    }
-    @if (detailsAvailable()) {
-      <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
-        (click)="toggleDetails()">
-        {{ expanded() ? 'Hide details' : 'Show details' }}
-        <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-      </button>
-    }
-  </div>
+  }
   @if (variant() === 'flat' && headline()) {
     <p class="summary-disclosure-headline" role="status" aria-atomic="true">{{ headline() }}</p>
   }
@@ -33,4 +27,18 @@
       <ng-content select="[summaryDetails]" />
     </div>
   }
+  @if (variant() === 'plain' && detailsAvailable()) {
+    <div class="summary-disclosure-footer">
+      <ng-container [ngTemplateOutlet]="detailsControl" />
+    </div>
+  }
 </section>
+<ng-template #detailsControl>
+  @if (detailsAvailable()) {
+    <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
+      (click)="toggleDetails()">
+      {{ expanded() ? 'Hide details' : 'Show details' }}
+      <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+    </button>
+  }
+</ng-template>
