@@ -1977,6 +1977,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Current TSB');
     expect(gettingStartedSection?.content).toContain('same-day readiness');
+    expect(gettingStartedSection?.content).toContain('Both Form/TSS vertical axes fit the displayed period');
+    expect(gettingStartedSection?.content).toContain('The Form pane keeps its zero baseline');
     expect(gettingStartedSection?.content).toContain('full history');
     expect(gettingStartedSection?.content).toContain('W / M / Y');
     expect(gettingStartedSection?.content).toContain('saved on that dashboard tile');

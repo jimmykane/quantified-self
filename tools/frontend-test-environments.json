@@ -49,6 +49,7 @@
     "src/app/helpers/dashboard-echarts-cartesian.helper.spec.ts",
     "src/app/helpers/dashboard-echarts-yaxis.helper.spec.ts",
     "src/app/helpers/dashboard-form-x-axis.helper.spec.ts",
+    "src/app/helpers/dashboard-form-y-axis.helper.spec.ts",
     "src/app/helpers/dashboard-form.helper.spec.ts",
     "src/app/helpers/dashboard-glance.helper.spec.ts",
     "src/app/helpers/dashboard-greeting.helper.spec.ts",

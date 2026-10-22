@@ -1051,6 +1051,13 @@ Preview data paths never call metric ensure/rebuild APIs or persist settings. Ca
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
+The shared Form/TSS chart uses `dashboard-form-y-axis.helper.ts` to derive both value axes from the displayed date
+window, not the entire loaded history. The full render series and tooltip indices remain intact. At window edges,
+interpolated values preserve the visible portion of crossing weekly/monthly line segments without importing their
+offscreen extremes. Form always includes its neutral zero baseline; the load axis retains its existing baseline policy.
+This presentation-only range applies to every consumer of `ChartsFormComponent`, without changing stored values,
+load calculations, headline stats, timeline-note overlays, or saved W/M/Y choices.
+
 Dashboard tooltip metric rows use the shared `dashboard-echarts-style.helper.ts` renderer. Labels and values can wrap
 within the card's bounded width, with wrapped values remaining aligned to the end. Column-chart sport breakdowns keep
 the canonical metric on the main row and put the percentage of the total and activity count on a separate detail line,
