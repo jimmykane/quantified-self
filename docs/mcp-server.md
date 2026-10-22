@@ -1569,6 +1569,21 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.5.0 power adoption preserves this public contract. Corrected power, balance and multisport summary
+values enter metric reads only after normal persistence; an unavailable calculated summary stays absent and genuine zero
+remains available. On-demand charts/samples use the adopted original-file parser without rewriting history. Detailed
+samples preserve aligned nulls; chart reads retain measured points at their original offsets and report missing counts.
+No power-coverage field, metric alias, scope, schema, planning capability or mutation is added. Existing private Training
+evaluations/policies remain excluded. See the [Training adoption notes](training-workspace.md#sports-lib-2350-power-and-rr-adoption)
+and reparse runbook for the historical-data and deployment boundaries. This semantic correction requires no registered-contract
+promotion, client rescan or bundled-plugin change.
+
+Sports Lib 23.5.0 also registers 20 canonical R–R summary metrics. Available finite summaries become discoverable
+through the existing activity numeric-metric catalog after import/reparse persistence; missing statistics stay absent,
+and valid zero remains available. Raw beat intervals, sample timestamps and beat classifications are not exposed.
+These activity summaries do not enter Health/Sleep or Readiness. Multisport legs retain their summaries without an
+invented event-level aggregate. No new tool, scope, consent, registered schema, planning mutation or plugin is added.
+
 `metric-catalog.ts` enumerates public Sports Lib `DataStore` classes. A metric is eligible only when:
 
 1. the class has a stable canonical type;

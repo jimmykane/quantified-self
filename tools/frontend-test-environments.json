@@ -97,6 +97,7 @@
     "src/app/helpers/event-jump-type.helper.spec.ts",
     "src/app/helpers/event-lap-table-columns.helper.spec.ts",
     "src/app/helpers/event-lap-type.helper.spec.ts",
+    "src/app/helpers/event-power-adoption.helper.spec.ts",
     "src/app/helpers/event-power-display.helper.spec.ts",
     "src/app/helpers/event-stat-aggregation.helper.spec.ts",
     "src/app/helpers/event-swim-analytics.helper.spec.ts",

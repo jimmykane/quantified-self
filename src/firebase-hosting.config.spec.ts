@@ -354,7 +354,7 @@ describe('Firebase Hosting configuration', () => {
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
     // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
-    // Help also covers the five-minute history-import refresh interval and late-arrival updates.
+    // Help covers power data, ascent corrections, and history-import refresh timing.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-22');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -533,6 +533,15 @@ describe('Firebase Hosting configuration', () => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
       type: 'allScript', maximumWarning: '13000kb', maximumError: '13600kb',
+    });
+  });
+
+  it.each(['production', 'beta'])('bounds the sports-lib 23.5 startup output for %s', configuration => {
+    const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
+    // Published 23.5.0 with power and R-R metrics measures 1,472.76 kB of initial output.
+    // Keep a narrow matching limit for both release builds, without relaxing allScript.
+    expect(budgets?.find(budget => budget.type === 'initial')).toEqual({
+      type: 'initial', maximumWarning: '1474kb', maximumError: '1474kb',
     });
   });
 

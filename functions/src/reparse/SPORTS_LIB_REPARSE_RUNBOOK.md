@@ -7,6 +7,34 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.5.0 power and R–R adoption
+
+Root and Functions install the same published 23.5.0 artifact, with matching lockfile integrity and runtime versions.
+The independent direct Functions FIT Parser pin remains unchanged. The reparse target follows the installed library;
+strict runtime/job version checks, superseded-job handling and rollout retries remain in force.
+
+Before a separately approved deployment:
+
+1. Verify both installed versions and lockfile integrity match the published artifact.
+2. Run power/R–R adoption, chart, Training load, reparse/worker, derived source and MCP contract tests; build Functions
+   and production/beta frontend outputs, including public-startup and service-worker guards.
+3. Review scanner runtime settings. An enabled scanner can enqueue eligible older activities/routes when the installed
+   version advances; disabling one requires its own explicit approval.
+
+Missing FIT/TCX/GPX watts remain null, while recorded zero remains coasting. The library calculates power summaries,
+efforts, work and load from supported active intervals; QS must not insert zeros or carry readings across gaps. New
+imports and on-demand source hydration use that behavior after adoption. Historical stored summaries, curves and load
+evaluations require the existing authorized source-backed reparse; a Training refresh cannot reconstruct source evidence.
+Reparse keeps imported scores, current controls, dated policies, strict leg identities, source reservations, retry and
+deletion guards. Sanitizers still strip all streams. Normal semantic source invalidation refreshes affected snapshots,
+including when a statistic becomes unavailable; there is no new schema, queue, scanner setting or bulk-write path.
+R–R statistics now come from supported original beat intervals, not ordinary HR or resampled IBI chart data.
+The SML XML adapter uses the first UTC sample to anchor beats; corrected timing can change derived HR/load. Native
+JSON retains raw IBI sample times for in-memory analysis, while Firestore still stores only sanitized summaries.
+Historical saved R–R statistics require the same authorized source-backed reparse. No saved-route correction is needed. See the
+[Training adoption contract](../../../docs/training-workspace.md#sports-lib-2350-power-and-rr-adoption) for calculation and
+MCP compatibility. Updating dependencies does not deploy or enable production reparse.
+
 ### Sports Lib 23.4.0 sparse distance adoption
 
 Root and Functions install the same published 23.4.0 artifact. Missing Distance samples remain null, while real zero
