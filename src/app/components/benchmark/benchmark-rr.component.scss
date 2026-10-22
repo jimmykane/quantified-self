@@ -1,0 +1,36 @@
+:host { display: block; min-width: 0; }
+.benchmark-rr { padding: 16px 0; border-top: 1px solid var(--mat-sys-outline-variant); color: var(--mat-sys-on-surface); }
+.rr-intro, .rr-note, .rr-secondary, .rr-summary-toolbar > span, .rr-plot-heading > span { color: var(--mat-sys-on-surface-variant); }
+.rr-intro { margin: 0 0 12px; }
+.rr-summary-toolbar, .rr-chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px 0; }
+.rr-summary-toolbar mat-form-field, .rr-chart-toolbar mat-form-field { width: 240px; max-width: 100%; }
+.rr-table-scroll { overflow-x: auto; max-width: 100%; }
+.rr-table-scroll:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: -2px; }
+.rr-table-hint { display: none; color: var(--mat-sys-on-surface-variant); }
+.rr-summary-table { width: 100%; background: transparent; }
+.rr-summary-table th, .rr-summary-table td { min-width: 170px; padding: 12px 16px; vertical-align: middle; }
+.rr-summary-table .mat-column-metric { min-width: 150px; width: 25%; background: var(--mat-sys-surface); }
+.rr-source-name { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.rr-device-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rr-value { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.rr-secondary { display: block; font-size: .75rem; margin-top: 3px; }
+.rr-missing { color: var(--mat-sys-on-surface-variant); }
+.rr-metric-label { font-size: .85rem; }
+.rr-note { margin: 14px 0 0; }
+.rr-loading, .rr-error { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 20px 0; }
+.rr-chart { width: 100%; height: 300px; min-width: 0; }
+.rr-dfa-chart { height: 220px; }
+.rr-plot-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.rr-plot-heading h3 { margin: 0; font-size: 1rem; font-weight: 500; }
+.rr-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.rr-legend > span { display: flex; align-items: center; gap: 6px; }
+.rr-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.rr-ectopic-key { border: 1.3px solid var(--mat-sys-on-surface); }
+@media (max-width: 600px) {
+  .rr-table-hint { display: block; margin: 0 0 8px; }
+  .rr-summary-toolbar, .rr-chart-toolbar { align-items: flex-start; }
+  .rr-summary-table th, .rr-summary-table td { min-width: 145px; padding: 10px; }
+  .rr-summary-table .mat-column-metric { min-width: 125px; }
+  .rr-chart { height: 270px; }
+  .rr-dfa-chart { height: 220px; }
+}

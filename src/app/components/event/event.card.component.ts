@@ -53,7 +53,7 @@ import {
 } from '../../helpers/event-dive-profile.helper';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
 import { buildTrainingSessionImpactView } from '../../helpers/training-impact.helper';
-import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
+import { isBenchmarkEvent, isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 
 @Component({
   selector: 'app-event-card',
@@ -81,6 +81,7 @@ export class EventCardComponent implements OnInit {
 
   // Signal-based state
   public event = signal<AppEventInterface | null>(null);
+  public isBenchmark = computed(() => isBenchmarkEvent(this.event()));
   public currentUser = signal<User | null>(null);
   public selectedActivitiesInstant = signal<ActivityInterface[]>([]);
   public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);

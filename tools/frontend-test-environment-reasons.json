@@ -11,6 +11,10 @@
     "environment": "angular",
     "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
   },
+  "src/app/components/benchmark/benchmark-rr.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the benchmark R–R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
+  },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
@@ -90,6 +94,10 @@
   "src/app/services/app-check-diagnostics.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
+  },
+  "src/app/services/benchmark-rr-analysis.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R–R panel fixture suite."
   },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",

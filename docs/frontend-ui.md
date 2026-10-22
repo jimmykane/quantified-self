@@ -404,6 +404,41 @@ brightening preserves achromatic black/gray rather than adding red saturation. P
 https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
 benchmark charts, particularly overlapping lines and map backgrounds.
 
+### Benchmark R–R summaries and plots
+
+`BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
+(including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
+full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.
+The default seven rows show per-recording coverage, artifacts, suspected pairs, RMSSD, SDNN, pNN50 and DFA median;
+the local selector includes all 20 canonical R–R metrics. Values and units use Sports Lib classes through the shared
+unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
+Artifact counts/rates and the DFA range stay attached to their source. The horizontal table keeps metric labels sticky,
+uses the global scrollbar skin and supports keyboard scrolling; phone layouts include a scrolling hint.
+
+Charts are lazy: opening the tab analyzes an already-loaded original `IBIStream` in a component-scoped module worker.
+Regular one-second `Stream` data is ineligible. Original elapsed beat times and invalid-observation barriers are preserved.
+The worker calls Sports Lib's `analyzeRRIntervals`; QS does not implement another artifact or DFA algorithm.
+Sports Lib 23.5.0 has no analysis-only public entry, and its root barrel emits unused parser chunks in a separate
+worker build. The worker therefore imports the pinned pure ESM implementation directly. The compiled-worker test
+checks parity with the public API, a single small output and absence of parser/Angular/Firebase runtime. Review this
+path on library upgrades and replace it with a public analysis-only entry when available; do not copy the algorithm.
+Analysis stays in memory, with cancellation on source/input changes and teardown, a 30-second timeout, and stale-result
+fences for both calculation and chart initialization. Worker failures keep saved summaries available and offer Retry.
+This panel introduces no Firestore query, write, index, reparse, original-file fetch or server endpoint.
+
+The two ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
+Reset uses the shared sync-source suppression so the button owns its single haptic response. Chart gestures use the
+shared ECharts feedback helper. Shared host lifecycle, theme/contrast, tooltip and resize helpers remain authoritative.
+Flag exclusion masks plot values only; null windows and recording segment boundaries stay gaps. Native LTTB is disabled
+because it can join unrelated points around null barriers. Dense artifact/pair markers are capped at 4,000 per kind by
+sampling the complete time domain, with a visible notice; recorded summary counts remain complete. Zoom and exclusion
+never recalculate persisted statistics. DFA guides at 0.75 and 0.50 carry no automatic intensity or medical conclusion.
+
+MCP impact review: browser-only benchmark presentation, with no version/parser/persistence or wire-contract change.
+The existing canonical numeric metric catalog and consent stay unchanged; benchmark events remain excluded from that
+catalog's activity history. Raw beats, classifications, detailed windows and device labels are not added to MCP.
+The existing R–R numeric adoption boundary is documented in `docs/mcp-server.md`.
+
 ## Shared scrollbars
 
 `src/styles/_scrollbars.scss`, included once by `src/styles.scss`, owns the app's thin, rounded QS scrollbar skin.

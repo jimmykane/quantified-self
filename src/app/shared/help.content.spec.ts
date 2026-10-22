@@ -186,6 +186,13 @@ describe('help.content', () => {
     expect(copy).toContain('separate from overnight HRV and Readiness');
     expect(copy).toContain('Older saved summaries need an original-file reparse');
     expect(copy).toContain('Multisport legs keep their own values');
+    expect(copy).toContain('On **benchmark event details**, **R–R & HRV**');
+    expect(copy).toContain('all 20 recorded R–R metrics');
+    expect(copy).toContain('Missing values show a dash; a recorded zero stays zero');
+    expect(copy).toContain('**Reset zoom** restores both');
+    expect(copy).toContain('without repairing data or changing the full-recording summaries');
+    expect(copy).toContain('available raw intervals do not fill missing saved summaries');
+    expect(copy).toContain('without saving new statistics, reparsing the event or adding an accuracy grade');
   });
   it('explains recorded timer recovery and the original-file boundary for historical corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;

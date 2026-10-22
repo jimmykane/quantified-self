@@ -333,6 +333,7 @@ describe('EventCardComponent', () => {
         expect(component.trainingImpactState().status).toBe('private');
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
         expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
     });
 
     it('keeps Training impact available for a combined multisport workout', () => {
@@ -342,6 +343,7 @@ describe('EventCardComponent', () => {
         expect(component.trainingImpact()?.availability).toBe('missing-tss');
         expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser', [component.event()]);
         expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).toBeNull();
     });
 
     it('should initialize event from route data as signal', () => {

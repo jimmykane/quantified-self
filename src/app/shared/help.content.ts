@@ -807,6 +807,12 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 When an original file contains beat-to-beat R–R intervals, newly imported or reparsed activities can include **R–R RMSSD**, **R–R SDNN**, **R–R pNN50**, recording coverage and artifact statistics. Ordinary heart-rate readings cannot supply these statistics. They describe the activity recording and are separate from overnight HRV and Readiness. Missing statistics stay unavailable. Older saved summaries need an original-file reparse; opening a chart alone does not update them. Multisport legs keep their own values rather than an invented workout average.
 
+On **benchmark event details**, **R–R & HRV** compares each selected recording separately. **Summary** starts with coverage, artifact percentage and count, suspected ectopic pairs and rate, RMSSD, SDNN, pNN50, and median DFA α1 with its range. Use **Summary statistics** to choose from all 20 recorded R–R metrics. Missing values show a dash; a recorded zero stays zero. On phones, scroll the table horizontally to compare recordings.
+
+Open **Charts** and choose a **Recording** to inspect original per-beat intervals, artifact dots, suspected ectopic-pair rings and rolling DFA α1. The plots share zoom and elapsed time within that recording; **Reset zoom** restores both. **Exclude flagged intervals** hides flagged beats and markers without repairing data or changing the full-recording summaries. Gaps and unavailable DFA windows remain gaps. The 0.75 and 0.50 DFA guides are reference lines, not a diagnosis or an automatic training-zone recommendation. Artifact and suspected-pair flags do not establish a medical condition or prove which device is more accurate.
+
+Charts require original per-beat timing; ordinary heart-rate samples or a resampled one-second interval stream cannot recreate it. Opening Charts calculates the view locally without saving new statistics, reparsing the event or adding an accuracy grade to the benchmark report. A recording can have saved summaries without raw chart data, and available raw intervals do not fill missing saved summaries.
+
 ### FIT calorie metrics
 
 - FIT activities that record it show **Metabolic Calories** in the **Physiological** Event Details summary tab. It is a source-recorded metric and remains separate from total **Energy**.

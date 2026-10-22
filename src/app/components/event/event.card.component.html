@@ -22,6 +22,11 @@
     <app-training-impact after-summary variant="strip" [impact]="impact" [unitSettings]="userUnitSettings()"></app-training-impact>
     }
 
+    @if (isBenchmark()) {
+    <app-benchmark-rr after-stats [event]="activeEvent" [activities]="selectedActivitiesInstant()"
+      [unitSettings]="userUnitSettings()" [darkTheme]="darkTheme()"></app-benchmark-rr>
+    }
+
     <!-- Keep performance charts first, followed by the pinned dive profile and ordinary charts. -->
     @if (hasDiveProfileFlag() || hasPerformanceChartsFlag()) {
     <div after-stats class="event-charts-summary-wrapper">

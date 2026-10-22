@@ -176,4 +176,14 @@ describe('BrowserCompatibilityService', () => {
             );
         });
     });
+
+    it('detects optional Worker support without opening a compatibility dialog', () => {
+        const openCount = mockDialog.open.mock.calls.length;
+        vi.stubGlobal('Worker', class { });
+        expect(BrowserCompatibilityService.checkWorkerSupport()).toBe(true);
+        vi.stubGlobal('Worker', undefined);
+        expect(BrowserCompatibilityService.checkWorkerSupport()).toBe(false);
+        vi.unstubAllGlobals();
+        expect(mockDialog.open).toHaveBeenCalledTimes(openCount);
+    });
 });

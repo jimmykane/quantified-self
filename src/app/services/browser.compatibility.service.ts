@@ -6,6 +6,10 @@ import { AppWindowService } from './app.window.service';
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
+    public static checkWorkerSupport(): boolean {
+        return typeof Worker !== 'undefined';
+    }
+
     /** Optional Intl API: older browsers still get useful timezone choices. */
     public static getSupportedTimeZones(): string[] {
         const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
