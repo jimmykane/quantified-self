@@ -98,10 +98,47 @@ import {
   DataVerticalOscillationMin
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
+import * as SportsLib from '@sports-alliance/sports-lib';
+import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
 
 describe('DataTypeIconComponent', () => {
+  const verticalSpeedTypes = Object.entries(SportsLib).flatMap(([name, candidate]) =>
+    name.startsWith('DataVerticalSpeed') && typeof candidate === 'function'
+      && 'type' in candidate && typeof candidate.type === 'string' ? [candidate.type] : []);
+
+  it.each(verticalSpeedTypes)('uses the vertical-speed icon for %s', type => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe('unfold_more_double');
+  });
+
+  it.each([
+    ['Minimum vertical speed in feet per hour', 'MV'],
+    ['  Unknown\tprovider   metric  ', 'UP'],
+    ['Custom', 'C'],
+    ['', ''],
+    [undefined, ''],
+  ])('keeps fallback initials within two characters for %s', (type, initials) => {
+    expect(new DataTypeIconComponent().getColumnHeaderTextInitials(type)).toBe(initials);
+  });
+
+  it('renders a real icon for the reported unit variant and retains the full label on unknown fallbacks', async () => {
+    await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(DataTypeIconComponent);
+    fixture.componentRef.setInput('dataType', 'Minimum vertical speed in feet per hour');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('mat-icon')?.textContent?.trim()).toBe('unfold_more_double');
+    expect(host.querySelector('[data-letters]')).toBeNull();
+    fixture.componentRef.setInput('dataType', 'Unknown provider metric with a long name');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-letters]')?.getAttribute('data-letters')).toBe('UP');
+    expect(fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message)
+      .toBe('Unknown provider metric with a long name');
+  });
+
   it('should return icons for newly surfaced max/min metrics', () => {
     const component = new DataTypeIconComponent();
 

@@ -38,17 +38,7 @@ import { DataEnergy, DataMetabolicCalories } from '@sports-alliance/sports-lib';
 import { DataAltitudeMax } from '@sports-alliance/sports-lib';
 import { DataAltitudeMin } from '@sports-alliance/sports-lib';
 import { DataAltitudeAvg } from '@sports-alliance/sports-lib';
-import {
-  DataVerticalSpeedAvg,
-  DataVerticalSpeedAvgFeetPerHour,
-  DataVerticalSpeedAvgFeetPerMinute,
-  DataVerticalSpeedAvgFeetPerSecond,
-  DataVerticalSpeedAvgKilometerPerHour,
-  DataVerticalSpeedAvgMetersPerHour,
-  DataVerticalSpeedAvgMetersPerMinute,
-  DataVerticalSpeedAvgMilesPerHour,
-  DataVerticalSpeedMax
-} from '@sports-alliance/sports-lib';
+import { DataVerticalSpeed } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import {
@@ -141,6 +131,11 @@ import {
   DataStaminaMin,
 } from '@sports-alliance/sports-lib';
 
+const VERTICAL_SPEED_ICON_TYPES = new Set([
+  DataVerticalSpeed.type, ...Object.keys(DynamicDataLoader.dataTypeUnitGroups[DataVerticalSpeed.type] ?? {}),
+].flatMap(type => [type, DynamicDataLoader.dataTypeAvgDataType[type],
+  DynamicDataLoader.dataTypeMinDataType[type], DynamicDataLoader.dataTypeMaxDataType[type]].filter(Boolean)));
+
 @Component({
   selector: 'app-data-type-icon',
   templateUrl: './data-type-icon.component.html',
@@ -180,6 +175,9 @@ export class DataTypeIconComponent {
   }
 
   getColumnHeaderIcon(statName): string {
+    if (VERTICAL_SPEED_ICON_TYPES.has(statName)) {
+      return 'unfold_more_double';
+    }
     if (this.isDivingSummaryStat(statName)) {
       return 'scuba_diving';
     }
@@ -277,16 +275,6 @@ export class DataTypeIconComponent {
         return 'landscape';
       case DataAltitudeAvg.type:
         return 'landscape';
-      case DataVerticalSpeedAvg.type:
-      case DataVerticalSpeedAvgFeetPerHour.type:
-      case DataVerticalSpeedAvgFeetPerMinute.type:
-      case DataVerticalSpeedAvgFeetPerSecond.type:
-      case DataVerticalSpeedAvgKilometerPerHour.type:
-      case DataVerticalSpeedAvgMilesPerHour.type:
-      case DataVerticalSpeedAvgMetersPerHour.type:
-      case DataVerticalSpeedAvgMetersPerMinute.type:
-      case DataVerticalSpeedMax.type:
-        return 'unfold_more_double';
       case DataSpeedAvg.type:
       case DataSpeedAvgKilometersPerHour.type:
       case DataSpeedAvgMilesPerHour.type:
@@ -574,7 +562,8 @@ export class DataTypeIconComponent {
     }
   }
 
-  getColumnHeaderTextInitials(statName): string {
-    return statName.split(' ').map(i => i.charAt(0).toUpperCase()).join('')
+  getColumnHeaderTextInitials(statName: string | null | undefined): string {
+    return (statName ?? '').trim().split(/\s+/).slice(0, 2)
+      .map(word => word.charAt(0).toUpperCase()).join('').slice(0, 2);
   }
 }
