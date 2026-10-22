@@ -105,8 +105,86 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
 import { BENCHMARK_RR_METRICS } from '../../helpers/benchmark-rr.helper';
+import { HeaderStatsComponent } from '../header-stats/header-stats.component';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('DataTypeIconComponent', () => {
+  const familyIcons = [
+    ['DataSpeed', 'speed'],
+    ['DataGradeAdjustedSpeed', 'speed'],
+    ['DataPace', 'steps'],
+    ['DataGradeAdjustedPace', 'steps'],
+    ['DataEffortPace', 'steps'],
+    ['DataSwimPace', 'pool'],
+    ['DataGNSSDistance', 'satellite_alt'],
+  ];
+  const familyVariants = familyIcons.flatMap(([prefix, icon]) => Object.entries(SportsLib).flatMap(([name, candidate]) =>
+    name.startsWith(prefix) && !name.startsWith(`${prefix}Zone`) && typeof candidate === 'function'
+      && 'type' in candidate && typeof candidate.type === 'string' ? [[candidate.type, icon]] : []));
+
+  it.each(familyVariants)('uses the family icon for %s', (type, icon) => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe(icon);
+  });
+
+  const convertedSummaryCases = [
+    [SportsLib.DataSpeedMin.type, 'speed'],
+    [SportsLib.DataSpeedMax.type, 'speed'],
+    [SportsLib.DataGradeAdjustedSpeedMin.type, 'speed'],
+    [SportsLib.DataGradeAdjustedSpeedMax.type, 'speed'],
+    [SportsLib.DataPaceMin.type, 'steps'],
+    [SportsLib.DataPaceMax.type, 'steps'],
+    [SportsLib.DataGradeAdjustedPaceMin.type, 'steps'],
+    [SportsLib.DataGradeAdjustedPaceMax.type, 'steps'],
+    [SportsLib.DataEffortPace.type, 'steps'],
+    [SportsLib.DataSwimPace.type, 'pool'],
+    [SportsLib.DataSwimPaceMin.type, 'pool'],
+    [SportsLib.DataSwimPaceMax.type, 'pool'],
+    [SportsLib.DataGNSSDistance.type, 'satellite_alt'],
+    [SportsLib.DataVerticalSpeedMin.type, 'unfold_more_double'],
+  ];
+  const unitPreferences = [
+    ['default', getDefaultUserUnitSettings()],
+    ['all supported units', {
+      ...getDefaultUserUnitSettings(),
+      speedUnits: Object.values(SportsLib.SpeedUnits),
+      gradeAdjustedSpeedUnits: Object.values(SportsLib.GradeAdjustedSpeedUnits),
+      paceUnits: Object.values(SportsLib.PaceUnits),
+      gradeAdjustedPaceUnits: Object.values(SportsLib.GradeAdjustedPaceUnits),
+      swimPaceUnits: Object.values(SportsLib.SwimPaceUnits),
+      verticalSpeedUnits: Object.values(SportsLib.VerticalSpeedUnits),
+      distanceUnits: SportsLib.DistanceUnits.Miles,
+    }],
+  ] as const;
+
+  describe.each(unitPreferences)('summary cards using %s', (_name, unitSettings) => {
+    it.each(convertedSummaryCases)('keeps an icon for %s when no average is present', (type, expectedIcon) => {
+      const summary = new HeaderStatsComponent();
+      const stat = SportsLib.DynamicDataLoader.getDataInstanceFromDataType(type, 1);
+      expect(stat).toBeDefined();
+      summary.stats = [stat!];
+      summary.statsToShow = [type];
+      summary.unitSettings = unitSettings;
+      summary.activityTypes = [SportsLib.ActivityTypes.Running];
+      summary.ngOnChanges({});
+
+      expect(summary.displayedStatCards.length).toBeGreaterThan(0);
+      summary.displayedStatCards.forEach(card => {
+        expect(new DataTypeIconComponent().getColumnHeaderIcon(card.iconType), card.iconType).toBe(expectedIcon);
+      });
+    });
+  });
+
+  it('does not mistake unrelated or unregistered metrics for a supported family', () => {
+    const component = new DataTypeIconComponent();
+    [SportsLib.DataSpeedZoneOneDuration.type, SportsLib.DataWheelchairPushDistance.type,
+      'Minimum speed in an unknown unit', 'Custom Grade Adjusted Pace'].forEach(type => {
+      expect(component.getColumnHeaderIcon(type)).toBeNull();
+    });
+    expect(component.getColumnHeaderIcon('Average Flow')).toBe('automation');
+    expect(component.getColumnHeaderIcon('Flow')).toBe('water');
+    expect(component.getColumnHeaderSVGIcon(SportsLib.DataPeakEPOC.type)).toBe('epoc');
+  });
+
   it.each(BENCHMARK_RR_METRICS.map(metric => metric.type))('uses a heart-interval icon for %s', type => {
     expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe('ecg_heart');
   });
