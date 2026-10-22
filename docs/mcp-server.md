@@ -1569,6 +1569,13 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.5.1 corrects the existing `unitSystem` descriptor to `imperial` for feet-, mile- and yard-based variants.
+Catalog membership, identifiers, unit strings, validators and persisted-only availability are unchanged; corrected
+metadata does not synthesize a stat or expose raw data. The existing strict descriptor schema already permits both
+unit systems. No tool/schema, scope, consent, registered-contract promotion, client rescan or plugin change is needed.
+The separate per-yard swim-average calculation correction enters metric reads only after normal persistence; older
+incorrect saved derived values require the existing authorized source-backed reparse described in the runbook.
+
 Sports Lib 23.5.0 power adoption preserves this public contract. Corrected power, balance and multisport summary
 values enter metric reads only after normal persistence; an unavailable calculated summary stays absent and genuine zero
 remains available. On-demand charts/samples use the adopted original-file parser without rewriting history. Detailed

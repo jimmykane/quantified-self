@@ -7,6 +7,29 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.5.1 summary metadata and swim-average adoption
+
+Root and Functions pin the same published 23.5.1 artifact, with matching lockfile integrity. Runtime version detection
+and the strict activity/route reparse target follow that installed version. The direct Functions FIT Parser pin,
+scanner settings, queue lifecycle, retry/deletion guards and monitoring coverage are unchanged.
+
+Complete family metadata now groups the existing speed, swim-pace, air-power and partial dive summaries correctly.
+Existing feet-, mile- and yard-based variants report imperial metadata without changing their canonical values,
+unit strings or JSON. These metadata/display corrections require no historical reparse or summary regeneration.
+Training load, durability formulas and canonical swim-performance inputs are unchanged; no derived schema bump or
+Training rebuild is needed for this patch.
+
+New imports derive a missing per-100-yard swim average from `Average Swim Pace`, preserving genuine zero and existing
+source-provided per-yard summaries. Missing per-yard values can be regenerated from retained canonical swim averages.
+Previously saved incorrect derived per-yard values remain authoritative during JSON hydration: correct affected
+swimming activities only through the separately authorized original-file reparse lifecycle and sanitized writer.
+No blanket historical campaign or saved-route reparse is required.
+
+MCP catalog membership, metric identifiers, persisted-only availability, schemas, consent and sensitive-field exclusions
+are unchanged. Existing `unitSystem` descriptors reflect the imperial correction. No registered-contract promotion,
+client rescan, plugin rebuild, deployment or production reparse is part of this dependency adoption. Review any already
+enabled scanners before a separately approved deployment, because their version target advances with the package.
+
 ### Sports Lib 23.5.0 power and R–R adoption
 
 Root and Functions install the same published 23.5.0 artifact, with matching lockfile integrity and runtime versions.

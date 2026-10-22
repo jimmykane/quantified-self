@@ -25,6 +25,7 @@ import {
   DataRunningFlightTimeMin,
   DataSleepDuration,
   DataStrokeRate,
+  DataStore,
   DynamicDataLoader,
   UnitSystem,
 } from '@sports-alliance/sports-lib';
@@ -39,6 +40,28 @@ import {
 } from './metric-catalog';
 
 describe('MCP Sports Lib metric catalog', () => {
+  it.each([
+    [DataStore.DataDistanceMiles.type, 'mi'],
+    [DataStore.DataGNSSDistanceMiles.type, 'mi'],
+    [DataStore.DataSpeedAvgFeetPerMinute.type, 'ft/min'],
+    [DataStore.DataGradeAdjustedSpeedAvgFeetPerMinute.type, 'ft/min'],
+    [DataStore.DataPaceAvgMinutesPerMile.type, 'min/m'],
+    [DataStore.DataEffortPaceMaxMinutesPerMile.type, 'min/m'],
+    [DataStore.DataSwimPaceAvgMinutesPer100Yard.type, 'min/100yd'],
+    [DataStore.DataVerticalSpeedMinFeetPerHour.type, 'ft/h'],
+  ])('exposes corrected imperial metadata for %s only when its canonical value is persisted', (type, unit) => {
+    const descriptor = resolveSportsLibNumericMetric(type);
+    expect(descriptor).toMatchObject({ type, unit, unitSystem: 'imperial' });
+    expect(resolveAvailableSportsLibMetrics([{}])).not.toContainEqual(descriptor);
+    for (const value of [0, 5]) {
+      const stat = DynamicDataLoader.getDataInstanceFromDataType(type, value);
+      const json = JSON.parse(JSON.stringify(stat.toJSON()));
+      expect(json).toEqual({ [type]: value });
+      expect(projectSportsLibNumericMetricValue(type, json[type])).toBe(value);
+      expect(resolveAvailableSportsLibMetrics([json])).toContainEqual(descriptor);
+    }
+  });
+
   it('discovers all released R-R summaries only when persisted, preserving native units and valid zero', () => {
     const expected = {
       'R-R Interval Count': 'count', 'R-R Invalid Interval Count': 'count', 'R-R Artifact Count': 'count',
