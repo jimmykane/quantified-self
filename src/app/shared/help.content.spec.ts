@@ -200,6 +200,8 @@ describe('help.content', () => {
     expect(copy).toContain('starts collapsed');
     expect(copy).toContain('one, two or more overlaid recordings');
     expect(copy).toContain('statistics in a top legend');
+    expect(copy).toContain('the metric legend wraps so every available value stays visible');
+    expect(copy).toContain('The full statistics table scrolls horizontally');
     expect(copy).toContain('Original recording start offsets');
     expect(copy).toContain('without raw intervals or usable beats is labelled in the legend');
     expect(copy).toContain('Missing values show a dash; a recorded zero stays zero');

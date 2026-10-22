@@ -438,8 +438,10 @@ full-event device color assignments. It does not change the benchmark report, al
 The panel starts collapsed as a compact section-header row. The surface-free **Show/Hide charts** Material button
 owns one selection haptic and a stable `aria-controls` target; collapsed content neither materializes beats nor starts a worker.
 Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each selected source's
-seven available primary saved statistics, with quality details in tooltips. The bounded legend scrolls horizontally
-with the shared skin and keyboard access, keeping multi-recording phone views short. Values and units use Sports Lib classes through
+seven available primary saved statistics, with quality details in tooltips. At phone widths the source names and metric
+pairs wrap inside the panel, keeping all available values visible without a sideways gesture. The artifact/pair key takes
+its own row below the chart heading. Wider layouts retain a bounded horizontal legend with the shared scrollbar skin and
+keyboard access. Values and units use Sports Lib classes through
 the shared unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
 **Show/Hide statistics** reveals the full table and its 20-metric selector. The table follows the local recording selection,
 keeps metric labels sticky, and uses the global scrollbar skin with a phone scrolling hint.

@@ -41,8 +41,13 @@
 .rr-marker-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
 .rr-ectopic-key { border: 1px solid var(--mat-sys-on-surface); }
 @media (max-width: 600px) {
-  .rr-source-legend { display: grid; gap: 2px; }
-  .rr-source-legend > .rr-source-name { max-width: 18rem; }
+  .rr-source-legends { gap: 12px; }
+  .rr-source-legend { display: grid; gap: 4px; width: 100%; min-width: 0; }
+  .rr-source-legend > .rr-source-name { min-width: 0; max-width: none; }
+  .rr-metrics-legend { flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+  .rr-metrics-legend > div { flex-wrap: wrap; max-width: 100%; }
+  .rr-metrics-legend dt { white-space: normal; overflow-wrap: anywhere; }
+  .rr-marker-legend { flex: 1 1 100%; min-width: 0; }
   .rr-table-hint { display: block; margin: 0 0 8px; }
   .rr-summary-table th, .rr-summary-table td { padding: 8px; }
   .rr-chart { height: 270px; }

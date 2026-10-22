@@ -6,7 +6,7 @@ import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
 import { MatCheckbox } from '@angular/material/checkbox';
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataRRCoverage, DataRRRMSSD, DistanceUnits, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataRRCoverage, DataRRArtifactPercentage, DataRRSuspectedEctopicPairCount, DataRRRMSSD, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median, DistanceUnits, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { MaterialModule } from '../../modules/material.module';
@@ -121,14 +121,25 @@ describe('benchmark R–R panel', () => {
     expect(host.textContent).toContain('Scroll horizontally to compare recordings');
   });
 
-  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('formats the top legend canonically with %s preferences', async distanceUnits => {
-    const strap = recording('Strap', true); strap.addStat(new DataRRRMSSD(8.14));
-    const { fixture, host, openCharts } = await render('benchmark', [strap]);
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('keeps all seven canonical metrics in each recording legend with %s preferences', async distanceUnits => {
+    const recordings = [recording('Reference chest strap with a long recording name', true), recording('Watch', true)];
+    for (const source of recordings) {
+      [new DataRRArtifactPercentage(1.5), new DataRRSuspectedEctopicPairCount(24), new DataRRRMSSD(8.14),
+        new DataRRSDNN(37.2), new DataRRPNN50(.5), new DataRRDFAAlpha1Median(.62)].forEach(stat => source.addStat(stat));
+    }
+    const { fixture, host, openCharts } = await render('benchmark', recordings);
     fixture.componentRef.setInput('unitSettings', { ...getDefaultUserUnitSettings(), distanceUnits }); fixture.detectChanges();
     await openCharts(); fixture.detectChanges();
-    const legend = host.querySelector('.rr-source-legends')!;
-    expect(legend.textContent).toContain('RMSSD'); expect(legend.textContent).toContain('8.1 ms');
-    expect(legend.textContent).toContain('0.0 %');
+    const legends = host.querySelectorAll('.rr-source-legend');
+    expect(legends).toHaveLength(2);
+    for (const legend of legends) {
+      expect(Array.from(legend.querySelectorAll('dt'), label => label.textContent)).toEqual([
+        'Coverage', 'Artifacts', 'Suspected pairs', 'RMSSD', 'SDNN', 'pNN50', 'DFA α1 · median',
+      ]);
+      expect(Array.from(legend.querySelectorAll('dd'), value => value.textContent)).toEqual([
+        '0.0 %', '1.5 %', '24', '8.1 ms', '37.2 ms', '0.5 %', '0.62',
+      ]);
+    }
   });
 
   it('excludes explicit multi-sport events even with the legacy merge flag', async () => {
