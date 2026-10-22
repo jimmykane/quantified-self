@@ -79,6 +79,8 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly sourceLegends = computed(() => this.selectedSources().map(source => ({
     ...source,
     plotColor: resolveDeviceChartColor(source.color, this.themeIsDark()),
+    noUsableIntervals: !!source.raw && this.status() !== 'idle' && this.status() !== 'loading'
+      && !this.analyses().has(source.key) && !this.sourceErrors().some(error => error.key === source.key),
     metrics: buildBenchmarkRRRows([source.activity], BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type), this.units())
       .filter(row => row.cells[0].display !== null)
       .map(row => ({ ...row, label: RR_STAT_LABELS[row.type] ?? row.label, cell: row.cells[0] })),
@@ -90,6 +92,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   }));
   readonly hasDFA = computed(() => this.chartRecordings().some(source => source.analysis.windows.some(window => window.dfaAlpha1 !== null)));
   private generation = 0;
+  private eventScope: string | AppEventInterface | undefined;
   private chartGeneration = 0;
   private destroyed = false;
   private rrElement?: HTMLElement;
@@ -107,6 +110,9 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
     this.units.set(this.unitSettings);
     this.themeIsDark.set(this.darkTheme);
     if (changes['event'] || changes['activities']) {
+      const eventScope = this.event?.getID?.() || this.event;
+      const differentEvent = eventScope !== this.eventScope;
+      this.eventScope = eventScope;
       const previousSources = this.sources();
       const previousKeys = this.selectedSourceKeys();
       const selectedAll = previousSources.length === previousKeys.length;
@@ -115,7 +121,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
       this.cache = new WeakMap(); this.analyses.set(new Map()); this.sourceErrors.set([]);
       this.status.set('idle'); this.errorMessage.set('');
       this.visible.set(isBenchmarkEvent(this.event) && this.activities.length > 0);
-      if (changes['event'] || !this.visible()) { this.expanded.set(false); this.showSummary.set(false); }
+      if (differentEvent || !this.visible()) { this.expanded.set(false); this.showSummary.set(false); }
       const labels = getBenchmarkRRLabels(this.activities);
       const allActivities = this.event?.getActivities() ?? this.activities;
       const patterns: RRSource['lineStyle'][] = ['solid', 'dashed', 'dotted', 'dash-dot'];
@@ -132,7 +138,10 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
         };
       }) : [];
       this.sources.set(sources);
-      this.selectedSourceKeys.set(sources.filter(source => changes['event'] || !previousSources.length || selectedAll || previousKeys.includes(source.key)).map(source => source.key));
+      const retained = sources.filter(source => differentEvent || !previousSources.length || selectedAll || previousKeys.includes(source.key));
+      // A parent selection can remove every locally selected source. Recover to the
+      // remaining event sources, while preserving a deliberate local clear.
+      this.selectedSourceKeys.set((retained.length || !previousKeys.length ? retained : sources).map(source => source.key));
       if (this.expanded()) void this.loadAnalysis();
     } else {
       this.scheduleCharts();

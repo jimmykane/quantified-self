@@ -447,6 +447,11 @@ The multi-select **Recordings** picker defaults to every selected event recordin
 for unsaved/duplicate IDs), colours and distinct full-event-order line patterns. It overlays two or more original R–R and DFA
 series on shared axes. Beat and window times retain each recording's start offset relative to the earliest plotted source;
 no resampling, concatenation or per-device zero alignment is introduced. Markers and tooltip series names retain source identity.
+If the parent event selection removes every locally chosen source, the remaining event sources become selected. A deliberate
+local clear stays empty, with the picker still available even for one remaining source. Sources whose analysis contains no
+usable intervals are labelled in the legend; saved statistics and successful recordings remain available.
+Same-event metadata refreshes preserve disclosure and local recording choices. A different event ID resets both;
+unsaved events use object identity. Analysis caches are still invalidated when event/activity inputs refresh.
 
 Charts are lazy: expansion analyzes already-loaded original `IBIStream` sources sequentially in a component-scoped module worker.
 The collapsed panel inspects eligibility only; it does not expand or copy beat arrays. Each activity is analyzed independently;

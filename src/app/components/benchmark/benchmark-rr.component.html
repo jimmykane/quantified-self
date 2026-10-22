@@ -12,7 +12,7 @@
       <p class="rr-note">The selected recordings do not contain R–R data.</p>
     } @else {
       <div class="rr-chart-toolbar">
-        @if (sources().length > 1) {
+        @if (sources().length > 1 || !selectedSources().length) {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Recordings</mat-label>
             <mat-select multiple [value]="selectedSourceKeys()" (selectionChange)="onSourcesChange($event.value)">
@@ -33,6 +33,7 @@
               <span class="rr-device-line" [class.rr-device-line-dash-dot]="source.lineStyle === 'dash-dot'" [style.--rr-device-color]="source.plotColor" [style.border-top-style]="source.lineStyle === 'dash-dot' ? null : source.lineStyle" aria-hidden="true"></span>
               <span>{{ source.label }}</span>
               @if (!source.raw) { <span class="rr-secondary">No raw R–R</span> }
+              @else if (source.noUsableIntervals) { <span class="rr-secondary">No usable R–R intervals</span> }
             </div>
             @if (source.metrics.length) {
               <dl class="rr-metrics-legend">

@@ -201,6 +201,7 @@ describe('help.content', () => {
     expect(copy).toContain('one, two or more overlaid recordings');
     expect(copy).toContain('statistics in a top legend');
     expect(copy).toContain('Original recording start offsets');
+    expect(copy).toContain('without raw intervals or usable beats is labelled in the legend');
     expect(copy).toContain('Missing values show a dash; a recorded zero stays zero');
     expect(copy).toContain('**Reset zoom** restores both');
     expect(copy).toContain('without repairing data or changing the full-recording summaries');
