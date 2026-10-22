@@ -6,6 +6,9 @@ import { buildBenchmarkRRChartOptions, buildBenchmarkRRSeries } from './benchmar
 function analysis() {
   return analyzeRRIntervals([{ time:800, interval:800 }, { time:1600, interval:800 }, { time:4000, interval:800 }], 5000)!;
 }
+function recording(durationMs = 5000) {
+  return { key: 'strap', label: 'Strap', analysis: analysis(), startTimeMs: 0, durationMs, color: '#123456', lineStyle: 'solid' as const };
+}
 
 describe('benchmark R–R charts', () => {
   it('keeps per-beat times and inserts a line break across a recording gap', () => {
@@ -27,7 +30,7 @@ describe('benchmark R–R charts', () => {
   });
   it('uses canonical display for default/non-default units, fixed full-recording bounds and preserved zoom', () => {
     for(const distanceUnits of [DistanceUnits.Kilometers,DistanceUnits.Miles]){
-      const result=buildBenchmarkRRChartOptions({analysis:analysis(),durationMs:5000,excludeFlagged:false,darkTheme:false,color:'#123456',artifactColor:'#654321',width:320,unitSettings:{...getDefaultUserUnitSettings(),distanceUnits},zoom:{start:20,end:80}});
+      const result=buildBenchmarkRRChartOptions({recordings:[recording()],excludeFlagged:false,darkTheme:false,artifactColor:'#654321',width:320,unitSettings:{...getDefaultUserUnitSettings(),distanceUnits},zoom:{start:20,end:80}});
       const y=result.rr.yAxis as {name:string;formatter?:unknown;axisLabel:{formatter:(n:number)=>string};min:number;max:number};
       expect(y.name).toBe('ms');expect(y.axisLabel.formatter(800)).toBe('800.0');expect(y.min).toBeLessThan(800);expect(y.max).toBeGreaterThan(800);
       expect(result.rr.dataZoom?.[0]).toMatchObject({start:20,end:80,zoomOnMouseWheel:false});
@@ -40,20 +43,44 @@ describe('benchmark R–R charts', () => {
   });
 
   it('keeps seconds in hover timing while axis ticks stay compact', () => {
-    const result = buildBenchmarkRRChartOptions({ analysis: analysis(), durationMs: 300000, excludeFlagged: false,
-      darkTheme: false, color: '#123456', artifactColor: '#654321', width: 600 });
+    const result = buildBenchmarkRRChartOptions({ recordings: [recording(300000)], excludeFlagged: false,
+      darkTheme: false, artifactColor: '#654321', width: 600 });
     const axis = result.rr.xAxis as { axisLabel: { formatter: (value: number) => string }; axisPointer: { label: { formatter: (params: { value: number }) => string } } };
     expect(axis.axisLabel.formatter(123456)).toBe('02m');
     expect(axis.axisPointer.label.formatter({ value: 123456 })).toBe('02m 03s');
   });
 
   it('does not turn a missing tooltip value into a recorded zero', () => {
-    const result = buildBenchmarkRRChartOptions({ analysis: analysis(), durationMs: 5000, excludeFlagged: false,
-      darkTheme: true, color: '#123456', artifactColor: '#654321', width: 320 });
+    const result = buildBenchmarkRRChartOptions({ recordings: [recording()], excludeFlagged: false,
+      darkTheme: true, artifactColor: '#654321', width: 320 });
     for (const option of [result.rr, result.dfa]) {
       const tooltip = option.tooltip as { valueFormatter: (value: unknown) => string };
       for (const value of [null, undefined, '', false, NaN, Infinity]) expect(tooltip.valueFormatter(value)).toBe('Unavailable');
       expect(tooltip.valueFormatter(0)).not.toBe('Unavailable');
     }
+  });
+
+  it('overlays three recordings with stable IDs, device styles and original start offsets on one domain', () => {
+    const first = recording();
+    first.analysis.beats[0].classification = 'short';
+    const recordings = [first,
+      { ...recording(7000), key: 'watch', label: 'Watch', startTimeMs: 1000, color: '#654321', lineStyle: 'dashed' as const },
+      { ...recording(), key: 'ring', label: 'Ring', startTimeMs: -2000, lineStyle: 'dotted' as const }];
+    const before = JSON.stringify(recordings);
+    const result = buildBenchmarkRRChartOptions({ recordings, excludeFlagged: false, darkTheme: false, artifactColor: '#FFA500', width: 800 });
+    expect(result.rr.series).toHaveLength(9);
+    expect(result.dfa.series).toHaveLength(3);
+    expect(result.rr.xAxis).toMatchObject({ min: 0, max: 10000 });
+    expect(result.dfa.xAxis).toEqual(result.rr.xAxis);
+    expect(result.rr.series?.[0]).toMatchObject({ id: 'strap:rr', name: 'Strap · R–R interval', data: [[2800,800],[3600,800],[6000,null],[6000,800]] });
+    expect(result.rr.series?.[1]).toMatchObject({ data: [[2800,800]] });
+    expect(result.rr.series?.[3]).toMatchObject({ id: 'watch:rr', data: [[3800,800],[4600,800],[7000,null],[7000,800]], lineStyle: { color: '#654321', type: 'dashed' } });
+    expect(result.dfa.series?.[1]).toMatchObject({ id: 'watch:dfa', data: [[8000,null]] });
+    expect(result.rr.series?.[6]).toMatchObject({ lineStyle: { type: 'dotted' } });
+    expect(result.dfa.series?.[1].markLine).toBeUndefined();
+    expect(JSON.stringify(recordings)).toBe(before);
+    const hidden = buildBenchmarkRRChartOptions({ recordings, excludeFlagged: true, darkTheme: true, artifactColor: '#FFA500', width: 320 });
+    expect(hidden.rr.series?.[0].data?.[0]).toEqual([2800,null]);
+    expect(hidden.rr.series?.[1].data).toEqual([]);
   });
 });

@@ -346,6 +346,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
+    // Help also documents the collapsed R-R chart panel, overlaid recordings and compact top statistics legend.
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
     // measurement-first Heart rate choices, compact history, source comparison, visible coverage and recording details,
