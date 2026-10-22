@@ -8,6 +8,10 @@ import {
   DataHeartRateMax,
   DataJumpDistance,
   DataPaceAvg,
+  DataRRRMSSD,
+  DataRRCoverage,
+  DataRRHeartRateAvg,
+  DataRRDFAAlpha1Median,
   DataSpeedAvg,
   DataTrainingStressScore,
   DataWeight,
@@ -27,6 +31,22 @@ import {
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it('renders R-R summaries through canonical classes under default and imperial preferences', () => {
+    const settings = [getDefaultUserUnitSettings(), normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles, speedUnits: [SpeedUnits.MilesPerHour], weightUnits: WeightUnits.Pounds,
+    })];
+    for (const DataClass of [DataRRRMSSD, DataRRCoverage, DataRRHeartRateAvg, DataRRDFAAlpha1Median]) {
+      for (const value of [0, 42.125]) {
+        const expected = new DataClass(value);
+        for (const preference of settings) {
+          expect(resolveUnitAwareDisplayFromValue(DataClass.type, value, preference)).toMatchObject({
+            value: String(expected.getDisplayValue()), unit: expected.getDisplayUnit(),
+          });
+        }
+      }
+    }
+  });
+
   it('formats sustainable-distance observations in the requested units without changing their canonical values', () => {
     let supported = false;
     try { supported = !!DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { /* Pending library release. */ }

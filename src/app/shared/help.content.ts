@@ -645,6 +645,8 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Power-based TSS needs independent FTP recorded in the file. An FTP estimate from that same workout is still shown as a statistic but cannot supply its load calculation. If calibration is missing or inconsistent, another eligible method is used or load stays unavailable. Calculated normalized power includes recorded zero power and restarts its rolling window at pauses or recording gaps.
 - Valid recorded zero-power windows can produce zero power-based TSS when the file also supplies FTP and duration. A zero summary or missing sensor readings alone cannot establish zero load.
 - Missing power readings do not count as recorded zero power. Without enough complete recorded power windows, calculated power load falls back to another eligible method or stays unavailable.
+- On newly imported or reparsed activities, calculated average power uses observed active readings, including real coasting zeros. Missing readings are unknown, so calculated total work can be unavailable and efforts crossing recording gaps or pauses are excluded. A valid summary supplied by the file keeps priority. Partial calculated power load is labelled as an estimate.
+- Opening a power chart reads the retained original file without changing saved statistics. Use **Reimport activity from file** to refresh historical saved power summaries and Training load after the parser update is available; refreshing Training alone does not reparse the file. Your load overrides, exclusions and saved preferences remain in place.
 - Recorded Suunto pauses and resumes are used in load calculations. A missing or zero FIT timer summary can be recovered only from a consistent, unambiguous timer timeline; a recorded positive timer summary remains authoritative.
 - Running pace TSS uses the energy cost of hills, recorded zero speed and complete 30-second windows. It excludes explicit timer pauses and restarts at recording gaps; insufficient usable pace data falls back to another eligible method.
 - Pool swims keep recorded heart-rate readings instead of replacing them with lap averages. Multisport files preserve a pause across a sport change when the file's session timing confirms it; missing or conflicting timing is not used to guess a pause.
@@ -799,6 +801,10 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - These estimates are not added across activities or devices. Reparse the original supported source to add newly supported summary metrics to older activities; opening a chart loads recorded streams on demand. A FIT file without these fields cannot recreate them.
 - Stamina metrics appear in Detailed Statistics, in event summary metric tabs, and as selectable chart metrics from **Settings -> Charts**.
 - Garmin session-level stamina values such as **Minimum Stamina**, **Beginning Potential Stamina**, and **Ending Potential Stamina** are shown when present.
+
+### Activity beat-interval statistics
+
+When an original file contains beat-to-beat R–R intervals, newly imported or reparsed activities can include **R–R RMSSD**, **R–R SDNN**, **R–R pNN50**, recording coverage and artifact statistics. Ordinary heart-rate readings cannot supply these statistics. They describe the activity recording and are separate from overnight HRV and Readiness. Missing statistics stay unavailable. Older saved summaries need an original-file reparse; opening a chart alone does not update them. Multisport legs keep their own values rather than an invented workout average.
 
 ### FIT calorie metrics
 

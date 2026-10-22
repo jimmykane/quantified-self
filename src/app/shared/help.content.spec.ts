@@ -171,6 +171,21 @@ describe('help.content', () => {
     expect(copy).toContain('A zero summary or missing sensor readings alone cannot establish zero load');
     expect(copy).toContain('Missing power readings do not count as recorded zero power');
     expect(copy).toContain('calculated power load falls back to another eligible method or stays unavailable');
+    expect(copy).toContain('calculated average power uses observed active readings, including real coasting zeros');
+    expect(copy).toContain('calculated total work can be unavailable');
+    expect(copy).toContain('efforts crossing recording gaps or pauses are excluded');
+    expect(copy).toContain('A valid summary supplied by the file keeps priority');
+    expect(copy).toContain('Partial calculated power load is labelled as an estimate');
+    expect(copy).toContain('Opening a power chart reads the retained original file without changing saved statistics');
+    expect(copy).toContain('refreshing Training alone does not reparse the file');
+  });
+  it('keeps activity beat statistics separate from overnight HRV and source-free recalculation', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('**R–R RMSSD**');
+    expect(copy).toContain('Ordinary heart-rate readings cannot supply these statistics');
+    expect(copy).toContain('separate from overnight HRV and Readiness');
+    expect(copy).toContain('Older saved summaries need an original-file reparse');
+    expect(copy).toContain('Multisport legs keep their own values');
   });
   it('explains recorded timer recovery and the original-file boundary for historical corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
