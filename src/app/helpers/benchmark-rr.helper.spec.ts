@@ -77,6 +77,22 @@ describe('benchmark R–R summaries', () => {
     expect([reference, test].map(activity => JSON.stringify(activity.toJSON()))).toEqual(sourceBefore);
   });
 
+  it.each([
+    [-.1, .1, '0.20', 200],
+    [-.1, .2, '0.30', 200],
+    [-.1, -.2, '0.10', 200 / 3],
+    [0, 0, '0.00', 0],
+  ])('compares valid signed DFA values without treating a zero mean as equality (%s, %s)', (a, b, display, percent) => {
+    const reference = recording(), test = recording('Watch');
+    reference.addStat(new DataRRDFAAlpha1Median(a));
+    test.addStat(new DataRRDFAAlpha1Median(b));
+    const [row] = buildBenchmarkRRReportRows(reference, test);
+    expect(row.cells.every(cell => cell.display !== null)).toBe(true);
+    expect(row.difference?.display).toBe(display);
+    expect(row.difference?.percent).toBeCloseTo(percent);
+    expect(buildBenchmarkRRReportRows(test, reference)[0].difference?.percent).toBeCloseTo(percent);
+  });
+
   it('groups only valid saved R–R statistics, preserving zero and the original stat instances', () => {
     const zero = new DataRRArtifactPercentage(0), rmssd = new DataRRRMSSD(8.14), count = new DataRRArtifactCount(0);
     const invalid = new DataRRCoverage(100);

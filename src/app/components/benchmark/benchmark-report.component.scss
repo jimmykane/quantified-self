@@ -556,6 +556,10 @@ li {
   padding: 1.5rem;
 }
 
+.benchmark-container.benchmark-export .rr-scroll-hint {
+  display: none;
+}
+
 .benchmark-container.benchmark-export .stats-grid {
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
