@@ -12,46 +12,45 @@ import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type'
 import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
 import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
 
-redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
+// Navigation is asynchronous: do not start App Check on the alias while leaving it.
+if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)) {
+  // Only initialize Sentry in non-localhost environments
+  if (!environment.localhost) {
+    Sentry.init({
+      dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
+      environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
+      release: environment.appVersion,
+      debug: false,
+      beforeBreadcrumb: appCheckBeforeBreadcrumb,
+      beforeSend: appCheckBeforeSend,
+      integrations: [
+        Sentry.browserTracingIntegration(),
+      ],
+      // ResizeObserver loop limit exceeded is a benign warning in browsers
+      ignoreErrors: [
+        'ResizeObserver loop limit exceeded',
+        'Network Error',
+        'Non-Error promise rejection captured'
+      ],
 
+      // We recommend adjusting this value in production, or using tracesSampler
+      // for finer control
+      tracesSampleRate: 0.2,
+    });
+  }
 
-// Only initialize Sentry in non-localhost environments
-if (!environment.localhost) {
-  Sentry.init({
-    dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
-    environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
-    release: environment.appVersion,
-    debug: false,
-    beforeBreadcrumb: appCheckBeforeBreadcrumb,
-    beforeSend: appCheckBeforeSend,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-    ],
-    // ResizeObserver loop limit exceeded is a benign warning in browsers
-    ignoreErrors: [
-      'ResizeObserver loop limit exceeded',
-      'Network Error',
-      'Non-Error promise rejection captured'
-    ],
+  if (environment.production) {
+    enableProdMode();
+  }
 
-    // We recommend adjusting this value in production, or using tracesSampler
-    // for finer control
-    tracesSampleRate: 0.2,
-  });
+  // Set the theme before app is running
+  const storedThemePreference = localStorage.getItem('appTheme');
+  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const followsSystem = !storedThemePreference || storedThemePreference === SYSTEM_THEME_PREFERENCE;
+  const shouldUseDarkTheme = storedThemePreference === AppThemes.Dark || (followsSystem && systemPrefersDark);
+  document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
+
+  Promise.all([registerAppLocale(), import('./app/app.module')])
+    .then(([, appModule]) => platformBrowserDynamic().bootstrapModule(appModule.AppModule))
+    .catch(err => console.error(err));
 }
-
-if (environment.production) {
-  enableProdMode();
-}
-
-// Set the theme before app is running
-const storedThemePreference = localStorage.getItem('appTheme');
-const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-const followsSystem = !storedThemePreference || storedThemePreference === SYSTEM_THEME_PREFERENCE;
-const shouldUseDarkTheme = storedThemePreference === AppThemes.Dark || (followsSystem && systemPrefersDark);
-document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
-
-Promise.all([registerAppLocale(), import('./app/app.module')])
-  .then(([, appModule]) => platformBrowserDynamic().bootstrapModule(appModule.AppModule))
-  .catch(err => console.error(err));
-// platformBrowserDynamic().bootstrapModule(AppModule);

@@ -194,6 +194,7 @@
     "src/app/helpers/workout-reflection.shared.spec.ts",
     "src/app/helpers/workout-time-input.helper.spec.ts",
     "src/app/services/history-import-state.service.spec.ts",
+    "src/app/shared/adapters/firebase-hosting-redirect.spec.ts",
     "src/app/shared/help.content.spec.ts",
     "src/app/shared/training-disciplines.shared.spec.ts",
     "src/app/utils/app.user.utilities.spec.ts"
@@ -209,6 +210,7 @@
     "src/app/helpers/health-workspace.helper.spec.ts",
     "src/app/helpers/reveal-calendar-day-context.helper.spec.ts",
     "src/app/helpers/table-row-activation.helper.spec.ts",
-    "src/app/helpers/timeline-notes-chart.helper.spec.ts"
+    "src/app/helpers/timeline-notes-chart.helper.spec.ts",
+    "src/main.spec.ts"
   ]
 }

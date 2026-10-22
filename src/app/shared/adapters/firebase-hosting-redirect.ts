@@ -52,11 +52,12 @@ export function getFirebaseHostingAliasRedirectUrl(
   return `${targetOrigin}${options.locationRef.pathname}${options.locationRef.search}${options.locationRef.hash}`;
 }
 
+/** Returns true when navigation was requested, so callers can stop app startup. */
 export function redirectFromFirebaseHostingAlias(
   localhost: boolean,
   appUrl: string,
   locationRef: RedirectLocationRef = window.location
-): void {
+): boolean {
   const redirectUrl = getFirebaseHostingAliasRedirectUrl({
     localhost,
     appUrl,
@@ -64,8 +65,9 @@ export function redirectFromFirebaseHostingAlias(
   });
 
   if (!redirectUrl) {
-    return;
+    return false;
   }
 
   locationRef.replace(redirectUrl);
+  return true;
 }
