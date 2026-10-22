@@ -3,7 +3,7 @@ import { validateTarget } from '../monitoring/target.mjs';
 export const OWNER = 'qs-derived-metrics-monitoring-v1';
 export const metricType = key => `logging.googleapis.com/user/qs_derived_metrics_${key}_v1`;
 export const SERVICES = ['processderivedmetricsingresstask', 'processderivedmetricstask', 'observederivedmetricshealth',
-  'ensurederivedmetrics', 'settrainingbuildbenchmark', 'mcpapi', 'assistantchat'];
+  'ensurederivedmetrics', 'settrainingbuildbenchmark', 'mcpapi', 'assistantchat', 'onconnectionhistoryimportwritten'];
 // Mirrors the lightweight canonical identities; the offline test rejects drift.
 export const METRIC_KINDS = ['form', 'recovery_now', 'acwr', 'ramp_rate', 'monotony_strain', 'form_now', 'form_plus_7d',
   'easy_percent', 'hard_percent', 'efficiency_delta_4w', 'freshness_forecast', 'intensity_distribution', 'efficiency_trend',

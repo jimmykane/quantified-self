@@ -35,6 +35,9 @@ export interface ConnectionHistoryRun {
   processed: boolean;
   revision: number;
   failed?: boolean;
+  // Private completion receipt: null consumed the event without issuing a task.
+  // A task generation permits only exact-generation enqueue repair on redelivery.
+  derivedMetricsFlush?: { revision: number; generation: number | null };
   garminHealthSummaryTypes?: readonly GarminHealthSummaryType[];
   steps: HistoryStep[];
   lastOperation?: { key: string; result: { count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] } };

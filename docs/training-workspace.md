@@ -5381,6 +5381,71 @@ MCP impact: **no wire or authority change**. Existing prepare/read contracts ret
 retry guidance; the private scheduling fields are never projected into their responses. No additional scopes, tools,
 planning fields, provider actions, registered-schema changes or plugin rebuild are required.
 
+### Import-specific five-minute batching
+
+History-import batching applies automatically to all accounts after deployment. No account allowlist or environment
+activation is required. Ordinary background updates retain the two-minute interval outside a recent active history import.
+
+Background scheduling skips import-metadata reads for a first build, an invalid prior start, or a prior start at least
+five minutes old: those builds are prompt under either interval. For a valid recent prior start, a new background
+generation reads the four existing Suunto/Garmin/COROS/Wahoo metadata leaves inside its coordinator transaction,
+projected to `connectionHistoryImport` only. An active UUID-bound import checkpoint updated within fifteen
+minutes changes the fixed build-start interval from two to five minutes. Missing, completed, malformed, future-dated or
+stale checkpoints retain the ordinary interval. The first build and manual control/benchmark edits retain prompt
+scheduling. Coalescing an already queued generation performs no extra metadata reads and never slides its deadline.
+The existing generation, claim, revision and account-deletion fences remain authoritative. Completion and write-block
+handoffs use this same bounded interval and durable enqueue recovery. Automatic freshness and MCP preparation join
+the account's scheduled work, retaining truthful preparing/last-result states.
+
+The existing history-write trigger expedites the coordinator's pending union when a run changes from active to
+terminal, including failed/skipped partial imports. Its transaction rechecks the exact terminal run revision and owner
+alongside the coordinator and deletion guard. It never increments source/input versions, adds metric kinds or creates
+work for a clean coordinator. During a build it preserves prompt pending priority; a delayed queued generation is
+replaced and its stale task is fenced. An enqueue failure rejects the terminal event so its existing retry policy can
+redeliver it. A restarted run or stale completion event cannot expedite another run's work. Completion is not provider
+acceptance: queued children, asynchronous callbacks and ingress arriving later still use normal source invalidation.
+Those late writes can create the final rebuild after the parent event; they are not suppressed by a completed import.
+
+Terminal delivery is consumed once per run revision using the private `derivedMetricsFlush` receipt on the existing
+history run. Its first transaction also checks that the provider's current projected run still matches and is terminal.
+The receipt commits atomically with the coordinator decision, including a null generation when there is no pending
+work or the current worker owns the follow-up. A clean completion records no new coordinator or calculation task.
+Duplicate delivery can only re-enqueue its recorded, still-unclaimed queued/failed generation at the stored deadline;
+it cannot promote later pending work, increment generations or reset the task's retry budget. A first delivery after
+a newer same-provider import starts is ignored. This handles failed/lost enqueue responses and concurrent duplicates.
+The receipt is one bounded field on the retained run, excluded from public history projections and MCP. Its update
+preserves the run revision, progress clock and TTL. The existing trigger treats that one receipt-bearing update as
+an enqueue-repair notification. It may repair only the matching persisted receipt; it cannot admit new completion
+work or write another receipt. Null/unchanged receipts and other terminal-to-terminal updates remain no-ops, so this
+notification cannot recurse. Existing history retention and account cleanup cover the receipt.
+
+Even without a terminal event, the final dirty generation remains scheduled at a fixed deadline and runs without a new
+source write. Concurrent imports share one account coordinator; another provider's active checkpoint can retain the
+five-minute interval. Once imports finish or their checkpoints become stale, new background work uses the ordinary
+interval. Already scheduled generations retain their valid bounded deadline. No data migration, new Function, queue,
+index, scanner or cleanup is required. Rollback uses the normal code deployment workflow.
+
+Verification uses real Firestore and synthetic recorded TSS events: compare ordinary scheduling with automatic active
+import scheduling over fourteen arrivals, including a correction and deletion, then require identical final Form payloads
+and complete input versions. The active-import case requires no environment configuration. Additional cases cover
+concurrent dirty arrivals/completion, obsolete terminal revisions, restart, foreign owner, account deletion, manual
+priority, late writes and failed enqueue handoffs. Completion regressions cover old events after later work, superseded
+projected runs, clean/missing coordinators, concurrent duplicates and lost enqueue replies after a claim, plus committed
+receipt repair without new admissions. Public history projection tests exclude the receipt. These fixtures are not
+production savings.
+
+Monitoring: **covered** by existing native derived queues, eligible-age probes and committed outcome metrics. The
+source bundle extends guarded enqueue-failure coverage to `onconnectionhistoryimportwritten`; worker-attempt metrics
+still select only ingress/calculation workers. Intentional future deadlines remain excluded from overdue samples.
+Deploy the filter extension through the existing monitoring workflow. Batching requires no monitoring configuration
+to activate. Compare worker starts, scanned document counters, source/publication revisions, failures and refresh
+latency using existing logs; this adds no per-record logging or duplicate production calculations.
+
+MCP impact: **no wire or authority change**. Calculation payloads, schemas, scopes, consent, planning reads/writes,
+provider actions and bounded preparation contracts are unchanged. Only a private background scheduling deadline can
+extend during an active import; pending results remain preparing. No registered-contract promotion, extra plan read,
+plugin change, reparse or schema migration is required. App Help documents the longer import wait.
+
 ### Frontend freshness probe
 
 On `/training`, the frontend:

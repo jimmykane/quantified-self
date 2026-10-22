@@ -225,6 +225,8 @@ import { getEventTags } from '../../../shared/event-tags';
 import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import { recordDerivedMetricCommit } from './monitoring';
+import { derivedImportBuildIntervalMs, IMPORT_BUILD_INTERVAL_MS, isDerivedImportService } from './import-batching';
+import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId } from '../connection-history/model';
 import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
@@ -5501,10 +5503,16 @@ function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFi
 // Private coordinator scheduling only; metric schemas and source revisions are unchanged.
 const BACKGROUND_BUILD_INTERVAL_MS = 2 * 60_000;
 
-function backgroundBuildNotBeforeMs(startedAtMs: number | null, nowMs: number): number {
+async function backgroundBuildNotBeforeMs(
+    transaction: FirebaseFirestore.Transaction, uid: string, startedAtMs: number | null, nowMs: number,
+): Promise<number> {
     // Legacy/malformed clocks must never create an unbounded wait.
-    return startedAtMs !== null && Number.isFinite(startedAtMs) && startedAtMs >= 0 && startedAtMs <= nowMs
-        ? Math.max(nowMs, startedAtMs + BACKGROUND_BUILD_INTERVAL_MS) : nowMs;
+    if (startedAtMs === null || !Number.isFinite(startedAtMs) || startedAtMs < 0 || startedAtMs > nowMs) return nowMs;
+    // Once the longest interval has elapsed, metadata cannot delay this build.
+    // Avoid four billed reads and a new read-failure dependency for ordinary work.
+    if (startedAtMs + Math.max(BACKGROUND_BUILD_INTERVAL_MS, IMPORT_BUILD_INTERVAL_MS) <= nowMs) return nowMs;
+    const intervalMs = await derivedImportBuildIntervalMs(transaction, uid, nowMs, BACKGROUND_BUILD_INTERVAL_MS);
+    return Math.max(nowMs, startedAtMs + intervalMs);
 }
 
 async function queueDerivedMetricsTask(uid: string, generation: number, notBeforeMs = 0): Promise<boolean> {
@@ -5896,6 +5904,18 @@ export async function fetchRecoveryLookbackEventDocs(
     return snapshot.docs;
 }
 
+/** Completion only expedites durable pending work; repeated/obsolete events cannot create a rebuild. */
+export async function flushPendingDerivedMetricsAfterHistory(
+    uid: string, runId: string, revision: number, options?: { repairOnly: true },
+): Promise<void> {
+    if (!isConnectionHistoryRunId(runId)
+        || !Number.isSafeInteger(revision) || revision < 0) return;
+    const result = await markDerivedMetricsDirtyAndMaybeQueue(uid, [], {
+        completedHistory: { runId, revision, repairOnly: options?.repairOnly },
+    });
+    if (!result.accepted && result.generation !== null) throw new Error('derived_metrics_history_flush_enqueue_failed');
+}
+
 export async function markDerivedMetricsDirtyAndMaybeQueue(
     uid: string,
     requestedMetricKinds: readonly unknown[] | null | undefined,
@@ -5905,6 +5925,8 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         preserveWorkoutInputs?: boolean;
         // Automatic ingress/freshness probes batch; explicit owner edits retain priority.
         background?: boolean;
+        // Internal history completion only: promote the pending union without invalidating inputs.
+        completedHistory?: { runId: string; revision: number; repairOnly?: boolean };
     },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
@@ -5957,6 +5979,45 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         nowMs = Date.now();
         const rawCoordinatorData = coordinatorSnapshot.data();
         const coordinator = parseCoordinator(rawCoordinatorData);
+        const completedHistory = options?.completedHistory;
+        const flushPending = completedHistory !== undefined;
+        let historyFlushRef: FirebaseFirestore.DocumentReference | undefined;
+        const recordHistoryFlush = (generation: number | null): void => {
+            if (historyFlushRef && completedHistory) transaction.update(historyFlushRef, {
+                derivedMetricsFlush: { revision: completedHistory.revision, generation },
+            });
+        };
+        if (completedHistory) {
+            const history = await transaction.get(admin.firestore().doc(`${CONNECTION_HISTORY_COLLECTION}/${completedHistory.runId}`));
+            const current = history.data();
+            if (!history.exists || current?.userID !== uid || current.processed !== true
+                || current.revision !== completedHistory.revision) return;
+            const receipt = current.derivedMetricsFlush;
+            if (receipt?.revision === completedHistory.revision) {
+                // A lost enqueue response may repair only this event's exact,
+                // still-unclaimed generation. Never promote a later generation.
+                if (Number.isSafeInteger(receipt.generation) && receipt.generation > 0 && receipt.generation === coordinator.generation
+                    && coordinator.dirtyMetricKinds.length
+                    && (coordinator.status === 'queued' || coordinator.status === 'failed')) {
+                    shouldEnqueue = true;
+                    generationToQueue = coordinator.generation;
+                    notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+                }
+                return;
+            }
+            if (completedHistory.repairOnly) return;
+            if (!isDerivedImportService(current.serviceName)) return;
+            const [meta] = await transaction.getAll(admin.firestore().doc(`users/${uid}/meta/${current.serviceName}`),
+                { fieldMask: ['connectionHistoryImport'] });
+            const projection = meta.data()?.connectionHistoryImport;
+            // A first delivery can itself be obsolete after a newer import starts.
+            if (projection?.runId !== completedHistory.runId || projection.active !== false) return;
+            historyFlushRef = history.ref;
+            if (!coordinator.dirtyMetricKinds.length) {
+                recordHistoryFlush(null);
+                return;
+            }
+        }
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
             && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
@@ -5973,14 +6034,16 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             ? mergeDerivedMetricKinds(coordinator.dirtyMetricKinds,
                 resolveInFlightMetricKinds(rawCoordinatorData, coordinator.dirtyMetricKinds))
             : coordinator.dirtyMetricKinds;
-        const nextDirtyMetricKinds = mergeDerivedMetricKinds(retainedMetricKinds, metricKinds);
+        const nextDirtyMetricKinds = flushPending ? retainedMetricKinds
+            : mergeDerivedMetricKinds(retainedMetricKinds, metricKinds);
         const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const shouldIncrementEventMutationVersion = options?.incrementEventMutationVersion === true;
         const nextEventMutationVersion = shouldIncrementEventMutationVersion
             ? coordinator.eventMutationVersion + 1
             : coordinator.eventMutationVersion;
         const eventMutationVersionChanged = nextEventMutationVersion !== coordinator.eventMutationVersion;
-        const invalidateWorkoutInputs = options?.preserveWorkoutInputs !== true || shouldIncrementEventMutationVersion;
+        const invalidateWorkoutInputs = !flushPending
+            && (options?.preserveWorkoutInputs !== true || shouldIncrementEventMutationVersion);
         const workoutInputsVersion = readWorkoutInputsVersion(coordinatorSnapshot.data())
             + (invalidateWorkoutInputs ? 1 : 0);
 
@@ -5998,6 +6061,11 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             && !invalidateWorkoutInputs) {
             shouldEnqueue = false;
             generationToQueue = coordinator.generation;
+            recordHistoryFlush(coordinator.status === 'queued' ? coordinator.generation : null);
+            if (historyFlushRef && coordinator.status === 'queued') {
+                shouldEnqueue = true;
+                notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+            }
             return;
         }
 
@@ -6018,7 +6086,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         const shouldResetLifecycleFields = shouldEnqueue;
         // A fixed deadline from the last claim, never a sliding debounce. Recovery is prompt.
         notBeforeMs = !immediate && coordinator.status === 'idle'
-            ? backgroundBuildNotBeforeMs(coordinator.startedAtMs, nowMs) : nowMs;
+            ? await backgroundBuildNotBeforeMs(transaction, uid, coordinator.startedAtMs, nowMs) : nowMs;
         generationToQueue = nextGeneration;
 
         const coordinatorUpdatePayload: Record<string, unknown> = {
@@ -6046,6 +6114,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         }
 
         transaction.set(coordinatorRef, coordinatorUpdatePayload, { merge: true });
+        recordHistoryFlush(shouldEnqueue ? nextGeneration : null);
     });
 
     if (blockedByDeletion) {
@@ -6251,7 +6320,7 @@ export async function completeDerivedMetricsProcessing(
         if (pendingDirtyMetricKinds.length) {
             const nextGeneration = coordinator.generation + 1;
             notBeforeMs = coordinatorSnapshot.data()?.pendingImmediate === true
-                ? nowMs : backgroundBuildNotBeforeMs(coordinator.startedAtMs, nowMs);
+                ? nowMs : await backgroundBuildNotBeforeMs(transaction, uid, coordinator.startedAtMs, nowMs);
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
@@ -6411,7 +6480,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
 
             const nextGeneration = coordinator.generation + 1;
             notBeforeMs = coordinatorSnapshot.data()?.pendingImmediate === true
-                ? nowMs : backgroundBuildNotBeforeMs(coordinator.startedAtMs, nowMs);
+                ? nowMs : await backgroundBuildNotBeforeMs(transaction, uid, coordinator.startedAtMs, nowMs);
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
