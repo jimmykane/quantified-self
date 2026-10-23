@@ -11,13 +11,6 @@ still require separate approval; this documentation update changes no secret bin
 
 `processConnectionHistoryTask` binds the existing Garmin, Suunto API, COROS and Wahoo client credentials because it coordinates their shared history operations. `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport` have no provider-secret bindings. Downstream workers retain their existing least-privilege bindings. Deploy this compatible backend before the connection-history checkbox frontend; see [the release checklist](connection-history-import.md#release-and-operations).
 
-The prepared account-deletion owner `cleanupUserAccountsV2` reuses the existing
-COROS, Garmin, Suunto and Wahoo OAuth client pairs, matching the transitional Gen 1
-`cleanupUserAccounts` binding. No new credential is registered or provisioned. Its
-explicit runtime identity is `quantified-self-io@appspot.gserviceaccount.com`; verify
-that identity's existing Secret Manager and exact bucket access before an approved
-rollout. See [the staged cutover](delete-user-data-migration.md).
-
 ## Managed inventory
 
 | Area | Secret Manager names |

@@ -1,15 +1,13 @@
 import functionsTest from 'firebase-functions-test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as functions from 'firebase-functions/v1';
-import { IS_NOT_TENANT, type AuthEvent, type User } from 'firebase-functions/v2/identity';
+import type { UserRecord } from 'firebase-admin/auth';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
 const {
     dataCleanupMocks,
     hydrateQuerySnapshot,
-    authBuilderMock,
-    runWithMock,
     deauthorizeServiceMock,
     cleanupServiceConnectionForUserMock,
     firestoreMock,
@@ -46,11 +44,6 @@ const {
         assertAccountStorageAbsent: vi.fn().mockResolvedValue(undefined),
         assertAccountCleanupQueryEmpty: vi.fn().mockResolvedValue(undefined),
     };
-    const onDeleteMock = vi.fn((handler) => handler);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
-    const authBuilderMock = { user: userMock };
-
     const deleteMock = vi.fn().mockResolvedValue({});
     const setMock = vi.fn().mockResolvedValue({});
 
@@ -170,15 +163,9 @@ const {
 
     const deauthorizeServiceMock = vi.fn();
     const cleanupServiceConnectionForUserMock = vi.fn((uid: string, serviceName: ServiceNames) => deauthorizeServiceMock(uid, serviceName));
-    const runWithMock = vi.fn(() => ({
-        auth: authBuilderMock,
-    }));
-
     return {
         dataCleanupMocks,
         hydrateQuerySnapshot,
-        authBuilderMock,
-        runWithMock,
         deauthorizeServiceMock,
         cleanupServiceConnectionForUserMock,
 
@@ -204,14 +191,8 @@ const {
     };
 });
 
-// Mock firebase-functions
-vi.mock('firebase-functions/v1', () => ({
-    auth: authBuilderMock,
-    region: vi.fn().mockImplementation(() => ({
-        auth: authBuilderMock,
-        runWith: runWithMock,
-    })),
-}));
+// Exercise the real Gen 1 SDK handler; only external I/O is mocked.
+vi.unmock('firebase-functions/v1');
 
 // Mock firebase-admin
 vi.mock('firebase-admin', () => ({
@@ -265,23 +246,14 @@ vi.mock('../service-disconnect-cleanup', () => ({
 // Import function under test
 import {
     ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS,
-    cleanupUserAccountsV2,
-    ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS,
+    cleanupUserAccounts as cleanupUserAccountsHandler,
     ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
 } from './cleanup';
 import { SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME } from '../sleep/constants';
 import { SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME } from '../suunto/health-webhook-binding';
 
 const testEnv = functionsTest();
-const authEvent = (user: User): AuthEvent<User> => ({
-    data: user, id: 'synthetic-delete', type: 'google.firebase.auth.user.v2.deleted',
-    source: '//identitytoolkit.googleapis.com/projects/demo-account-deletion',
-    time: '2026-10-09T00:00:00Z', specversion: '1.0',
-});
-// Keep the behavioral cases readable while invoking the real Gen 2 SDK handler.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const cleanupUserAccounts = (user: User, _context: functions.EventContext) => cleanupUserAccountsV2.run(authEvent(user));
-const registeredCleanupRuntimeOptions = runWithMock.mock.calls[0]?.[0];
+const cleanupUserAccounts = (user: UserRecord, context: functions.EventContext) => cleanupUserAccountsHandler.run(user, context);
 
 function createPaginatedLimitQueryMock(pages: Array<{ docs: unknown[]; empty?: boolean }>) {
     const get = vi.fn();
@@ -346,7 +318,7 @@ function mockCollectionWhereResultsByName(
     };
 }
 
-describe('cleanupUserAccountsV2', () => {
+describe('cleanupUserAccounts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset console mocks to keep output clean during tests if needed
@@ -407,41 +379,25 @@ describe('cleanupUserAccountsV2', () => {
         vi.clearAllMocks();
     });
 
-    it('unwraps the real Eventarc deleted-user envelope and selects mail by the original UID', async () => {
-        const event = { ...authEvent(testEnv.auth.makeUserRecord({ uid: 'testUser123' })),
-            data: { oldValue: { uid: 'testUser123', email: 'deleted@example.invalid' } } };
-        await cleanupUserAccountsV2(event as unknown as AuthEvent<User>);
+    it('selects account mail by the original Auth UID', async () => {
+        await cleanupUserAccounts(testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'deleted@example.invalid' }), {} as functions.EventContext);
         expect(dataCleanupMocks.beginAccountDataCleanup).toHaveBeenCalledWith(expect.anything(), 'testUser123');
         expect(whereMock).toHaveBeenCalledWith('uid', '==', 'testUser123');
         expect(whereMock).not.toHaveBeenCalledWith('to', '==', 'deleted@example.invalid');
         expect(dataCleanupMocks.completeAccountDataCleanup).toHaveBeenCalledWith(expect.anything(), 'testUser123', 'synthetic-attempt');
     });
 
-    it.each(['tenantid', 'tenantId'])('ignores another tenant even when its UID matches a default-project account (%s)', async tenantField => {
-        await cleanupUserAccountsV2({ ...authEvent(testEnv.auth.makeUserRecord({ uid: 'testUser123' })),
-            [tenantField]: 'other-tenant' });
+    it('ignores tenant users even when their UID matches a default-project account', async () => {
+        await cleanupUserAccounts({ uid: 'testUser123', tenantId: 'other-tenant' } as UserRecord, {} as functions.EventContext);
         expect(dataCleanupMocks.beginAccountDataCleanup).not.toHaveBeenCalled();
         expect(firestoreMock).not.toHaveBeenCalled();
         expect(deauthorizeServiceMock).not.toHaveBeenCalled();
     });
 
     it('rejects missing Auth data before any cleanup starts', async () => {
-        await expect(cleanupUserAccountsV2.run({ ...authEvent(testEnv.auth.makeUserRecord({ uid: 'testUser123' })),
-            data: undefined } as unknown as AuthEvent<User>)).rejects.toThrow('Missing deleted Auth user');
+        await expect(cleanupUserAccounts(undefined as unknown as UserRecord, {} as functions.EventContext)).rejects.toThrow('Missing deleted Auth user');
         expect(dataCleanupMocks.beginAccountDataCleanup).not.toHaveBeenCalled();
         expect(firestoreMock).not.toHaveBeenCalled();
-    });
-
-    it('registers the default-project Gen 2 trigger with retries and the previous runtime identity', () => {
-        expect(ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS.tenantId).toBe(IS_NOT_TENANT);
-        expect(cleanupUserAccountsV2.__endpoint).toMatchObject({
-            platform: 'gcfv2', region: ['europe-west2'], availableMemoryMb: 1024,
-            timeoutSeconds: 540, concurrency: 1, cpu: 1,
-            serviceAccountEmail: 'quantified-self-io@appspot.gserviceaccount.com',
-            eventTrigger: { eventType: 'google.firebase.auth.user.v2.deleted', retry: true, region: 'global', eventFilters: {} },
-        });
-        expect(ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS.secrets.map(secret => secret.name))
-            .toEqual(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.secrets.map(secret => secret.name));
     });
 
     it('redrives only the deleted account upload reservations and rejects failed reconciliation', async () => {
@@ -567,12 +523,15 @@ describe('cleanupUserAccountsV2', () => {
 
         expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.failurePolicy).toBe(true);
         expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.timeoutSeconds).toBe(540);
-        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.memory).toBe('512MB');
+        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.memory).toBe('1GB');
         expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.secrets.map(secret => secret.name)).toEqual(expectedSecretNames);
-        expect(registeredCleanupRuntimeOptions?.failurePolicy).toBe(true);
-        expect(registeredCleanupRuntimeOptions?.timeoutSeconds).toBe(540);
-        expect(registeredCleanupRuntimeOptions?.memory).toBe('512MB');
-        expect(registeredCleanupRuntimeOptions?.secrets.map(secret => secret.name)).toEqual(expectedSecretNames);
+        expect(cleanupUserAccountsHandler.__endpoint).toMatchObject({
+            platform: 'gcfv1', region: ['europe-west2'], availableMemoryMb: 1024,
+            timeoutSeconds: 540,
+            eventTrigger: { eventType: 'providers/firebase.auth/eventTypes/user.delete', retry: true },
+        });
+        expect(cleanupUserAccountsHandler.__endpoint.secretEnvironmentVariables?.map(secret => secret.key))
+            .toEqual(expectedSecretNames);
     });
 
     it('continues later deletion stages and requests a retry when MCP OAuth cleanup fails', async () => {

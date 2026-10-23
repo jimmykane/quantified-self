@@ -6,9 +6,8 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes account deletion, MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
+  it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
-      'cleanupUserAccountsV2',
       'mcpApi',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',

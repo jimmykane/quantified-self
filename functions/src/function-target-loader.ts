@@ -35,7 +35,6 @@ const loadActivityImportDispatchers = (): FunctionModule =>
   module.require('./queue') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
-  cleanupUserAccountsV2: () => module.require('./users/cleanup') as FunctionModule,
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
   getSuuntoAPIAuthRequestTokenRedirectURI:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,

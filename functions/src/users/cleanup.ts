@@ -1,7 +1,6 @@
 import { CONNECTION_HISTORY_COLLECTION } from '../connection-history/model';
 import { cleanupSendUploadReservations, SEND_UPLOAD_CLEANUP_COLLECTION } from '../activity-send/upload-cleanup';
 import * as functions from 'firebase-functions/v1';
-import { IS_NOT_TENANT, onUserDeleted } from 'firebase-functions/v2/identity';
 import * as logger from 'firebase-functions/logger';
 import { cleanupObservation, cleanupProvider, observeAccountCleanup, observeRemoteCleanup } from '../cleanup-monitoring';
 import * as admin from 'firebase-admin';
@@ -1043,11 +1042,14 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
     failurePolicy: true,
     timeoutSeconds: 540,
-    memory: '512MB',
+    memory: '1GB',
     secrets: FUNCTION_SECRET_BINDINGS.cleanupUserAccounts,
 } as const;
 
 async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
+    if (!user) throw new Error('Missing deleted Auth user.');
+    // Fixed UID paths belong to the default project, never an Identity Platform tenant.
+    if (user.tenantId) return;
     const uid = user.uid;
     const db = admin.firestore();
     // Fail closed before any destructive stage if the durable fence cannot be established.
@@ -1236,27 +1238,8 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
     logger.info('[AccountDeletion] Verified cleanup complete.', { outcome: 'complete' });
 }
 
-// Retain the Gen 1 name until a separately approved, verified cutover retires it.
+// Keep the existing Gen 1 Auth owner while replacing the extension's configured cleanup scope.
 export const cleanupUserAccounts = functions
     .region('europe-west2')
     .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
     .auth.user().onDelete((user, context) => observeAccountCleanup(context.timestamp, () => cleanupDeletedUser(user)));
-
-export const ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS = {
-    region: 'europe-west2',
-    memory: '1GiB',
-    timeoutSeconds: 540,
-    retry: true,
-    cpu: 1,
-    concurrency: 1,
-    // Preserve the inspected Gen 1 identity and its existing bucket/secret access.
-    serviceAccount: 'quantified-self-io@appspot.gserviceaccount.com',
-    // UIDs and cleanup paths belong to the default project, never another tenant.
-    tenantId: IS_NOT_TENANT,
-    secrets: FUNCTION_SECRET_BINDINGS.cleanupUserAccountsV2,
-} as const;
-
-export const cleanupUserAccountsV2 = onUserDeleted(ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS, async event => {
-    if (!event.data) throw new Error('Missing deleted Auth user.');
-    await observeAccountCleanup(event.time, () => cleanupDeletedUser(event.data));
-});

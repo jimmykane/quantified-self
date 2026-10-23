@@ -16,9 +16,7 @@ import { getUserDeletionGuardStateInTransaction, isUserDeletionTombstoneActive }
 // Full owner-handler cases use real Firestore and cleanup guards; external I/O
 // is replaced before imports so no provider, Storage or Extension can be invoked.
 vi.unmock('@sports-alliance/sports-lib');
-vi.mock('firebase-functions/v1', () => ({ region: () => ({ runWith: () => ({
-    auth: { user: () => ({ onDelete: (handler: unknown) => handler }) },
-}) }) }));
+vi.unmock('firebase-functions/v1');
 vi.mock('../OAuth2', () => ({ getServiceConfig: (service: string) => ({ tokenCollectionName: `${service}TestTokens` }) }));
 vi.mock('../service-auth-lifecycle', () => ({
     SERVICE_AUTH_CLEANUP_REASONS: { AccountDeletion: 'account_deletion' },
@@ -38,16 +36,12 @@ vi.mock('./data-cleanup', async importOriginal => ({
     deleteAccountStorageFiles: vi.fn(async () => undefined),
     assertAccountStorageAbsent: vi.fn(async () => undefined),
 }));
-import { cleanupUserAccounts as cleanupUserAccountsV1, cleanupUserAccountsV2 } from './cleanup';
+import { cleanupUserAccounts as cleanupUserAccountsHandler } from './cleanup';
 import * as dataCleanup from './data-cleanup';
 vi.unmock('firebase-admin');
 vi.unmock('firebase-admin/firestore');
 const host = process.env.FIRESTORE_EMULATOR_HOST;
-const cleanupUserAccounts = (user: admin.auth.UserRecord) => cleanupUserAccountsV2.run({
-    data: user, id: `synthetic-delete-${user.uid}`, type: 'google.firebase.auth.user.v2.deleted',
-    source: '//identitytoolkit.googleapis.com/projects/demo-account-deletion',
-    time: '2026-10-09T00:00:00Z', specversion: '1.0',
-});
+const cleanupUserAccounts = (user: admin.auth.UserRecord) => cleanupUserAccountsHandler.run(user, { timestamp: '2026-10-23T00:00:00Z' } as never);
 
 describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', () => {
     let db: admin.firestore.Firestore;
@@ -649,7 +643,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         } finally { await db.recursiveDelete(reservation); await db.recursiveDelete(foreign); }
     }, 30_000);
 
-    it('keeps the verified Gen 2 receipt when an overlapping Gen 1 attempt resumes', async () => {
+    it('keeps the verified receipt when an overlapping older invocation resumes', async () => {
         const uid = owner();
         const other = owner();
         await db.doc(`users/${uid}/unknown/missing/deep/owned`).set({ synthetic: true });
@@ -664,16 +658,16 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             await resumed;
             return checkpoint(...args);
         });
-        const legacy = cleanupUserAccountsV1({ uid } as admin.auth.UserRecord, {} as never);
+        const olderAttempt = cleanupUserAccounts({ uid } as admin.auth.UserRecord);
         // Attach immediately: a failure must never become an unhandled rejection.
-        const legacyResult = legacy.then(() => null, error => error);
+        const olderAttemptResult = olderAttempt.then(() => null, error => error);
         try {
             await ready;
             await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             const receipt = (await db.doc(`userDeletionTombstones/${uid}`).get()).data()!;
             expect(receipt.cleanupStatus).toBe('complete');
             resume();
-            expect(await legacyResult).toEqual(expect.objectContaining({ message: 'Account cleanup attempt was superseded.' }));
+            expect(await olderAttemptResult).toEqual(expect.objectContaining({ message: 'Account cleanup attempt was superseded.' }));
             const after = (await db.doc(`userDeletionTombstones/${uid}`).get()).data()!;
             expect(after.cleanupStatus).toBe('complete');
             expect(after.cleanupAttemptId).toBe(receipt.cleanupAttemptId);
@@ -682,7 +676,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             expect((await db.doc(`users/${other}`).get()).exists).toBe(true);
         } finally {
             resume();
-            await legacyResult;
+            await olderAttemptResult;
             spy.mockRestore();
         }
     }, 30_000);

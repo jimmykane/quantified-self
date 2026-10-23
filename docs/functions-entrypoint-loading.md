@@ -668,30 +668,6 @@ complete entrypoint. Each of the four isolated connection history targets loaded
 graph in 385–399 ms and used 124.5–125.3 MiB RSS. This historical single-run comparison predates the October rebase;
 production memory and cold-start monitoring remain necessary before changing runtime limits.
 
-## Gen 2 account cleanup (2026-10-09)
-
-`cleanupUserAccountsV2` loads directly from `users/cleanup`, exposes one Firebase
-handler and preserves its Auth deletion trigger and all runtime options during
-both isolated loading and complete discovery. On 19 October, the compiled check
-verified all 181 endpoints and 100 isolated targets after rebasing onto current develop.
-The Gen 1 `cleanupUserAccounts` fallback
-remains during the [staged cutover](delete-user-data-migration.md).
-
-The owner needs MCP OAuth erasure and marketing recipient cleanup. Its import
-check allows only `mcp/oauth.service`, `admin/marketing/cleanup` and
-`admin/marketing/core` within those areas; it still rejects MCP server registration,
-admin handlers, Genkit, BigQuery and the full entrypoint. No unrelated endpoint is
-exposed by the loader.
-
-A 19 October Node 22.23.3 cold-import smoke ran once for each of the 101 scenarios
-(complete entrypoint plus all isolated targets). The cleanup target imported in
-0.40 s, with 138.0 MiB RSS, 40.0 MiB used heap and 1,520 loaded modules. Complete
-discovery used 247.8 MiB RSS and 131.4 MiB heap. These local single-sample smoke
-measurements are not a performance comparison,
-production memory guarantee or billing estimate. The configured limit is now
-1 GiB to provide additional cleanup headroom; production cutover must verify
-memory/errors as well as event delivery.
-
 ## Adding another optimized target
 
 1. For each new deployed Function, add the full export and a direct owner-module loader in
