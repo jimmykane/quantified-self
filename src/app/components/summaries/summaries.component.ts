@@ -41,7 +41,7 @@ import {
   SimpleChanges,
   viewChild,
 } from '@angular/core';
-import { filter, firstValueFrom, Subscription, take } from 'rxjs';
+import { defer, filter, firstValueFrom, map, Observable, shareReplay, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -443,6 +443,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
   private tileEventListenerKeys = new Map<number, string>();
+  private tileEventQueries = new Map<string, Observable<EventInterface[]>>();
+  private tileEventUserUID: string | null = null;
   private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
   private tileEventsByOrder: Record<number, EventInterface[]> = {};
   public tileEventLoadingByOrder: Record<number, boolean> = {};
@@ -1595,6 +1597,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.unsubscribeTileEventSubscriptions();
       return;
     }
+    if (this.tileEventUserUID !== uid) {
+      this.unsubscribeTileEventSubscriptions();
+      this.tileEventUserUID = uid;
+    }
 
     const eventDataTiles = this.getOrderedDashboardSettingsTiles().filter(tile => this.isEventDataSettingsTile(tile));
     const activeOrders = new Set(eventDataTiles.map(tile => tile.order));
@@ -1610,15 +1616,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
     }
 
+    const nowMs = Date.now();
+    const activeQueryKeys = new Set<string>();
     eventDataTiles.forEach((tile) => {
       const filters = this.getSettingsTileEventFilters(tile);
       const window = resolveDashboardTileEventWindow(
         filters,
         this.user?.settings?.unitSettings?.startOfTheWeek,
         this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
+        nowMs,
       );
       const listenerKey = this.buildTileEventListenerKey(uid, tile.order, filters, window);
-      if (this.tileEventListenerKeys.get(tile.order) === listenerKey && this.tileEventSubscriptions.has(tile.order)) {
+      activeQueryKeys.add(listenerKey);
+      const currentSubscription = this.tileEventSubscriptions.get(tile.order);
+      if (this.tileEventListenerKeys.get(tile.order) === listenerKey && currentSubscription && !currentSubscription.closed) {
         return;
       }
 
@@ -1626,28 +1637,40 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.tileEventSubscriptionStates.delete(tile.order);
       this.tileEventListenerKeys.set(tile.order, listenerKey);
       this.tileEventLoadingByOrder[tile.order] = true;
+      delete this.tileEventsByOrder[tile.order];
       const subscriptionState: DashboardTileEventSubscriptionState = { order: tile.order };
       this.tileEventSubscriptionStates.set(tile.order, subscriptionState);
 
-      const where = this.buildTileEventWhereClauses(window);
-      this.tileEventSubscriptions.set(tile.order, this.eventService
-        .getEventsBy(eventUser, where, 'startDate', false, 0)
-        .subscribe({
-          next: (events) => {
-            const currentOrder = subscriptionState.order;
-            this.tileEventsByOrder[currentOrder] = (events || []).filter(event => !event.isMerge);
-            this.tileEventLoadingByOrder[currentOrder] = false;
-            this.tileRebuild.request();
-          },
-          error: (error) => {
-            const currentOrder = subscriptionState.order;
-            this.tileEventsByOrder[currentOrder] = [];
-            this.tileEventLoadingByOrder[currentOrder] = false;
-            this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
-            this.tileRebuild.request();
-          },
-        }));
+      let events$ = this.tileEventQueries.get(listenerKey);
+      if (!events$) {
+        const where = this.buildTileEventWhereClauses(window);
+        // Matching tiles share hydration as well as the listener. Keep the first latest-window
+        // anchor while it has consumers, so tiles added later can reuse the same live query.
+        events$ = defer(() => this.eventService.getEventsBy(eventUser, where, 'startDate', false, 0)).pipe(
+          map(events => (events || []).filter(event => !event.isMerge)),
+          shareReplay({ bufferSize: 1, refCount: true }),
+        );
+        this.tileEventQueries.set(listenerKey, events$);
+      }
+      this.tileEventSubscriptions.set(tile.order, events$.subscribe({
+        next: (events) => {
+          const currentOrder = subscriptionState.order;
+          this.tileEventsByOrder[currentOrder] = events;
+          this.tileEventLoadingByOrder[currentOrder] = false;
+          this.tileRebuild.request();
+        },
+        error: (error) => {
+          const currentOrder = subscriptionState.order;
+          this.tileEventsByOrder[currentOrder] = [];
+          this.tileEventLoadingByOrder[currentOrder] = false;
+          this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
+          this.tileRebuild.request();
+        },
+      }));
     });
+    for (const key of this.tileEventQueries.keys()) {
+      if (!activeQueryKeys.has(key)) this.tileEventQueries.delete(key);
+    }
   }
 
   private syncRoutePreviewSubscription(): void {
@@ -1720,7 +1743,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       : `${window.startMs}:${window.endMs}`;
     return JSON.stringify({
       uid,
-      order,
       range,
       windowKey,
     });
@@ -2836,6 +2858,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.tileEventSubscriptions.clear();
     this.tileEventSubscriptionStates.clear();
     this.tileEventListenerKeys.clear();
+    this.tileEventQueries.clear();
+    this.tileEventUserUID = null;
     this.tileEventAnchorEndMsByOrder.clear();
     this.tileEventsByOrder = {};
     this.tileEventLoadingByOrder = {};

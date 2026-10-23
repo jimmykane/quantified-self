@@ -572,6 +572,34 @@ QA must include genuinely overflowing content in dialogs, sheets and nested pane
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
 
+## Dashboard activity query sharing
+
+`SummariesComponent` owns a shared activity-query stream for each event owner and tile date window. Duration
+windows use one clock anchor during synchronization; a latest-window stream retains its first anchor while it
+has consumers. Matching charts and event maps share the listener, event hydration and merge exclusion. Sport
+filters remain per tile in the view-model builder. Historical windows remain separate from the latest window.
+
+Streams use reference-counted replay: removing the final consumer stops the SDK listener, and unused query
+entries are removed. Dashboard destruction and event-owner changes clear the streams, values and transient
+navigation anchors. Tile reorder remaps consumers without restarting reads. Failed streams may reconnect on
+the next subscription synchronization. The activity table, route previews and derived-metric readers retain
+their independent query lifecycles.
+
+## Firestore Angular boundary
+
+`app/firebase/firestore.ts` runs the provider factory, live-listener registration/teardown and the exported
+one-shot document/query/count reads outside Angular's zone. Firestore transport and IndexedDB callbacks otherwise
+inherit Angular task tracking, which becomes expensive for large cached histories. The SDK offers no Angular
+scheduling integration, so this boundary lives in the existing adapter rather than individual consumers.
+
+Snapshot, error and observer-completion callbacks enter Angular at the application boundary; `collectionData`
+and `docData` still filter cache/pending snapshots before entering when `waitForServer` is requested. One-shot
+reads preserve the original promises and error objects, and caller continuations retain their own zone context.
+The provider's zone registry covers reads started outside an injection context; without a zone, reads execute
+directly. Access rules, persistence settings and write APIs are unchanged. Regression coverage belongs in
+`firestore.spec.ts` and the dashboard subscription tests. These scheduling changes add no product settings or
+MCP/Training planning contracts and require no app-help changes.
+
 ## Firestore HTTP error responses
 
 The Firebase adapter installs `firestore-http-response-guard.ts` before browser RPCs run. The full SDK's XHR

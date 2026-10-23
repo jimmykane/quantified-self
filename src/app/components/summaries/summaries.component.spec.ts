@@ -20,7 +20,9 @@ import { CalendarDayDetailsNavigationService } from '../../services/calendar-day
 import { LOCALE_ID, NO_ERRORS_SCHEMA, signal, type WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { of, Subject, Subscription } from 'rxjs';
+import { Observable, of, Subject, Subscription } from 'rxjs';
+import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { AppDashboardChartTileSettingsInterface } from '../../models/app-user.interface';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { readFileSync } from 'node:fs';
@@ -2430,6 +2432,164 @@ describe('SummariesComponent', () => {
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
+  });
+
+  describe('shared tile event queries', () => {
+    beforeEach(() => {
+      buildDashboardTileViewModelsSpy.mockReturnValue([]);
+      component.user = {
+        uid: 'query-owner', settings: { dashboardSettings: { tiles: [
+          { type: TileTypes.Chart, order: 0, chartType: ChartTypes.ColumnsVertical,
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Running] } },
+          { type: TileTypes.Map, order: 1,
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] } },
+        ] } },
+      } as SummariesComponent['user'];
+      component.eventUser = component.user;
+    });
+
+    it('shares one live subscription and one filtered event array across matching chart and map tiles', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      let subscriptions = 0;
+      mockEventService.getEventsBy.mockReturnValue(new Observable<EventInterface[]>(subscriber => {
+        subscriptions++;
+        return incoming$.subscribe(subscriber);
+      }));
+      const nowMs = 1800000000000;
+      const now = vi.spyOn(Date, 'now').mockImplementation(() => nowMs + now.mock.calls.length);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventsBy).toHaveBeenCalledOnce();
+      expect(subscriptions).toBe(1);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      const event = { isMerge: false } as EventInterface;
+      incoming$.next([event, { isMerge: true } as EventInterface]);
+      expect(component['tileEventsByOrder'][0]).toEqual([event]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+      expect(component.user.settings.dashboardSettings.tiles.map(tile => (tile as AppDashboardChartTileSettingsInterface).eventFilters.activityTypes))
+        .toEqual([[ActivityTypes.Running], [ActivityTypes.Cycling]]);
+    });
+
+    it('replays loaded events to a later matching tile without changing the original window', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValue(incoming$);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+      component['syncTileEventSubscriptions']();
+      const event = { isMerge: false } as EventInterface;
+      incoming$.next([event]);
+      now.mockReturnValue(1800000060000);
+      component.user.settings.dashboardSettings.tiles.push({
+        type: TileTypes.Map, order: 2, eventFilters: { range: '1y', activityTypes: [] },
+      } as typeof component.user.settings.dashboardSettings.tiles[number]);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventsBy).toHaveBeenCalledOnce();
+      expect(component['tileEventsByOrder'][2]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder[2]).toBe(false);
+    });
+
+    it('keeps a shared source alive until its final tile is removed and releases its replayed data', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      const teardown = vi.fn();
+      mockEventService.getEventsBy.mockReturnValue(new Observable<EventInterface[]>(subscriber => {
+        const subscription = incoming$.subscribe(subscriber);
+        return () => { subscription.unsubscribe(); teardown(); };
+      }));
+      component['syncTileEventSubscriptions']();
+      incoming$.next([{ isMerge: false } as EventInterface]);
+      const savedTiles = component.user.settings.dashboardSettings.tiles;
+      component.user.settings.dashboardSettings.tiles = savedTiles.slice(1);
+      component['syncTileEventSubscriptions']();
+      expect(teardown).not.toHaveBeenCalled();
+      expect(component['tileEventsByOrder'][0]).toBeUndefined();
+      component.user.settings.dashboardSettings.tiles = [];
+      component['syncTileEventSubscriptions']();
+      expect(teardown).toHaveBeenCalledOnce();
+      expect(component['tileEventQueries'].size).toBe(0);
+
+      component.user.settings.dashboardSettings.tiles = savedTiles;
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(component['tileEventsByOrder']).toEqual({});
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      fixture.destroy();
+      expect(teardown).toHaveBeenCalledTimes(2);
+      expect(component['tileEventQueries'].size).toBe(0);
+    });
+
+    it('keeps changed date windows independent without restarting their unchanged peers', () => {
+      const latest$ = new Subject<EventInterface[]>();
+      const shorter$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValueOnce(latest$).mockReturnValueOnce(shorter$);
+      component['syncTileEventSubscriptions']();
+      const event = { isMerge: false } as EventInterface;
+      latest$.next([event]);
+      (component.user.settings.dashboardSettings.tiles[0] as AppDashboardChartTileSettingsInterface).eventFilters.range = '30d';
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(latest$.observed).toBe(true);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: false });
+      expect(component['tileEventsByOrder'][0]).toBeUndefined();
+      expect(component['tileEventsByOrder'][1]).toEqual([event]);
+      shorter$.next([]);
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [event] });
+    });
+
+    it('tears down the previous account and clears its values before loading the next account', () => {
+      const previous$ = new Subject<EventInterface[]>();
+      const next$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValueOnce(previous$).mockReturnValueOnce(next$);
+      component['syncTileEventSubscriptions']();
+      previous$.next([{ isMerge: false } as EventInterface]);
+      component['tileEventAnchorEndMsByOrder'].set(0, 1700000000000);
+      component.eventUser = { uid: 'next-account' } as SummariesComponent['eventUser'];
+      component['syncTileEventSubscriptions']();
+
+      expect(previous$.observed).toBe(false);
+      expect(component['tileEventAnchorEndMsByOrder'].size).toBe(0);
+      expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['query-owner', 'next-account']);
+      expect(component['tileEventsByOrder']).toEqual({});
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      previous$.next([{ isMerge: false } as EventInterface]);
+      expect(component['tileEventsByOrder']).toEqual({});
+      next$.next([]);
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+    });
+
+    it('shares matching historical windows while keeping the latest window independent', () => {
+      const latest$ = new Subject<EventInterface[]>();
+      const historical$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValueOnce(latest$).mockReturnValueOnce(historical$);
+      component['syncTileEventSubscriptions']();
+      component['tileEventAnchorEndMsByOrder'].set(0, 1700000000000);
+      component['syncTileEventSubscriptions']();
+      expect(latest$.observed).toBe(true);
+      expect(historical$.observed).toBe(true);
+      component['tileEventAnchorEndMsByOrder'].set(1, 1700000000000);
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(latest$.observed).toBe(false);
+      historical$.next([]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
+
+    it('reports errors to all consumers and reconnects once when subscriptions are synchronized again', () => {
+      const failed$ = new Subject<EventInterface[]>();
+      const retry$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValueOnce(failed$).mockReturnValueOnce(retry$);
+      component['syncTileEventSubscriptions']();
+      failed$.error(new Error('offline'));
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      retry$.next([]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
   });
 
   it('should maintain independent tile event loading states and pass per-tile events into the builder', async () => {
