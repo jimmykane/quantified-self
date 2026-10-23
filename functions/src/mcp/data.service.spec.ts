@@ -160,6 +160,8 @@ function activityDocument(overrides: Record<string, unknown> = {}) {
       type: ActivityTypes.Cycling,
       name: 'Private MTB workout',
       creator: { name: 'Private device' },
+      sourceIdentity: { version: 1, activityId: 'activity-1', startMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        endMs: Date.parse('2026-07-01T09:00:00.000Z'), importedType: 'Cycling', privateCanary: 'private-source-identity' },
       sourceActivityKey: 'private-source-key',
       powerMeter: true,
       trainer: false,
@@ -542,6 +544,8 @@ describe('MCP data service', () => {
     const activityRef = activities.activities[0].activityRef;
     expect(Buffer.from(activityRef, 'base64url').toString('utf8')).not.toContain('activity-1');
     expect(JSON.stringify(activities.activities[0])).not.toContain('Private device');
+    expect(activities.activities[0]).not.toHaveProperty('sourceIdentity');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-identity');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-key');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-source');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-payload');

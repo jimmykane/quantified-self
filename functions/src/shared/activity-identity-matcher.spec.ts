@@ -28,6 +28,37 @@ function identity(
 }
 
 describe('activity identity matcher', () => {
+  it('allows mutable sport/stat fields only inside a verified recording with unique source windows', () => {
+    const old = { ...identity('old-file', 1000), type: 'Stretching' };
+    const next = { ...identity('new-file', 1000, 3600, 0), type: 'Yoga' };
+    expect(resolveActivityIdentityAssignments([old], [next]).assignments.size).toBe(0);
+    expect([...resolveActivityIdentityAssignments([old], [next], { allowSourceWindowMatch: true }).assignments]).toEqual([[0, 0]]);
+    for (const candidate of [{ ...next, startDate: 2000 }, { ...next, endDate: null }])
+      expect(resolveActivityIdentityAssignments([old], [candidate], { allowSourceWindowMatch: true }).assignments.size).toBe(0);
+    for (const [before, after] of [[[old, old], [next]], [[old], [next, next]]])
+      expect(resolveActivityIdentityAssignments(before, after, { allowSourceWindowMatch: true }).assignments.size).toBe(0);
+  });
+
+  it('uses the bound source snapshot for reads without mutating the saved document', () => {
+    const old = { ...identity(undefined, 1000), type: 'Yoga', getID: () => 'stable-id',
+      sourceIdentity: { version: 1, activityId: 'stable-id', startMs: 1000, endMs: 3601000, importedType: 'Stretching' } };
+    const incoming = { ...identity(undefined, 1000), type: 'Stretching' };
+    expect([...resolveActivityIdentityAssignments([old], [incoming]).assignments]).toEqual([[0, 0]]);
+    expect(old.type).toBe('Yoga');
+    expect(resolveActivityIdentityAssignments([{ ...old, getID: () => 'different-id' }], [incoming]).assignments.size).toBe(0);
+  });
+
+  it('carries only explicitly certified stable IDs across Training sport changes', () => {
+    const old = { ...identity(undefined, 1000), getID: () => 'stable', type: 'Stretching' };
+    const incoming = { ...identity(undefined, 1000), getID: () => 'stable', type: 'Yoga' };
+    expect(resolveActivityIdentityAssignments([old], [incoming]).assignments.size).toBe(0);
+    expect([...resolveActivityIdentityAssignments([old], [incoming], { verifiedActivityIds: new Set(['stable']) }).assignments]).toEqual([[0, 0]]);
+    expect(resolveActivityIdentityAssignments([old], [{ ...incoming, getID: () => 'foreign' }],
+      { verifiedActivityIds: new Set(['stable']) }).assignments.size).toBe(0);
+    expect(resolveActivityIdentityAssignments([old, old], [incoming],
+      { verifiedActivityIds: new Set(['stable']) }).assignments.size).toBe(0);
+  });
+
   it.each(HISTORICAL_IMPORT_TYPE_REFINEMENTS)('matches a documented %s -> %s refinement with identical source evidence', (oldType, newType) => {
     const startDate = Date.parse('2026-07-01T08:00:00.000Z');
     const oldActivity = { ...identity('persisted-source-key', startDate), type: oldType };
@@ -198,7 +229,7 @@ describe('activity identity matcher', () => {
     expect(result.unmatchedExistingIndexes).toEqual([0]);
   });
 
-  it('requires complete strict evidence for report links even when keys agree or a fallback was requested', () => {
+  it('requires complete strict evidence for report links even when keys agree', () => {
     const old = identity('shared-key', Date.parse('2026-07-01T08:00:00Z'));
     const mismatches = [
       { ...old, endDate: Number(old.endDate) + 1000 },
@@ -208,7 +239,7 @@ describe('activity identity matcher', () => {
     ];
     for (const parsed of mismatches) {
       expect(resolveActivityIdentityAssignments([old], [parsed], {
-        requireStrictMatch: true, allowSingleRemainingFallback: true,
+        requireStrictMatch: true,
       }).assignments.size).toBe(0);
     }
     expect([...resolveActivityIdentityAssignments([old], [old], { requireStrictMatch: true }).assignments]).toEqual([[0, 0]]);
@@ -223,17 +254,12 @@ describe('activity identity matcher', () => {
     expect(resolveActivityIdentityAssignments([a], [wrongFile], { requireStrictMatch: true }).assignments.size).toBe(0);
   });
 
-  it('retains the one-remaining-item fallback only when a legacy caller requests it', () => {
+  it('leaves unrelated last remaining legs unmatched', () => {
     const result = resolveActivityIdentityAssignments([
       identity('persisted-source', Date.parse('2026-07-01T08:00:00.000Z')),
-    ], [
-      identity('different-source', Date.parse('2026-07-02T08:00:00.000Z')),
-    ], {
-      allowSingleRemainingFallback: true,
-    });
-
-    expect([...result.assignments.entries()]).toEqual([[0, 0]]);
-    expect(result.unmatchedParsedIndexes).toEqual([]);
-    expect(result.unmatchedExistingIndexes).toEqual([]);
+    ], [identity('different-source', Date.parse('2026-07-02T08:00:00.000Z'))]);
+    expect(result.assignments.size).toBe(0);
+    expect(result.unmatchedParsedIndexes).toEqual([0]);
+    expect(result.unmatchedExistingIndexes).toEqual([0]);
   });
 });

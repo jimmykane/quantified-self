@@ -1,4 +1,4 @@
-import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
+import { TrainingLoadSourceWrite, EventWriteSkippedForDeletedEventError } from '../training-load/training-load-source-write';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -26,6 +26,8 @@ import {
 import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { generateActivityIDFromSourceKey } from '../shared/id-generator';
+import { retainedSourceRevision } from '../shared/retained-activity-source';
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import {
@@ -56,7 +58,7 @@ import {
     resolveActivityIdentityAssignments,
 } from '../shared/activity-identity-matcher';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
-import { IMPORTED_EVENT_EDIT_FIELDS as REPARSE_PRESERVED_EVENT_FIELDS, preserveImportedEventEdits, prepareReparsedEventWrite } from '../shared/import-preservation';
+import { IMPORTED_EVENT_EDIT_FIELDS as REPARSE_PRESERVED_EVENT_FIELDS, preserveImportedEventEdits, preserveImportedActivityEdits, prepareReparsedEventWrite } from '../shared/import-preservation';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { shouldPreserveParsedDistance } from './regeneration-distance';
 import { preserveFreshSourceEventSummary } from './source-event-summary';
@@ -104,7 +106,8 @@ const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
 ] as const;
 
 export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {
-    return SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
+    return errorMessage === ACTIVITY_IDENTITY_CONFLICT_MESSAGE
+        || SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
 }
 
 function isSportsLibReparseTooHeavyFailureMessage(errorMessage: string): boolean {
@@ -115,6 +118,7 @@ function isSportsLibReparseTooHeavyFailureMessage(errorMessage: string): boolean
 }
 
 export function getSportsLibReparseFailureReason(errorMessage: string): SportsLibReparseFailureReason {
+    if (errorMessage === ACTIVITY_IDENTITY_CONFLICT_MESSAGE) return SPORTS_LIB_REPARSE_FAILURE_REASONS.IdentityConflict;
     return isSportsLibReparseTooHeavyFailureMessage(errorMessage)
         ? SPORTS_LIB_REPARSE_FAILURE_REASONS.TooHeavyForAutoReparse
         : SPORTS_LIB_REPARSE_FAILURE_REASONS.ReparseFailed;
@@ -129,13 +133,6 @@ class ReparsePersistenceSkippedForDeletedUserError extends Error {
         readonly phase: string,
     ) {
         super(`Skipping sports-lib reparse persistence for user ${uid} during ${phase} because the user is missing or deletion is in progress.`);
-    }
-}
-
-class ReparsePersistenceSkippedForDeletedEventError extends Error {
-    readonly name = 'EventWriteSkippedForDeletedEventError';
-    constructor(uid: string, eventId: string) {
-        super(`Skipping reparse status for missing event ${eventId} of user ${uid}.`);
     }
 }
 
@@ -1362,9 +1359,7 @@ function stampSourceActivityKeysForActivities(
             }
             if (usedKeys.has(sourceActivityKey)) {
                 if (strictAmbiguity) {
-                    throw new Error(
-                        `[sports-lib-reparse] Duplicate sourceActivityKey detected for fingerprint ${primaryFingerprint}`,
-                    );
+                    throw new ActivityIdentityConflictError();
                 }
                 continue;
             }
@@ -1393,9 +1388,7 @@ function stampSourceActivityKeysForActivities(
 
             if (missingEntries.length > 1) {
                 if (strictAmbiguity) {
-                    throw new Error(
-                        `[sports-lib-reparse] Ambiguous sourceActivityKey stamping for fingerprint ${primaryFingerprint} (${missingEntries.length} indistinguishable activities)`,
-                    );
+                    throw new ActivityIdentityConflictError();
                 }
                 return;
             }
@@ -1426,11 +1419,13 @@ function toComparableExistingActivity(existingDoc: Pick<admin.firestore.QueryDoc
         ? raw.stats as Record<string, unknown>
         : {};
     return {
+        getID: () => existingDoc.id,
         startDate: raw.startDate,
         endDate: raw.endDate,
         type: raw.type,
         creator: raw.creator as { name?: string } | undefined,
         sourceActivityKey: normalizeText(raw.sourceActivityKey) || undefined,
+        sourceIdentity: raw.sourceIdentity,
         fingerprintPayload: raw,
         getStat: (statType: string) => {
             const value = getStatValueFromJson(stats, statType);
@@ -1461,13 +1456,14 @@ function describeActivityIdentity(activity: ActivityIdentityLike, index: number)
 export function resolveActivityEditCarryover(
     parsedEvent: EventInterface,
     existingActivityDocs: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>,
+    options: { allowSourceWindowMatch?: boolean } = {},
 ): ActivityEditCarryoverResult {
     const activities = parsedEvent.getActivities();
     const existingComparableActivities = existingActivityDocs.map(toComparableExistingActivity);
     const assignmentResult = resolveActivityIdentityAssignments(
         existingComparableActivities,
         activities as ActivityIdentityLike[],
-        { allowSingleRemainingFallback: true },
+        { allowSourceWindowMatch: options.allowSourceWindowMatch },
     );
 
     assignmentResult.assignments.forEach((existingIndex, parsedIndex) => {
@@ -1476,7 +1472,6 @@ export function resolveActivityEditCarryover(
         if (!activity || !existingActivity) {
             return;
         }
-
         const existingSourceActivityKey = getActivitySourceActivityKey(existingActivity);
         if (!getActivitySourceActivityKey(activity) && existingSourceActivityKey) {
             setActivitySourceActivityKey(activity, existingSourceActivityKey);
@@ -1529,6 +1524,7 @@ export async function assignReimportActivityIds(
         }
         setActivitySourceActivityKey(activity, sourceActivityKey);
         if (typeof activity.setID === 'function') {
+            // Provisional ID only. Guarded source preparation owns saved-ID reuse.
             activity.setID(await generateActivityIDFromSourceKey(eventID, sourceActivityKey));
         }
     }
@@ -1586,8 +1582,20 @@ async function setReparseDocIfUserActive(
         await assertSourceWrite?.(db, transaction);
         const incomingData = data as admin.firestore.DocumentData;
         let resolvedData = incomingData;
-        if (transformExistingData) {
-            const existingSnapshot = await transaction.get(docRef);
+        const path = docRef.path.split('/');
+        const isEventDocument = path.length === 4 && path[0] === 'users' && path[1] === uid && path[2] === 'events';
+        const isActivityDocument = path.length === 4 && path[0] === 'users' && path[1] === uid && path[2] === 'activities';
+        let existingSnapshot: admin.firestore.DocumentSnapshot | undefined;
+        if (isActivityDocument) {
+            // The parent read shares this transaction, so a concurrent event delete also fences child writes.
+            const [parent, child] = await transaction.getAll(db.doc(`users/${uid}/events/${incomingData.eventID}`), docRef);
+            if (!parent.exists) throw new EventWriteSkippedForDeletedEventError(uid, incomingData.eventID);
+            existingSnapshot = child;
+        } else if (isEventDocument || transformExistingData) {
+            existingSnapshot = await transaction.get(docRef);
+            if (isEventDocument && !existingSnapshot.exists) throw new EventWriteSkippedForDeletedEventError(uid, docRef.id);
+        }
+        if (transformExistingData && existingSnapshot) {
             resolvedData = transformExistingData(
                 incomingData,
                 existingSnapshot.exists ? existingSnapshot.data() || null : null,
@@ -1606,12 +1614,9 @@ async function beginBenchmarkSourceWrite(
         uid,
         'sports_lib_reparse_benchmark_begin',
         admin.firestore().doc(`users/${uid}/events/${eventId}`),
-        {},
+        sanitizeEventFirestoreWritePayload({ benchmarkSourceWritePending: true }),
         { merge: true },
-        (_incoming, existing) => {
-            if (!existing) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
-            return sanitizeEventFirestoreWritePayload({ benchmarkSourceWritePending: true });
-        },
+        undefined,
         sourceWrite.assertCurrent,
     );
 }
@@ -1629,7 +1634,7 @@ async function completeReparsedSource(
         await sourceWrite.assertCurrent(db, transaction);
         const eventRef = db.doc(`users/${uid}/events/${eventId}`);
         const snapshot = await transaction.get(eventRef);
-        if (!snapshot.exists) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+        if (!snapshot.exists) throw new EventWriteSkippedForDeletedEventError(uid, eventId);
         const patch = completeBenchmarkSourceWrite(snapshot.data() || {});
         if (Object.keys(patch).length) {
             transaction.set(eventRef, sanitizeEventFirestoreWritePayload(patch), { merge: true });
@@ -1639,23 +1644,34 @@ async function completeReparsedSource(
     }));
 }
 
-function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite, identity: BenchmarkReparseIdentity): FirestoreAdapter {
+function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite,
+    existingActivities: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>): FirestoreAdapter {
+    let identity: BenchmarkReparseIdentity = { activityIDRemap: new Map(), currentActivityIDs: new Set() };
     return {
         prepareTrainingLoad: async event => {
             const finish = await sourceWrite.prepareTrainingLoad(event);
+            // Preparation is the only place that restores saved IDs. Build report links from its final result.
+            const activities = event.getActivities();
+            const ids = new Set(activities.map(activity => activity.getID()).filter((id): id is string => !!id));
+            const matches = resolveActivityIdentityAssignments(existingActivities.map(toComparableExistingActivity),
+                activities as ActivityIdentityLike[], { requireStrictMatch: true, allowSourceWindowMatch: true, verifiedActivityIds: ids });
+            identity = { currentActivityIDs: ids, activityIDRemap: new Map([...matches.assignments].map(([parsedIndex, existingIndex]) =>
+                [existingActivities[existingIndex].id, activities[parsedIndex].getID()!])) };
             await beginBenchmarkSourceWrite(uid, event.getID()!, sourceWrite);
             return finish;
         },
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
             const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+            const isActivityDocument = path.length === 4 && path[0] === 'users' && path[2] === 'activities';
             await setReparseDocIfUserActive(
                 uid,
                 `sports_lib_reparse_writer:${documentPath}`,
                 admin.firestore().doc(documentPath),
                 data,
                 undefined,
-                isEventDocument ? (incoming, existing) => preserveReparseEventEditsOnRewrite(incoming, existing, identity) : undefined,
+                isEventDocument ? (incoming, existing) => preserveReparseEventEditsOnRewrite(incoming, existing, identity)
+                    : isActivityDocument ? preserveImportedActivityEdits : undefined,
                 sourceWrite.assertCurrent,
             );
         },
@@ -1761,6 +1777,7 @@ export async function persistReparsedEvent(
     existingEventDoc: FirestoreEventJSON | Record<string, unknown>,
     existingActivityDocs: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>,
     targetSportsLibVersion: string,
+    expectedSourceRevision = retainedSourceRevision(existingEventDoc),
 ): Promise<{ staleActivitiesDeleted: number }> {
     parsedEvent.setID(eventId);
     const parsedEventAny = parsedEvent as any;
@@ -1773,19 +1790,10 @@ export async function persistReparsedEvent(
         parsedEventAny.originalFile = existingEventAny.originalFile;
     }
 
-    const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareReparsedEventWrite(uid, event));
-    const parsedActivities = parsedEvent.getActivities();
-    const strictIdentity = resolveActivityIdentityAssignments(existingActivityDocs.map(toComparableExistingActivity), parsedActivities as ActivityIdentityLike[], {
-        requireStrictMatch: true,
-    });
-    const identity: BenchmarkReparseIdentity = {
-        activityIDRemap: new Map([...strictIdentity.assignments].flatMap(([parsedIndex, existingIndex]) => {
-            const parsedID = parsedActivities[parsedIndex].getID();
-            return parsedID ? [[existingActivityDocs[existingIndex].id, parsedID] as const] : [];
-        })),
-        currentActivityIDs: new Set(parsedActivities.map(activity => activity.getID()).filter((id): id is string => !!id)),
-    };
-    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite, identity), undefined, undefined, getWriterLogAdapter());
+    const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareReparsedEventWrite(uid, event,
+        expectedSourceRevision));
+    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite, existingActivityDocs),
+        undefined, undefined, getWriterLogAdapter());
     await runReparsePersistencePhase(
         uid,
         eventId,
@@ -1906,7 +1914,7 @@ export async function writeReparseStatus(
             // Guard every status outcome, including the failure write after a skipped
             // classification, so no handler can recreate metadata below a deleted event.
             const event = await transaction.get(admin.firestore().doc(`users/${uid}/events/${eventId}`));
-            if (!event.exists) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+            if (!event.exists) throw new EventWriteSkippedForDeletedEventError(uid, eventId);
             if (payload.nonActivitySources && 'schemaVersion' in payload.nonActivitySources
                 && sourceReferenceFingerprint(extractSourceFiles(event.data() || {})) !== payload.nonActivitySources.sourceFingerprint) {
                 throw new Error('Original source references changed before classification was saved; retry reparse.');
@@ -2098,7 +2106,8 @@ export async function reparseEventFromOriginalFiles(
         reparsedEvent.setID(eventId);
         applyPreservedFields(reparsedEvent, autoHealResult.eventData);
         const existingComparableActivities = eventAndActivities.activityDocs.map(toComparableExistingActivity);
-        const activityEditCarryoverResult = resolveActivityEditCarryover(reparsedEvent, eventAndActivities.activityDocs);
+        const activityEditCarryoverResult = resolveActivityEditCarryover(reparsedEvent, eventAndActivities.activityDocs,
+            { allowSourceWindowMatch: true });
         if (
             activityEditCarryoverResult.unmatchedParsedIndexes.length > 0
             || activityEditCarryoverResult.unmatchedExistingIndexes.length > 0
@@ -2219,6 +2228,7 @@ export async function reparseEventFromOriginalFiles(
             autoHealResult.eventData,
             eventAndActivities.activityDocs,
             targetSportsLibVersion,
+            retainedSourceRevision(eventAndActivities.eventData),
         );
         const persistDurationMs = Date.now() - persistStartedAtMs;
         const totalDurationMs = Date.now() - startedAtMs;

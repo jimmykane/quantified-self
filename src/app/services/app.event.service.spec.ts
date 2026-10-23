@@ -275,9 +275,13 @@ describe('AppEventService', () => {
             getActivities: vi.fn().mockReturnValue([]),
             startDate: new Date()
         });
-        mocks.getActivityFromJSON.mockReturnValue({
-            setID: vi.fn().mockReturnThis(),
-            toJSON: vi.fn().mockReturnValue({})
+        mocks.getActivityFromJSON.mockImplementation(() => {
+            let id: string | null = null;
+            return {
+                setID: vi.fn(function (value: string) { id = value; return this; }),
+                getID: () => id,
+                toJSON: vi.fn().mockReturnValue({}),
+            };
         });
         mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
         mocks.batchCommit.mockResolvedValue(undefined);
@@ -506,6 +510,19 @@ describe('AppEventService', () => {
         const full = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
         expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(1);
         expect(full[0]).not.toBe(live[0]);
+    });
+
+    it.each(['file', 'provenance'])('includes source-only %s changes omitted by Sports Lib JSON in live fingerprints', change => {
+        const sourceIdentity = { version: 1, activityId: 'stable', startMs: 0, endMs: 1000, importedType: 'Running' };
+        const event = (updated: boolean) => ({
+            getID: () => 'event', toJSON: () => ({ name: 'Same summary' }),
+            originalFile: { path: 'original.fit', generation: updated && change === 'file' ? '2' : '1' },
+            getActivities: () => [{ getID: () => 'stable', toJSON: () => ({ type: 'Walking' }),
+                sourceIdentity: { ...sourceIdentity, importedType: updated && change === 'provenance' ? 'Cycling' : 'Running' } }],
+        });
+
+        expect((service as any).buildEventDetailsFingerprint(event(false)))
+            .not.toBe((service as any).buildEventDetailsFingerprint(event(true)));
     });
 
     it('should reuse one-shot event parsing for an identical initial live snapshot', async () => {
@@ -1730,6 +1747,7 @@ describe('AppEventService', () => {
             userID: 'other-user',
             eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
             sourceActivityKey: 'sha256:signature:0',
+            sourceIdentity: { version: 1, activityId: 'private-source-id' },
             details: {
                 streams: [{ type: 'Power', values: [100, 200] }],
             },
@@ -1747,6 +1765,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.userID).toBeUndefined();
         expect(writtenPayload.eventStartDate).toBeUndefined();
         expect(writtenPayload.sourceActivityKey).toBeUndefined();
+        expect(writtenPayload.sourceIdentity).toBeUndefined();
         expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
@@ -1758,6 +1777,7 @@ describe('AppEventService', () => {
             userID: 'other-user',
             eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
             sourceActivityKey: 'sha256:signature:0',
+            sourceIdentity: { version: 1, activityId: 'private-source-id' },
             nested: {
                 streams: [{ type: 'Pace', values: [1, 2, 3] }],
             },
@@ -1797,6 +1817,7 @@ describe('AppEventService', () => {
         expect(writtenActivityPatch.userID).toBeUndefined();
         expect(writtenActivityPatch.eventStartDate).toBeUndefined();
         expect(writtenActivityPatch.sourceActivityKey).toBeUndefined();
+        expect(writtenActivityPatch.sourceIdentity).toBeUndefined();
         expect(hasStreamsKey(writtenActivityPatch)).toBe(false);
 
         const writtenEventPatch = mocks.batchUpdate.mock.calls[1][1];
@@ -2064,11 +2085,13 @@ describe('AppEventService', () => {
     });
 
     describe('activity ID transfer', () => {
+        const identity = (index = 0) => ({ startDate: new Date(1000 + index * 60000),
+            endDate: new Date(61000 + index * 60000), type: 'Cycling' });
         it('should transfer activity IDs from existing activities during client-side parsing (Single File)', async () => {
             const activityId = 'act1';
 
             // Mock activities from Firestore
-            const mockActivity = {
+            const mockActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(activityId),
                 setID: vi.fn().mockReturnThis(),
             } as any;
@@ -2080,7 +2103,7 @@ describe('AppEventService', () => {
             } as any;
 
             // Mock re-parsed activity (without ID)
-            const parsedActivity = {
+            const parsedActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
             } as any;
@@ -2101,7 +2124,7 @@ describe('AppEventService', () => {
         it('should preserve renamed creator name from existing activity during client-side parsing', async () => {
             const activityId = 'act1';
 
-            const existingActivity = {
+            const existingActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(activityId),
                 creator: { name: 'Renamed Device' },
             } as any;
@@ -2112,7 +2135,7 @@ describe('AppEventService', () => {
                 getID: vi.fn().mockReturnValue('event1')
             } as any;
 
-            const parsedActivity = {
+            const parsedActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
                 creator: { name: 'Original Parsed Name' },
@@ -2132,7 +2155,7 @@ describe('AppEventService', () => {
 
         it('should replace an existing Unknown creator during client-side parsing', async () => {
             const activityId = 'act1';
-            const existingActivity = {
+            const existingActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(activityId),
                 creator: { name: 'Unknown' },
             } as any;
@@ -2141,7 +2164,7 @@ describe('AppEventService', () => {
                 originalFile: { path: 'path/to/file.fit' },
                 getID: vi.fn().mockReturnValue('event1')
             } as any;
-            const parsedActivity = {
+            const parsedActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
                 creator: { name: 'Garmin Edge 1030 Plus' },
@@ -2161,8 +2184,8 @@ describe('AppEventService', () => {
 
         it('should transfer activity IDs in merged events scenario (Multiple Files)', async () => {
             // Firestore activities
-            const mockActivity1 = { getID: () => 'act1' } as any;
-            const mockActivity2 = { getID: () => 'act2' } as any;
+            const mockActivity1 = { ...identity(0), getID: () => 'act1' } as any;
+            const mockActivity2 = { ...identity(1), getID: () => 'act2' } as any;
 
             const mockEvent = {
                 getID: () => 'event1',
@@ -2171,11 +2194,11 @@ describe('AppEventService', () => {
             } as any;
 
             // Mock re-parsed activities (without IDs)
-            const parsedActivity1 = {
+            const parsedActivity1 = { ...identity(0),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
             } as any;
-            const parsedActivity2 = {
+            const parsedActivity2 = { ...identity(1),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
             } as any;
@@ -2204,15 +2227,15 @@ describe('AppEventService', () => {
         });
 
         it('should handle mismatched activity counts gracefully (More parsed than Firestore)', async () => {
-            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockActivity1 = { ...identity(0), getID: () => 'act1' } as any;
             const mockEvent = {
                 getActivities: () => [mockActivity1],
                 originalFile: { path: 'path/to/file.fit' },
                 getID: () => 'event1'
             } as any;
 
-            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
-            const parsedActivity2 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity1 = { ...identity(0), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity2 = { ...identity(1), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
             const parsedEvent = {
                 getActivities: () => [parsedActivity1, parsedActivity2],
             } as any;
@@ -2227,15 +2250,15 @@ describe('AppEventService', () => {
         });
 
         it('should handle mismatched activity counts gracefully (Fewer parsed than Firestore)', async () => {
-            const mockActivity1 = { getID: () => 'act1' } as any;
-            const mockActivity2 = { getID: () => 'act2' } as any;
+            const mockActivity1 = { ...identity(0), getID: () => 'act1' } as any;
+            const mockActivity2 = { ...identity(1), getID: () => 'act2' } as any;
             const mockEvent = {
                 getActivities: () => [mockActivity1, mockActivity2],
                 originalFile: { path: 'path/to/file.fit' },
                 getID: () => 'event1'
             } as any;
 
-            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity1 = { ...identity(0), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
             const parsedEvent = {
                 getActivities: () => [parsedActivity1],
             } as any;
@@ -2248,6 +2271,15 @@ describe('AppEventService', () => {
             expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
         });
 
+        it('does not borrow the only saved ID for a different source window', async () => {
+            const saved = { ...identity(0), getID: () => 'saved-id' };
+            const parsed = { ...identity(1), getID: () => null, setID: vi.fn() };
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ getActivities: () => [parsed] });
+            await (service as any).calculateStreamsFromWithOrchestration({ getID: () => 'event',
+                originalFile: { path: 'synthetic.fit' }, getActivities: () => [saved] });
+            expect(parsed.setID).not.toHaveBeenCalled();
+        });
+
         it('should not crash if Firestore has no activities', async () => {
             const mockEvent = {
                 getActivities: () => [],
@@ -2255,7 +2287,7 @@ describe('AppEventService', () => {
                 getID: () => 'event1'
             } as any;
 
-            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity1 = { ...identity(0), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
             const parsedEvent = {
                 getActivities: () => [parsedActivity1],
             } as any;

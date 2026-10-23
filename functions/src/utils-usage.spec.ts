@@ -7,7 +7,8 @@ vi.mock('./shared/import-preservation', async importOriginal => ({
     ...await importOriginal<typeof import('./shared/import-preservation')>(),
     prepareImportedEventWrite: prepareImportWrite,
 }));
-vi.mock('./training-load/training-load-source-write', () => ({
+vi.mock('./training-load/training-load-source-write', async importOriginal => ({
+  ...await importOriginal<typeof import('./training-load/training-load-source-write')>(),
     TrainingLoadSourceWrite: class {
         assertCurrent = sourceWriteGuard.assertCurrent;
         constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
@@ -427,11 +428,13 @@ describe('utils higher-level helpers', () => {
             const finish = Object.assign(vi.fn(), { sourceWriteId: 'attempt' });
             const prepare = vi.spyOn(trainingLoadMetadata, 'prepareTrainingLoadMetadata').mockResolvedValueOnce(finish);
             const saved = { name: 'Edited title', description: 'Edited description', notes: 'Notes', tags: ['Race'], rpe: 7, feeling: 4, privacy: 'private' };
+            const providerMetadata = { serviceName: 'GARMINAPI', serviceUserID: 'synthetic-account',
+                serviceActivityFileID: 'synthetic-file', serviceActivityFileType: 'FIT' };
             try {
                 writeAllEventDataMock.mockImplementationOnce(async () => {
                     const [adapter] = eventWriterConstructorMock.mock.calls.at(-1)!;
                     expect(await adapter.prepareTrainingLoad(event)).toBe(finish);
-                    expect(prepareImportWrite).toHaveBeenCalledWith('user-1', event, expect.any(Function));
+                    expect(prepareImportWrite).toHaveBeenCalledWith('user-1', event, expect.any(Function), providerMetadata);
                     hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => saved });
                     await adapter.setDoc(['users', 'user-1', 'events', 'event-1'], { name: 'File title', description: 'File description' });
                     expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), saved);
@@ -440,7 +443,8 @@ describe('utils higher-level helpers', () => {
                     expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), { creator: { name: 'Latest watch name' }, sourceActivityKey: 'saved-key' });
                     return mockSavedOriginalFiles;
                 });
-                await setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], { serviceName: 'GARMINAPI', toJSON: () => ({}) });
+                await setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2],
+                    { serviceName: providerMetadata.serviceName, toJSON: () => providerMetadata });
             } finally { prepare.mockRestore(); }
         });
 

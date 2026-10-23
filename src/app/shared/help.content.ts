@@ -826,6 +826,20 @@ The plots share zoom and a timeline starting at the first plotted recording. Ori
 
 Charts require original per-beat timing; ordinary heart-rate samples or a resampled one-second interval stream cannot recreate it. Expanding the charts calculates the view locally without saving new statistics, reparsing the event or adding an accuracy grade to the benchmark report. A recording can have saved summaries without raw chart data, and available raw intervals do not fill missing saved summaries.
 
+### Updated recordings and saved preferences
+
+When a connected service changes the sport in an existing recording, Quantified Self keeps the same saved activity
+when it can verify which recording and leg changed. Your Training load override, exclusion and saved policy stay with
+that leg. The updated file supplies the sport. Your custom device name and ascent/descent corrections are preserved
+when they can be matched safely. Opening charts only reads the retained original; it does not download a newer recording from the service or change saved statistics.
+If a saved source is updated while Event Details is open, its charts refresh and keep your selected activities.
+
+If a source update cannot be matched safely, the saved workout is kept and the update needs review. Quantified Self
+does not guess how to move preferences between multisport legs. Reprocessing reads the retained originals, so it does
+not fetch a sport change that exists only in the service's newer export.
+If a repeat manual upload reports that the saved activities cannot be matched, review the source change before
+retrying; repeating the upload cannot resolve an ambiguous leg association.
+
 ### FIT calorie metrics
 
 - FIT activities that record it show **Metabolic Calories** in the **Physiological** Event Details summary tab. It is a source-recorded metric and remains separate from total **Energy**.

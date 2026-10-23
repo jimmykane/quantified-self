@@ -31,6 +31,7 @@ import { createParsingOptions } from '../../../shared/parsing-options';
 import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
+import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 import {
   deferWorkoutQueueItemForTokenRefreshContention,
 } from '../queue/token-refresh-contention';
@@ -522,6 +523,9 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
+    if (isActivityIdentityConflict(e)) {
+      return moveToDeadLetterQueue(queueItem, e, bulkWriter, e.code);
+    }
     logger.error(e);
     if (isEventWriteSkippedForDeletedUserError(e)) {
       logger.warn(`Skipping Garmin queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);

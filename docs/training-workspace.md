@@ -6166,6 +6166,52 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+### Stable recording associations across source revisions
+
+Existing activity document IDs survive safely matched provider revisions and retained-original reparses. The file
+supplies the sport; Quantified Self has no recorded-sport editor. Device names, explicit ascent/descent corrections,
+Training controls and dated applied policies retain their separate preservation rules.
+
+The server-owned `sourceIdentity` stores the bound document ID, complete source window and last imported sport.
+It certifies an already matched leg during interrupted-write recovery; it is not a sport override. The common pure
+matcher in `shared/activity-identity.ts` serves backend writes, read-only source hydration and MCP charts. Only a
+verified provider account/workout identity or retained-original reparse authorizes matching across sport/statistic
+changes by a unique complete source window. Ordinary uploads and read-only hydration retain strict source checks.
+Ambiguous windows and overlapping splits/merges fail before source reservation; no positional or unmatched-leg
+fallback is used. Legacy associations are adopted on normal writes, without downloading old originals to infer edits.
+
+Guarded preparation owns saved-ID reuse and applies assignments only after its reservation commits. Parsing/source-key
+generation supplies provisional IDs; only new legs keep them. The writer builds benchmark associations once, after
+preparation establishes final IDs. Explicit elevation corrections must pass strict matching for the same saved-ID
+pairing and remain eligible for the file's sport. Conflicting evidence cannot transfer a correction to another leg.
+ID binding changes only IDs and source associations; it does not rebuild recorded statistics. Correction handling owns
+its stricter validation and runs the additional match only when saved elevation corrections exist.
+
+The reservation passes verified IDs in memory to Training finalization. This preserves zero overrides, exclusions and
+saved policies across sport revisions without trusting arbitrary reused IDs. Source-write IDs, full source fingerprints,
+latest controls, account guards and deletion fences remain authoritative. Guarded document transactions preserve live
+event edits and custom device names. The parent activity-type summary follows the parsed legs. A source conflict uses
+the existing terminal review/dead-letter lifecycle (`ACTIVITY_IDENTITY_CONFLICT`), rather than an endless retry or
+implicit reassociation. Duplicate source keys fail before writes or ID assignment.
+
+Interrupted reparses use the frozen active-leg snapshot, ignoring partial duplicate copies. A pending legacy activity
+without valid source provenance must still match its frozen complete time window; controls without any frozen identity
+also require valid provenance. An overwritten/reused ID cannot certify another leg's controls. Missing or foreign active
+leg references require review. Long reparses recheck retained-file references before reservation. Reparse checks workout
+existence before reservation and inside parent/child transactions, preventing recreation of a deleted workout or new
+orphan writes. Child reads batch parent and activity; event rewrites reuse their preservation read. Deletion uses the
+existing skipped-write lifecycle.
+
+Stable leg IDs do not identify a stream revision. Event Details uses original paths/buckets/generations, completed
+reparse revision and validated source snapshots to refresh changed streams while keeping selected IDs. Ordinary
+metadata edits and unchanged multisport reorderings reuse streams. Refreshes coalesce to the latest live snapshot
+and respect the current selection, including an empty selection. Old reads cannot replace another account/route or
+restore a public share after access is lost. This browser behavior adds no trigger or stored state.
+
+Read-only hydration consumes the saved association without changing Firestore. No historical migration, mass reparse
+or provider fetch is required to adopt these associations. See the [provider lifecycle](provider-integration-guide.md)
+and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
+
 ### File-only TSS evaluation and owner load controls
 
 Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain

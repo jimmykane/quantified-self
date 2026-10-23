@@ -1,6 +1,8 @@
 import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
+import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
+import { isActivityIdentityConflict } from './activity-identity-conflict';
 import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, readAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 
 /**
@@ -103,7 +105,7 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 }
 
 function isControlFlowWriteAbort(error: Error): boolean {
-    return error.name === 'EventWriteSkippedForDeletedUserError'
+    return isActivityIdentityConflict(error) || error.name === 'EventWriteSkippedForDeletedUserError'
         || error.name === 'EventWriteSkippedForDeletedEventError'
         || error.name === 'UserDeletionGuardReadError'
         || error.name === 'HistoryLifecycleChangedError';
@@ -188,7 +190,10 @@ export class EventWriter {
                     eventID: event.getID() as string,
                     ...(event.startDate ? { eventStartDate: event.startDate } : {}),
                 };
+                delete activityJSON.sourceIdentity; // Accept only the validated server-owned instance snapshot below.
                 const sourceActivityKey = `${(activity as any)?.sourceActivityKey || ''}`.trim();
+                const sourceIdentity = readActivitySourceIdentity((activity as any)?.sourceIdentity, activity.getID());
+                if (sourceIdentity) activityJSON.sourceIdentity = sourceIdentity;
                 if (sourceActivityKey) {
                     activityJSON.sourceActivityKey = sourceActivityKey;
                 }

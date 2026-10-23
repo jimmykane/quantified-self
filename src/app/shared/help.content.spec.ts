@@ -16,6 +16,17 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains source updates, saved leg preferences and the retained-original boundary', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
+    expect(copy).toContain('Training load override, exclusion and saved policy stay with');
+    expect(copy).toContain('The updated file supplies the sport');
+    expect(copy).toContain('custom device name and ascent/descent corrections');
+    expect(copy).toContain('does not fetch a sport change');
+    expect(copy).toContain('does not guess how to move preferences between multisport legs');
+    expect(copy).toContain('repeat manual upload');
+    expect(copy).toContain('repeating the upload cannot resolve an ambiguous leg association');
+  });
+
   it('explains independent ascent/descent correction, reviewed reset and source preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
     for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',

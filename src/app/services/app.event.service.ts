@@ -1,5 +1,8 @@
 import { AppEventSummary } from '@shared/event-summary';
 import { isCompleteEvent, type EventRead } from '@shared/event-read';
+import { resolveActivityIdentityAssignments, type ActivityIdentityLike } from '@shared/activity-identity';
+import { readActivitySourceIdentity, carryActivitySourceIdentity } from '@shared/activity-source-identity';
+import { eventSourceVersion } from '../utils/event-live-reconcile';
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
@@ -287,6 +290,7 @@ export class AppEventService implements OnDestroy {
     delete sanitizedPayload.userID;
     delete sanitizedPayload.eventStartDate;
     delete sanitizedPayload.sourceActivityKey;
+    delete sanitizedPayload.sourceIdentity;
     delete sanitizedPayload.ascentCorrection;
     delete sanitizedPayload.descentCorrection;
     return sanitizedPayload;
@@ -420,6 +424,7 @@ export class AppEventService implements OnDestroy {
 
     return this.buildSnapshotFingerprint({
       eventID: typeof eventAny?.getID === 'function' ? eventAny.getID() : null,
+      sourceVersion: eventSourceVersion(event),
       event: eventSnapshot,
       tags: Array.isArray(event.tags) ? event.tags : event.benchmarkReviewTags,
       benchmark: {
@@ -508,6 +513,8 @@ export class AppEventService implements OnDestroy {
           }
         }
         const activity = EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id);
+        const sourceIdentity = readActivitySourceIdentity(sanitizedJson.sourceIdentity, activitySnapshot.id);
+        if (sourceIdentity) Object.assign(activity, { sourceIdentity });
         for (const metric of ACTIVITY_ELEVATION_METRICS) {
           const { field } = activityElevationMetric(metric);
           applyActivityAscentCorrection(activity as AscentCorrectedActivity, sanitizedJson[field], false, metric);
@@ -1251,14 +1258,7 @@ export class AppEventService implements OnDestroy {
 
       const finalEvent = validEvents.length === 1 ? validEvents[0] : EventUtilities.mergeEvents(validEvents);
 
-      // Basic transfer of IDs from Firestore activities to re-parsed activities
-      const existingActivities = event.getActivities();
-      finalEvent.getActivities().forEach((activity, index) => {
-        if (existingActivities[index]) {
-          activity.setID(existingActivities[index].getID());
-          this.applyUserActivityOverrides(existingActivities[index], activity);
-        }
-      });
+      this.carryMatchedActivityEdits(event, finalEvent);
 
       return finalEvent;
     }
@@ -1271,15 +1271,20 @@ export class AppEventService implements OnDestroy {
     }
     const res = await this.fetchAndParseOneFile(originalFile, skipEnrichment);
     if (res && res.getActivities().length > 0) {
-      const existingActivities = event.getActivities();
-      res.getActivities().forEach((activity, index) => {
-        if (existingActivities[index]) {
-          activity.setID(existingActivities[index].getID());
-          this.applyUserActivityOverrides(existingActivities[index], activity);
-        }
-      });
+      this.carryMatchedActivityEdits(event, res);
     }
     return res;
+  }
+
+  private carryMatchedActivityEdits(saved: EventInterface, parsed: EventInterface): void {
+    const before = saved.getActivities(), after = parsed.getActivities();
+    const { assignments } = resolveActivityIdentityAssignments(before as ActivityIdentityLike[], after as ActivityIdentityLike[]);
+    assignments.forEach((existingIndex, parsedIndex) => {
+      const id = before[existingIndex].getID();
+      if (!id) return;
+      after[parsedIndex].setID(id);
+      this.applyUserActivityOverrides(before[existingIndex], after[parsedIndex]);
+    });
   }
 
   /**
@@ -1288,6 +1293,7 @@ export class AppEventService implements OnDestroy {
    */
   private applyUserActivityOverrides(existingActivity: ActivityInterface, parsedActivity: ActivityInterface): void {
     if (!existingActivity || !parsedActivity) return;
+    carryActivitySourceIdentity(existingActivity, parsedActivity);
     carryActivityAscentCorrection(existingActivity as AscentCorrectedActivity, parsedActivity as AscentCorrectedActivity);
 
     const existingCreatorName = getActivityCreatorNameCarryover(

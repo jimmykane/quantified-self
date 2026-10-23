@@ -876,11 +876,29 @@ re-reads the current event document and keeps the latest values plus event tags,
 in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
-- regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
-- derive sourceActivityKey from source-content hash + activity signature (order-independent)
-- `assignReimportActivityIds(...)` performs strict sourceActivityKey restamping and fails fast if any activity still lacks a valid SHA-derived key (no fallback key generation)
-- use deterministic matching for creator-name carryover (prefer sourceActivityKey, then signatures)
-- delete stale old activities not present in the new parsed ID set
+
+- A pending legacy activity without valid `sourceIdentity` must still match the complete pre-write window in frozen
+  Training metadata. If an older interrupted writer overwrote/reused that ID for another leg, reject with
+  `ACTIVITY_IDENTITY_CONFLICT` before further writes. Do not retry by trusting the current document ID or moving its
+  old controls. Valid server-owned source snapshots continue to support interrupted source-revision recovery.
+  A legacy control without any frozen leg identity also requires valid source provenance before trusting its ID.
+- Guarded source preparation is the only owner of saved-ID reuse. Parsing/source-key generation assigns provisional deterministic IDs; matched saved IDs replace them before any write. Only genuinely new legs keep their generated IDs.
+- Keep source key generation/validation for new and legacy compatibility; a source-content hash or sport refinement must not rename an already verified leg.
+- Use the shared pure matcher and a unique complete retained-source window for mutable sport/statistics. Do not fall back to array order or the only unmatched leg.
+- Persist a server-owned `sourceIdentity` containing stable ID, raw start/end and imported type for interrupted-write recovery. The file supplies the sport; QS has no recorded-sport editor.
+- Validate assignments and saved corrections before reserving a source write. Recheck the pre-parse retained references after long parsing, separately from any bucket repair being saved; source replacement remains retryable.
+- Use the committed association certificate for Training controls/policies. Calculate benchmark selection remaps once, after preparation assigns final IDs; no pre-write guess or preparation callback is needed.
+- Preserve custom device names inside guarded document transactions, alongside the existing parent edit policy and strict elevation-correction matching.
+- Check event existence before reserving and inside subsequent parent/child writes. Reservation ownership and account status alone cannot stop a reparse from recreating a deleted workout. Child writes batch their existing child read with one parent read; event-body writes reuse their preservation read, and merge-flag writes also read the parent. Missing events use the existing skipped-write lifecycle.
+- Missing or foreign active leg references during interrupted recovery produce `ACTIVITY_IDENTITY_CONFLICT` for review. Retrying the same source cannot restore that saved association.
+- Reject overlapping splits/merges and ambiguous windows with terminal `ACTIVITY_IDENTITY_CONFLICT`; leave the saved source/load available for review.
+- Duplicate or indistinguishable source keys detected before reservation use the same terminal review outcome. Repeating the parse cannot disambiguate those legs; no source writes or new ID assignments are attempted.
+- Interrupted retries use the existing active leg snapshot rather than partial copies. Delete only stale children outside the final verified ID set using existing reservation/deletion guards.
+
+This metadata is adopted on normal writes/reparses; do not launch a historical campaign just to populate it. A reparse
+reads retained originals, not the newest provider export, so it cannot discover a provider-side sport edit that was
+never downloaded. A provider resync verifies the persisted provider account/workout identity before accepting that
+revision. Read-only source hydration and MCP charts consume the saved association without writing it.
 
 ## Bucket Fallback + Auto-Heal
 To handle incorrect bucket metadata safely, reparse download tries the known canonical buckets and auto-heals metadata when fallback succeeds.

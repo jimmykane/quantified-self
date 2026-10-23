@@ -355,7 +355,7 @@ describe('Firebase Hosting configuration', () => {
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
-    // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
+    // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
@@ -398,6 +398,7 @@ describe('Firebase Hosting configuration', () => {
     // Account deletion now lives in the separate Data management settings section.
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
+    // Recording-update help also covers stable legs, saved preferences and retained-original reprocessing.
     // Benchmark R–R help covers source-separated summaries, linked plots and the original-timing boundary.
     // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
     // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.

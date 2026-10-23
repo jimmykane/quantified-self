@@ -1,3 +1,4 @@
+import { ActivityIdentityConflictError } from './shared/activity-identity-conflict';
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { PROVIDER_MAX_RETRY_COUNT, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
@@ -2974,6 +2975,27 @@ describe('queue', () => {
             } as any);
 
             vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(createSyntheticFitPayload()));
+        });
+
+        it('dead-letters a verified Suunto identity conflict without another parse retry', async () => {
+            vi.mocked(utils.setEvent).mockRejectedValueOnce(new ActivityIdentityConflictError());
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'ACTIVITY_IDENTITY_CONFLICT' }));
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+        });
+
+        it('tries a usable sibling token after a legacy shared-provider identity conflict', async () => {
+            const tokenFor = (id: string) => ({ id: `token-${id}`, ref: { parent: { id: 'tokens', parent: { id } } }, data: () => ({}) });
+            mockCollection.get.mockResolvedValueOnce({ size: 2, docs: [tokenFor('owner-a'), tokenFor('owner-b')], empty: false });
+            vi.mocked(utils.setEvent).mockImplementation(async (uid: string) => {
+                if (uid === 'owner-a') throw new ActivityIdentityConflictError();
+                return { eventID: 'standardized-event-id', savedOriginalFiles: [] };
+            });
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent).mock.calls.map(([uid]) => uid)).toEqual(['owner-a', 'owner-b']);
+            expect(mockBatch.set).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'ACTIVITY_IDENTITY_CONFLICT' }));
         });
 
         it('should call garmin processor for GarminAPI service', async () => {

@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -240,6 +241,9 @@ export async function processWahooWorkoutQueueItem(
     }
     return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {}, true);
   } catch (error) {
+    if (isActivityIdentityConflict(error)) {
+      return failWahooWorkoutQueueRevision(queueItem, processingOwner, error);
+    }
     if (isWahooReconnectRequiredError(error)) {
       return deferClaimedWahooQueueItemForReconnect(queueItem, userID, processingOwner);
     }
