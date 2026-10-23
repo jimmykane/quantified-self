@@ -130,15 +130,16 @@ function renderMessage(draft: MarketingCampaignDraft, firstName: string, uid: st
   });
   return { rendered: { ...rendered, subject: draft.subject }, unsubscribeUrl };
 }
-function mailPayload(draft: MarketingCampaignDraft, email: string, firstName: string, uid: string, secret: string,
+function mailPayload(draft: MarketingCampaignDraft, email: string, firstName: string, uid: string | null, secret: string,
   campaignId: string | null, attempt: number, unsubscribeOverride?: string) {
-  const { rendered, unsubscribeUrl } = renderMessage(draft, firstName, uid, secret, unsubscribeOverride);
+  if (!uid && !unsubscribeOverride) throw new Error('Campaign mail requires recipient UID ownership.');
+  const { rendered, unsubscribeUrl } = renderMessage(draft, firstName, uid ?? '', secret, unsubscribeOverride);
   return {
     ...newEmailDeliveryFields(),
     to: email, from: marketingFrom(draft.senderName), replyTo: MARKETING_EMAIL_REPLY_TO,
     headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
     message: unsubscribeOverride ? { ...rendered, subject: `[TEST] ${rendered.subject}` } : rendered,
-    marketing: { campaignId, uid, attempt },
+    marketing: { campaignId, ...(uid ? { uid } : {}), attempt },
     expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
   };
 }
@@ -363,12 +364,16 @@ export async function setDailyCap(input: unknown): Promise<MarketingCampaignList
 }
 
 export async function reserveMail(mailId: string, data: Record<string, unknown>,
-  nowProvider: () => Date = () => new Date()): Promise<boolean> {
+  nowProvider: () => Date = () => new Date(), recipientUid?: string): Promise<boolean> {
   return db().runTransaction(async tx => {
     const now = nowProvider();
     const day = dayRef(utcDay(now));
     const mail = db().collection('mail').doc(mailId);
-    const [controlDoc, dayDoc, mailDoc] = await Promise.all([tx.get(control()), tx.get(day), tx.get(mail)]);
+    const [controlDoc, dayDoc, mailDoc, guard] = await Promise.all([
+      tx.get(control()), tx.get(day), tx.get(mail),
+      recipientUid ? getUserDeletionGuardStateInTransaction(db(), tx, recipientUid) : undefined,
+    ]);
+    if (guard?.shouldSkip) throw new HttpsError('failed-precondition', 'The test recipient account is missing or being deleted.');
     const cap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
     const used = dayDoc.get('used') || 0;
     if (remainingToday(cap, used) === 0 || mailDoc.exists) return false;
@@ -396,12 +401,20 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
   if (campaign) requireMatchingDraft(testedDraft, checkedExpectedDraft(draftInput));
   const user = await getAuth(adminUid);
   if (!user?.email || user.disabled) throw new HttpsError('failed-precondition', 'Your admin account needs an enabled email address.');
+  // Test delivery can target another app account or a deliberate external inbox.
+  // Ownership belongs to that recipient, never to the admin initiating the test.
+  let recipientUid: string | undefined;
+  try {
+    recipientUid = (await admin.auth().getUserByEmail(recipient)).uid;
+  } catch (error) {
+    if (!isMissingAuth(error)) throw error;
+  }
   const mailId = `marketing_test_${campaign?.id || 'unsaved'}_${randomUUID()}`;
   const firstName = recipient.toLowerCase() === user.email.toLowerCase()
     ? user.displayName?.trim().split(/\s+/)[0] || 'friend' : 'friend';
-  const mail = mailPayload(testedDraft, recipient, firstName, adminUid, secret, null, 1, testUnsubscribeUrl);
+  const mail = mailPayload(testedDraft, recipient, firstName, recipientUid ?? null, secret, null, 1, testUnsubscribeUrl);
   if (!campaign) {
-    const submitted = await reserveMail(mailId, mail);
+    const submitted = await reserveMail(mailId, mail, undefined, recipientUid);
     if (!submitted) throw new HttpsError('resource-exhausted', 'The UTC daily marketing limit has been reached.');
     return { mailId, submitted };
   }
@@ -410,13 +423,15 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
     const now = new Date();
     const day = dayRef(utcDay(now));
     const mailRef = db().collection('mail').doc(mailId);
-    const [campaignDoc, controlDoc, dayDoc, mailDoc] = await Promise.all([
+    const [campaignDoc, controlDoc, dayDoc, mailDoc, guard] = await Promise.all([
       tx.get(ref), tx.get(control()), tx.get(day), tx.get(mailRef),
+      recipientUid ? getUserDeletionGuardStateInTransaction(db(), tx, recipientUid) : undefined,
     ]);
     if (campaignDoc.get('status') !== campaign.status || campaignDoc.get('updatedAt') !== campaign.updatedAt ||
         JSON.stringify(validateMarketingDraft(campaignDoc.data())) !== JSON.stringify(testedDraft)) {
       throw new HttpsError('failed-precondition', 'The campaign changed while preparing the test. Refresh and try again.');
     }
+    if (guard?.shouldSkip) throw new HttpsError('failed-precondition', 'The test recipient account is missing or being deleted.');
     const cap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
     const used = dayDoc.get('used') || 0;
     if (remainingToday(cap, used) === 0 || mailDoc.exists) return false;

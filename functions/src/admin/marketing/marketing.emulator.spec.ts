@@ -369,6 +369,8 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout
     expect(test.submitted).toBe(true);
     const mail = await db.collection('mail').doc(test.mailId).get();
     expect(mail.get('to')).toBe(target);
+    expect(mail.get('marketing.uid')).toBeUndefined();
+    expect(mail.get('expireAt').toMillis()).toBeGreaterThan(Date.now());
     expect(mail.get('message.subject')).toBe(`[TEST] ${draft.subject}`);
     expect(mail.get('headers.List-Unsubscribe')).toBe('<https://quantified-self.io/email/unsubscribe?test=1>');
     expect(mail.get('from')).toBe('Dimitrios from Quantified Self <updates@quantified-self.io>');
@@ -376,6 +378,69 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout
     await expect(sendTest(campaign.id, user.uid, secret, target)).rejects.toThrow();
     const edited = await saveCampaign(campaign.id, { ...draft, subject: 'Edited subject' }, user.uid);
     expect(edited.lastTestMailId).toBeNull();
+  });
+
+  async function accountTestMailFixture(mode: 'saved' | 'unsaved') {
+    const sender = await admin.auth().createUser({ email: `sender-${randomUUID()}@example.com` });
+    const recipient = await admin.auth().createUser({ email: `recipient-${randomUUID()}@example.com` });
+    await db.doc(`users/${recipient.uid}`).set({ test: true });
+    const campaignId = mode === 'saved' ? (await saveCampaign(null, draft, sender.uid)).id : null;
+    const quota = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
+    await quota.set({ used: 0 });
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    return { sender, recipient, campaignId, quota };
+  }
+
+  it.each(['saved', 'unsaved'] as const)('uses recipient ownership for %s test mail', async mode => {
+    const { sender, recipient, campaignId } = await accountTestMailFixture(mode);
+    const result = await sendTest(campaignId, sender.uid, secret, recipient.email, draft);
+    const mail = await db.collection('mail').doc(result.mailId).get();
+    expect(mail.get('to')).toBe(recipient.email);
+    expect(mail.get('marketing.uid')).toBe(recipient.uid);
+    expect(mail.get('toUids')).toBeUndefined();
+    expect(mail.get('expireAt').toMillis()).toBeGreaterThan(Date.now());
+    expect(mail.get('headers.List-Unsubscribe')).toBe('<https://quantified-self.io/email/unsubscribe?test=1>');
+    expect((await db.collection('mail').where('marketing.uid', '==', recipient.uid).get()).docs.map(doc => doc.id)).toContain(result.mailId);
+  });
+
+  it.each(['saved', 'unsaved'] as const)('rejects %s test mail after account cleanup wins the reservation race', async mode => {
+    const { sender, recipient, campaignId, quota } = await accountTestMailFixture(mode);
+    const runTransaction = db.runTransaction.bind(db);
+    let entered!: () => void;
+    let release!: () => void;
+    let paused = false;
+    const entering = new Promise<void>(resolve => { entered = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const transaction = vi.spyOn(db, 'runTransaction').mockImplementation(async (update, options) => {
+      if (!paused) { paused = true; entered(); await released; }
+      return runTransaction(update, options);
+    });
+    const sending = sendTest(campaignId, sender.uid, secret, recipient.email, draft);
+    const outcome = sending.then(result => ({ result, error: undefined }), error => ({ result: undefined, error }));
+    try {
+      await entering;
+      const attempt = await beginAccountDataCleanup(db, recipient.uid);
+      await admin.auth().deleteUser(recipient.uid);
+      await db.recursiveDelete(db.doc(`users/${recipient.uid}`));
+      await completeAccountDataCleanup(db, recipient.uid, attempt.attemptId);
+      release();
+      const settled = await outcome;
+      expect(settled.result).toBeUndefined();
+      expect(settled.error?.message).toContain('missing or being deleted');
+      expect((await quota.get()).get('used')).toBe(0);
+      expect((await db.collection('mail').where('to', '==', recipient.email).get()).empty).toBe(true);
+      if (campaignId) expect((await db.doc(`marketingCampaigns/${campaignId}`).get()).get('lastTestMailId')).toBeNull();
+    } finally { release(); await outcome; transaction.mockRestore(); }
+  });
+
+  it.each(['saved', 'unsaved'] as const)('fails closed on recipient Auth errors for %s test mail', async mode => {
+    const { sender, recipient, campaignId, quota } = await accountTestMailFixture(mode);
+    const lookup = vi.spyOn(admin.auth(), 'getUserByEmail').mockRejectedValueOnce(new Error('Auth unavailable'));
+    try {
+      await expect(sendTest(campaignId, sender.uid, secret, recipient.email, draft)).rejects.toThrow('Auth unavailable');
+      expect((await quota.get()).get('used')).toBe(0);
+      expect((await db.collection('mail').where('to', '==', recipient.email).get()).empty).toBe(true);
+    } finally { lookup.mockRestore(); }
   });
 
   it('persists and clones sender names, preserves them for older clients and rejects invalid saves', async () => {
@@ -529,6 +594,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout
 
   it('does not send or charge for a saved test with a stale sender name', async () => {
     const user = await admin.auth().createUser({ email: `stale-composer-${randomUUID()}@example.com` });
+    await db.doc(`users/${user.uid}`).set({ test: true });
     const campaign = await saveCampaign(null, draft, user.uid);
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
     const latest = { ...draft, senderName: 'Dimitrios' };
@@ -608,6 +674,8 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout
     const result = await sendTest(null, user.uid, secret, target, testDraft);
     const mail = await db.collection('mail').doc(result.mailId).get();
     expect(mail.get('to')).toBe(target);
+    expect(mail.get('marketing.uid')).toBeUndefined();
+    expect(mail.get('expireAt').toMillis()).toBeGreaterThan(Date.now());
     expect(mail.get('from')).toBe('"Élodie, from QS" <updates@quantified-self.io>');
     expect(mail.get('message.subject')).toBe(`[TEST] ${draft.subject}`);
     const rendered = new JSDOM(mail.get('message.html')).window.document;

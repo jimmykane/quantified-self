@@ -119,6 +119,11 @@ The manual template-test script also attaches UID for registered recipients;
 an explicitly selected external test inbox has no app UID and remains email-only.
 Both scripts check the shared deletion guard inside the write transaction for
 registered accounts and abort on Auth lookup failures other than user-not-found.
+Saved and unsaved admin campaign tests also resolve the actual recipient UID,
+store it in `marketing.uid` and recheck deletion in the mail/quota transaction.
+The initiating admin is not the recipient owner. Explicit external test inboxes
+without an Auth account retain expiry but no invented UID. Lookup errors abort
+without reserving quota or recording a successful test.
 Existing records are not backfilled. The installed Delete User Data extension
 never selected `mail`; email cleanup was already owned by the custom Gen 1 handler.
 `functions/AGENTS.md` requires all account-mail writers to preserve explicit UID
@@ -327,12 +332,12 @@ emulators or claim live Auth trigger delivery.
    declarations until a separately approved retirement; their presence is not
    proof that overlap is safe.
 2. After separate deployment approval, deploy the client write fence,
-   guarded campaign preparation and UID-bearing registration/subscription mail writers first. Account mail cleanup
+   guarded campaign preparation/test-mail writers and UID-bearing registration/subscription mail writers first. Account mail cleanup
    uses explicit UID ownership only; historical email-only records are excluded.
    Use the updated, guarded campaign scripts for any separately authorized sends.
 
    ```sh
-   firebase deploy --project quantified-self-io --only firestore:rules,functions:prepareMarketingCampaign,functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated
+   firebase deploy --project quantified-self-io --only firestore:rules,functions:prepareMarketingCampaign,functions:sendMarketingTest,functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated
    ```
 
 3. Deploy the updated existing cleanup owner and callable:
