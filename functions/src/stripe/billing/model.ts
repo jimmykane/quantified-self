@@ -105,6 +105,9 @@ export type BillingEventKind = 'subscription' | 'checkout' | 'invoice' | 'paymen
 export interface BillingEvent { eventId: string; type: string; kind: BillingEventKind; objectId: string; customerId: string | null; created: number; livemode: boolean }
 // Store identifiers only. Event-version payloads are never used as a projection.
 export function billingEvent(event: { id: string; type: string; created: number; livemode: boolean; data: { object: unknown } }): BillingEvent | null {
+  // Upcoming notifications have no retrievable invoice ID. Deleted invoices
+  // are one-off drafts, outside the persisted subscription-invoice contract.
+  if (['invoice.upcoming', 'invoice.deleted'].includes(event.type)) return null;
   const object = event.data.object as Record<string, unknown>;
   const kind: BillingEventKind | null = event.type.startsWith('customer.subscription.') ? 'subscription'
     : event.type.startsWith('checkout.session.') ? 'checkout'

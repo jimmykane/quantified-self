@@ -12,6 +12,7 @@ import { dispatchBillingJob } from './dispatch';
 import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { getBillingStripe } from '../client';
 import { processStripeBillingTask } from './handlers';
+import { onSubscriptionUpdated } from '../subscriptions';
 
 vi.unmock('firebase-admin');
 vi.mock('../client', () => ({ getBillingStripe: vi.fn() }));
@@ -254,6 +255,103 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     await f.run(billingId('delete', f.uid));
     expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
     expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/customer`).get()).exists).toBe(false);
+  });
+  it('cancels surviving active subscriptions after customer-document deletion without recreating the customer', async () => {
+    const f = await fixture();
+    await admin.auth().createUser({ uid: f.uid, email: `${f.uid}@example.test`, emailVerified: true });
+    await admin.auth().setCustomUserClaims(f.uid, { stripeRole: 'pro', unrelated: true });
+    const subscriptions = db.collection(`customers/${f.uid}/subscriptions`);
+    await subscriptions.doc('active').set({ status: 'active', role: 'pro', created: Timestamp.now(), appOwned: true });
+    await subscriptions.doc('trial').set({ status: 'trialing', role: 'basic' });
+    await subscriptions.doc('canceled').set({ status: 'canceled', ended_at: Timestamp.fromMillis(1) });
+    const before = await subscriptions.doc('active').get();
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await f.run(billingId('delete', f.uid));
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await subscriptions.where('status', 'in', ['active', 'trialing']).get()).empty).toBe(true);
+    expect((await subscriptions.doc('active').get()).data()).toMatchObject({ status: 'canceled', appOwned: true, ended_at: expect.any(Timestamp) });
+    expect((await subscriptions.doc('canceled').get()).get('ended_at').toMillis()).toBe(1);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+    await onSubscriptionUpdated.run({ id: `evt_cancel_${f.uid}`, params: { uid: f.uid, subscriptionId: 'active' },
+      data: { before, after: await subscriptions.doc('active').get() } } as Parameters<typeof onSubscriptionUpdated.run>[0]);
+    const claims = (await admin.auth().getUser(f.uid)).customClaims;
+    expect(claims).toMatchObject({ stripeRole: 'free', unrelated: true });
+    expect(claims?.gracePeriodUntil).toBeGreaterThan(Date.now());
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('finishes cancellation across bounded pages without resetting the deletion operation', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    const subscriptions = db.collection(`customers/${f.uid}/subscriptions`);
+    const batch = db.batch();
+    for (let i = 0; i < 101; i++) batch.set(subscriptions.doc(`sub_${i}`), { status: 'active', role: 'pro' });
+    await batch.commit();
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await expect(f.run(id)).rejects.toBeInstanceOf(BillingContention);
+    expect((await subscriptions.where('status', '==', 'active').get()).size).toBe(1);
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    expect((await job.get()).get('state')).toBe('pending');
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    await job.update({ leaseUntil: Timestamp.fromMillis(0) });
+    await f.run(id);
+    expect((await subscriptions.where('status', '==', 'active').get()).empty).toBe(true);
+    expect((await job.get()).get('state')).toBe('done');
+    expect((await job.get()).get('generation')).toBe(0);
+  });
+  it('does not recreate subscriptions when Auth cleanup begins during Stripe customer deletion', async () => {
+    const f = await fixture();
+    const subscription = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await subscription.set({ status: 'active', role: 'pro' });
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    f.stripe.customers.del.mockImplementationOnce(async () => {
+      await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+      await db.recursiveDelete(db.doc(`customers/${f.uid}`));
+      return { id: f.customerId, deleted: true };
+    });
+    await f.run(billingId('delete', f.uid));
+    expect((await subscription.get()).exists).toBe(false);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('does not cancel records for a replacement binding created during remote deletion', async () => {
+    const f = await fixture();
+    const subscription = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await subscription.set({ status: 'active', role: 'pro' });
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    f.stripe.customers.del.mockImplementationOnce(async () => {
+      await db.doc(`customers/${f.uid}`).set({ stripeId: 'cus_replacement' });
+      return { id: f.customerId, deleted: true };
+    });
+    const id = billingId('delete', f.uid);
+    await f.run(id);
+    expect((await subscription.get()).get('status')).toBe('active');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('error')).toBe('customer_conflict');
+  });
+  it('keeps subscriptions intact until remote customer deletion is confirmed', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    const subscription = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await subscription.set({ status: 'active', role: 'pro' });
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    f.stripe.customers.del.mockRejectedValueOnce(new Error('uncertain deletion reply'));
+    await expect(f.run(id)).rejects.toThrow();
+    expect((await subscription.get()).get('status')).toBe('active');
+    await f.readyRetry(id); await f.run(id);
+    expect((await subscription.get()).get('status')).toBe('canceled');
+  });
+  it('treats a delayed invoice event after one-off draft deletion as completed work', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const invoices = { retrieve: vi.fn().mockRejectedValue({ code: 'resource_missing' }) };
+    Object.assign(f.stripe, { invoices });
+    const id = (await admitBillingEvent(db, { ...f.event(), type: 'invoice.created', kind: 'invoice', objectId: `in_${f.uid}` }))!;
+    await f.run(id);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+  });
+  it('retains invoice lookup permission failures for retry instead of treating them as deleted drafts', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    Object.assign(f.stripe, { invoices: { retrieve: vi.fn().mockRejectedValue({ code: 'permission_denied' }) } });
+    const id = (await admitBillingEvent(db, { ...f.event(), type: 'invoice.created', kind: 'invoice', objectId: `in_${f.uid}` }))!;
+    await expect(f.run(id)).rejects.toThrow();
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('pending');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('attempts')).toBe(1);
   });
   it('stops cleanup customer recovery if billing ownership changes during the Stripe lookup', async () => {
     const f = await fixture();
@@ -514,10 +612,30 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
   });
   it('leaves extension-owned requests dormant and retains queued work while paused', async () => {
     const f = await fixture(); const id = (await f.admit())!;
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    const dispatchTime = (await job.get()).get('dueAt').toMillis() + 1;
+    Object.assign(f.ctx, { now: () => dispatchTime });
     await db.doc(BILLING_CONTROL).update({ owner: 'extension' });
     try { expect(await f.admit()).toBeNull(); await f.run(id); expect(f.stripe.customers.create).not.toHaveBeenCalled(); }
     finally { await db.doc(BILLING_CONTROL).update({ owner: 'native' }); }
+    expect((await job.get()).get('attempts')).toBe(0);
+    expect((await job.get()).get('leaseUntil')).toBeUndefined();
     await f.run(id); expect((await f.ref.get()).get('url')).toBeTruthy();
+  });
+  it('does not consume a provider attempt before the scheduled dispatch time', async () => {
+    const f = await fixture(); const id = (await f.admit())!;
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    const scheduledTime = Date.now() + 60_000;
+    await job.update({ dueAt: Timestamp.fromMillis(scheduledTime) });
+    let dispatchTime = scheduledTime - 1;
+    Object.assign(f.ctx, { now: () => dispatchTime });
+    await expect(f.run(id)).rejects.toBeInstanceOf(BillingContention);
+    expect((await job.get()).get('attempts')).toBe(0);
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+    dispatchTime = scheduledTime;
+    await f.run(id);
+    expect((await job.get()).get('attempts')).toBe(1);
+    expect((await job.get()).get('state')).toBe('done');
   });
   it('does not let an expired lease release the replacement owner', async () => {
     const lease = await acquireBillingLease(db, 'test-lock', 1);

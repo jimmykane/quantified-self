@@ -31,4 +31,9 @@ describe('Stripe webhook admission boundary', () => {
     vi.mocked(admitBillingEvent).mockRejectedValueOnce(new Error('private database failure'));
     expect((await invoke(event)).sendStatus).toHaveBeenCalledWith(503);
   });
+  it.each(['invoice.upcoming', 'invoice.deleted'])('acknowledges %s without scheduling an impossible invoice retrieval', async type => {
+    const response = await invoke({ ...event, type, data: { object: { customer: 'cus_synthetic' } } });
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(admitBillingEvent).not.toHaveBeenCalled();
+  });
 });

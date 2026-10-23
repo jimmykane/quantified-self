@@ -322,7 +322,15 @@ export async function fetchBillingProjections(ctx: BillingDependencies, event: B
     return customer.deleted ? [{ path: `customers/${uid}`, data: { stripeDeleted: true } }] : [];
   }
   if (event.kind === 'invoice') {
-    const invoice = await stripe.invoices.retrieve(event.objectId);
+    let invoice: Stripe.Invoice;
+    try { invoice = await stripe.invoices.retrieve(event.objectId); }
+    catch (error) {
+      // An earlier create/update can follow one-off draft deletion. Stripe does
+      // not permit deletion of subscription invoices, which are the only ones
+      // projected here. Keep other lookup failures retryable.
+      if ((error as { code?: string }).code === 'resource_missing') return [];
+      throw error;
+    }
     checkCustomer(invoice.customer);
     const projection = invoiceProjection(uid, invoice);
     const sub = stripeId(invoice.parent?.subscription_details?.subscription);
@@ -448,6 +456,28 @@ export async function deleteBillingCustomer(ctx: BillingDependencies, lease: Bil
     await assertDeletionAuthority(id);
     try { await ctx.stripe.customers.del(id); }
     catch (e) { if ((e as { code?: string }).code !== 'resource_missing') throw e; }
+  }
+  if (ids.size) {
+    const fullPage = await ctx.db.runTransaction(async tx => {
+      await checkLease(tx, lease, now(ctx));
+      const control = billingControl((await tx.get(ctx.db.doc(BILLING_CONTROL))).data());
+      if (control.owner !== 'native' || !control.nativeSince) throw new BillingError('maintenance', true);
+      const guard = await getUserDeletionGuardStateInTransaction(ctx.db, tx, uid);
+      if (guard.shouldSkip) return false;
+      const customer = await tx.get(ctx.db.doc(`customers/${uid}`));
+      if (customer.get('stripeId') && !ids.has(customer.get('stripeId'))) throw new BillingError('customer_conflict');
+      // Deleting a customer root alone leaves subscription descendants intact.
+      // Stripe canceled them above; let the existing subscription trigger own
+      // claims, grace periods and emails by updating only surviving records.
+      const subscriptions = await tx.get(ctx.db.collection(`customers/${uid}/subscriptions`)
+        .where('status', 'in', ['active', 'trialing']).limit(100));
+      for (const subscription of subscriptions.docs)
+        tx.update(subscription.ref, { status: 'canceled', ended_at: Timestamp.fromMillis(now(ctx)) });
+      return subscriptions.size === 100;
+    });
+    // Continue a bounded cancellation page through the retained job, without
+    // classifying successful partial cleanup as a provider failure.
+    if (fullPage) throw new BillingContention();
   }
   // No writer can acquire this customer's lease during cleanup. New admissions
   // also see deleting=true, while deleted users fail the shared tombstone guard.

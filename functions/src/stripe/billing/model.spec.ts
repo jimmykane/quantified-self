@@ -50,6 +50,11 @@ describe('billing trust boundaries', () => {
     expect(event).toEqual({ eventId: 'evt_test', type: 'customer.subscription.updated', created: 10, livemode: false,
       kind: 'subscription', objectId: 'sub_test', customerId: 'cus_test' });
   });
+  it.each(['invoice.upcoming', 'invoice.deleted'])('skips nonpersistent %s notifications without poisoning a replay window', type => {
+    const event = billingEvent({ id: 'evt_preview', type, created: 10, livemode: false,
+      data: { object: { ...(type === 'invoice.deleted' ? { id: 'in_deleted' } : {}), customer: 'cus_test' } } });
+    expect(event).toBeNull();
+  });
   it('compares projections independently of unrelated application-owned fields', () => {
     const data = { created: Timestamp.fromMillis(1000), role: 'pro', nested: { a: 1, b: 2 } };
     expect(projectionUnchanged({ ...data, gracePeriodUntil: 99 }, { ...data, nested: { b: 2, a: 1 } })).toBe(true);
