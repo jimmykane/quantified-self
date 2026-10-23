@@ -768,26 +768,40 @@ describe('EventTableComponent', () => {
         expect(styles).toMatch(/\.table-container\s*{[\s\S]*-webkit-backdrop-filter:\s*none;/);
     });
 
-    it('should use activity language and keep the glass empty state clear of the paginator', () => {
-        const template = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
-            'utf8'
-        );
-        const styles = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
-            'utf8'
-        );
+    it('renders a compact notice only after a successful empty read and restores pagination when rows return', async () => {
+        const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+        fixture.componentRef.setInput('events', []); fixture.componentRef.setInput('isLoading', false);
+        await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities to show');
+        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p')).toBeNull();
+        expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-loading-overlay').hasError).toBeFalsy();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        fixture.componentRef.setInput('isLoading', true); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        fixture.componentRef.setInput('isLoading', false); fixture.componentRef.setInput('hasLoadError', true); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        fixture.componentRef.setInput('hasLoadError', false); fixture.componentRef.setInput('events', undefined); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        fixture.componentRef.setInput('events', [new MockEvent('returned')]); fixture.componentRef.setInput('isLoading', false); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(false);
+    });
 
-        expect(template).toContain('placeholder="Search activities"');
-        expect(template).toContain('[errorMessage]="emptyMessage"');
-        expect(component.emptyMessage).toBe('No activities yet');
-        expect(component.emptyHint).toBe('Import an activity or change your filters');
-        expect(template).toContain('[allowErrorPassthrough]="true"');
-        expect(template).toContain('activity-table-no-data-row--hidden');
-        expect(template).not.toContain('No events found');
-        expect(template.indexOf('</app-loading-overlay>')).toBeLessThan(template.indexOf('<mat-paginator'));
-        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-blur:\s*16px;/);
-        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-shadow:\s*var\(--qs-overlay-shadow\);/);
+    it('uses filter-specific copy for an empty local search or tag selection', () => {
+        component.emptyHint = 'Try a wider date range.';
+        component.data.data = [{ Event: component.events[0] }]; component.data.filteredData = [];
+        for (const filter of ['search', 'tag', 'untagged']) {
+            component.searchTerm = filter === 'search' ? 'missing' : '';
+            component.tagFilters = filter === 'tag' ? ['Race'] : [];
+            component.untaggedFilter = filter === 'untagged';
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities match your filters');
+            expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p').textContent).toBe('Change your dates or clear a filter.');
+        }
+        component.searchTerm = ''; component.tagFilters = []; component.untaggedFilter = false;
+        expect(component.emptyNoticeHint).toBe('Try a wider date range.');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('should clear the contextual table selection', () => {

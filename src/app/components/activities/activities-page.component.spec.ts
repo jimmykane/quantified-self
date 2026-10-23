@@ -54,6 +54,7 @@ class EventTableStub {
   @Input() hideGeneratedNames: boolean;
   @Input() emptyMessage: string;
   @Input() emptyHint: string;
+  @Input() hasLoadError: boolean;
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
 }
 
@@ -684,6 +685,80 @@ describe('ActivitiesPageComponent', () => {
       expect(c.haptics.selection).not.toHaveBeenCalled();
       c.fixture.destroy(); await vi.advanceTimersByTimeAsync(60_000); expect(clock).toHaveBeenCalledOnce();
     } finally { c.fixture.destroy(); vi.useRealTimers(); }
+  });
+
+  it('shows the compact notice only for ready empty results and opens existing date controls without queries or duplicate feedback', async () => {
+    const c = await setup('', true);
+    const stream = new Subject<AppEventInterface[]>();
+    c.events.getEventsBy.mockReturnValue(stream);
+    const settle = async () => { c.fixture.detectChanges(); await c.fixture.whenStable(); c.fixture.detectChanges(); };
+    await settle();
+    const root = c.fixture.nativeElement as HTMLElement;
+    expect(c.component.loading()).toBe(true); expect(root.querySelector('.activity-table-empty')).toBeNull();
+    stream.next([]); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    const paginator = table.paginator, sort = table.sort, columns = [...table.selectedColumns];
+    expect(root.querySelector('.activity-table-empty-copy')?.textContent).toContain('No activities in this date range');
+    expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Try a wider date range.');
+    expect(root.querySelector('.event-table-header app-data-type-icon')).not.toBeNull();
+    expect(root.querySelector('.qs-glass-card-panel')).not.toBeNull();
+    expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(true);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
+    const presets = c.fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(presets.panelOpen).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    c.component.openDateFilter(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    presets.close(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.component.selectPeriod('custom'); await settle(); c.haptics.selection.mockClear();
+    root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
+    const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
+    expect(picker.opened).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    c.component.openDateFilter(); await settle(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); picker.close(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
+    c.component.cancelCustomRange(); await settle();
+    const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(),
+      srcFileType: FileType.FIT, privacy: Privacy.Private, stats: {}, activities: [] }) as AppEventInterface;
+    record.setID('empty-notice-example'); record.addStat(new DataActivityTypes([ActivityTypes.Cycling]));
+    record.addStat(new DataDeviceNames([])); record.addStat(new DataDistance(1000));
+    stream.next([record]); await render(c);
+    expect(root.querySelector('.activity-table-empty')).toBeNull();
+    expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(false);
+    expect(table.paginator).toBe(paginator); expect(table.sort).toBe(sort); expect(table.selectedColumns).toEqual(columns);
+    table.search('not recorded'); await settle();
+    expect(root.querySelector('.activity-table-empty-copy')?.textContent).toContain('No activities match your filters');
+    expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Change your dates or clear a filter.');
+    table.clearSearch(); await settle();
+    expect(root.querySelector('.activity-table-empty')).toBeNull();
+    stream.next([]); await render(c);
+    expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Try a wider date range.');
+    c.component.refresh(); await settle();
+    expect(c.component.loading()).toBe(true); expect(root.querySelector('.activity-table-empty')).toBeNull();
+    stream.error(new Error('unavailable')); await settle();
+    expect(c.component.historyError()).toBe(true); expect(root.querySelector('.activity-table-empty')).toBeNull();
+    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+    c.fixture.destroy();
+  });
+
+  it('keeps empty-result hints specific to date ranges and filters, including All dates', async () => {
+    const c = await setup();
+    c.events.getEventsBy.mockReturnValue(of([])); await render(c);
+    const table = () => c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    expect(table().emptyHint).toBe('Try a wider date range.');
+    c.component.selectPeriod('year'); await render(c);
+    expect(table().emptyHint).toBe('Try a wider date range.');
+    c.component.selectTags(['Recovery']); await render(c);
+    expect(table().emptyMessage).toBe('No activities with this tag');
+    expect(table().emptyHint).toBe('Change your dates or clear a filter.');
+    c.component.selectTags([]); c.component.selectPeriod('all');
+    c.dialogs.at(-1)!.closed$.next(true); await render(c);
+    expect(table().emptyMessage).toBe('No activities to show'); expect(table().emptyHint).toBe('');
+    c.component.selectSports(['Cycling']); await render(c);
+    expect(table().emptyMessage).toBe('No activities match these filters');
+    expect(table().emptyHint).toBe('Change your dates or clear a filter.');
+    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('uses the real shared paginator, totals, full search and metric sorting without extra queries', async () => {

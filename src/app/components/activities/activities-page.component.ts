@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
+import { MatDateRangePicker } from '@angular/material/datepicker';
 import { combineLatest, Subscription, take } from 'rxjs';
 import dayjs, { type Dayjs } from 'dayjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
@@ -48,6 +49,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   private readonly datePresets = viewChild<MatSelect>('datePresets');
+  private readonly customPicker = viewChild<MatDateRangePicker<Dayjs>>('customPicker');
   private readonly customStartDate = viewChild<ElementRef<HTMLInputElement>>('customStartDate');
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
   private owner: FirebaseUserType | null = null;
@@ -105,9 +107,11 @@ export class ActivitiesPageComponent implements OnInit {
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
     : this.historyError() ? 'Activities couldn’t be loaded'
       : this.selectedSports().length || this.selectedTags().length > 1 || (this.untagged() && this.selectedTags().length) ? 'No activities match these filters'
-        : this.untagged() ? 'No untagged activities' : this.selectedTags().length ? 'No activities with this tag' : 'No activities in this date range');
+        : this.untagged() ? 'No untagged activities' : this.selectedTags().length ? 'No activities with this tag'
+          : this.period() === 'all' ? 'No activities to show' : 'No activities in this date range');
   readonly emptyHint = computed(() => this.loading() ? '' : this.historyError() ? 'Try again in a moment.'
-    : this.hasFilters() ? 'Try another date range or clear a filter.' : 'Try a wider date range or import an activity.');
+    : this.selectedSports().length || this.selectedTags().length || this.untagged() ? 'Change your dates or clear a filter.'
+      : this.period() === 'all' ? '' : 'Try a wider date range.');
 
   constructor() {
     afterNextRender(() => {
@@ -300,6 +304,22 @@ export class ActivitiesPageComponent implements OnInit {
 
   onCustomPickerOpened(): void {
     this.haptics.selection();
+  }
+
+  openDateFilter(): void {
+    if (this.loading() || !this.owner || this.owner !== this.auth.currentUser || this.user()?.uid !== this.owner.uid) return;
+    if (this.showCustomRange()) {
+      const picker = this.customPicker();
+      if (!picker || picker.disabled || picker.opened) return;
+      this.customStartDate()?.nativeElement.focus();
+      picker.open(); // The existing opened handler owns feedback.
+      return;
+    }
+    const presets = this.datePresets();
+    if (!presets || presets.disabled || presets.panelOpen) return;
+    presets.focus();
+    presets.open();
+    if (presets.panelOpen) this.haptics.selection();
   }
 
   clearCustomRange(): void {
