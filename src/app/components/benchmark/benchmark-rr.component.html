@@ -66,7 +66,26 @@
       }
       @if (status() === 'ready') {
         @if (chartView() === 'poincare') {
-          <div class="rr-plot-heading"><h3>Poincaré plot</h3><span class="rr-secondary">Full recordings</span></div>
+          <section #poincarePanel class="rr-poincare-panel" [class.rr-poincare-fullscreen]="poincareFullscreen()" aria-label="Poincaré plot">
+          <div class="rr-plot-heading">
+            <h3>Poincaré plot</h3>
+            <div class="rr-poincare-actions"><span class="rr-secondary">Full recordings</span>
+            @if (fullscreenAvailable()) {
+              <button mat-icon-button type="button" class="qs-action-menu-icon-button rr-fullscreen-toggle" [disabled]="fullscreenPending()" [attr.aria-busy]="fullscreenPending()" [attr.aria-label]="poincareFullscreen() ? 'Exit fullscreen' : 'Open Poincaré plot fullscreen'" [matTooltip]="poincareFullscreen() ? 'Exit fullscreen' : 'Open Poincaré plot fullscreen'" (click)="togglePoincareFullscreen()">
+                @if (fullscreenPending()) { <mat-spinner diameter="24"></mat-spinner> } @else { <mat-icon>{{ poincareFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon> }
+              </button>
+            }
+            </div>
+          </div>
+          @if (poincareFullscreen()) {
+            <div class="rr-poincare-sources">
+              @for (source of sourceLegends(); track source.key) {
+                <span class="rr-source-name"><mat-icon class="rr-device-symbol" [style.color]="source.plotColor" aria-hidden="true">{{ source.pointIcon }}</mat-icon>{{ source.label }}</span>
+              }
+              <mat-checkbox [checked]="excludeFlagged()" (change)="onExcludeFlagged($event.checked)">Exclude flagged intervals</mat-checkbox>
+            </div>
+          }
+          @if (fullscreenError()) { <p class="rr-note" role="status">{{ fullscreenError() }}</p> }
           <div #poincareChart class="rr-chart rr-poincare-chart" role="img" aria-label="Consecutive R–R intervals within each recording, with equal interval scales on both axes. Crosses identify artifact flags and rings identify suspected pairs."></div>
           <div class="rr-marker-legend rr-poincare-legend"><span><i class="rr-unflagged-key"></i>Unflagged</span><span><mat-icon aria-hidden="true">close</mat-icon>Artifact</span><span><i class="rr-ectopic-key"></i>Suspected pair</span><span><i class="rr-equal-key"></i>Equal intervals</span></div>
           <div class="rr-poincare-inspector">
@@ -81,6 +100,7 @@
           <p class="rr-note">{{ poincarePairCount() | number }} adjacent interval pairs. Each point belongs to one recording.</p>
           @if (!poincarePairCount()) { <p class="rr-note">No consecutive interval pairs are available for the selected recordings and filter.</p> }
           @if (poincareSampled()) { <p class="rr-note">Dense points are sampled for display across each recording. Pair counts and saved statistics remain complete.</p> }
+          </section>
         } @else {
         <div class="rr-plot-heading"><h3>R–R intervals</h3><div class="rr-marker-legend"><span><i [style.backgroundColor]="artifactColor()"></i>Artifact</span><span><i class="rr-ectopic-key"></i>Suspected pair</span></div></div>
         <div #rrChart class="rr-chart" role="img" aria-label="R–R intervals by elapsed time and recording, with artifact dots and suspected ectopic-pair rings"></div>

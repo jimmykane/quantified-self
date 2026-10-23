@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Input, OnChanges, OnDestroy, ViewChild, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, Input, OnChanges, OnDestroy, ViewChild, computed, inject, signal } from '@angular/core';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import type { ActivityInterface, RRAnalysis, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import type { TooltipComponentOption } from 'echarts/components';
@@ -14,6 +14,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { BenchmarkRRAnalysisService } from '../../services/benchmark-rr-analysis.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { EChartsHostController } from '../../helpers/echarts-host-controller';
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import { resolveDeviceChartColor } from '../../helpers/device-chart-appearance.helper';
@@ -53,6 +54,10 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   private readonly worker = inject(BenchmarkRRAnalysisService);
   private readonly loader = inject(EChartsLoaderService);
   private readonly logger = inject(LoggerService);
+  private readonly document = inject(DOCUMENT) as Document & {
+    webkitFullscreenElement?: Element | null;
+    webkitExitFullscreen?: () => Promise<void> | void;
+  };
   private readonly units = signal<UserUnitSettingsInterface | undefined>(undefined);
   readonly visible = signal(false);
   readonly sources = signal<RRSource[]>([]);
@@ -77,6 +82,11 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly zoomed = signal(false);
   readonly markerSampling = signal(false);
   readonly chartView = signal<'time' | 'poincare'>('time');
+  readonly poincareFullscreen = signal(false);
+  readonly fullscreenAvailable = signal(false);
+  readonly fullscreenPending = signal(false);
+  readonly fullscreenError = signal('');
+  private fullscreenPanel?: HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
   readonly poincarePairCount = signal(0);
   readonly poincareSampled = signal(false);
   readonly poincareHasFlags = signal(false);
@@ -126,6 +136,66 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
     if (element === this.poincareElement) return;
     this.poincareElement = element;
     if (element) this.scheduleCharts();
+  }
+
+  @ViewChild('poincarePanel') set poincarePanel(ref: ElementRef<HTMLElement> | undefined) {
+    this.fullscreenPanel = ref?.nativeElement;
+    this.fullscreenAvailable.set(BrowserCompatibilityService.checkFullscreenSupport(this.fullscreenPanel));
+    this.poincareFullscreen.set(!!this.fullscreenPanel && this.fullscreenElement === this.fullscreenPanel);
+    this.fullscreenError.set('');
+  }
+
+  private get fullscreenElement(): Element | null {
+    return this.document.fullscreenElement ?? this.document.webkitFullscreenElement ?? null;
+  }
+
+  @HostListener('document:fullscreenchange')
+  @HostListener('document:webkitfullscreenchange')
+  onFullscreenChange(): void {
+    const fullscreen = !!this.fullscreenPanel && this.fullscreenElement === this.fullscreenPanel;
+    if (fullscreen === this.poincareFullscreen()) return;
+    this.poincareFullscreen.set(fullscreen);
+    this.poincareHost.hideTooltip();
+    this.scheduleCharts();
+    this.poincareHost.scheduleResize();
+  }
+
+  async togglePoincareFullscreen(): Promise<void> {
+    const element = this.fullscreenPanel;
+    if (!element || this.fullscreenPending() || !BrowserCompatibilityService.checkFullscreenSupport(element)) return;
+    this.fullscreenPending.set(true); this.fullscreenError.set('');
+    try {
+      if (this.fullscreenElement === element) {
+        await this.exitPoincareFullscreen();
+      } else if (typeof element.requestFullscreen === 'function' && typeof this.document.exitFullscreen === 'function'
+        && this.document.fullscreenEnabled !== false) {
+        await element.requestFullscreen();
+      } else {
+        await element.webkitRequestFullscreen?.();
+      }
+      // A late permission response must not leave a removed chart in fullscreen.
+      if (this.destroyed || this.fullscreenPanel !== element) {
+        if (this.fullscreenElement === element) await this.exitPoincareFullscreen();
+        return;
+      }
+      this.onFullscreenChange();
+      this.haptics.selection();
+    } catch (error) {
+      if (this.destroyed || this.fullscreenPanel !== element) return;
+      this.fullscreenError.set('Fullscreen could not be changed. Please try again.');
+      this.logger.error('[BenchmarkRR] Fullscreen transition failed', error);
+      this.haptics.error();
+    } finally {
+      this.fullscreenPending.set(false);
+    }
+  }
+
+  private async exitPoincareFullscreen(): Promise<void> {
+    if (typeof this.document.exitFullscreen === 'function' && this.document.fullscreenElement) {
+      await this.document.exitFullscreen();
+    } else {
+      await this.document.webkitExitFullscreen?.();
+    }
   }
 
   ngOnChanges(changes: Record<string, unknown>): void {
@@ -297,7 +367,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
       const data = buildRRPoincareChartOptions({ recordings, excludeFlagged: this.excludeFlagged(), darkTheme: this.darkTheme,
         artifactColor: this.artifactColor(), width: this.poincareElement.clientWidth, height: this.poincareElement.clientHeight, unitSettings: this.units() });
       data.option.tooltip = { ...data.option.tooltip as TooltipComponentOption,
-        ...resolveEChartsTooltipSurfaceConfig(), triggerOn: resolveEChartsTooltipTriggerOn() };
+        ...resolveEChartsTooltipSurfaceConfig(this.poincareFullscreen() ? true : undefined), triggerOn: resolveEChartsTooltipTriggerOn() };
       this.poincareHost.setOption(data.option, { notMerge: true, lazyUpdate: false });
       this.poincareData = data; this.poincarePairCount.set(data.pairCount);
       this.poincareSampled.set(data.sampled); this.poincareHasFlags.set(data.flagged.length > 0);

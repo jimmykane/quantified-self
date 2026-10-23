@@ -199,6 +199,9 @@ describe('help.content', () => {
     expect(copy).toContain('without joining the remaining neighbours');
     expect(copy).toContain('Gaps and invalid observations always break adjacency');
     expect(copy).toContain('Point-pair counts are separate from suspected ectopic-pair statistics');
+    expect(copy).toContain('larger centred square on desktop');
+    expect(copy).toContain('**Open Poincaré plot fullscreen**');
+    expect(copy).toContain('without repeating beat analysis');
     expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
     expect(copy).toContain('seven key R–R & HRV statistics side by side');
     expect(copy).toContain('differences appear only when both recordings have a valid value');

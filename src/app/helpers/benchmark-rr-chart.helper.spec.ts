@@ -88,6 +88,14 @@ describe('benchmark R–R charts', () => {
 
 
 describe('Poincaré interval pairs', () => {
+  it.each([[288,288,192],[816,816,720],[1440,700,620],[700,1000,604]])('keeps equal physical scales at %s × %s without wasting available plot space', (width, height, expectedSize) => {
+    const result = buildRRPoincareChartOptions({recordings:[recording()],excludeFlagged:false,darkTheme:false,artifactColor:'#654321',width,height});
+    expect(result.option.grid).toMatchObject({width:expectedSize,height:expectedSize});
+    expect(result.option.xAxis.min).toBe(result.option.yAxis.min);
+    expect(result.option.xAxis.max).toBe(result.option.yAxis.max);
+    expect(result.option.grid.left).toBeGreaterThanOrEqual(68);
+    expect(result.option.grid.top).toBeGreaterThanOrEqual(18);
+  });
   it('pairs only original adjacent intervals and never joins segment boundaries or invalid observations', () => {
     const input = analysis();
     expect(buildRRPoincareSeries(input, false).points.accepted).toEqual([{value:[800,800],time:800,kind:'accepted'}]);

@@ -518,6 +518,14 @@ shared mobile tooltip/haptic handling. Switching views preserves timeline zoom; 
 panel retains the existing disposal/cancellation policy. Failed or stale scatter initialization is fenced and disposed,
 and the existing Retry path reuses successful analyses. Saved-only sources stay in statistics, outside the plots.
 
+The scatter host fills phone width and centres on desktop at up to 816 CSS pixels (720 pixels of plotting area).
+Its square geometry and identical axis bounds preserve interval-pair shape. The plot-only native fullscreen control
+is offered through `BrowserCompatibilityService` only when both entry and exit APIs are available and policy permits
+them, including the WebKit-prefixed API. Fullscreen keeps source identities, the flagged filter and point inspector
+accessible, sizes the same shared chart host to available height, and retains the cached analysis. Native exit events
+restore layout silently; pending requests are deduplicated, failures leave the chart usable, and a late entry for a
+removed plot is exited. Short viewports scroll with the global QS scrollbar skin rather than clipping controls.
+
 `benchmark-rr-poincare.helper.ts` pairs original adjacent analyzed observations within a source segment before applying
 quality filters. Invalid/nonpositive intervals, invalid time and non-increasing time break pairing. A point is artifact-flagged
 when either member has an artifact classification; otherwise either suspected-ectopic classification gives a ring.

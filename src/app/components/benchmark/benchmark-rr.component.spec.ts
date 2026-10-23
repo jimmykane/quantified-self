@@ -5,7 +5,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
 import { MatCheckbox } from '@angular/material/checkbox';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, DataRRCoverage, DataRRArtifactPercentage, DataRRSuspectedEctopicPairCount, DataRRRMSSD, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median, DistanceUnits, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
@@ -52,6 +52,27 @@ function chartStub() {
 }
 
 describe('benchmark R–R panel', () => {
+  const fullscreenRestorers: (() => void)[] = [];
+  afterEach(() => fullscreenRestorers.splice(0).reverse().forEach(restore => restore()));
+
+  function fullscreenBrowser(legacy = false) {
+    let current: Element | null = null;
+    const eventName = legacy ? 'webkitfullscreenchange' : 'fullscreenchange';
+    function property(target: object, key: string, descriptor: PropertyDescriptor) {
+      const original = Object.getOwnPropertyDescriptor(target, key);
+      Object.defineProperty(target, key, { configurable: true, ...descriptor });
+      fullscreenRestorers.push(() => original ? Object.defineProperty(target, key, original) : Reflect.deleteProperty(target, key));
+    }
+    const change = (element: Element | null) => { current = element; document.dispatchEvent(new Event(eventName)); };
+    const request = vi.fn(async function(this: HTMLElement) { change(this); });
+    const exit = vi.fn(async () => { change(null); });
+    property(HTMLElement.prototype, legacy ? 'webkitRequestFullscreen' : 'requestFullscreen', { value: request });
+    property(document, legacy ? 'webkitExitFullscreen' : 'exitFullscreen', { value: exit });
+    property(document, legacy ? 'webkitFullscreenEnabled' : 'fullscreenEnabled', { value: true });
+    property(document, legacy ? 'webkitFullscreenElement' : 'fullscreenElement', { get: () => current });
+    return { request, exit, change };
+  }
+
   async function render(mergeType = 'benchmark', activities = [recording('Strap', true), recording('Watch')]) {
     const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     const analysis = analyzeRRIntervals([{ time: 800, interval: 800 }, { time: 1600, interval: 800 }], 10000)!;
@@ -63,6 +84,7 @@ describe('benchmark R–R panel', () => {
       load: vi.fn().mockResolvedValue(core),
       setOption: vi.fn((chart, option) => chart.setOption(option)),
       dispose: vi.fn(chart => chart?.dispose()),
+      resize: vi.fn(),
       subscribeToViewportResize: vi.fn(() => vi.fn()),
       attachMobileSeriesTapFeedback: vi.fn(() => vi.fn()),
     };
@@ -113,6 +135,95 @@ describe('benchmark R–R panel', () => {
     });
     return charts.filter(chart=>!chart.isDisposed())[0];
   }
+
+  it.each([false, true])('opens only the Poincaré panel fullscreen and exits without reanalysis (prefixed: %s)', async legacy => {
+    const browser = fullscreenBrowser(legacy);
+    const context = await render(); await context.openCharts();
+    const chart = await openPoincare(context);
+    const { panel, fixture, host, haptics } = context;
+    const target = host.querySelector<HTMLElement>('.rr-poincare-panel')!;
+    const button = host.querySelector<HTMLButtonElement>('.rr-fullscreen-toggle')!;
+    expect(button.getAttribute('aria-label')).toBe('Open Poincaré plot fullscreen');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    panel.onExcludeFlagged(true); fixture.detectChanges(); await fixture.whenStable();
+    const analyses = panel.analyses(), summary = panel.summaryRows();
+    button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(browser.request).toHaveBeenCalledOnce(); expect(browser.request.mock.contexts[0]).toBe(target);
+    expect(panel.poincareFullscreen()).toBe(true); expect(target.classList.contains('rr-poincare-fullscreen')).toBe(true);
+    expect(button.getAttribute('aria-label')).toBe('Exit fullscreen');
+    expect(target.querySelector('.rr-poincare-sources')?.textContent).toContain('Strap');
+    expect(target.querySelector('.rr-poincare-sources')?.textContent).not.toContain('Watch');
+    expect(target.querySelector('mat-checkbox')).not.toBeNull();
+    expect(panel.excludeFlagged()).toBe(true); expect(panel.analyses()).toBe(analyses); expect(panel.summaryRows()).toBe(summary);
+    expect(context.worker.analyze).toHaveBeenCalledOnce(); expect(chart.isDisposed()).toBe(false);
+    expect(chart.getOption().tooltip.confine).toBe(true); expect(chart.getOption().tooltip.appendTo).toBeUndefined();
+    expect(haptics.selection).toHaveBeenCalledTimes(4);
+    button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(browser.exit).toHaveBeenCalledOnce(); expect(panel.poincareFullscreen()).toBe(false);
+    expect(target.querySelector('.rr-poincare-sources')).toBeNull(); expect(chart.isDisposed()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(5); expect(haptics.error).not.toHaveBeenCalled();
+    browser.change(target); fixture.detectChanges(); browser.change(null); fixture.detectChanges();
+    expect(panel.poincareFullscreen()).toBe(false); expect(haptics.selection).toHaveBeenCalledTimes(5);
+  });
+
+  it('leaves unsupported fullscreen silent and keeps the chart available', async () => {
+    const context = await render(); await context.openCharts(); await openPoincare(context);
+    expect(context.panel.fullscreenAvailable()).toBe(false);
+    expect(context.host.querySelector('.rr-fullscreen-toggle')).toBeNull();
+    await context.panel.togglePoincareFullscreen();
+    expect(context.haptics.selection).toHaveBeenCalledTimes(2); expect(context.haptics.error).not.toHaveBeenCalled();
+    expect(context.panel.status()).toBe('ready');
+  });
+
+  it('reports a rejected fullscreen request without changing or disposing the chart', async () => {
+    const browser = fullscreenBrowser(); browser.request.mockRejectedValueOnce(new Error('Permission denied'));
+    const context = await render(); await context.openCharts(); const chart = await openPoincare(context);
+    await context.panel.togglePoincareFullscreen(); context.fixture.detectChanges();
+    expect(context.panel.poincareFullscreen()).toBe(false); expect(context.panel.fullscreenPending()).toBe(false);
+    expect(context.host.querySelector('[role="status"]')?.textContent).toContain('Fullscreen could not be changed');
+    expect(context.haptics.selection).toHaveBeenCalledTimes(2); expect(context.haptics.error).toHaveBeenCalledOnce();
+    expect(chart.isDisposed()).toBe(false); expect(context.panel.status()).toBe('ready');
+    await context.panel.togglePoincareFullscreen(); context.fixture.detectChanges();
+    expect(context.panel.poincareFullscreen()).toBe(true); expect(context.panel.fullscreenError()).toBe('');
+    browser.change(null);
+  });
+
+  it('deduplicates pending requests and exits a late fullscreen entry after the plot is removed', async () => {
+    const browser = fullscreenBrowser(); let finish!: () => void;
+    browser.request.mockImplementationOnce(function(this: HTMLElement) {
+      return new Promise<void>(resolve => { finish = () => { browser.change(this); resolve(); }; });
+    });
+    const context = await render(); await context.openCharts(); await openPoincare(context);
+    const pending = context.panel.togglePoincareFullscreen();
+    await context.panel.togglePoincareFullscreen(); context.fixture.detectChanges();
+    expect(browser.request).toHaveBeenCalledOnce(); expect(context.host.querySelector<HTMLButtonElement>('.rr-fullscreen-toggle')?.disabled).toBe(true);
+    expect(context.host.querySelector('.rr-fullscreen-toggle mat-spinner')).not.toBeNull();
+    context.panel.onChartViewChange('time'); context.fixture.detectChanges(); await context.fixture.whenStable();
+    finish(); await pending;
+    expect(browser.exit).toHaveBeenCalledOnce(); expect(context.panel.poincareFullscreen()).toBe(false);
+    expect(context.panel.fullscreenPending()).toBe(false); expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+    expect(context.haptics.error).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds square geometry on fullscreen changes while keeping selection and chart listeners', async () => {
+    const browser = fullscreenBrowser();
+    const context = await render(); await context.openCharts(); const chart = await openPoincare(context);
+    const target = context.host.querySelector<HTMLElement>('.rr-poincare-panel')!;
+    const canvas = target.querySelector<HTMLElement>('.rr-poincare-chart')!;
+    let width = 1440, height = 700;
+    Object.defineProperties(canvas, {clientWidth:{get:()=>width},clientHeight:{get:()=>height}});
+    chart.listeners.get('click')?.({seriesId:'activity:Strap:poincare:accepted',dataIndex:0});
+    const selection = context.panel.poincareSelection(), listeners = chart.on.mock.calls.length;
+    await context.panel.togglePoincareFullscreen(); context.fixture.detectChanges(); await context.fixture.whenStable();
+    expect(chart.getOption().grid).toMatchObject({width:620,height:620});
+    expect(chart.getOption().tooltip.confine).toBe(true);
+    width = 816; height = 816; browser.change(null); context.fixture.detectChanges(); await context.fixture.whenStable();
+    expect(chart.getOption().grid).toMatchObject({width:720,height:720});
+    expect(chart.getOption().tooltip.confine).toBe(false); expect(chart.getOption().tooltip.appendTo).toBeTypeOf('function');
+    expect(context.panel.poincareSelection()).toBe(selection); expect(chart.on).toHaveBeenCalledTimes(listeners);
+    expect(context.worker.analyze).toHaveBeenCalledOnce(); expect(chart.isDisposed()).toBe(false);
+    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+  });
 
   it.each(['ordinary','multi','benchmark'])('adds a lazy Poincaré view with isolated device overlays on %s events', async kind => {
     const context=await render(kind,[recording('No HRV'),recording('Strap',true),recording('Watch',true)]);

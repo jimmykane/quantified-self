@@ -401,6 +401,7 @@ describe('Firebase Hosting configuration', () => {
     // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
     // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
     // Help also documents Poincaré pairs, flagged-point inspection and preserved adjacency.
+    // Poincaré help also covers the responsive square plot and browser-supported fullscreen controls.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.
