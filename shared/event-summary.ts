@@ -17,8 +17,6 @@ function multipliedNames(values: readonly string[]): string {
   return [...counts].map(([value, count]) => count === 1 ? value : `${count}x ${value}`).join(', ');
 }
 
-export interface AppEventSummary extends AppEventMetadata {}
-
 /** QS summary composition; deliberately has no toJSON, setID or child activity API. */
 export class AppEventSummary implements EventRead {
   name: string;
@@ -28,6 +26,23 @@ export class AppEventSummary implements EventRead {
   privacy: EventSummary['privacy'];
   isMerge: boolean;
   srcFileType: EventSummary['srcFileType'];
+  declare originalFile?: AppEventMetadata['originalFile'];
+  declare originalFiles?: AppEventMetadata['originalFiles'];
+  declare benchmarkResult?: AppEventMetadata['benchmarkResult'];
+  declare benchmarkResults?: AppEventMetadata['benchmarkResults'];
+  declare isBenchmark?: AppEventMetadata['isBenchmark'];
+  declare hasBenchmark?: AppEventMetadata['hasBenchmark'];
+  declare benchmarkDevices?: AppEventMetadata['benchmarkDevices'];
+  declare benchmarkLatestAt?: AppEventMetadata['benchmarkLatestAt'];
+  declare benchmarkSourceRevision?: AppEventMetadata['benchmarkSourceRevision'];
+  declare benchmarkSourceWritePending?: AppEventMetadata['benchmarkSourceWritePending'];
+  declare mergeType?: AppEventMetadata['mergeType'];
+  declare toolSource?: AppEventMetadata['toolSource'];
+  declare comparisonTitle?: AppEventMetadata['comparisonTitle'];
+  declare sourceFilesCount?: AppEventMetadata['sourceFilesCount'];
+  declare activitiesCount?: AppEventMetadata['activitiesCount'];
+  declare tags?: AppEventMetadata['tags'];
+  declare benchmarkReviewTags?: AppEventMetadata['benchmarkReviewTags'];
   private readonly sourceRevision = ++nextRevision;
   private metricRevision = 0;
   private readonly observed = new Map<string, { stat: DataInterface<unknown>; value: number | string | undefined; initialValue: number | string | undefined }>();
