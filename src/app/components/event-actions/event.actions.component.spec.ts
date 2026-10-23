@@ -73,7 +73,7 @@ describe('EventActionsComponent', () => {
             )),
             getEventMetaData: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
-            getEventAndActivities: vi.fn(),
+            getEventAndActivitiesOnce: vi.fn(),
         };
         mockEventReprocessService = {
             regenerateEventStatistics: vi.fn().mockResolvedValue({ event: null }),
@@ -206,10 +206,10 @@ describe('EventActionsComponent', () => {
             stats: { 'Start Position': { latitudeDegrees: 0, longitudeDegrees: 0 } } } as any);
         expect(component.hasPositionalData()).toBeTruthy();
         expect(component.isHydrated()).toBe(false);
-        mockEventService.getEventAndActivities = vi.fn().mockReturnValue(of(full));
+        mockEventService.getEventAndActivitiesOnce = vi.fn().mockReturnValue(of(full));
         mockEventService.getEventAsGPXBloB.mockResolvedValue(new Blob());
         await component.downloadGPX();
-        expect(mockEventService.getEventAndActivities).toHaveBeenCalledExactlyOnceWith(component.user, 'event-123');
+        expect(mockEventService.getEventAndActivitiesOnce).toHaveBeenCalledExactlyOnceWith(component.user, 'event-123');
         expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledExactlyOnceWith(component.user, full);
     });
 
@@ -232,7 +232,7 @@ describe('EventActionsComponent', () => {
             component.event = { ...component.event, getID: () => 'other-event' } as any;
             closed.next(true);
             await work;
-            expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+            expect(mockEventService.getEventAndActivitiesOnce).not.toHaveBeenCalled();
             expect(mockEventReprocessService.regenerateEventStatistics).not.toHaveBeenCalled();
             expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
             expect(mockProcessingService.addJob).not.toHaveBeenCalled();
@@ -244,14 +244,58 @@ describe('EventActionsComponent', () => {
             component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000,
                 stats: { 'Average Power': 'malformed stored value' } } as any);
             component.event.originalFile = { path: 'source.fit' } as any;
-            mockEventService.getEventAndActivities.mockImplementation(() => { throw new Error('Cannot restore malformed source'); });
+            mockEventService.getEventAndActivitiesOnce.mockImplementation(() => { throw new Error('Cannot restore malformed source'); });
             await component[action]();
             const reprocess = action === 'reGenerateStatistics' ? mockEventReprocessService.regenerateEventStatistics
                 : mockEventReprocessService.reimportEventFromOriginalFiles;
             expect(reprocess).toHaveBeenCalledWith(component.user, component.event, expect.any(Object));
-            expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+            expect(mockEventService.getEventAndActivitiesOnce).not.toHaveBeenCalled();
             expect(mockProcessingService.completeJob).toHaveBeenCalled();
             expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+
+    it.each([
+        ['reGenerateStatistics', 'owner'], ['reGenerateStatistics', 'account'],
+        ['reImportActivityFromFile', 'owner'], ['reImportActivityFromFile', 'account'],
+    ] as const)(
+        'cancels %s quietly if its %s changes while callable preparation is pending', async (action, changed) => {
+            (component.event as any).originalFile = { path: 'source.fit' };
+            let ready!: () => void;
+            const preparation = new Promise<void>(resolve => { ready = resolve; });
+            const reprocess = action === 'reGenerateStatistics' ? mockEventReprocessService.regenerateEventStatistics
+                : mockEventReprocessService.reimportEventFromOriginalFiles;
+            const dispatch = vi.fn();
+            reprocess.mockImplementation(async (_owner, _event, options) => {
+                await preparation;
+                if (!options.canExecute()) throw new ReprocessError('CANCELLED', 'Operation cancelled');
+                dispatch();
+            });
+            const work = component[action]();
+            await vi.waitFor(() => expect(reprocess).toHaveBeenCalledOnce());
+            if (changed === 'owner') component.user = { uid: 'new-owner' } as any;
+            else (TestBed.inject(Auth) as unknown as { currentUser: { uid: string } }).currentUser = { uid: 'new-account' };
+            ready();
+            await work;
+            expect(dispatch).not.toHaveBeenCalled();
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+            expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+
+    it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
+        'reports %s as saved when only the refreshed read fails', async action => {
+            (component.event as any).originalFile = { path: 'source.fit' };
+            const reprocess = action === 'reGenerateStatistics' ? mockEventReprocessService.regenerateEventStatistics
+                : mockEventReprocessService.reimportEventFromOriginalFiles;
+            const message = 'Activity was reprocessed, but its updated data could not be loaded. Refresh the page.';
+            reprocess.mockRejectedValueOnce(new ReprocessError('PERSIST_FAILED', message));
+            await component[action]();
+            expect(reprocess).toHaveBeenCalledOnce();
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-id', 'Activity reprocessed; refresh needed');
+            expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(message, undefined, { duration: 4000 });
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
         });
 
     it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
@@ -315,7 +359,7 @@ describe('EventActionsComponent', () => {
         const full = component.event;
         component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
         const loaded = new Subject<any>();
-        mockEventService.getEventAndActivities.mockReturnValue(loaded);
+        mockEventService.getEventAndActivitiesOnce.mockReturnValue(loaded);
         const work = component.downloadGPX();
         component.event = full;
         loaded.next(full);
@@ -331,6 +375,21 @@ describe('EventActionsComponent', () => {
         await work;
         expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
         expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+    });
+
+    it('abandons summary GPX hydration after an auth switch before the input owner changes', async () => {
+        const full = component.event;
+        component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+        const loaded = new Subject<any>();
+        mockEventService.getEventAndActivitiesOnce.mockReturnValue(loaded);
+        const work = component.downloadGPX();
+        (TestBed.inject(Auth) as unknown as { currentUser: { uid: string } }).currentUser = { uid: 'new-account' };
+        loaded.next(full);
+        await work;
+        expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
+        expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
     });
 
     it('does not serve a GPX or use a new row filename after the export finishes for an old row', async () => {
@@ -381,13 +440,13 @@ describe('EventActionsComponent', () => {
         component.user = { uid: 'test-user' } as any;
         const activity = { getID: () => 'hike', addStat: vi.fn(), removeStat: vi.fn() };
         Object.assign(component.event, { getActivities: () => [activity], addStat: vi.fn(), clearActivities: vi.fn(), addActivities: vi.fn() });
-        mockEventService.getEventAndActivities = vi.fn().mockReturnValue(of(component.event));
+        mockEventService.getEventAndActivitiesOnce = vi.fn().mockReturnValue(of(component.event));
         const closed = new Subject<unknown>();
         mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
         await component.editAscent();
         closed.next({ activityId: 'hike', metric, value: 75, eventValue: 275, correction: { value: 75, sourceValue: 100 } });
         await Promise.resolve();
-        expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+        expect(mockEventService.getEventAndActivitiesOnce).not.toHaveBeenCalled();
         expect(component.event.clearActivities).not.toHaveBeenCalled();
         expect(component.event.getActivities()[0]).toBe(activity);
         expect(activity.addStat.mock.calls[0][0].getValue()).toBe(75);
@@ -400,7 +459,7 @@ describe('EventActionsComponent', () => {
         component.user = { uid: 'test-user' } as any;
         const closed = new Subject<unknown>();
         mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
-        mockEventService.getEventAndActivities = vi.fn().mockReturnValue(of(component.event));
+        mockEventService.getEventAndActivitiesOnce = vi.fn().mockReturnValue(of(component.event));
         await component.editAscent();
         const nextEvent = { getID: () => eventId, clearActivities: vi.fn(), addActivities: vi.fn(), addStat: vi.fn() };
         component.event = nextEvent as any;
@@ -408,7 +467,7 @@ describe('EventActionsComponent', () => {
         await Promise.resolve();
         expect(nextEvent.clearActivities).not.toHaveBeenCalled();
         expect(nextEvent.addStat).not.toHaveBeenCalled();
-        expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+        expect(mockEventService.getEventAndActivitiesOnce).not.toHaveBeenCalled();
         expect(changed).not.toHaveBeenCalled();
     });
     it('opens only one ascent editor when requested twice during lazy loading', async () => {

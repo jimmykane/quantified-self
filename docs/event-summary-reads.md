@@ -100,6 +100,12 @@ Optional metric reads do not rewrite that source. Committed patches and subseque
 without adding implicit lazy-derived fields. Never use that whole-source operation in row construction or caching.
 Full action reads normalize source-file dates on copies and fall back to the event date for legacy path-only references;
 missing optional metadata must not prevent an otherwise valid export or repaired-event refresh.
+`getEventAndActivitiesOnce` fetches the parent and its child activities from the server for GPX/benchmark hydration
+and post-reprocess refresh. It waits for both reads and propagates failures; taking the first cache-backed live emission
+can otherwise mistake missing cached children or stale stats for the complete result. Keep list queries on summaries.
+Capture the authenticated UID as well as input ownership for asynchronous actions; profile inputs can lag an auth switch.
+Forward the action's local cancellation guard through App Check preparation and retries. A confirmed backend reprocess
+followed by a failed read is a completed mutation requiring refresh, not a failed save or an automatic retry.
 
 | Area | Implemented behavior |
 | --- | --- |

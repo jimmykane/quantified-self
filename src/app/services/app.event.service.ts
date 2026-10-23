@@ -4,8 +4,8 @@ import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, applyActivityAscentCorrection, carryActivityAscentCorrection, type AscentCorrectedActivity } from '@shared/activity-ascent';
-import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromServer, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath, runTransaction } from 'app/firebase/firestore';
+import { combineLatest, defer, from, Observable, of, throwError, zip } from 'rxjs';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocFromServer, getDocs, getDocsFromServer, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath, runTransaction } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -541,6 +541,18 @@ export class AppEventService implements OnDestroy {
           activityCount: activities?.length || 0,
           activityIDs: this.getActivityIDsForDebug(activities),
         });
+      }),
+    );
+  }
+
+  /** Complete, server-confirmed action input. Propagates read failures instead of falling back to cache. */
+  public getEventAndActivitiesOnce(user: User, eventID: string): Observable<AppEventInterface | null> {
+    const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
+    const activitiesQuery = query(collection(this.firestore, 'users', user.uid, 'activities'), where('eventID', '==', eventID));
+    return defer(() => Promise.all([getDocFromServer(eventDoc), getDocsFromServer(activitiesQuery)])).pipe(
+      map(([snapshot, activitiesSnapshot]) => {
+        const event = this.buildEventFromSnapshot(snapshot.data(), eventID);
+        return event ? this.cloneEventWithActivities(event, this.parseActivitiesFromQueryDocs(eventID, activitiesSnapshot.docs)) : null;
       }),
     );
   }

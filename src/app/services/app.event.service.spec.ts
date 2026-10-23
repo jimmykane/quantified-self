@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromServer, getDocsFromCache, onSnapshot, FieldPath, runTransaction } from 'app/firebase/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocFromServer, getDocs, getDocsFromServer, getDocsFromCache, onSnapshot, FieldPath, runTransaction } from 'app/firebase/firestore';
 import { Storage } from 'app/firebase/storage';
 import { Auth } from 'app/firebase/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -120,6 +120,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         where: vi.fn(),
         limit: vi.fn(),
         getDocs: vi.fn(),
+        getDocFromServer: vi.fn(),
         getDocsFromServer: vi.fn(),
         getDocsFromCache: vi.fn(),
         onSnapshot: vi.fn(),
@@ -738,6 +739,59 @@ describe('AppEventService', () => {
         expect((emissions[1][1] as any).name).toBe('Event A moved');
 
         subscription.unsubscribe();
+    });
+
+    it('waits for server event and child reads instead of taking an incomplete cached model', async () => {
+        const cached = { name: 'Cached', startDate: new Date(1000) };
+        (docData as Mock).mockReturnValue(of(cached));
+        (collectionData as Mock).mockReturnValue(of([]));
+        const eventRef = { kind: 'event' }, activitiesRef = { kind: 'activities' };
+        (doc as Mock).mockReturnValueOnce(eventRef);
+        (query as Mock).mockReturnValueOnce(activitiesRef);
+        (getDocFromServer as Mock).mockResolvedValue({ data: () => ({ ...cached, name: 'Server' }) });
+        let finishChildren!: (snapshot: unknown) => void;
+        (getDocsFromServer as Mock).mockReturnValue(new Promise(resolve => { finishChildren = resolve; }));
+        mocks.getEventFromJSON.mockImplementation(json => {
+            const event = createMockEvent(json);
+            let activities: any[] = [];
+            event.addActivities.mockImplementation(children => { activities = children; });
+            event.getActivities = () => activities;
+            return event;
+        });
+        mocks.getActivityFromJSON.mockImplementation(json => createMockEvent(json));
+        let settled = false;
+        const result = firstValueFrom(service.getEventAndActivitiesOnce({ uid: 'owner' } as any, 'event-id'))
+            .then(event => { settled = true; return event; });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'owner', 'events', 'event-id');
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'owner', 'activities');
+        expect(where).toHaveBeenCalledWith('eventID', '==', 'event-id');
+        expect(getDocFromServer).toHaveBeenCalledExactlyOnceWith(eventRef);
+        expect(getDocsFromServer).toHaveBeenCalledExactlyOnceWith(activitiesRef);
+        finishChildren({ docs: [createQueryDoc('server-leg', {})] });
+        const event = await result;
+        expect(event?.name).toBe('Server');
+        expect(event?.getActivities().map(activity => activity.getID())).toEqual(['server-leg']);
+        expect(docData).not.toHaveBeenCalled();
+        expect(collectionData).not.toHaveBeenCalled();
+    });
+
+    it.each(['event', 'activities'])('propagates a failed server %s read without using cached action data', async failedRead => {
+        const error = new Error('Server unavailable');
+        (getDocFromServer as Mock).mockResolvedValue({ data: () => ({ name: 'Server' }) });
+        (getDocsFromServer as Mock).mockResolvedValue({ docs: [] });
+        const failed = failedRead === 'event' ? getDocFromServer : getDocsFromServer;
+        (failed as Mock).mockRejectedValueOnce(error);
+        await expect(firstValueFrom(service.getEventAndActivitiesOnce({ uid: 'owner' } as any, 'event-id'))).rejects.toBe(error);
+        expect(docData).not.toHaveBeenCalled();
+        expect(collectionData).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the server confirms that an action event was deleted', async () => {
+        (getDocFromServer as Mock).mockResolvedValue({ data: () => undefined });
+        (getDocsFromServer as Mock).mockResolvedValue({ docs: [] });
+        expect(await firstValueFrom(service.getEventAndActivitiesOnce({ uid: 'owner' } as any, 'deleted'))).toBeNull();
     });
 
     it('should get event and activities correctly', async () => {

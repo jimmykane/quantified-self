@@ -374,15 +374,16 @@ describe('EventTableComponent', () => {
         }));
     });
 
-    it('abandons a summary benchmark read after its owner changes', async () => {
+    it.each(['owner', 'account'])('abandons a summary benchmark read after its %s changes', async changed => {
         const source = new Subject<any>();
         const events = TestBed.inject(AppEventService) as any;
-        events.getEventAndActivities = vi.fn().mockReturnValue(source);
+        events.getEventAndActivitiesOnce = vi.fn().mockReturnValue(source);
         const flow = TestBed.inject(AppBenchmarkFlowService);
         const open = vi.spyOn(flow, 'openBenchmarkSelectionDialog');
         const summary = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
         const work = component.openBenchmarkFlow({ stopPropagation() {}, preventDefault() {} } as any, summary);
-        component.user = { ...component.user, uid: 'another-owner' } as any;
+        if (changed === 'owner') component.user = { ...component.user, uid: 'another-owner' } as any;
+        else (TestBed.inject(Auth) as unknown as { currentUser: { uid: string } }).currentUser = { uid: 'new-account' };
         source.next(new MockEvent('event-1'));
         await work;
         expect(open).not.toHaveBeenCalled();
@@ -2145,31 +2146,32 @@ describe('EventTableComponent', () => {
     describe('downloadGPXSelection', () => {
         it('stops a summary batch before exporting or loading another ID after an owner change', async () => {
             const loaded = new Subject<any>();
-            mockEventService.getEventAndActivities = vi.fn().mockReturnValue(loaded);
+            mockEventService.getEventAndActivitiesOnce = vi.fn().mockReturnValue(loaded);
             for (const id of ['event-1', 'event-2']) {
                 const event = new AppEventSummary({ id, name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
                 component.selection.select({ Event: event } as any);
             }
             const owner = component.user;
             const work = component.downloadGPXSelection();
-            expect(mockEventService.getEventAndActivities).toHaveBeenCalledExactlyOnceWith(owner, 'event-1');
+            expect(mockEventService.getEventAndActivitiesOnce).toHaveBeenCalledExactlyOnceWith(owner, 'event-1');
             component.targetUser = { uid: 'other-owner' } as any;
             loaded.next(new MockEvent('event-1'));
             await work;
-            expect(mockEventService.getEventAndActivities).toHaveBeenCalledTimes(1);
+            expect(mockEventService.getEventAndActivitiesOnce).toHaveBeenCalledTimes(1);
             expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
             expect(mockFileService.downloadFile).not.toHaveBeenCalled();
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
             expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
         });
 
-        it('drops completed GPX bytes and stops the batch if the viewer changes during generation', async () => {
+        it.each(['owner', 'account'])('drops completed GPX bytes and stops the batch if the %s changes during generation', async changed => {
             let finish!: (blob: Blob) => void;
             mockEventService.getEventAsGPXBloB.mockReturnValueOnce(new Promise<Blob>(resolve => finish = resolve));
             component.selection.select({ Event: new MockEvent('event-1') } as any, { Event: new MockEvent('event-2') } as any);
             const work = component.downloadGPXSelection();
             await vi.waitFor(() => expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledOnce());
-            component.user = { ...component.user, uid: 'other-viewer' } as any;
+            if (changed === 'owner') component.user = { ...component.user, uid: 'other-viewer' } as any;
+            else (TestBed.inject(Auth) as unknown as { currentUser: { uid: string } }).currentUser = { uid: 'new-account' };
             finish(new Blob());
             await work;
             expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledTimes(1);

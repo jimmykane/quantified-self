@@ -457,7 +457,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const user = this.user;
     const owner = this.targetUser || user;
     const ownerID = owner?.uid;
-    const isCurrent = () => !this.destroyed && this.user?.uid === user?.uid && (this.targetUser || this.user)?.uid === ownerID;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => !this.destroyed && this.user?.uid === user?.uid && (this.targetUser || this.user)?.uid === ownerID
+      && this.sendAuth?.currentUser?.uid === viewerID;
     let appEvent;
     try {
       appEvent = await this.loadCompleteEvent(eventRead, owner);
@@ -783,15 +785,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       // Full readers can be passed through; summaries must be fetched explicitly.
       return event;
     }
-    const fullEvent = await firstValueFrom(this.eventService.getEventAndActivities(owner, event.getID()));
+    const fullEvent = await firstValueFrom(this.eventService.getEventAndActivitiesOnce(owner, event.getID()));
     if (!fullEvent) throw new Error('Activity no longer exists');
     return fullEvent;
   }
 
   public async downloadGPXSelection() {
     const viewer = this.user, owner = this.targetUser || viewer;
+    const viewerID = this.sendAuth?.currentUser?.uid;
     const isCurrent = () => !this.destroyed && this.user?.uid === viewer?.uid
-      && (this.targetUser || this.user)?.uid === owner?.uid;
+      && (this.targetUser || this.user)?.uid === owner?.uid && this.sendAuth?.currentUser?.uid === viewerID;
     const jobId = this.processingService.addJob('download', 'Preparing GPX export...');
 
     try {
