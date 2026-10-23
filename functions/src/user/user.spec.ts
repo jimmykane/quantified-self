@@ -9,6 +9,7 @@ const {
     mailDocMock,
     deletionMarkerSetMock,
     deletionMarkerDeleteMock,
+    deletionMarkerGetMock,
     deletionMarkerDocMock,
     firestoreCollectionMock,
     loggerInfoMock,
@@ -21,9 +22,11 @@ const {
     }));
     const deletionMarkerSetMock = vi.fn().mockResolvedValue(undefined);
     const deletionMarkerDeleteMock = vi.fn().mockResolvedValue(undefined);
+    const deletionMarkerGetMock = vi.fn().mockResolvedValue({ get: () => undefined });
     const deletionMarkerDocMock = vi.fn((_id?: string) => ({
         set: deletionMarkerSetMock,
-        delete: deletionMarkerDeleteMock
+        delete: deletionMarkerDeleteMock,
+        get: deletionMarkerGetMock
     }));
     const firestoreCollectionMock = vi.fn((name?: string) => {
         if (name === 'mail') {
@@ -50,6 +53,7 @@ const {
         mailDocMock,
         deletionMarkerSetMock,
         deletionMarkerDeleteMock,
+        deletionMarkerGetMock,
         deletionMarkerDocMock,
         firestoreCollectionMock,
         loggerInfoMock: vi.fn(),
@@ -63,7 +67,18 @@ const testEnv = firebaseFunctionsTest();
 // Mock admin
 vi.mock('firebase-admin', () => {
     const firestoreMock = vi.fn(() => ({
-        collection: firestoreCollectionMock
+        collection: firestoreCollectionMock,
+        runTransaction: async (handler: (tx: unknown) => Promise<unknown>) => {
+            const writes: Promise<unknown>[] = [];
+            const result = await handler({
+                get: deletionMarkerGetMock,
+                set: (_ref: unknown, data: unknown, options: unknown) => {
+                    writes.push(deletionMarkerSetMock(data, options));
+                },
+            });
+            await Promise.all(writes);
+            return result;
+        },
     }));
 
     return {
@@ -78,7 +93,8 @@ vi.mock('firebase-admin', () => {
 
 vi.mock('firebase-admin/firestore', () => ({
     FieldValue: {
-        serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP')
+        serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
+        delete: vi.fn(() => 'DELETE_FIELD')
     },
     Timestamp: {
         fromDate: vi.fn((date: Date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
@@ -129,6 +145,7 @@ describe('deleteSelf Cloud Function', () => {
         mailSetMock.mockResolvedValue(undefined);
         deletionMarkerSetMock.mockResolvedValue(undefined);
         deletionMarkerDeleteMock.mockResolvedValue(undefined);
+        deletionMarkerGetMock.mockReset().mockResolvedValue({ get: () => undefined });
     });
 
     afterEach(() => {
@@ -177,12 +194,15 @@ describe('deleteSelf Cloud Function', () => {
         expect(deletionMarkerSetMock).toHaveBeenCalledWith({
             createdAt: 'SERVER_TIMESTAMP',
             source: 'deleteSelf',
-            expireAt: expect.any(Object)
+            cleanupStatus: 'pending',
+            expireAt: 'DELETE_FIELD',
+            completedAt: 'DELETE_FIELD'
         }, { merge: true });
         expect(admin.firestore().collection).toHaveBeenCalledWith('mail');
         expect(mailDocMock).toHaveBeenCalledWith(`account_deleted_confirmation_${uid}`);
         expect(mailSetMock).toHaveBeenCalledWith(expect.objectContaining({
             to: 'test@example.com',
+            uid,
             from: 'Quantified Self <hello@quantified-self.io>',
             replyTo: 'support@quantified-self.io',
             template: {
@@ -298,6 +318,33 @@ describe('deleteSelf Cloud Function', () => {
         expect(result).toEqual({ success: true });
     });
 
+    it('preserves completed cleanup when a stale callable retry finds Auth already absent', async () => {
+        const error = { errorInfo: { code: 'auth/user-not-found' } };
+        getUserMock.mockRejectedValueOnce(error);
+        deleteUserMock.mockRejectedValueOnce(error);
+        deletionMarkerGetMock.mockResolvedValueOnce({ get: () => 'complete' });
+        const result = await (deleteSelf as unknown as (data: unknown, context: unknown) => Promise<unknown>)({}, {
+            rawRequest: {}, auth: { uid: 'test-uid', token: {} }, app: { appId: 'mock-app-id' },
+        });
+        expect(result).toEqual({ success: true });
+        expect(deletionMarkerSetMock).not.toHaveBeenCalled();
+    });
+
+    it('preserves cleanup completed after a successful Auth lookup and before the fence transaction', async () => {
+        getUserMock.mockResolvedValueOnce({ email: 'test@example.com' });
+        // A competing request deletes Auth and completes cleanup after that lookup.
+        deletionMarkerGetMock.mockResolvedValueOnce({ get: () => 'complete' });
+        deleteUserMock.mockRejectedValueOnce({ errorInfo: { code: 'auth/user-not-found' } });
+
+        await expect((deleteSelf as unknown as (data: unknown, context: unknown) => Promise<unknown>)({}, {
+            rawRequest: {}, auth: { uid: 'test-uid', token: {} }, app: { appId: 'mock-app-id' },
+        })).resolves.toEqual({ success: true });
+
+        expect(deletionMarkerGetMock).toHaveBeenCalledOnce();
+        expect(deletionMarkerSetMock).not.toHaveBeenCalled();
+        expect(deleteUserMock).toHaveBeenCalledWith('test-uid');
+    });
+
     it('should throw "internal" error if deleteUser fails', async () => {
         const uid = 'test-uid';
         const context = {
@@ -318,6 +365,6 @@ describe('deleteSelf Cloud Function', () => {
             expect(e.message).to.equal('Unable to delete user');
         }
 
-        expect(deletionMarkerDeleteMock).toHaveBeenCalledTimes(1);
+        expect(deletionMarkerDeleteMock).not.toHaveBeenCalled();
     });
 });

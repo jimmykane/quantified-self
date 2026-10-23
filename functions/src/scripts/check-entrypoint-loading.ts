@@ -582,6 +582,20 @@ async function check(): Promise<void> {
   );
   assert(!('projectEventTagCatalog' in stack.endpoints), 'Retired event tag trigger is still exported.');
 
+  const accountCleanup = stack.endpoints.cleanupUserAccounts;
+  assert(accountCleanup?.platform === 'gcfv1' && accountCleanup.entryPoint === 'cleanupUserAccounts',
+    'Account cleanup must retain its existing Gen 1 Auth owner.');
+  assert(arraysEqual(accountCleanup.region || [], ['europe-west2'])
+    && accountCleanup.availableMemoryMb === 1024 && accountCleanup.timeoutSeconds === 540,
+  'Account cleanup region, memory or timeout changed.');
+  assert(accountCleanup.eventTrigger?.eventType === 'providers/firebase.auth/eventTypes/user.delete'
+    && accountCleanup.eventTrigger.retry === true,
+  'Account cleanup Auth deletion trigger or retries changed.');
+  assert(arraysEqual((accountCleanup.secretEnvironmentVariables || []).map(secret => secret.key || '').sort(), [
+    'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
+  ]), 'Account cleanup secret bindings changed.');
+
   const firstGenerationEndpoint = Object.entries(stack.endpoints)
     .find(([target, endpoint]) => endpoint.platform === 'gcfv1'
       && !OPTIMIZED_FUNCTION_TARGETS.includes(target));
