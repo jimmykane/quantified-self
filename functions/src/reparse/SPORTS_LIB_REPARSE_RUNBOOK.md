@@ -876,12 +876,12 @@ re-reads the current event document and keeps the latest values plus event tags,
 in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
-- Retain an existing matched activity document ID. Generate a deterministic source-derived ID only for a genuinely new leg.
+- Guarded source preparation is the only owner of saved-ID reuse. Parsing/source-key generation assigns provisional deterministic IDs; matched saved IDs replace them before any write. Only genuinely new legs keep their generated IDs.
 - Keep source key generation/validation for new and legacy compatibility; a source-content hash or sport refinement must not rename an already verified leg.
 - Use the shared pure matcher and a unique complete retained-source window for mutable sport/statistics. Do not fall back to array order or the only unmatched leg.
 - Persist a server-owned `sourceIdentity` containing stable ID, raw start/end and imported type; preserve an explicit owner sport label separately.
 - Validate assignments and saved corrections before reserving a source write. Recheck the pre-parse retained references after long parsing, separately from any bucket repair being saved; source replacement remains retryable.
-- Use the committed association certificate for Training controls/policies and refresh benchmark selection remaps after preparation assigns final IDs.
+- Use the committed association certificate for Training controls/policies. Calculate benchmark selection remaps once, after preparation assigns final IDs; no pre-write guess or preparation callback is needed.
 - Preserve live activity device/sport edits inside guarded document transactions, alongside the existing parent edit policy.
 - Reject overlapping splits/merges and ambiguous windows with terminal `ACTIVITY_IDENTITY_CONFLICT`; leave the saved source/load available for review.
 - Interrupted retries use the existing active leg snapshot rather than partial copies. Delete only stale children outside the final verified ID set using existing reservation/deletion guards.

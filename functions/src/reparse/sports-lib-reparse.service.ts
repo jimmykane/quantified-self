@@ -1483,9 +1483,6 @@ export function resolveActivityEditCarryover(
         if (!activity || !existingActivity) {
             return;
         }
-        const existingID = existingActivity.getID?.();
-        if (existingID && activity.setID) activity.setID(existingID);
-
         const existingSourceActivityKey = getActivitySourceActivityKey(existingActivity);
         if (!getActivitySourceActivityKey(activity) && existingSourceActivityKey) {
             setActivitySourceActivityKey(activity, existingSourceActivityKey);
@@ -1510,7 +1507,6 @@ export function resolveActivityEditCarryover(
 export interface AssignReimportActivityIdsOptions {
     combinedSourceContentHash: string;
     existingActivities?: ActivityIdentityLike[];
-    allowSourceWindowMatch?: boolean;
 }
 
 export async function assignReimportActivityIds(
@@ -1524,8 +1520,6 @@ export async function assignReimportActivityIds(
     }
 
     const activities = parsedEvent.getActivities() as ActivityIdentityLike[];
-    const existing = options.existingActivities ?? [];
-    const matches = resolveActivityIdentityAssignments(existing, activities, { allowSourceWindowMatch: options.allowSourceWindowMatch });
     stampSourceActivityKeysForActivities(activities, normalizedCombinedSourceContentHash, {
         existingActivities: options.existingActivities || [],
         strictAmbiguity: true,
@@ -1541,9 +1535,8 @@ export async function assignReimportActivityIds(
         }
         setActivitySourceActivityKey(activity, sourceActivityKey);
         if (typeof activity.setID === 'function') {
-            const existingIndex = matches.assignments.get(index);
-            const stableID = existingIndex === undefined ? undefined : existing[existingIndex].getID?.();
-            activity.setID(stableID || await generateActivityIDFromSourceKey(eventID, sourceActivityKey));
+            // Provisional ID only. Guarded source preparation owns saved-ID reuse.
+            activity.setID(await generateActivityIDFromSourceKey(eventID, sourceActivityKey));
         }
     }
 }
@@ -1653,12 +1646,19 @@ async function completeReparsedSource(
     }));
 }
 
-function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite, identity: BenchmarkReparseIdentity,
-    onPrepared?: (event: EventInterface) => void): FirestoreAdapter {
+function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite,
+    existingActivities: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>): FirestoreAdapter {
+    let identity: BenchmarkReparseIdentity = { activityIDRemap: new Map(), currentActivityIDs: new Set() };
     return {
         prepareTrainingLoad: async event => {
             const finish = await sourceWrite.prepareTrainingLoad(event);
-            onPrepared?.(event);
+            // Preparation is the only place that restores saved IDs. Build report links from its final result.
+            const activities = event.getActivities();
+            const ids = new Set(activities.map(activity => activity.getID()).filter((id): id is string => !!id));
+            const matches = resolveActivityIdentityAssignments(existingActivities.map(toComparableExistingActivity),
+                activities as ActivityIdentityLike[], { requireStrictMatch: true, allowSourceWindowMatch: true, verifiedActivityIds: ids });
+            identity = { currentActivityIDs: ids, activityIDRemap: new Map([...matches.assignments].map(([parsedIndex, existingIndex]) =>
+                [existingActivities[existingIndex].id, activities[parsedIndex].getID()!])) };
             await beginBenchmarkSourceWrite(uid, event.getID()!, sourceWrite);
             return finish;
         },
@@ -1794,26 +1794,8 @@ export async function persistReparsedEvent(
 
     const sourceWrite = new TrainingLoadSourceWrite(uid, event => prepareReparsedEventWrite(uid, event,
         expectedSourceRevision));
-    const parsedActivities = parsedEvent.getActivities();
-    const strictIdentity = resolveActivityIdentityAssignments(existingActivityDocs.map(toComparableExistingActivity), parsedActivities as ActivityIdentityLike[], {
-        requireStrictMatch: true, allowSourceWindowMatch: true,
-    });
-    const identity: BenchmarkReparseIdentity = {
-        activityIDRemap: new Map([...strictIdentity.assignments].flatMap(([parsedIndex, existingIndex]) => {
-            const parsedID = parsedActivities[parsedIndex].getID();
-            return parsedID ? [[existingActivityDocs[existingIndex].id, parsedID] as const] : [];
-        })),
-        currentActivityIDs: new Set(parsedActivities.map(activity => activity.getID()).filter((id): id is string => !!id)),
-    };
-    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite, identity, prepared => {
-        const current = prepared.getActivities();
-        const ids = new Set(current.map(activity => activity.getID()).filter((id): id is string => !!id));
-        const matches = resolveActivityIdentityAssignments(existingActivityDocs.map(toComparableExistingActivity),
-            current as ActivityIdentityLike[], { requireStrictMatch: true, allowSourceWindowMatch: true, verifiedActivityIds: ids });
-        identity.currentActivityIDs = ids;
-        identity.activityIDRemap = new Map([...matches.assignments].map(([parsedIndex, existingIndex]) =>
-            [existingActivityDocs[existingIndex].id, current[parsedIndex].getID()!]));
-    }), undefined, undefined, getWriterLogAdapter());
+    const writer = new EventWriter(getFirestoreAdapter(uid, sourceWrite, existingActivityDocs),
+        undefined, undefined, getWriterLogAdapter());
     await runReparsePersistencePhase(
         uid,
         eventId,
@@ -2147,7 +2129,6 @@ export async function reparseEventFromOriginalFiles(
         await assignReimportActivityIds(reparsedEvent, eventId, {
             combinedSourceContentHash: parseResult.combinedSourceContentHash,
             existingActivities: existingComparableActivities,
-            allowSourceWindowMatch: true,
         });
         if (mode === 'regenerate') {
             reparsedEvent.getActivities().forEach((activity) => {

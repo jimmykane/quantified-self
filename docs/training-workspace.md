@@ -6177,6 +6177,10 @@ provider account/workout scope or retained-original reparse; a unique complete w
 Ordinary uploads and read-only chart hydration cannot opt into that relaxation. Overlapping splits/merges and
 ambiguous windows fail before the source reservation writes anything. No positional or unmatched-leg guess is made.
 
+Saved leg ID reuse belongs only to guarded source preparation. Parsing/source-key generation uses provisional IDs,
+and edit carryover preserves names without assigning IDs. The writer builds benchmark associations once, after
+preparation establishes the final IDs. Normal reparse and interrupted recovery share the same preparation path.
+
 The committed reservation carries its verified activity IDs in memory into load reconciliation. This certificate
 preserves each matched leg's dated applied policy and latest controls, including a numeric zero, when the imported
 sport changes. It does not authorize ID-only matching for unrelated source writes. Existing source-write IDs,

@@ -108,29 +108,27 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
     const activeIds = recovering ? [...new Set(Object.values(metadata?.legs ?? metadata?.legacyLegs ?? {})
       .flatMap(leg => leg.activityId ? [leg.activityId] : []))] : [];
     if (activeIds.length > 100) throw new Error('Elevation correction matching supports at most 100 activities.');
+    let sourceDocs: SavedActivitySource[];
     if (activeIds.length) {
       // An interrupted reparse can leave both old and new IDs. The server-owned leg snapshot
       // identifies the active source; partial copies must not make its correction ambiguous.
       const children = await transaction.getAll(...activeIds.map(id => db.doc(`users/${uid}/activities/${id}`)));
-      const sourceDocs = children.map(child => {
+      sourceDocs = children.map(child => {
         const data = child.data();
         if (!data || data.eventID !== event.getID())
           throw new Error('Cannot find the saved source activities for elevation correction recovery.');
         return { id: child.id, data: () => data };
       });
-      const plan = prepareRetainedSourceBindings(event, sourceDocs);
-      verifiedActivityIds = plan.verifiedActivityIds;
-      const corrected = prepareAscentCarryover(event, sourceDocs, plan);
-      apply = () => { plan.apply(); corrected(); };
     } else {
       const children = await transaction.get(db.collection(`users/${uid}/activities`)
         .where('eventID', '==', event.getID()).limit(101));
       if (children.size > 100) throw new Error('Elevation correction matching supports at most 100 activities.');
-      const plan = prepareRetainedSourceBindings(event, children.docs);
-      verifiedActivityIds = plan.verifiedActivityIds;
-      const corrected = prepareAscentCarryover(event, children.docs, plan);
-      apply = () => { plan.apply(); corrected(); };
+      sourceDocs = children.docs;
     }
+    const plan = prepareRetainedSourceBindings(event, sourceDocs);
+    const corrected = prepareAscentCarryover(event, sourceDocs, plan);
+    verifiedActivityIds = plan.verifiedActivityIds;
+    apply = () => { plan.apply(); corrected(); };
     return verifiedActivityIds;
   });
   prepared = true;

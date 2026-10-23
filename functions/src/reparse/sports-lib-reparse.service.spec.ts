@@ -1046,6 +1046,7 @@ describe('sports-lib-reparse.service', () => {
     it('resolveActivityEditCarryover should preserve creator names using deterministic matching when order changes', () => {
         const activityOne = {
             creator: { name: 'new1' },
+            setID: vi.fn(),
             startDate: new Date('2026-01-01T10:00:00.000Z'),
             endDate: new Date('2026-01-01T10:30:00.000Z'),
             type: 'Run',
@@ -1085,6 +1086,7 @@ describe('sports-lib-reparse.service', () => {
 
         expect(result.assignments.size).toBe(2);
         expect(activityOne.creator.name).toBe('old1');
+        expect(activityOne.setID).not.toHaveBeenCalled(); // Edit carryover cannot claim a saved ID outside the reservation.
         expect(activityTwo.creator.name).toBe('old2');
     });
 
@@ -1304,6 +1306,17 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenNthCalledWith(2, 'event-1', sourceKeyTwo);
         expect(activityOne.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyOne}`);
         expect(activityTwo.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyTwo}`);
+    });
+
+    it('leaves saved-ID reuse to guarded preparation instead of claiming it during source-key generation', async () => {
+        const parsed = { startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
+            getStat: () => ({ getValue: () => 60 }), setID: vi.fn(), getID: () => 'provisional' };
+        hoisted.mockGenerateActivityIDFromSourceKey.mockResolvedValueOnce('derived-id');
+        await assignReimportActivityIds({ getActivities: () => [parsed] } as any, 'event', {
+            combinedSourceContentHash: 'a'.repeat(64),
+            existingActivities: [{ ...parsed, getID: () => 'saved-id' }],
+        });
+        expect(parsed.setID).toHaveBeenCalledExactlyOnceWith('derived-id');
     });
 
     it('assignReimportActivityIds should keep key-based ids stable even when parsed order changes', async () => {
