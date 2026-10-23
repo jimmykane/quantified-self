@@ -2591,6 +2591,41 @@ describe('SummariesComponent', () => {
       expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [event] });
     });
 
+    it('refreshes a shared calendar query after a date boundary and reorder before adding a matching tile', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 9, 31, 12));
+      component.user.settings.dashboardSettings.tiles.forEach(tile => {
+        (tile as AppDashboardChartTileSettingsInterface).eventFilters.range = 'thisMonth';
+      });
+      const previous$ = new Subject<EventInterface[]>();
+      const current$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValueOnce(previous$).mockReturnValueOnce(current$);
+      component['syncTileEventSubscriptions']();
+      previous$.next([{ isMerge: false } as EventInterface]);
+
+      vi.setSystemTime(new Date(2026, 10, 1, 12));
+      component.user.settings.dashboardSettings.tiles.forEach(tile => { tile.order = 1 - tile.order; });
+      component['remapTileEventStateForOrderChange'](new Map([[0, 1], [1, 0]]));
+      expect(mockEventService.getEventsBy).toHaveBeenCalledOnce();
+      component.user.settings.dashboardSettings.tiles.push({
+        type: TileTypes.Map, order: 2, eventFilters: { range: 'thisMonth', activityTypes: [] },
+      } as typeof component.user.settings.dashboardSettings.tiles[number]);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(previous$.observed).toBe(false);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true, 2: true });
+      expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
+        { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 10, 1).getTime() },
+        { fieldPath: 'startDate', opStr: '<=', value: new Date(2026, 10, 2).getTime() },
+      ]);
+      current$.next([]);
+      expect(component['tileEventsByOrder'][0]).toBe(component['tileEventsByOrder'][2]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][2]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false, 2: false });
+      expect(component['tileEventQueries'].size).toBe(1);
+    });
+
     it('tears down the previous account and clears its values before loading the next account', () => {
       const previous$ = new Subject<EventInterface[]>();
       const next$ = new Subject<EventInterface[]>();

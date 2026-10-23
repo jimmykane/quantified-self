@@ -1765,6 +1765,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     const nextSubscriptions = new Map<number, Subscription>();
     const nextSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
+    const nextListenerKeys = new Map<number, string>();
     this.tileEventSubscriptions.forEach((subscription, previousOrder) => {
       const nextOrder = orderRemap.get(previousOrder);
       if (nextOrder === undefined) {
@@ -1772,6 +1773,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         return;
       }
       nextSubscriptions.set(nextOrder, subscription);
+      // Query keys describe the live source, independent of tile order. Recomputing a
+      // calendar window here would label an old listener with a new date window.
+      const listenerKey = this.tileEventListenerKeys.get(previousOrder);
+      if (listenerKey !== undefined) nextListenerKeys.set(nextOrder, listenerKey);
       const subscriptionState = this.tileEventSubscriptionStates.get(previousOrder);
       if (subscriptionState) {
         subscriptionState.order = nextOrder;
@@ -1805,37 +1810,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.tileEventSubscriptions = nextSubscriptions;
     this.tileEventSubscriptionStates = nextSubscriptionStates;
+    this.tileEventListenerKeys = nextListenerKeys;
     this.tileEventAnchorEndMsByOrder = nextAnchorEndMsByOrder;
     this.tileEventsByOrder = nextEventsByOrder;
     this.tileEventLoadingByOrder = nextLoadingByOrder;
-    this.refreshTileEventListenerKeysForCurrentSettings();
-  }
-
-  private refreshTileEventListenerKeysForCurrentSettings(): void {
-    const eventUser = (this.eventUser || this.user) as User | null;
-    const uid = `${eventUser?.uid || ''}`.trim();
-    if (!uid) {
-      this.tileEventListenerKeys.clear();
-      return;
-    }
-
-    const nextListenerKeys = new Map<number, string>();
-    this.getOrderedDashboardSettingsTiles()
-      .filter(tile => this.isEventDataSettingsTile(tile))
-      .forEach((tile) => {
-        if (!this.tileEventSubscriptions.has(tile.order)) {
-          return;
-        }
-        const filters = this.getSettingsTileEventFilters(tile);
-        const window = resolveDashboardTileEventWindow(
-          filters,
-          this.user?.settings?.unitSettings?.startOfTheWeek,
-          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
-        );
-        nextListenerKeys.set(tile.order, this.buildTileEventListenerKey(uid, tile.order, filters, window));
-      });
-
-    this.tileEventListenerKeys = nextListenerKeys;
   }
 
   private async updateTileEventFilters(

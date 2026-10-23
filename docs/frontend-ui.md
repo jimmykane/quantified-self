@@ -591,7 +591,9 @@ Streams use reference-counted replay: removing the final consumer stops the SDK 
 entries are removed. Synchronization releases all departing consumers before starting replacements, so a
 window without remaining consumers gets a fresh clock anchor regardless of tile order. Dashboard destruction
 and event-owner changes clear the streams, values and transient navigation anchors. Tile reorder remaps
-consumers without restarting reads. A startup failure is shared across matching tiles within one synchronization;
+consumers with their existing source keys without restarting reads. The next synchronization can then detect
+calendar windows that changed across a date boundary and replace the old shared listener. A startup failure is
+shared across matching tiles within one synchronization;
 failed streams may reconnect on the next synchronization. The activity table, route previews and derived-metric
 readers retain their independent query lifecycles.
 
