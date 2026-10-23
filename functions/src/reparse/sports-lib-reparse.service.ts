@@ -27,7 +27,7 @@ import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-ev
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { generateActivityIDFromSourceKey } from '../shared/id-generator';
 import { retainedSourceRevision } from '../shared/retained-activity-source';
-import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE } from '../shared/activity-identity-conflict';
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import {
@@ -1359,9 +1359,7 @@ function stampSourceActivityKeysForActivities(
             }
             if (usedKeys.has(sourceActivityKey)) {
                 if (strictAmbiguity) {
-                    throw new Error(
-                        `[sports-lib-reparse] Duplicate sourceActivityKey detected for fingerprint ${primaryFingerprint}`,
-                    );
+                    throw new ActivityIdentityConflictError();
                 }
                 continue;
             }
@@ -1390,9 +1388,7 @@ function stampSourceActivityKeysForActivities(
 
             if (missingEntries.length > 1) {
                 if (strictAmbiguity) {
-                    throw new Error(
-                        `[sports-lib-reparse] Ambiguous sourceActivityKey stamping for fingerprint ${primaryFingerprint} (${missingEntries.length} indistinguishable activities)`,
-                    );
+                    throw new ActivityIdentityConflictError();
                 }
                 return;
             }

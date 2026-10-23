@@ -893,6 +893,7 @@ Activity identity strategy:
 - Check event existence before reserving and inside subsequent parent/child writes. Reservation ownership and account status alone cannot stop a reparse from recreating a deleted workout. Child writes batch their existing child read with one parent read; event-body writes reuse their preservation read, and merge-flag writes also read the parent. Missing events use the existing skipped-write lifecycle.
 - Missing or foreign active leg references during interrupted recovery produce `ACTIVITY_IDENTITY_CONFLICT` for review. Retrying the same source cannot restore that saved association.
 - Reject overlapping splits/merges and ambiguous windows with terminal `ACTIVITY_IDENTITY_CONFLICT`; leave the saved source/load available for review.
+- Duplicate or indistinguishable source keys detected before reservation use the same terminal review outcome. Repeating the parse cannot disambiguate those legs; no source writes or new ID assignments are attempted.
 - Interrupted retries use the existing active leg snapshot rather than partial copies. Delete only stale children outside the final verified ID set using existing reservation/deletion guards.
 
 This metadata is adopted on normal writes/reparses; do not launch a historical campaign just to populate it. A reparse

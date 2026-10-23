@@ -1436,7 +1436,7 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Missing or invalid combinedSourceContentHash');
     });
 
-    it('assignReimportActivityIds should fail on strict ambiguity after restamp', async () => {
+    it.each([false, true])('terminalizes ambiguous source-key assignment before assigning IDs (duplicate keys: %s)', async duplicateKeys => {
         const combinedHash = 'f'.repeat(64);
         const ambiguousActivities = [
             {
@@ -1456,14 +1456,19 @@ describe('sports-lib-reparse.service', () => {
                 getStat: vi.fn(() => null),
             },
         ];
+        if (duplicateKeys) for (const activity of ambiguousActivities)
+            Object.assign(activity, { sourceActivityKey: `${combinedHash}:${'a'.repeat(64)}:0` });
 
-        await expect(assignReimportActivityIds({
+        const error = await assignReimportActivityIds({
             getActivities: () => ambiguousActivities,
         } as any, 'event-3', {
             combinedSourceContentHash: combinedHash,
-        }))
-            .rejects
-            .toThrow('Ambiguous sourceActivityKey stamping');
+        }).then(() => null, (error: unknown) => error);
+        expect(error).toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT', message: ACTIVITY_IDENTITY_CONFLICT_MESSAGE });
+        expect(isSportsLibReparseTerminalFailureMessage((error as Error).message)).toBe(true);
+        expect(getSportsLibReparseFailureReason((error as Error).message)).toBe('ACTIVITY_IDENTITY_CONFLICT');
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).not.toHaveBeenCalled();
+        for (const activity of ambiguousActivities) expect(activity.setID).not.toHaveBeenCalled();
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
@@ -2564,7 +2569,9 @@ describe('sports-lib-reparse.service', () => {
                 ],
                 targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
             }),
-        ).rejects.toThrow('Ambiguous sourceActivityKey stamping');
+        ).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT', message: ACTIVITY_IDENTITY_CONFLICT_MESSAGE });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
     });
 
     it('reparseEventFromOriginalFiles should run activity-level sports-lib regeneration in regenerate mode', async () => {

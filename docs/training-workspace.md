@@ -6226,6 +6226,8 @@ reservation must not recreate a deleted workout or append orphan children. Child
 child together; event-body rewrites reuse their preservation read, and merge-flag writes also check the parent.
 Deletion uses the existing skipped-write handling. Missing or foreign active leg references during interrupted
 recovery require identity review, rather than being treated as transient parser failures.
+Reparse source-key ambiguity detected before reservation uses the same terminal review outcome, including duplicate
+keys and indistinguishable legs. It stops before source writes or activity ID assignments, retaining existing controls.
 
 ### File-only TSS evaluation and owner load controls
 
