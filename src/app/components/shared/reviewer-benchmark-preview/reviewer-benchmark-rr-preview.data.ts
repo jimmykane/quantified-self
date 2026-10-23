@@ -9,6 +9,7 @@ import { AppColors } from '../../../services/color/app.colors';
 // Retain only relative millisecond times, intervals and algorithmic flags.
 // No account, event, device, calendar-time or location fields are included.
 export const REVIEWER_RR_EXCERPT_DURATION_MS = 90_000;
+export const REVIEWER_RR_CHART_DESCRIPTION = 'First 90 seconds of one anonymized recorded R–R signal. Dots flag suspected recording artifacts; rings flag suspected ectopic pairs. The adjacent table contains full-recording HRV statistics.';
 const EXCERPT: readonly (readonly [number, number, RRAnalyzedBeat['classification']])[] = [
   [613, 613, 'accepted'],
   [1324, 711, 'accepted'],
@@ -194,6 +195,7 @@ export function buildReviewerRRChartOption(darkTheme: boolean, width: number) {
   });
   const xAxis = Array.isArray(rr.xAxis) ? rr.xAxis[0] : rr.xAxis;
   return { ...rr, animation: false, grid: { left: 52, right: 12, top: 26, bottom: 30 },
+    aria: { enabled: true, label: { description: REVIEWER_RR_CHART_DESCRIPTION } },
     xAxis: { ...xAxis, axisLabel: { ...xAxis?.axisLabel, formatter: (value: number) => formatDurationSeconds(value / 1000) } },
     dataZoom: [], tooltip: { show: false },
     series: (Array.isArray(rr.series) ? rr.series : []).map(series => ({ ...series, silent: true })),

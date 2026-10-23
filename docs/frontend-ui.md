@@ -439,7 +439,10 @@ event, device, calendar-time or location fields. The sample is independent of th
 Use the shared R–R option builder and viewport-deferred ECharts host; the public preview does not parse originals, run analysis
 workers, query accounts or add input listeners. Keep its numeric example under `data-nosnippet`, with capability copy in ordinary
 prerendered HTML outside that boundary. The phone layout stacks the plot and a wrapping two-column metric table without horizontal
-scrolling. Chart initialization failures retain the server-renderable summary table and show a short fallback.
+scrolling. Chart initialization/drawing failures retain the summary table and show a short fallback over the chart's
+reserved space. Keep its host measurable and observable (visibility/ARIA hiding, never `display: none`) so a later theme
+refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
+excerpt/full-recording context with an automatically generated list of coordinates.
 
 `BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
 (including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and

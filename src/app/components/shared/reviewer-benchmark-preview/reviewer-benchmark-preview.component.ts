@@ -9,7 +9,7 @@ import { EChartsHostController, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS } fr
 import { resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
-import { buildReviewerRRChartOption, buildReviewerRRMetricRows } from './reviewer-benchmark-rr-preview.data';
+import { REVIEWER_RR_CHART_DESCRIPTION, buildReviewerRRChartOption, buildReviewerRRMetricRows } from './reviewer-benchmark-rr-preview.data';
 import {
   REVIEWER_BENCHMARK_ALTITUDE_PANEL,
   REVIEWER_BENCHMARK_DURATION_SECONDS,
@@ -44,6 +44,7 @@ export class ReviewerBenchmarkPreviewComponent {
   readonly cursorBehaviour = ChartCursorBehaviours.ZoomX;
   readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
   readonly rrMetricRows = buildReviewerRRMetricRows();
+  readonly rrChartDescription = REVIEWER_RR_CHART_DESCRIPTION;
   readonly rrChartUnavailable = signal(false);
 
   constructor() {

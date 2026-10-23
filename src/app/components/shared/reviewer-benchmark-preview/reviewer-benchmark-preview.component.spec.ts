@@ -7,7 +7,8 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { chartViewportQueue } from '../../../helpers/chart-viewport-queue';
 import { EventCardChartPanelComponent } from '../../event/chart/panel/event.card.chart.panel.component';
 import { AppShareService } from '../../../services/app.share.service';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -43,6 +44,7 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    loader.setOption.mockReset();
     loader.init.mockImplementation(async () => createChart());
     theme.set(AppThemes.Normal);
     await TestBed.configureTestingModule({
@@ -59,6 +61,8 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
     fixture = TestBed.createComponent(ReviewerBenchmarkPreviewComponent);
     fixture.detectChanges();
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it('shares five compact benchmark rows and their evidence previews', () => {
     const text = fixture.nativeElement.textContent as string;
@@ -89,6 +93,7 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
     expect(chart.on.mock.calls.map(call => call[0])).toEqual(['finished']);
     expect(chart.getZr).not.toHaveBeenCalled();
     expect(option.tooltip.show).toBe(false);
+    expect(option.aria.label.description).toBe(fixture.nativeElement.querySelector('.rr-preview__chart')?.getAttribute('aria-label'));
     expect(option.series.every(series => series.silent)).toBe(true);
     expect(loader.attachMobileSeriesTapFeedback.mock.calls.some(call => call[0] === chart)).toBe(false);
     fixture.destroy();
@@ -104,6 +109,66 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.rr-preview [role="status"]')?.textContent).toContain('Recorded summary values remain available');
     expect(fixture.nativeElement.querySelector('.rr-preview table')?.textContent).toContain('8.1 ms');
+  });
+
+  it.each(['initialization', 'drawing'])('recovers after a transient %s failure without hiding the viewport target', async failure => {
+    await vi.waitFor(() => expect(loader.setOption.mock.calls.some(call => call[1].series?.[0]?.id === 'recorded-rr-sample:rr')).toBe(true));
+    const waitForViewport = chartViewportQueue.wait.bind(chartViewportQueue);
+    vi.spyOn(chartViewportQueue, 'wait').mockImplementation((element, prepare) => {
+      // display:none hosts never enter the viewport, so a retry must retain its target's layout box.
+      if (element.classList.contains('rr-preview__chart') && element.hidden) {
+        let finish: (ready: boolean) => void;
+        return { ready: new Promise<boolean>(resolve => { finish = resolve; }), cancel: () => finish(false) };
+      }
+      return waitForViewport(element, prepare);
+    });
+    if (failure === 'initialization') {
+      loader.init.mockImplementation(async (container: HTMLElement) => container.classList.contains('rr-preview__chart') ? null : createChart());
+    } else {
+      loader.setOption.mockImplementation((_chart, option) => {
+        if (option.series?.[0]?.id === 'recorded-rr-sample:rr') throw new Error('Transient draw failure');
+      });
+    }
+    theme.set(AppThemes.Dark); fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.rrChartUnavailable()).toBe(true));
+    fixture.detectChanges();
+    const container: HTMLElement = fixture.nativeElement.querySelector('.rr-preview__chart');
+    expect(container.hidden).toBe(false);
+    expect(container.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.rr-preview table')?.textContent).toContain('8.1 ms');
+    loader.init.mockImplementation(async () => createChart());
+    loader.setOption.mockReset();
+    theme.set(AppThemes.Normal); fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.rrChartUnavailable()).toBe(false));
+    fixture.detectChanges();
+    expect(container.hidden).toBe(false);
+    expect(container.getAttribute('aria-hidden')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.rr-preview [role="status"]')).toBeNull();
+    expect(loader.setOption.mock.calls.some(call => call[1].series?.[0]?.id === 'recorded-rr-sample:rr')).toBe(true);
+  });
+
+  it.each(['theme change', 'destruction'])('disposes a late R–R initialization after %s without drawing stale data', async action => {
+    await vi.waitFor(() => expect(loader.setOption.mock.calls.some(call => call[1].series?.[0]?.id === 'recorded-rr-sample:rr')).toBe(true));
+    const lateChart = createChart();
+    let finish: ((chart: typeof lateChart) => void) | undefined;
+    loader.init.mockImplementation(async (container: HTMLElement) => {
+      if (container.classList.contains('rr-preview__chart') && !finish) {
+        return new Promise<typeof lateChart>(resolve => { finish = resolve; });
+      }
+      return createChart();
+    });
+    theme.set(AppThemes.Dark); fixture.detectChanges();
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    loader.setOption.mockClear();
+    if (action === 'destruction') fixture.destroy();
+    else { theme.set(AppThemes.Normal); fixture.detectChanges(); }
+    finish!(lateChart);
+    await vi.waitFor(() => expect(loader.dispose).toHaveBeenCalledWith(lateChart));
+    expect(loader.setOption.mock.calls.some(call => call[0] === lateChart)).toBe(false);
+    if (action === 'theme change') {
+      await vi.waitFor(() => expect(loader.setOption.mock.calls.some(call => call[1].series?.[0]?.id === 'recorded-rr-sample:rr')).toBe(true));
+      expect(fixture.componentInstance.rrChartUnavailable()).toBe(false);
+    }
   });
 
   it('renders both production comparison charts with three labeled series', () => {

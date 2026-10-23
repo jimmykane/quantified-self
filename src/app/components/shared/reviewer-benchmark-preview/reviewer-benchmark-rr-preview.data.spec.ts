@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
-import { REVIEWER_RR_BEATS, REVIEWER_RR_EXCERPT_DURATION_MS, REVIEWER_RR_SUMMARY,
+import { REVIEWER_RR_BEATS, REVIEWER_RR_CHART_DESCRIPTION, REVIEWER_RR_EXCERPT_DURATION_MS, REVIEWER_RR_SUMMARY,
   buildReviewerRRChartOption, buildReviewerRRMetricRows } from './reviewer-benchmark-rr-preview.data';
 
 describe('public reviewer R–R sample', () => {
@@ -43,6 +43,9 @@ describe('public reviewer R–R sample', () => {
     expect(option.dataZoom).toEqual([]);
     expect(option.tooltip).toEqual({ show: false });
     expect(option.animation).toBe(false);
+    expect(option.aria).toEqual({ enabled: true, label: { description: REVIEWER_RR_CHART_DESCRIPTION } });
+    expect(option.aria.label.description).toContain('First 90 seconds of one anonymized recorded R–R signal');
+    expect(option.aria.label.description).toContain('full-recording HRV statistics');
     expect(option.series).toHaveLength(3);
     expect(option.series.map(series => series.type)).toEqual(['line', 'scatter', 'scatter']);
     expect(option.series.every(series => series.silent === true)).toBe(true);

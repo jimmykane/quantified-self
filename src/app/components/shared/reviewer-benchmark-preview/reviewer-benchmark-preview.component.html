@@ -94,8 +94,13 @@
     <div class="rr-preview">
       <div class="rr-preview__plot">
         <div class="rr-preview__heading"><span>R–R intervals</span><span>Dots: artifact flags · Rings: suspected pairs</span></div>
-        <div #rrChart class="rr-preview__chart" [hidden]="rrChartUnavailable()" role="img" aria-label="First 90 seconds of one anonymized recorded R–R signal, including algorithmic artifact and suspected-pair flags"></div>
-        @if (rrChartUnavailable()) { <p class="rr-preview__note" role="status">Chart preview unavailable. Recorded summary values remain available.</p> }
+        <div class="rr-preview__chart-frame">
+          <div #rrChart class="rr-preview__chart" [class.rr-preview__chart--unavailable]="rrChartUnavailable()"
+            [attr.aria-hidden]="rrChartUnavailable() ? true : null" role="img" [attr.aria-label]="rrChartDescription"></div>
+          @if (rrChartUnavailable()) {
+            <p class="rr-preview__fallback" role="status">Chart preview unavailable. Recorded summary values remain available.</p>
+          }
+        </div>
         <p class="rr-preview__note">Real recording · first 90 seconds · one R–R source</p>
       </div>
       <div>
