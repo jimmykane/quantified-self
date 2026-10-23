@@ -679,6 +679,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
 - Opening the dashboard also runs a freshness check against your latest events and requeues a rebuild automatically if snapshots are behind.
+- A temporary connection or server failure during that freshness check is retried automatically up to twice, while your available values stay visible. Retries stop if you sign out or change accounts. If the connection stays unavailable, use **Retry** once it returns.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - If a stale/building state is stuck for too long, the dashboard switches to a retryable failed state so you can trigger a rebuild immediately.
 - **Preparing your dashboard…** means your charts and stats are being prepared. **Updating your dashboard…** means newer data is being added; you can keep browsing the values already shown. The **Today** title, date, and calendar stay in place, and the short loading message returns to your greeting when the update finishes. If an update fails, use **Retry** beside the dashboard options. Recovery affects this status only when an active recovery estimate appears in Today or a Recovery tile is on your dashboard.

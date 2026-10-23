@@ -346,7 +346,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
-    // Help also describes Dashboard Health range menus, newest-first activity sorting and contextual empty notices.
+    // Help also describes bounded dashboard freshness retries, Health range menus, newest-first sorting and empty notices.
     // Help also documents the collapsed R-R chart panel, overlaid recordings and legend labels for unavailable beats.
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,

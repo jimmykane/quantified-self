@@ -644,6 +644,26 @@ Each failed subscription reports once; successful reads, cancelled reads and a r
 Error displays and user-triggered retries retain their existing behavior. This is app diagnostics only, with no
 change to Training planning semantics or MCP read/write contracts, scopes, projections or bundled workflows.
 
+## Callable freshness-check recovery
+
+`AppFunctionsService` retries only `ensureDerivedMetrics` after SDK `internal`, `unavailable` or
+`deadline-exceeded` failures, accepting both prefixed and unprefixed codes. A lost browser response does not prove
+the server failed; the existing freshness probe/coordinator coalesces already queued work, so replaying this check
+is safe. Other callable actions retain their existing retry behavior.
+
+There are at most two transport retries, delayed by one and two seconds. That budget is shared across the existing
+single App Check verification retry, rather than restarting after a token refresh. Authentication, permission,
+validation, quota and unclassified errors do not trigger transport retries. Capture the Firebase Auth user object
+before asynchronous work and recheck it before each dispatch, alongside the caller's existing cancellation guard.
+Sign-out, an account switch or a new sign-in to the same account stops an older request; tokens and user identifiers
+are not added to requests or telemetry. A recovered check is silent; exhausted recovery preserves the final rejection
+for existing retry notifications and redacted diagnostics. Background retries produce no haptic feedback.
+
+This is frontend callable transport recovery only. It changes no metric calculations, stored values, Firestore
+listener policies, Training planning/provider actions, backend queue lifecycle or MCP contracts. Verification covers
+backoff timing, bounded attempts, combined App Check recovery, account/view cancellation, permanent failures,
+non-replay of other actions and existing diagnostics, plus derived-metric/dashboard consumer tests.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for

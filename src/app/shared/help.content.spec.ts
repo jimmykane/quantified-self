@@ -159,6 +159,12 @@ describe('help.content', () => {
     expect(copy).toContain('that distance is counted once');
     expect(copy).toContain('Missing or conflicting evidence is not used to guess a correction');
   });
+  it('explains bounded dashboard freshness-check recovery without promising unavailable values', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('retried automatically up to twice, while your available values stay visible');
+    expect(copy).toContain('Retries stop if you sign out or change accounts');
+    expect(copy).toContain('If the connection stays unavailable, use **Retry** once it returns');
+  });
   it('distinguishes rejected calculations from missing inputs and explains importer metadata corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('have the required file inputs but still fail to produce a valid TSS');
