@@ -85,6 +85,17 @@ describe('benchmark R–R panel', () => {
       if (!panel.expanded()) host.querySelector<HTMLButtonElement>('.rr-disclosure')!.click();
       fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
       await fixture.whenStable();
+      // Host initialization and setOption run asynchronously after the chart view queries settle.
+      if (panel.status() === 'ready') {
+        await vi.waitFor(() => {
+          fixture.detectChanges();
+          if (panel.status() === 'error') return;
+          const active = charts.filter(chart => !chart.isDisposed());
+          expect(active).toHaveLength(2);
+          expect(active.every(chart => chart.setOption.mock.calls.length > 0)).toBe(true);
+        });
+        await fixture.whenStable();
+      }
     }
     return { fixture, panel, host, activities, analysis, worker, haptics, loader, core, charts, logger, openCharts };
   }
@@ -109,16 +120,18 @@ describe('benchmark R–R panel', () => {
     expect(legend.getAttribute('tabindex')).toBe('0');
     expect(legend.getAttribute('role')).toBe('region');
     expect(legend.textContent).toContain('0.0 %');
-    expect(legend.textContent).toContain('No saved R–R statistics');
-    expect(legend.textContent).toContain('No raw R–R');
+    expect(legend.textContent).not.toContain('Watch');
+    expect(legend.textContent).not.toContain('No raw R–R');
+    expect(host.querySelectorAll('.rr-source-legend')).toHaveLength(1);
+    expect(fixture.debugElement.query(By.directive(MatSelect))).toBeNull();
     expect(host.querySelector('table')).toBeNull();
     expect(legend.compareDocumentPosition(host.querySelector('.rr-chart')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
     expect(host.querySelector('table')?.textContent).toContain('0.0 %');
     expect(host.querySelectorAll('[aria-label="Unavailable"]').length).toBeGreaterThan(0);
-    expect(host.querySelectorAll('.rr-device-dot')).toHaveLength(2);
+    expect(host.querySelectorAll('.rr-device-dot')).toHaveLength(1);
     expect(host.querySelector('.rr-table-scroll')?.getAttribute('tabindex')).toBe('0');
-    expect(host.textContent).toContain('Scroll horizontally to compare recordings');
+    expect(host.textContent).not.toContain('Scroll horizontally to compare recordings');
   });
 
   it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('keeps all seven canonical metrics in each recording legend with %s preferences', async distanceUnits => {
@@ -192,7 +205,8 @@ describe('benchmark R–R panel', () => {
   });
 
   it('disposes old plots when switching to a source without raw intervals', async () => {
-    const { fixture, panel, host, openCharts, charts, core, worker, haptics } = await render();
+    const watch = recording('Watch'); watch.addStat(new DataRRRMSSD(12));
+    const { fixture, panel, host, openCharts, charts, core, worker, haptics } = await render('benchmark', [recording('Strap', true), watch]);
     await openCharts();
     fixture.debugElement.queryAll(By.directive(MatSelect)).at(-1)!.triggerEventHandler('selectionChange', { value: [panel.sources()[1].key] });
     fixture.detectChanges(); await fixture.whenStable();
@@ -238,7 +252,8 @@ describe('benchmark R–R panel', () => {
   });
 
   it('ignores a chart-link failure belonging to a recording that is no longer selected', async () => {
-    const { fixture, panel, loader, logger, openCharts } = await render();
+    const watch = recording('Watch'); watch.addStat(new DataRRRMSSD(12));
+    const { fixture, panel, loader, logger, openCharts } = await render('benchmark', [recording('Strap', true), watch]);
     let reject!: (error: Error) => void;
     loader.load.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
     await openCharts();
@@ -400,7 +415,7 @@ describe('benchmark R–R panel', () => {
     expect(panel.status()).toBe('ready'); expect(host.querySelector('.rr-chart')).not.toBeNull();
   });
 
-  it('labels sources with no usable intervals instead of silently omitting them from a working overlay', async () => {
+  it('omits unusable sources from the chart legend while retaining valid saved summaries', async () => {
     const invalid = recording('Invalid watch');
     invalid.addStream(new IBIStream([null, null], [800, 1600]));
     invalid.addStat(new DataRRCoverage(0));
@@ -408,9 +423,67 @@ describe('benchmark R–R panel', () => {
     worker.analyze.mockImplementation(async input => analyzeRRIntervals(input.samples, input.durationMs));
     await openCharts(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(panel.status()).toBe('ready'); expect(panel.chartRecordings().map(source => source.label)).toEqual(['Strap']);
-    expect(host.querySelectorAll('.rr-source-legend')[1].textContent).toContain('No usable R–R intervals');
-    expect(host.querySelectorAll('.rr-source-legend')[1].textContent).toContain('0.0 %');
+    expect(host.querySelectorAll('.rr-source-legend')).toHaveLength(1);
+    expect(host.querySelector('.rr-source-legends')?.textContent).not.toContain('Invalid watch');
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
+    expect(host.querySelector('table')?.textContent).toContain('Invalid watch');
+    expect(panel.summaryRows()[0].cells[1].display).toBe('0.0 %');
     expect(panel.sourceErrors()).toEqual([]);
+  });
+
+  it.each([true, false])('omits devices without R–R data while preserving full-event source identities and line styles (saved IDs: %s)', async hasIDs => {
+    const recordings = [recording('No HRV device'), recording('Strap', true), recording('Second HRV device', true)];
+    if (!hasIDs) recordings.forEach(activity => activity.setID(''));
+    const { fixture, panel, host, openCharts, worker, charts } = await render('benchmark', recordings);
+    await openCharts(); fixture.detectChanges();
+    expect(panel.sources().map(source => source.activity)).toEqual(recordings.slice(1));
+    expect(panel.sourceLegends().map(source => source.label)).toEqual(['Strap', 'Second HRV device']);
+    expect(panel.chartRecordings().map(source => source.lineStyle)).toEqual(['dashed', 'dotted']);
+    expect(panel.chartRecordings().map(source => source.key)).toEqual(hasIDs
+      ? ['activity:Strap', 'activity:Second HRV device'] : ['recording:1', 'recording:2']);
+    const picker = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(picker.options.map(option => option.viewValue)).toEqual(['Strap', 'Second HRV device']);
+    expect(host.querySelector('.rr-source-legends')?.textContent).not.toContain('No HRV device');
+    expect(worker.analyze).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(charts[0]?.setOption).toHaveBeenCalled());
+    expect(charts[0].getOption().series).toHaveLength(6);
+    expect(charts[1].getOption().series).toHaveLength(2);
+    expect(panel.activities).toEqual(recordings);
+  });
+
+  it('keeps saved HRV statistics available outside the chart legend when a device has no raw intervals', async () => {
+    const savedOnly = recording('Saved HRV'); savedOnly.addStat(new DataRRRMSSD(12));
+    const { fixture, panel, host, openCharts, worker } = await render('benchmark', [recording('Strap', true), savedOnly, recording('No HRV')]);
+    await openCharts(); fixture.detectChanges();
+    expect(panel.sourceLegends().map(source => source.label)).toEqual(['Strap']);
+    expect(host.querySelector('.rr-source-legends')?.textContent).not.toContain('Saved HRV');
+    expect(worker.analyze).toHaveBeenCalledOnce();
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
+    expect(host.querySelector('table')?.textContent).toContain('Saved HRV');
+    expect(host.querySelector('table')?.textContent).toContain('12.0 ms');
+    expect(host.querySelector('table')?.textContent).not.toContain('No HRV');
+  });
+
+  it('keeps a recording with original beat intervals chartable even when saved HRV summaries are missing', async () => {
+    const rawOnly = recording('Original intervals');
+    rawOnly.addStream(new IBIStream([800, 800, 800], [800, 1600, 2400]));
+    const { panel, host, worker, openCharts } = await render('benchmark', [recording('No HRV'), rawOnly]);
+    await openCharts();
+    expect(panel.sources()).toHaveLength(1);
+    expect(panel.sources()[0].hasStats).toBe(false);
+    expect(panel.chartRecordings().map(source => source.label)).toEqual(['Original intervals']);
+    expect(host.querySelector('.rr-source-legends')?.textContent).toContain('Original intervals');
+    expect(worker.analyze).toHaveBeenCalledOnce();
+  });
+
+  it('does not create chart hosts or empty legends when no device has R–R data', async () => {
+    const { host, panel, openCharts, worker, loader } = await render('benchmark', [recording('Watch'), recording('Bike computer')]);
+    await openCharts();
+    expect(panel.sources()).toEqual([]);
+    expect(host.querySelector('.rr-source-legends')).toBeNull();
+    expect(host.querySelector('.rr-chart')).toBeNull();
+    expect(worker.analyze).not.toHaveBeenCalled();
+    expect(loader.init).not.toHaveBeenCalled();
   });
 
   it('preserves disclosure and source choices on a same-event refresh, resetting them for a different event', async () => {

@@ -26,14 +26,13 @@
           <mat-checkbox [checked]="excludeFlagged()" (change)="onExcludeFlagged($event.checked)">Exclude flagged intervals</mat-checkbox>
         }
       </div>
+      @if (sourceLegends().length) {
       <div class="rr-source-legends qs-scrollbar" tabindex="0" role="region" aria-label="Full-recording R–R statistics">
         @for (source of sourceLegends(); track source.key) {
           <div class="rr-source-legend">
             <div class="rr-source-name">
               <span class="rr-device-line" [class.rr-device-line-dash-dot]="source.lineStyle === 'dash-dot'" [style.--rr-device-color]="source.plotColor" [style.border-top-style]="source.lineStyle === 'dash-dot' ? null : source.lineStyle" aria-hidden="true"></span>
               <span>{{ source.label }}</span>
-              @if (!source.raw) { <span class="rr-secondary">No raw R–R</span> }
-              @else if (source.noUsableIntervals) { <span class="rr-secondary">No usable R–R intervals</span> }
             </div>
             @if (source.metrics.length) {
               <dl class="rr-metrics-legend">
@@ -45,6 +44,7 @@
           </div>
         }
       </div>
+      }
       @if (status() === 'loading') { <div class="rr-loading" role="status"><mat-spinner diameter="20"></mat-spinner><span>Analyzing R–R intervals…</span></div> }
       @if (sourceErrors().length || status() === 'error') {
         <div class="rr-error" role="status">

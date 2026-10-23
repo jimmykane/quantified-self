@@ -205,7 +205,9 @@ describe('help.content', () => {
     expect(copy).toContain('the metric legend wraps so every available value stays visible');
     expect(copy).toContain('The full statistics table scrolls horizontally');
     expect(copy).toContain('Original recording start offsets');
-    expect(copy).toContain('without raw intervals or usable beats is labelled in the legend');
+    expect(copy).toContain('Devices without R–R intervals or saved HRV statistics are omitted');
+    expect(copy).toContain('The chart legend includes only recordings with usable beat intervals');
+    expect(copy).toContain('can still show valid saved values under **Show statistics**');
     expect(copy).toContain('Missing values show a dash; a recorded zero stays zero');
     expect(copy).toContain('**Reset zoom** restores both');
     expect(copy).toContain('without repairing data or changing the full-recording summaries');

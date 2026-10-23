@@ -449,7 +449,7 @@ excerpt/full-recording context with an automatically generated list of coordinat
 full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.
 The panel starts collapsed as a compact section-header row. The surface-free **Show/Hide charts** Material button
 owns one selection haptic and a stable `aria-controls` target; collapsed content neither materializes beats nor starts a worker.
-Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each selected source's
+Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each plotted source's
 seven available primary saved statistics, with quality details in tooltips. At phone widths the source names and metric
 pairs wrap inside the panel, keeping all available values visible without a sideways gesture. The artifact/pair key takes
 its own row below the chart heading. Wider layouts retain a bounded horizontal legend with the shared scrollbar skin and
@@ -457,13 +457,16 @@ keyboard access. Values and units use Sports Lib classes through
 the shared unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
 **Show/Hide statistics** reveals the full table and its 20-metric selector. The table follows the local recording selection,
 keeps metric labels sticky, and uses the global scrollbar skin with a phone scrolling hint.
-The multi-select **Recordings** picker defaults to every selected event recording, preserving IDs (or full-event positions
+The multi-select **Recordings** picker includes only selected event recordings with original R–R intervals or valid saved
+R–R/HRV statistics, defaulting to all eligible sources and preserving IDs (or full-event positions
 for unsaved/duplicate IDs), colours and distinct full-event-order line patterns. It overlays two or more original R–R and DFA
 series on shared axes. Beat and window times retain each recording's start offset relative to the earliest plotted source;
 no resampling, concatenation or per-device zero alignment is introduced. Markers and tooltip series names retain source identity.
 If the parent event selection removes every locally chosen source, the remaining event sources become selected. A deliberate
-local clear stays empty, with the picker still available even for one remaining source. Sources whose analysis contains no
-usable intervals are labelled in the legend; saved statistics and successful recordings remain available.
+local clear stays empty, with the picker still available even for one remaining source. Chart legends omit sources without
+usable analyzed intervals, including saved-summary-only recordings and failed/empty analyses. Their valid saved values remain
+available in the statistics table, and failed analyses keep their named retry message. Filtering never renumbers full-event
+line styles, alters the parent activity selection or hides devices from other event charts.
 Same-event metadata refreshes preserve disclosure and local recording choices. A different event ID resets both;
 unsaved events use object identity. Analysis caches are still invalidated when event/activity inputs refresh.
 

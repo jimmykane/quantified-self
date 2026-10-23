@@ -76,11 +76,9 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly zoomed = signal(false);
   readonly markerSampling = signal(false);
   readonly artifactColor = computed(() => resolveDeviceChartColor(AppColors.Orange, this.themeIsDark()));
-  readonly sourceLegends = computed(() => this.selectedSources().map(source => ({
+  readonly sourceLegends = computed(() => this.selectedSources().filter(source => this.analyses().has(source.key)).map(source => ({
     ...source,
     plotColor: resolveDeviceChartColor(source.color, this.themeIsDark()),
-    noUsableIntervals: !!source.raw && this.status() !== 'idle' && this.status() !== 'loading'
-      && !this.analyses().has(source.key) && !this.sourceErrors().some(error => error.key === source.key),
     metrics: buildBenchmarkRRRows([source.activity], BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type), this.units())
       .filter(row => row.cells[0].display !== null)
       .map(row => ({ ...row, label: RR_STAT_LABELS[row.type] ?? row.label, cell: row.cells[0] })),
@@ -136,7 +134,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
           color: this.colors.getActivityColor(allActivities, activity), lineStyle: patterns[position % patterns.length], activity,
           hasStats: hasBenchmarkRRStats(activity), raw: getBenchmarkRRIntervalSource(activity),
         };
-      }) : [];
+      }).filter(source => source.hasStats || source.raw) : [];
       this.sources.set(sources);
       const retained = sources.filter(source => differentEvent || !previousSources.length || selectedAll || previousKeys.includes(source.key));
       // A parent selection can remove every locally selected source. Recover to the
