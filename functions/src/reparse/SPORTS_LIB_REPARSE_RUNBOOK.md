@@ -7,6 +7,31 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.6.0 dependency and GPS calculation adoption
+
+Root and Functions pin the same published 23.6.0 artifact with matching lockfile integrity. Runtime version detection
+and the strict activity/route reparse target follow the installed version. The independent Functions FIT Parser pin
+remains 6.2.2. Existing parser calls already handle promises; SML XML loads its parser on demand, while SML JSON and
+native JSON hydration do not load that parser. Deploy all generated browser chunks together.
+
+Generated GPS distances now use the library's haversine calculation. Recorded distances retain priority. Small
+interval differences, including zero for identical coordinates, can affect generated speed, pace, moving time,
+grade-adjusted statistics and dependent Training evidence. New imports and on-demand source hydration use the new
+calculation; stored summaries and private load evaluations remain unchanged until the normal source-backed lifecycle
+rewrites them. To apply the calculation historically, use a separately authorized original-file reparse and normal
+derived invalidation. Preserve current controls, dated policies, strict leg identities, source-write reservations,
+retry/deletion guards and stream-stripping sanitizers. No blanket historical campaign, saved-route correction,
+derived schema bump or new persistence path is required.
+
+MCP catalog membership, canonical names/units, output schemas, scopes, consent, planning reads/mutations and provider
+delivery are unchanged. Existing persisted queries and bounded on-demand chart/sample projections consume the same
+fields. This adoption requires no registered-contract promotion, client rescan or plugin rebuild. Existing Help
+guidance about recorded values and source-backed reimport remains applicable.
+
+Scanner configuration, queues and monitoring are unchanged. Review already-enabled activity/route scanner settings
+before a separately approved deployment because their version target advances with the package. This upgrade does
+not deploy, change cloud configuration, enable scanning or authorize a production reparse.
+
 ### Sports Lib 23.5.1 summary metadata and swim-average adoption
 
 Root and Functions pin the same published 23.5.1 artifact, with matching lockfile integrity. Runtime version detection

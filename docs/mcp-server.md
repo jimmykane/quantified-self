@@ -1569,6 +1569,13 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.6.0 preserves catalog membership, canonical names/units, validators and existing JSON/output schemas.
+Its GPS calculation changes can affect generated distance, speed, pace and dependent summaries on new imports or
+authorized reparses; saved metric queries still read persisted values, while on-demand charts/samples use the current
+original-file parser without rewriting history. Deferred SML XML parser loading changes no public MCP projection.
+No tool, scope, consent, planning/provider capability, registered-contract promotion, client rescan or plugin rebuild
+is required by this adoption. See the reparse runbook and Training guide for historical-data and deployment boundaries.
+
 Sports Lib 23.5.1 corrects the existing `unitSystem` descriptor to `imperial` for feet-, mile- and yard-based variants.
 Catalog membership, identifiers, unit strings, validators and persisted-only availability are unchanged; corrected
 metadata does not synthesize a stat or expose raw data. The existing strict descriptor schema already permits both

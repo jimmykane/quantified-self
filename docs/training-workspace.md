@@ -6819,7 +6819,7 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.5.0 with matching package integrity. The direct Functions FIT Parser
+Root and Functions now pin published Sports Lib 23.6.0 with matching package integrity. The direct Functions FIT Parser
 pin remains 6.2.2; Sports Lib retains its own compatible parser dependency.
 Both consumers use the installed canonical metric catalog, including the 20 R–R summary types. The earlier 22.0.0
 integration and its historical verification remain recorded here; package adoption does not deploy either consumer or start a production reparse.
@@ -6894,6 +6894,27 @@ require a source-backed reparse; chart hydration alone does not persist them. Ne
 requires saved-route reparse. These numeric metrics use existing MCP discovery and permissions, without exposing raw
 intervals, timestamps or beat classifications. No new tools, mutations, consent, planning/delivery behavior, plugin or
 registered-schema changes are needed.
+
+#### Sports Lib 23.6.0 GPS calculation and parser loading adoption
+
+Root and Functions use the same published 23.6.0 artifact. Generated GPS distances use the library's haversine
+calculation, while recorded distances remain authoritative. Small interval differences can change generated speed,
+pace, moving time, grade-adjusted statistics and dependent load or durability evidence. QS adds no second distance
+formula or changed movement threshold. SML XML loads its parser only when requested; existing promise-based callers
+remain compatible, and SML JSON/native JSON restoration avoid that load. Browser releases must include every emitted
+chunk. This loading change alone preserves parsed metrics and requires no reparse.
+
+Historical summaries and load evaluations remain saved evidence until a separately authorized original-file reparse
+uses the existing sanitized writer and derived invalidation. A Training rebuild alone cannot recover new source-based
+calculations. Preserve current controls, dated policy snapshots, strict leg identity, source reservations and retry/
+deletion guards. Training formulas and snapshot schemas are unchanged; there is no blanket rebuild or saved-route
+correction. The runtime reparse target advances with the installed package without changing scanner settings; review
+already-enabled scanners before separately approving deployment.
+
+MCP impact review: no new metric name, unit, tool, field, schema, scope, consent, planning capability, provider action
+or plugin change. Existing persisted metric reads and bounded source chart/sample reads keep their projections.
+No registered-contract promotion or client refresh is required by this dependency change. The reparse runbook owns
+the adoption and historical-data checklist; deployment and production reparse remain separate approvals.
 
 #### Earlier published dependency verification
 
