@@ -203,6 +203,28 @@ describe('DashboardComponent', () => {
         ) as HTMLElement;
 
         expect(projectedSearch).toBeTruthy();
+        const emptyAction = fixture.nativeElement.querySelector('app-event-table [event-table-empty-action]');
+        expect(emptyAction.textContent).toContain('Change dates');
+    });
+
+    it.each([
+        { range: DateRanges.thisMonth, sports: [], message: 'No activities in this date range', hint: 'Try a wider date range.' },
+        { range: DateRanges.thisMonth, sports: [ActivityTypes.Cycling], message: 'No activities match your filters', hint: 'Change your dates or clear a filter.' },
+        { range: DateRanges.all, sports: [], message: 'No activities to show', hint: '' },
+        { range: DateRanges.all, sports: [ActivityTypes.Cycling], message: 'No activities match your filters', hint: 'Change your dates or clear a filter.' },
+    ])('uses contextual table copy for $range with sports $sports', async ({ range, sports, message, hint }) => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            dateRange: range, activityTypes: sports, searchTerm: null, startDate: null, endDate: null, includeMergedEvents: true,
+        };
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const table = fixture.nativeElement.querySelector('app-event-table');
+        expect(table.emptyMessage).toBe(message); expect(table.emptyHint).toBe(hint);
+        expect(table.emptyHint).not.toContain('import');
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
     });
 
     it('renders dashboard summaries eagerly before the event table to avoid layout shifts', () => {
@@ -386,7 +408,7 @@ describe('DashboardComponent', () => {
         expect(mockEventService.hasAnyActivity).toHaveBeenCalledWith(mockUser);
         expect(component.showNoActivityDashboardState).toBe(true);
         expect(text).toContain('No activities yet');
-        expect(text).toContain('Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.');
+        expect(text).toContain('Connect a service or upload an activity.');
         expect(template).toContain('[fullWidth]="true"');
         expect(template).toContain('uploadLabel="Upload activity"');
         expect(template).toContain('routerLink="/features/supported-activities"');
@@ -409,7 +431,7 @@ describe('DashboardComponent', () => {
             const emptyState = fixture.nativeElement.querySelector('.dashboard-no-activity');
             expect(emptyState.textContent).toContain('No activities yet');
             expect(emptyState.textContent).not.toContain('Connect service');
-            expect(emptyState.textContent).not.toContain('or connect Garmin');
+            expect(emptyState.textContent).not.toContain('Connect a service');
             expect(emptyState.querySelector('app-upload-activities')).toBeTruthy();
             expect(mockHaptics.selection).not.toHaveBeenCalled();
         },

@@ -84,6 +84,35 @@ describe('Merged toolbar filter rendering', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('opens the toolbar date controls once without submitting a range or duplicating feedback', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+    const presets = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(haptics.selection).not.toHaveBeenCalled();
+    search.openToolbarDateFilter(); await settle(); expect(presets.panelOpen).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    search.openToolbarDateFilter(); expect(haptics.selection).toHaveBeenCalledOnce();
+    presets.close(); await settle(); haptics.selection.mockClear();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+    search.isLoading = true; search.openToolbarDateFilter(); expect(presets.panelOpen).toBe(false);
+    search.isLoading = false; search.showDatePicker = false; search.openToolbarDateFilter();
+    expect(presets.panelOpen).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
+    search.showDatePicker = true;
+    search.openToolbarDateFilter(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const customOption = [...overlay.querySelectorAll<HTMLElement>('mat-option')].find(option => option.textContent?.trim() === 'Custom dates')!;
+    customOption.click(); await settle(); haptics.selection.mockClear();
+    search.openToolbarDateFilter(); await settle();
+    const picker = fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
+    expect(picker.opened).toBe(true); expect(haptics.selection).toHaveBeenCalledOnce();
+    search.openToolbarDateFilter(); await settle(); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.requests).toEqual([]); picker.close(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
+    fixture.destroy();
+  });
+
   it('replaces presets in place, applies native calendar selections once and restores focus on clear', async () => {
     const fixture = TestBed.createComponent(MergedFilterTestHost);
     fixture.componentInstance.range = DateRanges.thisMonth;

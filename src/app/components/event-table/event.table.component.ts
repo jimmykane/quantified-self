@@ -118,8 +118,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() filterContext = '';
   @Input() preserveSearchOnFilterChange = false;
   @Input() hideGeneratedNames = false;
-  @Input() emptyMessage = 'No activities yet';
-  @Input() emptyHint = 'Import an activity or change your filters';
+  @Input() emptyMessage = 'No activities to show';
+  @Input() emptyHint = '';
+  @Input() hasLoadError = false;
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
@@ -140,6 +141,22 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
   ];
   displayedColumns: string[] = [];
+
+  get showEmptyNotice(): boolean {
+    if (this.isLoading || this.hasLoadError || !this.events) return false;
+    const rows = this.data.filteredData ?? this.data.data;
+    return rows.length === 0 && (this.events.length === 0 || this.data.data.length > 0);
+  }
+
+  get emptyNoticeMessage(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'No activities match your filters' : this.emptyMessage;
+  }
+
+  get emptyNoticeHint(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'Change your dates or clear a filter.' : this.emptyHint;
+  }
 
   public show = true
 

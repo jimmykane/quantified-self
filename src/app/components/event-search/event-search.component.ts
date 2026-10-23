@@ -22,7 +22,7 @@ import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
-import { MatDatepickerInputEvent } from '@angular/material/datepicker';
+import { MatDatepickerInputEvent, MatDateRangePicker } from '@angular/material/datepicker';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { MatDialog } from '@angular/material/dialog';
@@ -84,10 +84,15 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public toolbarSelectedSports: string[] = [];
   public customRangeOpen = false;
   private focusDateControl = false;
+  private datePresetsControl?: MatSelect;
+  private customStartDateControl?: ElementRef<HTMLInputElement>;
+  @ViewChild('toolbarPicker') private toolbarPicker?: MatDateRangePicker<Dayjs>;
   @ViewChild('datePresets') set datePresets(control: MatSelect | undefined) {
+    this.datePresetsControl = control;
     if (control && this.focusDateControl) { this.focusDateControl = false; control.focus(); }
   }
   @ViewChild('customStartDate') set customStartDate(control: ElementRef<HTMLInputElement> | undefined) {
+    this.customStartDateControl = control;
     if (control && this.focusDateControl) { this.focusDateControl = false; control.nativeElement.focus(); }
   }
   constructor(
@@ -100,6 +105,22 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   get startDateControl(): UntypedFormControl {
     return this.searchFormGroup.get('startDate') as UntypedFormControl;
+  }
+
+  openToolbarDateFilter(): void {
+    if (this.isLoading || !this.showDatePicker || !this.toolbarRangeLayout) return;
+    if (this.customRangeOpen || this.selectedDateRange === DateRanges.custom) {
+      const picker = this.toolbarPicker;
+      if (!picker || picker.disabled || picker.opened) return;
+      this.customStartDateControl?.nativeElement.focus();
+      picker.open(); // The existing opened handler owns feedback.
+      return;
+    }
+    const presets = this.datePresetsControl;
+    if (!presets || presets.disabled || presets.panelOpen) return;
+    presets.focus();
+    presets.open();
+    if (presets.panelOpen) this.hapticsService?.selection();
   }
 
   get endDateControl(): UntypedFormControl {

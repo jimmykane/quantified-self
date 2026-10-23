@@ -28,6 +28,7 @@
         [isLoading]="loading()" [showTagFilter]="false"
         [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
         [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
+        [hasLoadError]="historyError()"
         (eventsChange)="onEventsChange($event)">
         <div event-table-filters class="activity-explorer-filters">
           <app-activity-filter-picker label="Tags" allLabel="All tags" searchLabel="Search tags"
@@ -101,6 +102,9 @@
             <button mat-button (click)="clearFilters()">Clear filters</button>
           </div>
         }
+        <button event-table-empty-action mat-button type="button" (click)="openDateFilter()">
+          <mat-icon aria-hidden="true">date_range</mat-icon>Change dates
+        </button>
       </app-event-table>
     }
   }
