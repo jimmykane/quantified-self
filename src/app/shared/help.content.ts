@@ -1722,7 +1722,7 @@ You can copy the endpoint and manage connected clients in [**Connections -> MCP*
 
 Open [Settings → Data management](/settings?section=data-management), then choose **Delete account…**. Review the consequences and confirm in the dialog. Opening Account or your profile does not show the deletion controls.
 
-If your account has an email address, self-deletion sends a confirmation email after the request completes.
+If your account has an email address, self-deletion sends a confirmation email after sign-in access is removed. Data cleanup continues in the background; this email does not confirm that every file or record has already been removed.
 
 Deleting your account permanently removes:
 
@@ -1732,7 +1732,9 @@ Deleting your account permanently removes:
 - uploaded files,
 - and any active subscription.
 
-This action cannot be undone.
+This action cannot be undone in the app. Deleted uploaded files can remain in protected recovery storage for up to 30 days before expiry.
+
+Some older email delivery records may remain after account deletion. Those with a 90-day expiry are removed automatically after that date.
 
 ## Exports and legal requests
 

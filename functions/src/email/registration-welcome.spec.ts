@@ -134,6 +134,7 @@ describe('registration founder welcome', () => {
             { path: 'mail/registration_welcome_user-1' },
             expect.objectContaining({
             to: 'athlete@example.com',
+            uid: 'user-1',
             from: FOUNDER_EMAIL_FROM,
             replyTo: FOUNDER_EMAIL_REPLY_TO,
             template: {
