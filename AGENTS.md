@@ -16,6 +16,8 @@ Always-on rules:
 - `.agent/rules/functions-emulator-shards.md` for Functions emulator specs or their test runner/CI changes
 - `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
+- Run tests only after code or executable configuration changes, or when the user explicitly requests test execution.
+  Review-only requests must reuse applicable existing test results and report verification gaps without running or rerunning tests.
 - Never patch or directly modify files under `node_modules/`.
 - Never install or add the official Garmin FIT SDK as a project dependency, development dependency, optional dependency,
   or vendored project code. Its license prevents its use as a dependency in Quantified Self, sports-lib, and fit-parser.
