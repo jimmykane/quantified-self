@@ -67,24 +67,81 @@ prefix-related UIDs such as `example` and `example-long`, deleting the first
 account matches both folders in the extension. This requires prefix-related
 identifiers, such as custom/imported UIDs; this review found no evidence of an
 actual cross-account deletion. The prepared native helper excludes the neighbour,
-but cannot constrain concurrent extension writes. Do not describe keeping this
-extension configuration active as unconditionally safe. Before approved overlap,
-review a separately approved extension configuration change to the trailing-slash
-folder boundary, with the native owner handling any exact bare object, or plan
-separately approved retirement after replacement verification. Neither action is
-performed here. Adding the bare path alongside a slash path would retain the risk.
+but cannot constrain concurrent extension writes. The 23 October inventory below
+found no matching UID prefixes, so this is not an observed blocker for those
+accounts. If a pre-cutover recheck finds overlapping identifiers, resolve that
+specific scope before overlap; changing the extension to a trailing-slash folder
+boundary is one option requiring separate approval. The native owner also handles
+an exact bare object. Adding the bare path alongside a slash path retains the risk.
 
 **High impact, conditional target expansion — extension UID substitution.**
 The published `replaceUID` helper passes the UID as the replacement-string
 argument to `String.replace`. JavaScript interprets replacement tokens: a custom
 UID consisting of `$'` produces Storage prefix `users/`, while `$$` becomes `$`.
 This was reproduced locally by evaluating only the pinned source's pure helper,
-with no SDK, credentials or remote I/O. No affected production UID is established.
+with no SDK, credentials or remote I/O. The 23 October inventory found no `$`
+characters in current Auth UIDs, Storage user-folder names or retained deletion
+marker IDs.
 The native implementation uses literal path segments and regression tests cover
 all four replacement-token forms. A trailing slash alone does not fix literal
-UID substitution. Extension overlap also requires excluding this case through
-reviewed UID constraints or correcting the extension implementation under a
-separately approved change; otherwise keep this as an unresolved cutover blocker.
+UID substitution. This remains a conditional risk for custom/imported identifiers,
+not an established problem in the audited accounts. Recheck if the inventory or
+UID creation/import paths change before retirement.
+
+### UID investigation and upstream reports — 23 October 2026
+
+Read-only production inspection reconfirmed the extension is ACTIVE at 0.1.30,
+with `STORAGE_PATHS=quantified-self-io/users/{UID}`, recursive fixed Firestore paths
+and auto discovery disabled. Paginated Auth reads selected only UIDs; Storage
+reads listed immediate `users/` prefixes and bare object names without downloading
+files; Firestore reads inspected retained deletion marker IDs. Identifiers were
+compared in memory and only aggregate results were retained:
+
+| Check | Result |
+| --- | --- |
+| Current Auth accounts | 2,939; every UID is 28 alphanumeric characters |
+| Live Storage user folders | 1,083; every folder ID is 28 alphanumeric characters |
+| Exact bare objects directly under `users/` | 0 |
+| Retained deletion marker IDs | 13; every ID is 28 alphanumeric characters |
+| Auth UIDs containing `$` or `/` | 0 |
+| Auth UID prefix pairs, or a UID prefix matching a different Storage user root | 0 |
+| Storage user folders without a matching current Auth UID | 0 |
+
+The app's email/password and provider sign-in paths delegate account IDs to
+Firebase. The only explicit production-source `createUser({uid})` helper found,
+`createFirebaseAccount`, uses a 64-character hexadecimal SHA-256 result; no call
+site for that helper was found in the inspected app/backend/tools sources. Neither
+path accepts a user-chosen UID. All current Auth UIDs use the 28-character form.
+
+Both extension behaviors reproduced locally with synthetic identifiers, and all
+11 native Storage/helper unit tests passed, including the literal replacement-token
+and prefix-neighbour cases. The current upstream `next` revision
+[`c63cc320e7ac6ab351af16868372f59ab9546d93`](https://github.com/firebase/extensions/blob/c63cc320e7ac6ab351af16868372f59ab9546d93/delete-user-data/functions/src/index.ts#L272-L288)
+still uses the bare prefix and replacement-string helper; its extension version
+is still 0.1.30. Searches of Firebase extension issues, PRs, discussions and the web
+found no exact public bug report or fix for these two edge cases. This is a search
+result, not proof that no report exists.
+
+Relevant upstream evidence, distinguished from our source reproductions:
+
+| Source | Finding and applicability |
+| --- | --- |
+| [PR #152](https://github.com/firebase/extensions/pull/152), implementing [#148](https://github.com/firebase/extensions/issues/148) | Introduced prefix deletion intentionally to support folders. It does not discuss the UID-prefix collision. |
+| [Issue #1498 and maintainer response](https://github.com/firebase/extensions/issues/1498#issuecomment-1568144815) | Historical 0.1.15 report of missed deletions during extension reconfiguration; maintainer described a reinstall gap. It is not a reproduction on 0.1.30, but argues against gratuitously reconfiguring the old extension during this cutover. |
+| [Issue #2031 correction](https://github.com/firebase/extensions/issues/2031#issuecomment-2048568504) and [changelog](https://github.com/firebase/extensions/blob/c63cc320e7ac6ab351af16868372f59ab9546d93/delete-user-data/CHANGELOG.md) | Reporter narrowed incomplete recursion to auto-discovered documents; the changelog records related fixes in 0.1.21/0.1.22. Our installation is 0.1.30 with discovery disabled. |
+| [Issue #2910](https://github.com/firebase/extensions/issues/2910#issuecomment-4995116894) | Open discussion of unsupported nested auto-discovery fields, not evidence that our configured fixed roots fail. Discovery is disabled here. |
+| [Issue #1549](https://github.com/firebase/extensions/issues/1549#issuecomment-1587656549) | Bulk `deleteUsers()` does not emit per-user Auth deletion events. Our `deleteSelf` uses singular `deleteUser(uid)`; the recovery restriction below remains necessary. |
+| [Discussion #1254](https://github.com/firebase/extensions/discussions/1254#discussioncomment-7586666) / [issue #1255](https://github.com/firebase/extensions/issues/1255#issuecomment-1814147237) | Duplicate cleanup with the Stripe extension can produce an already-deleted customer 404. This does not establish a UID boundary defect or certify remote Stripe cleanup. |
+
+**Cutover consequence:** neither UID edge case is present in this inventory. No
+extension reconfiguration is required solely for these two concerns in the audited
+accounts. Use a brief, verified overlap and retire the extension after the native
+owner passes the approved test deletion. Repeat the UID/prefix check immediately
+before cutover and avoid custom UID creation/import during overlap. This snapshot
+does not audit historical deletions, all possible delayed events or future Admin
+writes, and it does not replace the runtime-permission and live-deletion checks.
+
+### Other cleanup findings
 
 **High reliability impact — extension error acknowledgement.** A successful
 `clearData` invocation/log is not proof of erasure. The source catches fixed-path
@@ -327,8 +384,9 @@ emulators or claim live Auth trigger delivery.
    live extension configuration and permissions of the existing runtime identity.
    It must recursively delete/read both Firestore roots and list/read/delete the
    exact Storage bucket. Do not copy the extension's broad RTDB/Pub/Sub roles.
-   Resolve both installed-extension Storage-prefix and UID-substitution gates
-   above before approving overlapping account deletion. Keep its manifest/env
+   Reconfirm the clean UID/prefix inventory above before overlapping account
+   deletion; investigate any changed patterns rather than treating the two
+   conditional source defects as confirmed production blockers. Keep its manifest/env
    declarations until a separately approved retirement; their presence is not
    proof that overlap is safe.
 2. After separate deployment approval, deploy the client write fence,
@@ -372,8 +430,9 @@ emulators or claim live Auth trigger delivery.
    ownership.
 
 Event-file trigger bursts are not the account Storage owner. Fixed-root Firestore
-deletes are idempotent across the native function and extension, but the extension's
-Storage prefix and UID-substitution exceptions still apply during overlap.
+deletes are idempotent across the native function and extension. The extension's
+Storage prefix and UID-substitution edge cases were absent from the audited
+inventory; recheck that assumption before overlap.
 
 Do not run `ext:migrate` for this custom replacement: it can deploy/update/uninstall
 resources. Do not treat `ext:export --mode functions` as read-only either; it can
