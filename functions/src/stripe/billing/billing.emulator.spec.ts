@@ -120,6 +120,41 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
     expect((await db.doc(`customers/${f.uid}/checkout_sessions/${other}`).get()).get('sessionId')).toBe((await f.ref.get()).get('sessionId'));
   });
+  it.each(['cus_foreign', null])('refuses a retained checkout with mismatched customer %s', async customer => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const original = (await f.ref.get()).get('sessionId');
+    f.stripe.checkout.sessions.retrieve.mockResolvedValueOnce({
+      id: original, status: 'open', customer, url: 'https://checkout.stripe.com/c/pay/foreign',
+    });
+    const next = unique(); const ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(f.request);
+    const id = (await admitBillingCheckout(db, f.uid, next, f.request, Timestamp.now()))!;
+    await f.run(id);
+    expect((await ref.get()).get('error.code')).toBe('customer_conflict');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect((await ref.get()).get('sessionId')).toBeUndefined();
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('failed');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).exists).toBe(false);
+  });
+  it.each(['open', 'expired'])('blocks a retained %s checkout after a trusted customer binding changes', async status => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const operationRef = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const originalOperation = (await operationRef.get()).data();
+    const originalSession = [...f.sessions.values()][0]; originalSession.status = status;
+    const replacement = `cus_repaired_${f.uid}`;
+    await db.doc(`customers/${f.uid}`).update({ stripeId: replacement });
+    f.stripe.customers.retrieve.mockResolvedValue({ ...f.customer, id: replacement });
+    const next = unique(); const ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(f.request);
+    await f.run((await admitBillingCheckout(db, f.uid, next, f.request, Timestamp.now()))!);
+    expect((await ref.get()).get('error.code')).toBe('customer_conflict');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await operationRef.get()).data()).toEqual(originalOperation);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${f.requestId}`);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).exists).toBe(false);
+  });
   it('recovers an accepted customer after a lost reply without a replacement create', async () => {
     const f = await fixture(); const create = f.stripe.customers.create.getMockImplementation()!;
     f.stripe.customers.create.mockImplementationOnce(async (...args) => { await create(...args); throw new Error('lost response'); });

@@ -194,6 +194,9 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
       if (!previous.result?.id) throw new BillingError('operation_uncertain');
       await assertBillingAuthority(ctx, lease, uid, customer);
       const session = await ctx.stripe.checkout.sessions.retrieve(previous.result.id);
+      // A retained operation may predate a repaired customer binding. Never
+      // return its URL or retire its reservation using another customer's state.
+      if (stripeId(session.customer) !== customer) throw new BillingError('customer_conflict');
       if (session.status === 'open') {
         const lineItems = previous.params.line_items as { price: string }[];
         if (previous.params.mode !== request.mode || lineItems[0]?.price !== request.price) throw new BillingError('operation_uncertain');
