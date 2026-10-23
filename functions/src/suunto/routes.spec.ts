@@ -729,6 +729,20 @@ describe('importRouteToSuuntoApp', () => {
         expect(requestMocks.post).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])('keeps an OAuth SDK refresh 403 retryable without another route POST (forced: %s)', async forced => {
+        if (forced) {
+            tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'token' });
+            requestMocks.post.mockRejectedValueOnce(Object.assign(new Error('rejected'), { statusCode: 403 }));
+        }
+        tokensMocks.getTokenData.mockRejectedValueOnce(Object.assign(new Error('Response Error: 403 Forbidden'), {
+            isBoom: true, output: { statusCode: 403 }, data: { payload: { message: 'private provider detail' } },
+        }));
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', VALID_GPX_ROUTE)).rejects.toMatchObject({
+            statusCode: 503, message: 'Suunto token refresh was rejected; resource access was not retried.',
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(forced ? 1 : 0);
+    });
+
     it('keeps an explicit Suunto rate-limit rejection retryable', async () => {
         requestMocks.post.mockRejectedValue(Object.assign(new Error('Rate limited'), { statusCode: 429 }));
 

@@ -1,6 +1,8 @@
 
 import * as logger from 'firebase-functions/logger';
 import { getTokenData } from '../tokens';
+import { extractRefreshFailureDetails } from '../service-auth-lifecycle';
+import { isTerminalServiceAuthError } from '../shared/provider-operation-error';
 import { SERVICE_NAME } from './constants';
 import * as admin from 'firebase-admin';
 import { SuuntoAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
@@ -16,7 +18,10 @@ async function tokenForRequest(
         // A token-endpoint 403 did not test resource permission. Leave credential
         // handling to the coordinator and durable retry to the caller, including when the
         // initial expiry-based refresh fails before the first resource request.
-        if ((error?.statusCode ?? error?.response?.statusCode) === 403) {
+        // OAuth SDK errors carry their HTTP status in output.statusCode. Do not
+        // downgrade a terminal decision already made by the credential owner.
+        const statusCode = extractRefreshFailureDetails(error).statusCode ?? error?.response?.statusCode;
+        if (statusCode === 403 && !isTerminalServiceAuthError(error)) {
             throw Object.assign(new Error('Suunto token refresh was rejected; resource access was not retried.'), { statusCode: 503 });
         }
         throw error;

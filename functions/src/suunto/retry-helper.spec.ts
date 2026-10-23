@@ -160,6 +160,34 @@ describe('executeWithTokenRetry', () => {
         expect(tokensMocks.getTokenData).toHaveBeenCalledOnce();
     });
 
+    it.each([false, true])('recognizes an OAuth SDK refresh 403 (forced: %s) without retrying resource access', async forced => {
+        const sdkError = Object.assign(new Error('Response Error: 403 Forbidden'), {
+            isBoom: true, output: { statusCode: 403 }, data: { payload: { message: 'private provider detail' } },
+        });
+        if (forced) {
+            tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'token' });
+            mockOperation.mockRejectedValueOnce({ statusCode: 403 });
+        }
+        tokensMocks.getTokenData.mockRejectedValueOnce(sdkError);
+        await expect(executeWithTokenRetry(mockTokenDoc, mockOperation, 'private-context'))
+            .rejects.toMatchObject({ statusCode: 503, message: 'Suunto token refresh was rejected; resource access was not retried.' });
+        expect(mockOperation).toHaveBeenCalledTimes(forced ? 1 : 0);
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(forced ? 2 : 1);
+    });
+
+    it.each([false, true])('preserves a terminal credential-lifecycle decision even for refresh 403 (forced: %s)', async forced => {
+        const terminalError = Object.assign(new Error('Reconnect required'), {
+            name: 'TerminalServiceAuthError', statusCode: 403, providerErrorCode: 'invalid_grant',
+        });
+        if (forced) {
+            tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'token' });
+            mockOperation.mockRejectedValueOnce({ statusCode: 403 });
+        }
+        tokensMocks.getTokenData.mockRejectedValueOnce(terminalError);
+        await expect(executeWithTokenRetry(mockTokenDoc, mockOperation, 'private-context')).rejects.toBe(terminalError);
+        expect(mockOperation).toHaveBeenCalledTimes(forced ? 1 : 0);
+    });
+
     it('logs only a fixed recovery message and numeric auth status, never private context or provider text', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'private-token' });
         mockOperation.mockRejectedValueOnce({ statusCode: 'private-provider-text', error: { error: 'invalid_grant' } })

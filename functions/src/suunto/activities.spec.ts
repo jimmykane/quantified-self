@@ -1007,10 +1007,12 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
-    it('should preserve status resume identifiers when forced token refresh hits temporary invalid_grant', async () => {
+    it.each(['invalid_grant', 'sdk_403'])('preserves status resume identifiers after a temporary refresh failure (%s)', async scenario => {
         vi.useFakeTimers();
         try {
-            const temporaryInvalidGrant = Object.assign(new Error('invalid_grant during Suunto outage'), {
+            const refreshFailure = scenario === 'sdk_403' ? Object.assign(new Error('Response Error: 403 Forbidden'), {
+                isBoom: true, output: { statusCode: 403 }, data: { payload: { message: 'private provider detail' } },
+            }) : Object.assign(new Error('invalid_grant during Suunto outage'), {
                 statusCode: 400,
                 error: {
                     error: 'invalid_grant',
@@ -1020,7 +1022,7 @@ describe('importActivityToSuuntoApp', () => {
             tokensMocks.getTokenData
                 .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
                 .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
-                .mockRejectedValueOnce(temporaryInvalidGrant);
+                .mockRejectedValueOnce(refreshFailure);
             requestMocks.post.mockResolvedValue({
                 id: 'post-blob-refresh-upload-id',
                 url: 'https://storage.suunto.com/post-blob-refresh-upload',
@@ -1043,15 +1045,16 @@ describe('importActivityToSuuntoApp', () => {
 
             expect(requestMocks.post).toHaveBeenCalledTimes(1);
             expect(requestMocks.put).toHaveBeenCalledTimes(1);
+            expect(requestMocks.get).toHaveBeenCalledTimes(1);
         } finally {
             vi.useRealTimers();
         }
     });
 
-    it('should normalize terminal token refresh cleanup as auth required', async () => {
+    it.each([401, 403])('normalizes terminal token refresh cleanup as auth required (HTTP %s)', async statusCode => {
         const terminalAuthError = Object.assign(new Error('Suunto connection requires reconnect'), {
             name: 'TerminalServiceAuthError',
-            statusCode: 401,
+            statusCode,
             providerErrorCode: 'invalid_token',
             providerErrorMessage: 'Refresh token revoked',
             providerUserId: 'token1',

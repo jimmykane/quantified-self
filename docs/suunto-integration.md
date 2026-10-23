@@ -44,9 +44,10 @@ one same-account forced OAuth refresh after a resource HTTP 401/403. Route reads
 codes in small HTTP 200 JSON error envelopes before treating the response as GPX or a route listing. The refreshed
 request repeats current account, deletion and lifecycle checks. A persistent rejection returns to the existing caller's
 permission/reconnect or durable retry policy; it never loops or switches accounts. A token-endpoint 403 is a refresh
-failure, not proof that resource permission was tested. In these paths, known APIM subscription-key rejection signatures
-are application configuration failures and do not trigger user-token refresh. Signed activity blob URLs are not OAuth endpoints and
-are never refreshed or replayed by this recovery.
+failure, not proof that resource permission was tested. Refresh status extraction includes OAuth SDK `output.statusCode`
+errors; an explicit terminal credential-lifecycle decision still propagates unchanged for reconnect handling. In these
+paths, known APIM subscription-key rejection signatures are application configuration failures and do not trigger
+user-token refresh. Signed activity blob URLs are not OAuth endpoints and are never refreshed or replayed by this recovery.
 
 Recovery repeats only the rejected request: a status failure cannot restart activity initialization or resend the FIT.
 Guides journal definitive write rejection before refreshing, recheck consent/Pro/lifecycle guards before another request,
