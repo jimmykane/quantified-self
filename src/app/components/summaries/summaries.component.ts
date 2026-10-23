@@ -41,7 +41,7 @@ import {
   SimpleChanges,
   viewChild,
 } from '@angular/core';
-import { defer, filter, firstValueFrom, map, Observable, shareReplay, Subscription, take } from 'rxjs';
+import { defer, filter, firstValueFrom, map, Observable, ReplaySubject, share, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -1602,44 +1602,50 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.tileEventUserUID = uid;
     }
 
-    const eventDataTiles = this.getOrderedDashboardSettingsTiles().filter(tile => this.isEventDataSettingsTile(tile));
-    const activeOrders = new Set(eventDataTiles.map(tile => tile.order));
-    for (const order of Array.from(this.tileEventSubscriptions.keys())) {
-      if (!activeOrders.has(order)) {
-        this.tileEventSubscriptions.get(order)?.unsubscribe();
-        this.tileEventSubscriptions.delete(order);
-        this.tileEventSubscriptionStates.delete(order);
-        this.tileEventListenerKeys.delete(order);
+    const nowMs = Date.now();
+    const requestedQueries = this.getOrderedDashboardSettingsTiles()
+      .filter(tile => this.isEventDataSettingsTile(tile))
+      .map(tile => {
+        const filters = this.getSettingsTileEventFilters(tile);
+        const window = resolveDashboardTileEventWindow(
+          filters,
+          this.user?.settings?.unitSettings?.startOfTheWeek,
+          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
+          nowMs,
+        );
+        return { order: tile.order, window, listenerKey: this.buildTileEventListenerKey(uid, tile.order, filters, window) };
+      });
+    const requestedKeysByOrder = new Map(requestedQueries.map(({ order, listenerKey }) => [order, listenerKey]));
+
+    // Release departing consumers before adding any replacements. A query without a live
+    // consumer must get a fresh clock window, regardless of the replacement tile's order.
+    for (const [order, subscription] of this.tileEventSubscriptions) {
+      if (!subscription.closed && this.tileEventListenerKeys.get(order) === requestedKeysByOrder.get(order)) {
+        continue;
+      }
+      subscription.unsubscribe();
+      this.tileEventSubscriptions.delete(order);
+      this.tileEventSubscriptionStates.delete(order);
+      this.tileEventListenerKeys.delete(order);
+      if (!requestedKeysByOrder.has(order)) {
         this.tileEventAnchorEndMsByOrder.delete(order);
         delete this.tileEventsByOrder[order];
         delete this.tileEventLoadingByOrder[order];
       }
     }
+    const liveQueryKeys = new Set(this.tileEventListenerKeys.values());
+    for (const key of this.tileEventQueries.keys()) {
+      if (!liveQueryKeys.has(key)) this.tileEventQueries.delete(key);
+    }
 
-    const nowMs = Date.now();
-    const activeQueryKeys = new Set<string>();
-    eventDataTiles.forEach((tile) => {
-      const filters = this.getSettingsTileEventFilters(tile);
-      const window = resolveDashboardTileEventWindow(
-        filters,
-        this.user?.settings?.unitSettings?.startOfTheWeek,
-        this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
-        nowMs,
-      );
-      const listenerKey = this.buildTileEventListenerKey(uid, tile.order, filters, window);
-      activeQueryKeys.add(listenerKey);
-      const currentSubscription = this.tileEventSubscriptions.get(tile.order);
-      if (this.tileEventListenerKeys.get(tile.order) === listenerKey && currentSubscription && !currentSubscription.closed) {
-        return;
-      }
+    requestedQueries.forEach(({ order, window, listenerKey }) => {
+      if (this.tileEventSubscriptions.has(order)) return;
 
-      this.tileEventSubscriptions.get(tile.order)?.unsubscribe();
-      this.tileEventSubscriptionStates.delete(tile.order);
-      this.tileEventListenerKeys.set(tile.order, listenerKey);
-      this.tileEventLoadingByOrder[tile.order] = true;
-      delete this.tileEventsByOrder[tile.order];
-      const subscriptionState: DashboardTileEventSubscriptionState = { order: tile.order };
-      this.tileEventSubscriptionStates.set(tile.order, subscriptionState);
+      this.tileEventListenerKeys.set(order, listenerKey);
+      this.tileEventLoadingByOrder[order] = true;
+      delete this.tileEventsByOrder[order];
+      const subscriptionState: DashboardTileEventSubscriptionState = { order };
+      this.tileEventSubscriptionStates.set(order, subscriptionState);
 
       let events$ = this.tileEventQueries.get(listenerKey);
       if (!events$) {
@@ -1648,11 +1654,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         // anchor while it has consumers, so tiles added later can reuse the same live query.
         events$ = defer(() => this.eventService.getEventsBy(eventUser, where, 'startDate', false, 0)).pipe(
           map(events => (events || []).filter(event => !event.isMerge)),
-          shareReplay({ bufferSize: 1, refCount: true }),
+          share({
+            connector: () => new ReplaySubject<EventInterface[]>(1),
+            // Replay terminal failures to all matching tiles in this synchronization.
+            // The next synchronization evicts the entry once all consumers are closed.
+            resetOnError: false,
+            resetOnComplete: false,
+            resetOnRefCountZero: true,
+          }),
         );
         this.tileEventQueries.set(listenerKey, events$);
       }
-      this.tileEventSubscriptions.set(tile.order, events$.subscribe({
+      this.tileEventSubscriptions.set(order, events$.subscribe({
         next: (events) => {
           const currentOrder = subscriptionState.order;
           this.tileEventsByOrder[currentOrder] = events;
@@ -1668,9 +1681,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         },
       }));
     });
-    for (const key of this.tileEventQueries.keys()) {
-      if (!activeQueryKeys.has(key)) this.tileEventQueries.delete(key);
-    }
   }
 
   private syncRoutePreviewSubscription(): void {

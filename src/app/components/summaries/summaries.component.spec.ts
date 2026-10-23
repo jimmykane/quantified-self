@@ -2489,6 +2489,60 @@ describe('SummariesComponent', () => {
       expect(component.tileEventLoadingByOrder[2]).toBe(false);
     });
 
+    it.each([
+      { change: 'replaced', newOrder: 0 },
+      { change: 'replaced', newOrder: 3 },
+      { change: 'changed range', newOrder: 0 },
+      { change: 'changed range', newOrder: 3 },
+    ] as const)(
+      'refreshes the latest window when its final consumers are $change and the replacement has order $newOrder', ({ change, newOrder }) => {
+        mockEventService.getEventsBy.mockImplementation(() => new Subject<EventInterface[]>());
+        component.user.settings.dashboardSettings.tiles.forEach((tile, index) => { tile.order = index + 1; });
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+        component['syncTileEventSubscriptions']();
+        now.mockReturnValue(1800000060000);
+        if (change === 'replaced') {
+          component.user.settings.dashboardSettings.tiles = [
+            { type: TileTypes.Chart, order: 1, chartType: DASHBOARD_FORM_CHART_TYPE },
+            { type: TileTypes.Chart, order: 2, chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE },
+          ] as typeof component.user.settings.dashboardSettings.tiles;
+        } else {
+          component.user.settings.dashboardSettings.tiles.forEach(tile => {
+            (tile as AppDashboardChartTileSettingsInterface).eventFilters.range = '30d';
+          });
+        }
+        component.user.settings.dashboardSettings.tiles.push({
+          type: TileTypes.Map, order: newOrder, eventFilters: { range: '1y', activityTypes: [] },
+        } as typeof component.user.settings.dashboardSettings.tiles[number]);
+        component['syncTileEventSubscriptions']();
+
+        const latestCall = mockEventService.getEventsBy.mock.calls.filter(call => {
+          const clauses = call[1] as Array<{ value: number }>;
+          return clauses[1].value - clauses[0].value === 365 * 24 * 60 * 60 * 1000;
+        }).at(-1);
+        expect(latestCall?.[1]).toEqual([
+          { fieldPath: 'startDate', opStr: '>=', value: 1800000060000 - 365 * 24 * 60 * 60 * 1000 },
+          { fieldPath: 'startDate', opStr: '<=', value: 1800000060000 },
+        ]);
+      },
+    );
+
+    it('shares a synchronous startup failure across tiles and retries only on the next synchronization', () => {
+      mockEventService.getEventsBy.mockImplementation(() => { throw new Error('query startup failed'); });
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventsBy).toHaveBeenCalledOnce();
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+
+      const retry$ = new Subject<EventInterface[]>();
+      mockEventService.getEventsBy.mockReturnValue(retry$);
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      retry$.next([]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
+
     it('keeps a shared source alive until its final tile is removed and releases its replayed data', () => {
       const incoming$ = new Subject<EventInterface[]>();
       const teardown = vi.fn();
@@ -2850,6 +2904,8 @@ describe('SummariesComponent', () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
+    const incoming$ = new Subject<EventInterface[]>();
+    mockEventService.getEventsBy.mockReturnValue(incoming$);
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = {
       uid: 'user-1',
