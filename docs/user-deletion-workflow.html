@@ -191,7 +191,7 @@
                 style Backend fill:#0d1117,stroke:#a371f7,stroke-width:2px
                 style CustomCleanup fill:#161b22,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5
             </div>
-            <p>The Gen 1 <code>cleanupUserAccounts</code> function owns recursive account data cleanup with 1 GB memory, a 540-second timeout and retries. The Delete User Data extension was retired on 23 October 2026 after approved deployment and a successful overlap check. A fresh account deletion with only the native owner remains the final verification step.</p>
+            <p>The Gen 1 <code>cleanupUserAccounts</code> function owns recursive account data cleanup with 1 GB memory, a 540-second timeout and retries. The Delete User Data extension was retired on 23 October 2026 after approved deployment and a successful overlap check. A fresh account deletion after retirement verified native-only cleanup.</p>
             <p>Before removing provider identity sources, <code>cleanupUserAccounts</code> stores a deletion-surviving checkpoint. Both Firestore roots and the exact Storage prefix are verified before recording completion. Pending deletion markers do not expire; completed markers retain a seven-day TTL. Independent cleanup stages continue after failure before the trigger throws for retry.</p>
             <p><code>deleteSelf</code> deletes the Firebase Auth user only after the deletion tombstone is stored. If
                 that write fails, deletion aborts so guarded background writers cannot race recursive cleanup without a
@@ -201,7 +201,7 @@
         <div class="card">
             <h2>🗑️ Data Cleanup Matrix</h2>
             <p>The native helper uses an exact Storage object and a slash-delimited folder. The retired extension's UID-prefix and replacement-token defects were absent from the audited production UID inventory; the runbook retains the pinned source comparison.</p>
-            <p>The native owner below is deployed. See the <a href="delete-user-data-migration.md">cutover evidence, remaining verification and recovery runbook</a>.</p>
+            <p>The native owner below is deployed. See the <a href="delete-user-data-migration.md">cutover verification and recovery runbook</a>.</p>
             <table>
                 <thead>
                     <tr>

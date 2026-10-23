@@ -11,7 +11,7 @@ On 23 October 2026, the separately approved Delete User Data extension retiremen
 left the native cleanup owner and this monitoring bundle active. Before/after readback
 matched all nine metrics, seven enabled policies and the dashboard. Filters do not
 depend on the retired extension, so monitoring coverage is **unchanged**. See the
-[cutover evidence and remaining native-only verification](delete-user-data-migration.md#production-status--23-october-2026).
+[cutover evidence and successful native-only verification](delete-user-data-migration.md#production-status--23-october-2026).
 
 ## Ownership and meanings
 

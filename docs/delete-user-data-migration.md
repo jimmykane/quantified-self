@@ -64,10 +64,21 @@ The former extension-config assertions now use the native recursive cleanup cont
 Exact JSON comparisons preserved all other Firebase configuration; documentation and
 diagram checks passed without changing application runtime code.
 
-**Remaining verification:** perform a separately approved deletion of a fresh test
-account, then verify native trigger delivery, the completed receipt and scoped data
-absence with the extension gone. Do not reuse the previous account's UID. Retirement
-readback and the earlier overlap check do not substitute for this native-only check.
+**Native-only verification complete:** the owner deleted a fresh account with a new
+UID after retirement. One native execution finished successfully in 6.844 seconds,
+recorded verified completion at 08:24:16 UTC and logged no errors. Independent reads
+at 08:26 UTC confirmed Auth absent; no user/customer or provider-token descendants;
+no live account Storage objects; zero matches across 30 UID-based operational/MCP
+queries; no campaign recipients; and no unfinished operational checkpoints. The only
+remaining UID-owned mail was the delivered deletion confirmation with its 90-day
+expiry. The completed receipt retained its seven-day expiry. A subsequent query found
+no pending native cleanup receipts.
+
+Post-deletion readback confirmed all nine retired extension resources still absent
+and the native Functions, Email/Stripe extensions and monitoring configuration
+unchanged. This completes the required native-only cutover check. The fresh account
+had no provider credentials, so this verifies native trigger delivery and scoped local
+completion without establishing remote provider revocation or large-account performance.
 
 The source comparison and rollout procedure below retain the pre-retirement evidence
 and recovery guidance; references to the installed extension describe that historical
