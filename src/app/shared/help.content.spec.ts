@@ -197,7 +197,9 @@ describe('help.content', () => {
     expect(copy).toContain('differences appear only when both recordings have a valid value');
     expect(copy).toContain('cover each entire recording, not only the aligned overlap');
     expect(copy).toContain('do not affect the hardware agreement grade');
-    expect(copy).toContain('On **benchmark event details**, **R–R & HRV**');
+    expect(copy).toContain('On **Event Details**, **R–R & HRV** appears after the performance charts');
+    expect(copy).toContain('ordinary workouts, multisport legs and benchmarks');
+    expect(copy).toContain('Events without beat intervals or valid saved HRV statistics do not show this section');
     expect(copy).toContain('all 20 recorded R–R metrics');
     expect(copy).toContain('starts collapsed');
     expect(copy).toContain('one, two or more overlaid recordings');

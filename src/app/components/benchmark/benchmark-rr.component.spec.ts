@@ -76,7 +76,10 @@ describe('benchmark R–R panel', () => {
       providers: [{ provide: BenchmarkRRAnalysisService, useValue: worker }],
     } }).compileComponents();
     const fixture = TestBed.createComponent(BenchmarkRRComponent);
-    fixture.componentRef.setInput('event', { mergeType, isMerge: true, getActivities: () => activities } as unknown as AppEventInterface);
+    fixture.componentRef.setInput('event', {
+      mergeType: mergeType === 'ordinary' ? undefined : mergeType,
+      isMerge: mergeType !== 'ordinary', getActivities: () => activities,
+    } as unknown as AppEventInterface);
     fixture.componentRef.setInput('activities', activities);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const panel = fixture.componentInstance;
@@ -136,13 +139,15 @@ describe('benchmark R–R panel', () => {
     expect(host.textContent).not.toContain('Scroll horizontally to compare recordings');
   });
 
-  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('keeps all seven canonical metrics in each recording legend with %s preferences', async distanceUnits => {
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles].flatMap(distanceUnits =>
+    ['benchmark', 'ordinary', 'multi'].map(kind => ({ distanceUnits, kind }))
+  ))('keeps all seven canonical metrics in each recording legend ($kind, $distanceUnits)', async ({ distanceUnits, kind }) => {
     const recordings = [recording('Reference chest strap with a long recording name', true), recording('Watch', true)];
     for (const source of recordings) {
       [new DataRRArtifactPercentage(1.5), new DataRRSuspectedEctopicPairCount(24), new DataRRRMSSD(8.14),
         new DataRRSDNN(37.2), new DataRRPNN50(.5), new DataRRDFAAlpha1Median(.62)].forEach(stat => source.addStat(stat));
     }
-    const { fixture, host, openCharts } = await render('benchmark', recordings);
+    const { fixture, host, openCharts } = await render(kind, recordings);
     fixture.componentRef.setInput('unitSettings', { ...getDefaultUserUnitSettings(), distanceUnits }); fixture.detectChanges();
     await openCharts(); fixture.detectChanges();
     const legends = host.querySelectorAll('.rr-source-legend');
@@ -157,11 +162,42 @@ describe('benchmark R–R panel', () => {
     }
   });
 
-  it('excludes explicit multi-sport events even with the legacy merge flag', async () => {
-    const { host, panel, worker } = await render('multi');
-    expect(panel.visible()).toBe(false); expect(host.querySelector('section')).toBeNull();
-    expect(host.classList.contains('benchmark-rr-collapsed')).toBe(false);
+  it.each(['ordinary', 'multi'])('supports %s events with R–R intervals, without analyzing while collapsed', async kind => {
+    const { host, panel, worker, loader, openCharts, haptics } = await render(kind, [recording('Strap', true)]);
+    expect(panel.visible()).toBe(true); expect(panel.expanded()).toBe(false);
+    expect(host.querySelector('section')?.getAttribute('aria-label')).toBe('R–R and HRV analysis');
     expect(worker.analyze).not.toHaveBeenCalled();
+    expect(loader.init).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    await openCharts();
+    expect(panel.status()).toBe('ready');
+    expect(panel.chartRecordings()).toHaveLength(1);
+    expect(host.querySelectorAll('.rr-chart')).toHaveLength(2);
+    expect(worker.analyze).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it('keeps saved HRV usable on an ordinary event without inventing raw intervals', async () => {
+    const activity = recording('Strap'); activity.addStat(new DataRRRMSSD(12));
+    const { host, panel, worker, loader, fixture, openCharts } = await render('ordinary', [activity]);
+    expect(panel.visible()).toBe(true);
+    await openCharts();
+    expect(panel.status()).toBe('unavailable');
+    expect(host.textContent).toContain('Original beat intervals are unavailable');
+    expect(host.querySelector('.rr-chart')).toBeNull();
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
+    expect(host.querySelector('table')?.textContent).toContain('12.0 ms');
+    expect(worker.analyze).not.toHaveBeenCalled(); expect(loader.init).not.toHaveBeenCalled();
+  });
+
+  it('hides and disposes the panel when selection changes to an activity without HRV', async () => {
+    const strap = recording('Strap', true);
+    const { host, panel, fixture, charts, openCharts } = await render('ordinary', [strap]);
+    await openCharts();
+    fixture.componentRef.setInput('activities', [recording('No HRV')]); fixture.detectChanges();
+    expect(panel.visible()).toBe(false); expect(panel.expanded()).toBe(false);
+    expect(host.querySelector('section')).toBeNull();
+    expect(charts.every(chart => chart.dispose.mock.calls.length === 1)).toBe(true);
+    fixture.componentRef.setInput('activities', [strap]); fixture.detectChanges();
+    expect(panel.visible()).toBe(true); expect(panel.expanded()).toBe(false);
   });
 
   it('binds the Material summary picker and ignores invalid or unchanged selections', async () => {
@@ -230,7 +266,8 @@ describe('benchmark R–R panel', () => {
     expect(panel.status()).toBe('loading');
     fixture.componentRef.setInput('activities', [recording('Other watch')]); fixture.detectChanges();
     resolve(analysis); await fixture.whenStable(); fixture.detectChanges();
-    expect(panel.analyses().size).toBe(0); expect(panel.status()).toBe('unavailable');
+    expect(panel.analyses().size).toBe(0); expect(panel.status()).toBe('idle');
+    expect(panel.visible()).toBe(false);
   });
 
   it('offers a working retry with one feedback owner after a calculation failure', async () => {
@@ -480,9 +517,10 @@ describe('benchmark R–R panel', () => {
     expect(worker.analyze).toHaveBeenCalledOnce();
   });
 
-  it('does not create chart hosts or empty legends when no device has R–R data', async () => {
-    const { host, panel, openCharts, worker, loader } = await render('benchmark', [recording('Watch'), recording('Bike computer')]);
-    await openCharts();
+  it.each(['benchmark', 'ordinary', 'multi'])('hides the HRV section on %s events when no device has R–R data', async kind => {
+    const { host, panel, worker, loader } = await render(kind, [recording('Watch'), recording('Bike computer')]);
+    expect(panel.visible()).toBe(false); expect(host.querySelector('section')).toBeNull();
+    expect(host.classList.contains('benchmark-rr-collapsed')).toBe(false);
     expect(panel.sources()).toEqual([]);
     expect(host.querySelector('.rr-source-legends')).toBeNull();
     expect(host.querySelector('.rr-chart')).toBeNull();

@@ -409,7 +409,7 @@ brightening preserves achromatic black/gray rather than adding red saturation. P
 https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
 benchmark charts, particularly overlapping lines and map backgrounds.
 
-### Benchmark R–R summaries and plots
+### Event R–R summaries and plots
 
 All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
 immediately before Device, preserving category IDs for remembered selections. It is not part of Device or Physiological. The existing metric-card renderer
@@ -450,9 +450,12 @@ reserved space. Keep its host measurable and observable (visibility/ARIA hiding,
 refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
 excerpt/full-recording context with an automatically generated list of coordinates.
 
-`BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
-(including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
-full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.
+`BenchmarkRRComponent` is shared by ordinary workouts, explicit multisport merges and benchmarks. Event Details
+mounts it after the performance/dive charts only when a selected activity has valid saved R–R statistics or an original
+IBI stream with usable timing metadata. The panel independently filters to those same eligible recordings; no-data
+selections leave no empty section or host in the summary stack. It follows selected activities and full-event device
+color assignments, preserving each multisport leg's original timing without combining its statistics with other legs.
+It does not change Training impact, benchmark reports, alignment or accuracy grades, persistence, or MCP contracts.
 The panel starts collapsed as a compact section-header row. The surface-free **Show/Hide charts** Material button
 owns one selection haptic and a stable `aria-controls` target; collapsed content neither materializes beats nor starts a worker.
 Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each plotted source's

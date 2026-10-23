@@ -42,6 +42,7 @@ import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.he
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
+import { getBenchmarkRRIntervalSource, hasBenchmarkRRStats } from '../../helpers/benchmark-rr.helper';
 import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -116,6 +117,10 @@ export class EventCardComponent implements OnInit {
   public hasDiveProfileFlag = computed(() =>
     hasEventDiveProfileData(this.selectedActivitiesInstant())
   );
+
+  public hasRRDataFlag = computed(() => this.selectedActivitiesInstant().some(activity =>
+    hasBenchmarkRRStats(activity) || getBenchmarkRRIntervalSource(activity) !== null
+  ));
 
   public performanceCurveAvailability = computed(() =>
     this.performanceCurveDataService.getAvailability(this.selectedActivitiesInstant(), {
