@@ -10,22 +10,18 @@ export class EventWriteSkippedForDeletedEventError extends Error {
 
 export type PreparedTrainingLoadWrite = (() => Promise<void>) & {
   readonly sourceWriteId: string;
-  readonly previousImportedTypes?: ReadonlyMap<string, string>;
 };
 
 /** One instance per import attempt. Check inside every source/cleanup transaction, before writes. */
 export class TrainingLoadSourceWrite {
-  private reservation?: { eventId: string; sourceWriteId: string; previousImportedTypes?: ReadonlyMap<string, string> };
-
-  get previousImportedTypes(): ReadonlyMap<string, string> | undefined { return this.reservation?.previousImportedTypes; }
+  private reservation?: { eventId: string; sourceWriteId: string };
 
   constructor(private readonly uid: string,
     private readonly prepare: (event: EventInterface) => Promise<PreparedTrainingLoadWrite>) {}
 
   prepareTrainingLoad = async (event: EventInterface): Promise<PreparedTrainingLoadWrite> => {
     const finish = await this.prepare(event);
-    this.reservation = { eventId: event.getID()!, sourceWriteId: finish.sourceWriteId,
-      previousImportedTypes: finish.previousImportedTypes };
+    this.reservation = { eventId: event.getID()!, sourceWriteId: finish.sourceWriteId };
     return finish;
   };
 

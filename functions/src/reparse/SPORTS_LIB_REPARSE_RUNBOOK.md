@@ -885,11 +885,10 @@ Activity identity strategy:
 - Guarded source preparation is the only owner of saved-ID reuse. Parsing/source-key generation assigns provisional deterministic IDs; matched saved IDs replace them before any write. Only genuinely new legs keep their generated IDs.
 - Keep source key generation/validation for new and legacy compatibility; a source-content hash or sport refinement must not rename an already verified leg.
 - Use the shared pure matcher and a unique complete retained-source window for mutable sport/statistics. Do not fall back to array order or the only unmatched leg.
-- Persist a server-owned `sourceIdentity` containing stable ID, raw start/end and imported type; preserve an explicit owner sport label separately.
+- Persist a server-owned `sourceIdentity` containing stable ID, raw start/end and imported type for interrupted-write recovery. The file supplies the sport; QS has no recorded-sport editor.
 - Validate assignments and saved corrections before reserving a source write. Recheck the pre-parse retained references after long parsing, separately from any bucket repair being saved; source replacement remains retryable.
 - Use the committed association certificate for Training controls/policies. Calculate benchmark selection remaps once, after preparation assigns final IDs; no pre-write guess or preparation callback is needed.
-- Preserve live activity device/sport edits inside guarded document transactions, alongside the existing parent edit policy.
-- During first adoption, keep the verified prior imported sport in the write attempt's memory. The final activity transaction needs it to preserve live legacy sport edits/resets; never add it to persisted or incoming JSON metadata.
+- Preserve custom device names inside guarded document transactions, alongside the existing parent edit policy and strict elevation-correction matching.
 - Check event existence before reserving and inside subsequent parent/child writes. Reservation ownership and account status alone cannot stop a reparse from recreating a deleted workout. Child writes batch their existing child read with one parent read; event-body writes reuse their preservation read, and merge-flag writes also read the parent. Missing events use the existing skipped-write lifecycle.
 - Missing or foreign active leg references during interrupted recovery produce `ACTIVITY_IDENTITY_CONFLICT` for review. Retrying the same source cannot restore that saved association.
 - Reject overlapping splits/merges and ambiguous windows with terminal `ACTIVITY_IDENTITY_CONFLICT`; leave the saved source/load available for review.

@@ -1561,35 +1561,13 @@ describe('uploadActivity', () => {
     for (const kind of ['events', 'activities']) {
       await adapter.setDoc(['users', 'user-1', kind, 'saved'], { creator: { name: 'Parsed' } });
       const transform = hoisted.mockSetEventDocumentIfUserActive.mock.calls.at(-1)![5] as (incoming: object, saved: object) => object;
-      expect(transform(kind === 'events' ? { name: 'File' } : { creator: { name: 'Parsed' } },
-        kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { creator: { name: 'Edited watch' } }))
-        .toMatchObject(kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { creator: { name: 'Edited watch' } });
+      expect(transform(kind === 'events' ? { name: 'File' } : { type: 'Yoga', creator: { name: 'Parsed' } },
+        kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { type: 'Stretching', creator: { name: 'Edited watch' } }))
+        .toMatchObject(kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { type: 'Yoga', creator: { name: 'Edited watch' } });
     }
     hoisted.mockPrepareTrainingLoad.mockRejectedValueOnce(new Error('deleted or superseded'));
     await expect(adapter.prepareTrainingLoad(parsed)).rejects.toThrow('deleted or superseded');
   });
 
-  it.each([
-    { preparedType: 'Walking', liveType: 'Pilates' },
-    { preparedType: 'Pilates', liveType: 'Walking' },
-  ])('preserves a live legacy sport edit/reset to $liveType during repeat upload', async ({ preparedType, liveType }) => {
-    hoisted.mockPrepareTrainingLoad.mockResolvedValueOnce(Object.assign(vi.fn(), {
-      sourceWriteId: 'attempt', previousImportedTypes: new Map([['stable-leg', 'Walking']]),
-    }));
-    const response = makeResponse();
-    await invokeUploadActivity(makeRequest({ headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' } }), response);
-    expect(response.status).toHaveBeenCalledWith(200);
-    const adapter = hoisted.capturedFirestoreAdapter.value as {
-      prepareTrainingLoad: (event: unknown) => Promise<unknown>;
-      setDoc: (path: string[], data: unknown) => Promise<void>;
-    };
-    await adapter.prepareTrainingLoad({ ...makeParsedEvent(), getID: () => 'saved' });
-    const incoming = { type: preparedType, sourceIdentity: {
-      version: 1, activityId: 'stable-leg', startMs: 1000, endMs: 61000, importedType: 'Walking',
-    } };
-    await adapter.setDoc(['users', 'user-1', 'activities', 'stable-leg'], incoming);
-    const transform = hoisted.mockSetEventDocumentIfUserActive.mock.calls.at(-1)![5] as (incoming: object, saved: object) => object;
-    expect(transform(incoming, { type: liveType })).toMatchObject({ type: liveType, sourceIdentity: incoming.sourceIdentity });
-    expect(incoming.type).toBe(preparedType);
-  });
+
 });

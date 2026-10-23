@@ -79,7 +79,7 @@ describe('AppOriginalFileHydrationService', () => {
     vi.useRealTimers();
   });
 
-  it('matches retained source type while preserving an owner sport label without changing the saved activity', () => {
+  it('matches the bound source without replacing file sport or mutating saved data', () => {
     const sourceIdentity = { version: 1, activityId: 'stable', startMs: 1000, endMs: 61000, importedType: 'Yoga' };
     const saved = { getID: () => 'stable', startDate: new Date(1000), endDate: new Date(61000), type: 'Pilates',
       sourceIdentity, getStat: () => null, creator: { name: 'Owner device' } };
@@ -87,7 +87,7 @@ describe('AppOriginalFileHydrationService', () => {
     const parsed = { getID: () => id, setID: (next: string) => { id = next; }, startDate: new Date(1000),
       endDate: new Date(61000), type: 'Yoga', getStat: () => null, creator: { name: 'Source device' } };
     (service as any).applyExistingActivityIdentity({ getActivities: () => [saved] }, { getActivities: () => [parsed] });
-    expect(parsed).toMatchObject({ type: 'Pilates', creator: { name: 'Owner device' }, sourceIdentity });
+    expect(parsed).toMatchObject({ type: 'Yoga', creator: { name: 'Owner device' }, sourceIdentity });
     expect(parsed.getID()).toBe('stable');
     expect(saved.type).toBe('Pilates');
     expect(saved.sourceIdentity).toEqual(sourceIdentity);

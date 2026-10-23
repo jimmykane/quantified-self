@@ -2970,8 +2970,8 @@ promotion, real-profile plugin install or historical reparse is performed by thi
 ## Stable activity source associations
 
 Chart/sample source reads use the common pure activity matcher and the validated server-owned `sourceIdentity`
-snapshot internally. This allows a saved owner sport label to differ from the raw retained recording without
-borrowing another leg's data. Its allowlisted snapshot participates in the opaque source-context fingerprint so
+snapshot internally to identify the bound recording without borrowing another leg's data. The parsed file supplies
+the sport; no sport override is inferred. The allowlisted snapshot participates in the opaque source-context fingerprint so
 stale pagination/cache context cannot survive a source association change. Read-only consumers retain strict matching;
 provider-only cross-sport window authorization and write-reservation certificates never come from MCP inputs.
 `sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,

@@ -32,14 +32,6 @@ describe('Training load source write reservation', () => {
     expect(f.get).toHaveBeenCalledWith('users/owner/events/workout/metaData/trainingLoad');
     expect(f.finish).not.toHaveBeenCalled();
   });
-  it('carries previous source sports only from its completed preparation', async () => {
-    const f = fixture();
-    const previousImportedTypes = new Map([['stable-leg', 'Stretching']]);
-    Object.assign(f.finish, { previousImportedTypes });
-    expect(f.guard.previousImportedTypes).toBeUndefined();
-    await f.guard.prepareTrainingLoad(f.event);
-    expect(f.guard.previousImportedTypes).toBe(previousImportedTypes);
-  });
   it.each(['attempt-2', undefined])('rejects a replaced or deleted reservation: %s', async sourceWriteId => {
     const f = fixture(); await f.guard.prepareTrainingLoad(f.event);
     f.get.mockResolvedValueOnce({ data: () => ({ sourceWriteId, revision: 0, sourceWritePending: true }) });

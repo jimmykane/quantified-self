@@ -3,12 +3,12 @@ import type { EventInterface } from '@sports-alliance/sports-lib';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
-import { getActivitySourceWindow, resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
+import { getActivitySourceWindow } from './activity-identity-matcher';
 import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { prepareActivitySourceBindings, savedActivityIdentity, type SavedActivitySource, type ActivityBindingPlan } from './activity-source-binding';
-import { ActivityIdentityConflictError, LegacyActivitySourceRequiredError } from './activity-identity-conflict';
+import { ActivityIdentityConflictError } from './activity-identity-conflict';
 import { isSameProviderRecording, providerRecordingService } from './provider-recording-identity';
-import { loadRetainedActivitySources, retainedSourceRevision } from './retained-activity-source';
+import { retainedSourceRevision } from './retained-activity-source';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { EventWriteSkippedForDeletedEventError, type PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -34,24 +34,15 @@ export function preserveImportedEventEdits(incoming: admin.firestore.DocumentDat
   return sanitizeEventFirestoreWritePayload(result);
 }
 
-export function preserveImportedActivityEdits(incoming: admin.firestore.DocumentData, existing: admin.firestore.DocumentData | null,
-  previousImportedTypes?: ReadonlyMap<string, string>): admin.firestore.DocumentData {
-  const currentSource = readActivitySourceIdentity(incoming.sourceIdentity);
-  const priorSource = readActivitySourceIdentity(existing?.sourceIdentity, currentSource?.activityId);
-  const previousImportedType = priorSource?.importedType ?? (currentSource && previousImportedTypes?.get(currentSource.activityId));
-  const boundSource = currentSource && previousImportedType !== undefined;
-  if (boundSource && !existing) throw new ActivityIdentityConflictError();
-  // Re-read both override and reset: a prepared owner label must not undo a later reset to the source sport.
-  const type = boundSource ? existing!.type !== previousImportedType ? existing!.type : currentSource.importedType : incoming.type;
+export function preserveImportedActivityEdits(incoming: admin.firestore.DocumentData, existing: admin.firestore.DocumentData | null): admin.firestore.DocumentData {
   for (const metric of ACTIVITY_ELEVATION_METRICS) {
     const { field } = activityElevationMetric(metric);
     if (readAscentCorrection(existing?.[field]) && !readAscentCorrection(incoming[field]))
       throw new Error(`A saved ${metric} correction was not safely matched. Reload the recording before reimporting.`);
-    if (readAscentCorrection(incoming[field]) && !isTerrainAscentActivity(type)) throw new ActivityIdentityConflictError();
+    if (readAscentCorrection(incoming[field]) && !isTerrainAscentActivity(incoming.type)) throw new ActivityIdentityConflictError();
   }
   const name = getActivityCreatorNameCarryover(existing?.creator?.name, incoming.creator?.name);
   return sanitizeActivityFirestoreWritePayload({ ...incoming,
-    ...(boundSource ? { type } : {}),
     ...(name ? { creator: { ...incoming.creator, name } } : {}),
     ...(existing?.sourceActivityKey ? { sourceActivityKey: existing.sourceActivityKey } : {}),
   });
@@ -78,24 +69,6 @@ function prepareAscentCarryover(event: EventInterface,
   };
 }
 
-/** A reparse is already reading the retained originals: its raw sport is legacy source evidence.
- * Preserve unexplained legacy display differences; approved parser refinements still adopt their new type. */
-function prepareRetainedSourceBindings(event: EventInterface, documents: SavedActivitySource[]): ActivityBindingPlan {
-  const options = { allowSourceWindowMatch: true, allowNewActivities: true, allowRemovedActivities: true };
-  try { return prepareActivitySourceBindings(event, documents, options); }
-  catch (error) {
-    if (!(error instanceof LegacyActivitySourceRequiredError)) throw error;
-    const before = documents.map(savedActivityIdentity), after = event.getActivities() as ActivityIdentityLike[];
-    const matches = resolveActivityIdentityAssignments(before, after, { allowSourceWindowMatch: true });
-    const legacyImportedTypes = new Map<string, string>();
-    matches.assignments.forEach((existingIndex, parsedIndex) => {
-      if (!resolveActivityIdentityAssignments([before[existingIndex]], [after[parsedIndex]], { requireStrictMatch: true }).assignments.size)
-        legacyImportedTypes.set(documents[existingIndex].id, `${after[parsedIndex].type}`);
-    });
-    return prepareActivitySourceBindings(event, documents, { ...options, legacyImportedTypes });
-  }
-}
-
 function assertLegacyPendingSources(metadata: TrainingLoadMetadata | undefined, documents: SavedActivitySource[]): void {
   if (!metadata?.sourceWritePending) return;
   const frozen = new Map(Object.values(metadata.legs ?? metadata.legacyLegs ?? {})
@@ -120,7 +93,6 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
   let prepared = false;
   let apply: () => void = () => undefined;
   let verifiedActivityIds: ReadonlySet<string> = new Set();
-  let previousImportedTypes: ReadonlyMap<string, string> = new Map();
   const finish = await prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
     if (prepared) return verifiedActivityIds;
     const parentRef = db.doc(`users/${uid}/events/${event.getID()}`);
@@ -151,16 +123,17 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
       sourceDocs = children.docs;
     }
     assertLegacyPendingSources(metadata, sourceDocs);
-    const plan = prepareRetainedSourceBindings(event, sourceDocs);
+    const plan = prepareActivitySourceBindings(event, sourceDocs, {
+      allowSourceWindowMatch: true, allowNewActivities: true, allowRemovedActivities: true,
+    });
     const corrected = prepareAscentCarryover(event, sourceDocs, plan);
     verifiedActivityIds = plan.verifiedActivityIds;
-    previousImportedTypes = plan.previousImportedTypes;
     apply = () => { plan.apply(); corrected(); };
     return verifiedActivityIds;
   });
   prepared = true;
   apply();
-  return Object.assign(finish, { previousImportedTypes });
+  return finish;
 }
 
 /** Validate identities in the reservation transaction, before it can mark saved load pending. */
@@ -172,44 +145,25 @@ export async function prepareImportedEventWrite(
   let prepared = false;
   let applyIdentities: () => void = () => undefined;
   let verifiedActivityIds: ReadonlySet<string> = new Set();
-  let previousImportedTypes: ReadonlyMap<string, string> = new Map();
-  let proof: { revision: string; types: ReadonlyMap<string, string> } | undefined;
-  let legacy: { parent: Record<string, any>; documents: SavedActivitySource[] } | undefined;
-  const reserve = () => prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
+  const finish = await prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
     await authorize?.(db, transaction);
     if (!prepared) {
-      const result = await prepareImportedActivityIdentities(uid, event, db, transaction, providerMetadata, proof,
-        (parent, documents) => { legacy = { parent, documents }; });
+      const result = await prepareImportedActivityIdentities(uid, event, db, transaction, providerMetadata);
       applyIdentities = result.apply;
       verifiedActivityIds = result.verifiedActivityIds;
-      previousImportedTypes = result.previousImportedTypes;
     }
     return verifiedActivityIds;
   });
-  let finish: PreparedTrainingLoadWrite;
-  try { finish = await reserve(); }
-  catch (error) {
-    if (!(error instanceof LegacyActivitySourceRequiredError) || !legacy) throw error;
-    const sources = await loadRetainedActivitySources(uid, event.getID()!, legacy.parent);
-    const matches = resolveActivityIdentityAssignments(legacy.documents.map(savedActivityIdentity), sources as ActivityIdentityLike[],
-      { allowSourceWindowMatch: true });
-    proof = { revision: retainedSourceRevision(legacy.parent), types: new Map([...matches.assignments]
-      .map(([parsedIndex, existingIndex]) => [legacy!.documents[existingIndex].id, `${sources[parsedIndex].type}`])) };
-    // One bounded legacy proof; further conflict or revision changes propagate to the caller.
-    finish = await reserve();
-  }
   prepared = true;
   // Firestore can retry preparation. Only the committed attempt may change the parsed IDs/keys.
   applyIdentities();
-  return Object.assign(finish, { previousImportedTypes });
+  return finish;
 }
 
 /** Reuse persisted IDs, rather than adding legacy index IDs beside a prior reparse's source IDs. */
 async function prepareImportedActivityIdentities(
   uid: string, event: EventInterface, db: admin.firestore.Firestore, transaction: admin.firestore.Transaction,
   providerMetadata: Record<string, unknown> | undefined,
-  proof: { revision: string; types: ReadonlyMap<string, string> } | undefined,
-  needLegacy: (parent: Record<string, any>, documents: SavedActivitySource[]) => void,
 ): Promise<ReturnType<typeof prepareActivitySourceBindings>> {
   const eventId = event.getID();
   if (!eventId) throw new Error('Import requires an event identity.');
@@ -221,20 +175,11 @@ async function prepareImportedActivityIdentities(
   const documents = snapshot.docs;
   assertLegacyPendingSources(metadata.data() as TrainingLoadMetadata | undefined, documents);
   const firstImport = !parent.exists || metadata.data()?.sourceFirstImport === true;
-  const parentData = parent.data() ?? {};
-  if (proof && proof.revision !== retainedSourceRevision(parentData))
-    throw new Error('Recording source changed during identity verification; retry the import.');
   const service = providerMetadata && providerRecordingService(providerMetadata);
   const provider = service && documents.length ? await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${service}`)) : null;
   const verifiedProvider = !!providerMetadata && isSameProviderRecording(provider?.data(), providerMetadata);
-  let plan: ReturnType<typeof prepareActivitySourceBindings>;
-  try {
-    plan = prepareActivitySourceBindings(event, documents, { allowSourceWindowMatch: verifiedProvider,
-      allowNewActivities: firstImport || !documents.length, legacyImportedTypes: proof?.types });
-  } catch (error) {
-    if (error instanceof LegacyActivitySourceRequiredError && verifiedProvider) needLegacy(parentData, documents);
-    throw error;
-  }
+  const plan = prepareActivitySourceBindings(event, documents, { allowSourceWindowMatch: verifiedProvider,
+    allowNewActivities: firstImport || !documents.length });
   const applyAscent = prepareAscentCarryover(event, documents, plan);
   return { ...plan, apply: () => { plan.apply(); applyAscent(); } };
 }

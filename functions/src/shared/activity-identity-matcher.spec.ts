@@ -39,7 +39,7 @@ describe('activity identity matcher', () => {
       expect(resolveActivityIdentityAssignments(before, after, { allowSourceWindowMatch: true }).assignments.size).toBe(0);
   });
 
-  it('uses imported sport provenance for source reads while leaving an owner-selected sport untouched', () => {
+  it('uses the bound source snapshot for reads without mutating the saved document', () => {
     const old = { ...identity(undefined, 1000), type: 'Yoga', getID: () => 'stable-id',
       sourceIdentity: { version: 1, activityId: 'stable-id', startMs: 1000, endMs: 3601000, importedType: 'Stretching' } };
     const incoming = { ...identity(undefined, 1000), type: 'Stretching' };

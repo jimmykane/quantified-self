@@ -8,9 +8,6 @@ export class ActivityIdentityConflictError extends Error {
   }
 }
 
-/** Internal request to inspect the retained source outside a Firestore transaction. */
-export class LegacyActivitySourceRequiredError extends ActivityIdentityConflictError {}
-
 export function isActivityIdentityConflict(error: unknown): error is ActivityIdentityConflictError {
   return !!error && typeof error === 'object'
     && (error as { code?: unknown }).code === 'ACTIVITY_IDENTITY_CONFLICT';

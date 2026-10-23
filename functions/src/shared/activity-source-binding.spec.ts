@@ -19,12 +19,11 @@ const saved = (id: string, type = 'Stretching', extra = {}) => ({ id, data: () =
 }) });
 
 describe('stable activity source bindings', () => {
-  it('adopts a legacy provider update only with verified scope and retained-source type evidence', () => {
+  it('adopts a legacy provider sport update only with verified scope', () => {
     const parsed = event();
     expect(() => prepareActivitySourceBindings(parsed, [saved('stable')])).toThrow();
-    expect(() => prepareActivitySourceBindings(parsed, [saved('stable')], { allowSourceWindowMatch: true })).toThrow();
     const plan = prepareActivitySourceBindings(parsed, [saved('stable')], {
-      allowSourceWindowMatch: true, legacyImportedTypes: new Map([['stable', 'Stretching']]),
+      allowSourceWindowMatch: true,
     });
     expect(parsed.getFirstActivity().getID()).toBe('incoming-0');
     plan.apply();
@@ -33,18 +32,16 @@ describe('stable activity source bindings', () => {
     } });
     expect(parsed.getFirstActivity().getID()).toBe('stable');
     expect([...plan.verifiedActivityIds]).toEqual(['stable']);
-    expect([...plan.previousImportedTypes]).toEqual([['stable', 'Stretching']]);
   });
 
-  it('preserves an owner-selected sport separately from the refreshed imported sport', () => {
+  it('takes the sport from the refreshed file after matching a saved leg', () => {
     const parsed = event();
     const plan = prepareActivitySourceBindings(parsed, [saved('stable', 'Pilates', { sourceIdentity: {
       version: 1, activityId: 'stable', startMs: 1000, endMs: 61000, importedType: 'Stretching',
     } })], { allowSourceWindowMatch: true });
     plan.apply();
-    expect(parsed.getFirstActivity().type).toBe('Pilates');
+    expect(parsed.getFirstActivity().type).toBe('Yoga');
     expect(parsed.getFirstActivity()).toHaveProperty('sourceIdentity.importedType', 'Yoga');
-    expect(plan.previousImportedTypes.get('stable')).toBe('Stretching');
   });
 
   it('rejects structural ambiguity before changing IDs or provenance', () => {
@@ -65,7 +62,7 @@ describe('stable activity source bindings', () => {
     const plan = prepareActivitySourceBindings(parsed, docs, { allowSourceWindowMatch: true });
     plan.apply();
     expect(parsed.getActivities().map(activity => activity.getID())).toEqual(['second', 'first']);
-    expect(parsed.getActivities().map(activity => activity.type)).toEqual(['Running', 'Pilates']);
+    expect(parsed.getActivities().map(activity => activity.type)).toEqual(['Running', 'Yoga']);
     expect(parsed.getActivities().map(activity => (activity as any).sourceIdentity.importedType)).toEqual(['Running', 'Yoga']);
   });
 
@@ -97,6 +94,5 @@ describe('stable activity source bindings', () => {
     expect(parsed.getActivities().map(activity => activity.getID())).toEqual(['incoming-0', 'incoming-1']);
     expect(parsed.getActivities().map(activity => (activity as any).sourceIdentity.importedType)).toEqual(['Yoga', 'Running']);
     expect(plan.verifiedActivityIds.size).toBe(0);
-    expect(plan.previousImportedTypes.size).toBe(0);
   });
 });

@@ -354,8 +354,7 @@ function getFirestoreAdapter(userID: string, sourceWrite: TrainingLoadSourceWrit
         documentRef,
         data,
         undefined,
-        isEventDocument ? preserveImportedEventEdits : isActivityDocument
-          ? (incoming, existing) => preserveImportedActivityEdits(incoming, existing, sourceWrite.previousImportedTypes) : undefined,
+        isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
         sourceWrite.assertCurrent,
       );
     },

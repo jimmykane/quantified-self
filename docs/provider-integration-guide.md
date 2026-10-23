@@ -907,45 +907,38 @@ Provider OAuth / webhook / history request
 This is preferred over processing partner payloads directly in a webhook or callable because provider requests can be retried, payloads may be incomplete, original files may need another download, and processing can exceed partner timeouts.
 
 Shared recorded-activity imports and original-file reparses retain matched activity document IDs across source
-revisions. The server-owned `sourceIdentity` snapshot records the stable document ID, complete source time window and
-last imported sport, separately from the owner's visible sport choice. Mutable sport names, statistics and export
-hashes do not create a second activity. `sourceActivityKey` remains a compatible legacy source-derived key, not a
-promise that it hashes the newest export.
+revisions. The server-owned `sourceIdentity` records the bound document ID, complete source window and last imported
+sport for interrupted-write recovery. The parsed file supplies the sport; QS has no recorded-sport editor.
+`sourceActivityKey` remains a compatible legacy key, not a promise that it hashes the newest export.
 
 `functions/src/shared/import-preservation.ts` validates associations inside the existing owner/deletion-guarded
-source-write reservation, before marking load pending. The shared pure matcher in `shared/activity-identity.ts` serves
-imports, reparse, frontend original-file hydration and MCP charts. Only a persisted match of provider account/workout
-identity authorizes a provider revision to match a unique complete source time window across a sport change. COROS
-component identity must also agree. Reparse has the corresponding retained-original scope. Ordinary uploads and
-read-only hydration keep their existing source/signature checks; they never guess by array position or the last leg.
+source-write reservation before marking load pending. The pure matcher in `shared/activity-identity.ts` serves
+imports, reparse, frontend hydration and MCP charts. A persisted match of provider account/workout identity authorizes
+a provider revision to match a unique complete source window across sport changes. COROS component identity must also
+agree. Reparse has the corresponding retained-original scope. Ordinary uploads and read-only hydration keep strict
+source/signature checks. No array-position or final-unmatched-leg fallback is used.
 
-Legacy records are adopted lazily. For an unexplained provider sport change, read the retained original outside the
-transaction to distinguish its old imported sport from an owner override, then recheck its reference revision inside
-the reservation. This exceptional proof is bounded to four owner/event-scoped originals, 30 MiB raw, 64 MiB unpacked,
-100 legs and a checked 20-second processing budget. Storage outages remain retryable. Missing proof, ambiguous
-windows, overlapping split/merge replacements or incompatible saved corrections preserve the saved source and load
-and produce `ACTIVITY_IDENTITY_CONFLICT` for review. Existing provider dead-letter handling commits that terminal
-outcome once; Wahoo retains its current revision/lease fences. No automated reassociation or deletion is performed.
-Strict elevation-correction matches must agree with the selected saved-ID pairing; contradictory key/window matches
-are rejected before reserving a source write rather than transferring a correction to another leg.
+Legacy associations are adopted during normal writes, without a separate old-original download. Ambiguous windows,
+overlapping split/merge replacements and incompatible saved corrections produce `ACTIVITY_IDENTITY_CONFLICT` before
+source reservation. Existing provider dead-letter handling commits the terminal outcome once; Wahoo retains its
+revision/lease fences. Strict elevation-correction matches must agree with the selected saved-ID pairing and the
+file's sport eligibility. No automatic reassociation or deletion is performed.
 
-Verified assignments are passed only in memory from the committed reservation to Training finalization. They preserve
-zero overrides, exclusions and dated applied policy across a sport revision without making arbitrary reused IDs
-trusted. Guarded source transactions preserve live event edits, custom device names and explicit owner sport labels.
-First adoption of a legacy leg carries its verified previous imported sport in memory through the reservation, so
-the final write can distinguish a late owner label/reset without another database read or a new stored field.
-Repeat manual uploads pass the same context. An unmatchable upload returns HTTP 409 with
-`ACTIVITY_IDENTITY_CONFLICT` and the review explanation, rather than a retryable server-error response.
-Owner labels do not reinterpret the file-calibrated load evaluation. Interrupted reparses use their existing active
-leg snapshot, not partial duplicate copies. Finalization still checks the current reservation, source fingerprints,
-latest controls and deletion guards. New imports keep their existing ID allocation. No historical reparse campaign,
-provider refresh, duplicate cleanup, Sports Lib release or dependency update is required by this change.
-Pending legacy activities without valid source provenance must match their frozen pre-write time windows before
-reuse. A conflicting overwritten ID requires review rather than inheriting that ID's old load controls.
-Open Event Details also refreshes its source streams when the retained-file references, completed reparse revision
-or validated leg source snapshot changes, even when leg IDs stay stable. Ordinary owner metadata edits reuse streams.
-Reparse checks that the workout still exists in its source-write transactions; deleting it cannot let a later parent
-rewrite recreate it or a child rewrite add orphan activities. Ordinary first imports retain their create behavior.
+Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
+overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
+live event edits and custom device names. Repeat manual uploads use the same preparation. An unmatchable upload
+returns HTTP 409 with `ACTIVITY_IDENTITY_CONFLICT` and a review explanation. Finalization still checks the reservation,
+full source fingerprints, latest controls and deletion guards. New imports keep their existing ID allocation.
+
+Interrupted reparses use their frozen active-leg snapshot, not partial duplicate copies. Pending legacy activities
+without valid provenance must match their frozen pre-write windows before ID reuse; conflicting overwritten IDs need
+review. Long reparses recheck retained-file references before reservation. Reparse checks workout existence inside
+source-write transactions, preventing parent recreation or orphan writes after deletion. First imports retain create
+behavior. No historical reparse campaign, provider refresh or duplicate cleanup is required by this change.
+
+Open Event Details refreshes streams when retained-file references, the completed reparse revision or validated source
+snapshots change, even with stable leg IDs. Ordinary metadata edits reuse streams. Detailed preservation and recovery
+rules remain in [Training workspace](training-workspace.md#stable-recording-associations-across-source-revisions).
 
 Monitoring coverage is **covered** by existing committed `dead_lettered` outcomes and fixed provider labels; native
 queue backlog and retry probes are unchanged. The new fixed context is an existing dead-letter diagnostic, not a

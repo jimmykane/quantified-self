@@ -8,11 +8,11 @@ describe('activity source provenance', () => {
     expect(readActivitySourceIdentity(source, 'different-id')).toBeNull();
     expect(readActivitySourceIdentity(source)).not.toBe(source);
   });
-  it('hydrates raw source identity and preserves an owner label only for the already matched saved ID', () => {
+  it('hydrates provenance for the matched saved ID while keeping the file sport', () => {
     const existing = { getID: () => 'existing-id', type: 'Pilates', sourceIdentity: source };
     const parsed = { getID: () => 'existing-id', type: 'Yoga' };
     carryActivitySourceIdentity(existing, parsed);
-    expect(parsed).toEqual({ getID: parsed.getID, type: 'Pilates', sourceIdentity: { ...source, importedType: 'Yoga' } });
+    expect(parsed).toEqual({ getID: parsed.getID, type: 'Yoga', sourceIdentity: { ...source, importedType: 'Yoga' } });
     const unmatched = { getID: () => 'other', type: 'Yoga' };
     carryActivitySourceIdentity(existing, unmatched);
     expect(unmatched).not.toHaveProperty('sourceIdentity');

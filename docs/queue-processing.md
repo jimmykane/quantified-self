@@ -53,4 +53,4 @@ A successfully parsed provider revision can still fail safe association with its
 misclassifying the file as a parsing failure. The original saved workout and controls are retained. Wahoo still
 checks its claimed revision/owner before committing a terminal result; transient Storage and source-revision races
 keep ordinary retry behavior. No retry budget, dispatcher, queue or schedule changes. See the provider guide for the
-bounded legacy-original proof and the reparse runbook for terminal review handling.
+verified provider-recording scope and the reparse runbook for terminal review handling.

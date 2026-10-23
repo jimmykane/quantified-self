@@ -1,4 +1,3 @@
-import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
@@ -165,7 +164,7 @@ async function finalizeTrainingLoadMetadata(
   if (!eventId) throw new Error('Training load requires a persisted event identity.');
   const activities = event.getActivities();
   if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
-  const parsedCandidates: TrainingLoadLeg[] = activities.map(activity => ({
+  const candidates: TrainingLoadLeg[] = activities.map(activity => ({
     activityId: activity.getID() as string, identity: identity(activity.toJSON()),
     recordedTss: recordedTrainingStressScore(activity),
     evaluations: ActivityUtilities.getTrainingStressScoreEvaluations(activity),
@@ -177,21 +176,9 @@ async function finalizeTrainingLoadMetadata(
   await db.runTransaction(async transaction => {
     const { guard, snapshots: [parent, snapshot, ...savedActivities] } = await getUserDeletionGuardedDocumentsInTransaction(
       db, transaction, uid, [eventRef, metaRef,
-        ...parsedCandidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`))]);
+        ...candidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`))]);
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
     if (authorize) await authorize(db, transaction);
-    // The guarded activity writer can preserve an owner sport edit made after preparation.
-    // Accept only that label difference for this certified leg and exactly the same raw source snapshot.
-    // Every measurement/time change must still fail the full source fingerprint below.
-    const candidates = parsedCandidates.map((candidate, index) => {
-      const saved = savedActivities[index]?.data();
-      const current = readActivitySourceIdentity((activities[index] as { sourceIdentity?: unknown }).sourceIdentity, candidate.activityId);
-      const persisted = readActivitySourceIdentity(saved?.sourceIdentity, candidate.activityId);
-      if (!saved || !current || !persisted || !verifiedActivityIds?.has(candidate.activityId!)
-        || JSON.stringify(current) !== JSON.stringify(persisted)) return candidate;
-      const expected = { ...activities[index].toJSON(), type: saved.type };
-      return { ...candidate, identity: identity(expected), sourceFingerprint: trainingLoadSourceFingerprint(expected) };
-    });
     if (!parent.exists || trainingLoadSourceFingerprint(parent.data() ?? {}) !== parentFingerprint ||
       candidates.some((leg, index) => !savedActivities[index]?.exists ||
         savedActivities[index].data()?.eventID !== eventId ||

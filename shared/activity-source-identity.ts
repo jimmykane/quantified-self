@@ -21,10 +21,9 @@ export function readActivitySourceIdentity(value: unknown, activityId?: string |
 
 /** Called only after a reader has established a unique source match and assigned the saved ID. */
 export function carryActivitySourceIdentity(existing: {
-  getID(): string | null | undefined; type: unknown; sourceIdentity?: unknown;
+  getID(): string | null | undefined; sourceIdentity?: unknown;
 }, parsed: { getID(): string | null | undefined; type: unknown; sourceIdentity?: unknown }): void {
   const source = readActivitySourceIdentity(existing.sourceIdentity, existing.getID());
   if (!source || parsed.getID() !== source.activityId) return;
   parsed.sourceIdentity = { ...source, importedType: `${parsed.type}` };
-  if (existing.type !== source.importedType) parsed.type = existing.type;
 }

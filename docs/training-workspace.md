@@ -6168,66 +6168,47 @@ state.
 
 ### Stable recording associations across source revisions
 
-Existing activity document IDs survive verified provider sport revisions and retained-original reparses. A
-server-owned `sourceIdentity` on each activity stores its document ID, complete source start/end window and last
-imported sport; the visible owner-selected sport remains separate. `shared/activity-identity.ts` is the common pure
-matcher for backend writes, read-only source hydration and MCP chart reads. Source sport, summary statistics and
-export bytes may change without creating another leg. Cross-sport window matching is allowed only inside a verified
-provider account/workout scope or retained-original reparse; a unique complete window is required on both sides.
-Ordinary uploads and read-only chart hydration cannot opt into that relaxation. Overlapping splits/merges and
-ambiguous windows fail before the source reservation writes anything. No positional or unmatched-leg guess is made.
+Existing activity document IDs survive safely matched provider revisions and retained-original reparses. The file
+supplies the sport; Quantified Self has no recorded-sport editor. Device names, explicit ascent/descent corrections,
+Training controls and dated applied policies retain their separate preservation rules.
 
-Saved leg ID reuse belongs only to guarded source preparation. Parsing/source-key generation uses provisional IDs,
-and edit carryover preserves names without assigning IDs. The writer builds benchmark associations once, after
-preparation establishes the final IDs. Normal reparse and interrupted recovery share the same preparation path.
-Saved elevation corrections must pass strict matching for that same ID pairing. Conflicting key/window evidence
-cannot move a correction to a different leg and fails before the reservation marks load pending.
+The server-owned `sourceIdentity` stores the bound document ID, complete source window and last imported sport.
+It certifies an already matched leg during interrupted-write recovery; it is not a sport override. The common pure
+matcher in `shared/activity-identity.ts` serves backend writes, read-only source hydration and MCP charts. Only a
+verified provider account/workout identity or retained-original reparse authorizes matching across sport/statistic
+changes by a unique complete source window. Ordinary uploads and read-only hydration retain strict source checks.
+Ambiguous windows and overlapping splits/merges fail before source reservation; no positional or unmatched-leg
+fallback is used. Legacy associations are adopted on normal writes, without downloading old originals to infer edits.
 
-The committed reservation carries its verified activity IDs in memory into load reconciliation. This certificate
-preserves each matched leg's dated applied policy and latest controls, including a numeric zero, when the imported
-sport changes. It does not authorize ID-only matching for unrelated source writes. Existing source-write IDs,
-fingerprints, concurrent owner-edit checks and deletion fences remain authoritative. Late owner sport/device edits
-are preserved inside the document transaction. An owner sport label does not recalculate the file's physiological
-inputs or replace its cached load evaluation. The parent activity-type summary is refreshed from prepared legs.
-Restoring the source sport during preparation clears the earlier owner label and adopts the refreshed imported
-sport; the activity write must not restore that stale override.
-The activity transaction also rechecks correction eligibility against the live sport label, so a late change to a
-diving activity cannot persist a terrain elevation correction.
-For a legacy leg's first source adoption, preparation also carries the previously verified imported sport in memory,
-keyed by the final stable activity ID. The guarded activity write uses it when the live document has no valid source
-snapshot yet, preserving a late owner sport edit or reset. This context is not persisted, exposed through MCP or
-recovered from incoming JSON, and adds no import reads or writes.
-Provider imports, repeat manual uploads and retained-original reparse all pass this committed context to their
-activity write adapters; none may fall back to the sport label captured before a live legacy edit.
+Guarded preparation owns saved-ID reuse and applies assignments only after its reservation commits. Parsing/source-key
+generation supplies provisional IDs; only new legs keep them. The writer builds benchmark associations once, after
+preparation establishes final IDs. Explicit elevation corrections must pass strict matching for the same saved-ID
+pairing and remain eligible for the file's sport. Conflicting evidence cannot transfer a correction to another leg.
 
-Legacy associations are established on demand; an unexplained provider sport change requires bounded retained-file
-proof of the old imported type, with reference revision revalidation. A source conflict uses the existing terminal
-review/dead-letter lifecycle (`ACTIVITY_IDENTITY_CONFLICT`), without overwriting saved load, retrying forever or
-automatically moving controls. Interrupted reparse recovery uses the existing active leg snapshot to ignore partial
-copies. Read-only chart hydration consumes the saved source snapshot and preserves owner labels without updating
-Firestore. No mass historical reparse or provider fetch is necessary. See the [provider lifecycle](provider-integration-guide.md)
+The reservation passes verified IDs in memory to Training finalization. This preserves zero overrides, exclusions and
+saved policies across sport revisions without trusting arbitrary reused IDs. Source-write IDs, full source fingerprints,
+latest controls, account guards and deletion fences remain authoritative. Guarded document transactions preserve live
+event edits and custom device names. The parent activity-type summary follows the parsed legs. A source conflict uses
+the existing terminal review/dead-letter lifecycle (`ACTIVITY_IDENTITY_CONFLICT`), rather than an endless retry or
+implicit reassociation. Duplicate source keys fail before writes or ID assignment.
+
+Interrupted reparses use the frozen active-leg snapshot, ignoring partial duplicate copies. A pending legacy activity
+without valid source provenance must still match its frozen complete time window; controls without any frozen identity
+also require valid provenance. An overwritten/reused ID cannot certify another leg's controls. Missing or foreign active
+leg references require review. Long reparses recheck retained-file references before reservation. Reparse checks workout
+existence before reservation and inside parent/child transactions, preventing recreation of a deleted workout or new
+orphan writes. Child reads batch parent and activity; event rewrites reuse their preservation read. Deletion uses the
+existing skipped-write lifecycle.
+
+Stable leg IDs do not identify a stream revision. Event Details uses original paths/buckets/generations, completed
+reparse revision and validated source snapshots to refresh changed streams while keeping selected IDs. Ordinary
+metadata edits and unchanged multisport reorderings reuse streams. Refreshes coalesce to the latest live snapshot
+and respect the current selection, including an empty selection. Old reads cannot replace another account/route or
+restore a public share after access is lost. This browser behavior adds no trigger or stored state.
+
+Read-only hydration consumes the saved association without changing Firestore. No historical migration, mass reparse
+or provider fetch is required to adopt these associations. See the [provider lifecycle](provider-integration-guide.md)
 and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
-
-Stable leg IDs do not identify a stream revision. Event Details live deduplication and stream reconciliation share a
-bounded source version: original paths/buckets/generations, completed reparse revision and validated leg source
-snapshots. A changed version reloads source streams while keeping selected IDs; owner metadata edits and unchanged
-multisport reorderings reuse streams. Updates arriving during a refresh are coalesced to the latest live snapshot.
-Refresh completion reads the current selection, including an empty selection, so a download cannot undo a leg toggle.
-Old reads cannot replace another account/route or restore a public share after access is lost. This is browser-only
-refresh behavior; it adds no backend trigger, stored field or account mutation.
-
-Before retrying a pending legacy write, an activity without valid source provenance must still agree with the frozen
-leg's complete time window. An older writer's reused/overwritten ID cannot certify controls for another leg; conflicts
-require review before further writes. Valid source snapshots preserve recovery of already verified source revisions.
-Pending legacy controls with no frozen identity also require valid source provenance before their activity ID can
-be trusted; a retry must not manufacture pre-write evidence from an already overwritten document.
-Reparse also checks workout existence before reserving, and inside every parent/child write transaction. A valid
-reservation must not recreate a deleted workout or append orphan children. Child preservation reads the parent and
-child together; event-body rewrites reuse their preservation read, and merge-flag writes also check the parent.
-Deletion uses the existing skipped-write handling. Missing or foreign active leg references during interrupted
-recovery require identity review, rather than being treated as transient parser failures.
-Reparse source-key ambiguity detected before reservation uses the same terminal review outcome, including duplicate
-keys and indistinguishable legs. It stops before source writes or activity ID assignments, retaining existing controls.
 
 ### File-only TSS evaluation and owner load controls
 
