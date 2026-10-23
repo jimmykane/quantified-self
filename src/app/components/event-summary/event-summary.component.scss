@@ -114,6 +114,11 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
   box-sizing: border-box;
 }
 
+// The collapsed row already owns its tap-target height; avoid an empty footer below it.
+.summary-stats-area:has(> app-benchmark-rr.benchmark-rr-collapsed:last-child) {
+  padding-bottom: 0;
+}
+
 .event-metadata-row {
   display: flex;
   flex-wrap: wrap;

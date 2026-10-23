@@ -105,6 +105,7 @@ describe('benchmark R–R panel', () => {
     const readBeats = vi.spyOn(strap.getStream('IBI'), 'getStreamDataByDuration');
     const { host, panel, worker, haptics, loader } = await render('benchmark', [strap]);
     expect(panel.expanded()).toBe(false);
+    expect(host.classList.contains('benchmark-rr-collapsed')).toBe(true);
     expect(host.querySelector('.rr-disclosure')?.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector(`[id="${panel.contentId}"]`)?.hasAttribute('hidden')).toBe(true);
     expect(host.querySelector('table')).toBeNull(); expect(host.querySelector('.rr-chart')).toBeNull();
@@ -116,6 +117,7 @@ describe('benchmark R–R panel', () => {
   it('opens directly to charts with compact source statistics above them and the full table behind a disclosure', async () => {
     const { host, fixture, openCharts } = await render();
     await openCharts(); fixture.detectChanges();
+    expect(host.classList.contains('benchmark-rr-collapsed')).toBe(false);
     const legend = host.querySelector('.rr-source-legends')!;
     expect(legend.getAttribute('tabindex')).toBe('0');
     expect(legend.getAttribute('role')).toBe('region');
@@ -158,6 +160,7 @@ describe('benchmark R–R panel', () => {
   it('excludes explicit multi-sport events even with the legacy merge flag', async () => {
     const { host, panel, worker } = await render('multi');
     expect(panel.visible()).toBe(false); expect(host.querySelector('section')).toBeNull();
+    expect(host.classList.contains('benchmark-rr-collapsed')).toBe(false);
     expect(worker.analyze).not.toHaveBeenCalled();
   });
 
@@ -370,6 +373,7 @@ describe('benchmark R–R panel', () => {
     await openCharts();
     host.querySelector<HTMLButtonElement>('.rr-disclosure')!.click(); fixture.detectChanges();
     expect(panel.expanded()).toBe(false); expect(host.querySelector('.rr-source-legends')).toBeNull();
+    expect(host.classList.contains('benchmark-rr-collapsed')).toBe(true);
     expect(charts.every(chart => chart.dispose.mock.calls.length === 1)).toBe(true);
     await openCharts();
     expect(panel.status()).toBe('ready'); expect(charts).toHaveLength(4);

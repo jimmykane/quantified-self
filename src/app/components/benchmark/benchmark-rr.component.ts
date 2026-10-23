@@ -37,6 +37,7 @@ interface RRSource {
   selector: 'app-benchmark-rr',
   templateUrl: './benchmark-rr.component.html',
   styleUrls: ['./benchmark-rr.component.scss'],
+  host: { '[class.benchmark-rr-collapsed]': 'visible() && !expanded()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, MaterialModule, SharedModule, AppChartSharedModule],
   providers: [BenchmarkRRAnalysisService],

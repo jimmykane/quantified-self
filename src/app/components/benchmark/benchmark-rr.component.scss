@@ -2,6 +2,7 @@
 
 :host { display: block; min-width: 0; }
 .benchmark-rr { --event-section-header-padding: 4px 0; border-top: 1px solid var(--mat-sys-outline-variant); color: var(--mat-sys-on-surface); font: var(--mat-sys-body-small); }
+:host(.benchmark-rr-collapsed) .benchmark-rr { --event-section-header-padding: 0; }
 .rr-note, .rr-secondary { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .rr-note { margin: 8px 0; }
 .rr-disclosure, .rr-summary-toggle { min-height: 44px; }
