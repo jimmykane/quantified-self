@@ -25,7 +25,7 @@ describe('inline chart library state', () => {
     watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
     TestBed.configureTestingModule({ providers: [DashboardChartLibraryState,
       { provide: DashboardConfigurationService, useValue: persistence }, { provide: AppHapticsService, useValue: haptics }, { provide: MatDialog, useValue: dialog },
-      { provide: AppEventService, useValue: { getEventsBy: vi.fn(() => of([])) } }, { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
+      { provide: AppEventService, useValue: { getEventSummariesBy: vi.fn(() => of([])) } }, { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
       { provide: AppRouteService, useValue: { watchHasAnyRoutePreview: vi.fn(() => of(false)) } }, { provide: DashboardDerivedMetricsService, useValue: { watch } },
     ] });
     user = { uid: 'test-owner', settings: { unitSettings: { speedUnits: [], startOfTheWeek: 1 }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;

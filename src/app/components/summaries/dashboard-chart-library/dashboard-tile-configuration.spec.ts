@@ -179,7 +179,7 @@ describe('DashboardTileConfiguration', () => {
   let dialogMock: { open: ReturnType<typeof vi.fn> };
   let sleepEligibilitySubject: BehaviorSubject<any[]>;
   let sleepServiceMock: { watchForDashboard: ReturnType<typeof vi.fn> };
-  let eventServiceMock: { getEventsBy: ReturnType<typeof vi.fn> };
+  let eventServiceMock: { getEventSummariesBy: ReturnType<typeof vi.fn> };
   let routeServiceMock: { watchHasAnyRoutePreview: ReturnType<typeof vi.fn> };
   let derivedMetricsServiceMock: { watch: ReturnType<typeof vi.fn> };
   let hapticsMock: {
@@ -226,7 +226,7 @@ describe('DashboardTileConfiguration', () => {
       watchForDashboard: vi.fn().mockReturnValue(sleepEligibilitySubject.asObservable()),
     };
     eventServiceMock = {
-      getEventsBy: vi.fn().mockReturnValue(of([])),
+      getEventSummariesBy: vi.fn().mockReturnValue(of([])),
     };
     routeServiceMock = {
       watchHasAnyRoutePreview: vi.fn().mockReturnValue(of(false)),
@@ -1154,7 +1154,7 @@ describe('DashboardTileConfiguration', () => {
     expect(dialogMock.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ title: 'Reset to starter dashboard?' }) }));
     expect(dialogData.user.settings.dashboardSettings.tiles.map(tile => tile.name)).toEqual(['Weekly Training Time', 'Calendar']);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
-    expect(eventServiceMock.getEventsBy).not.toHaveBeenCalled();
+    expect(eventServiceMock.getEventSummariesBy).not.toHaveBeenCalled();
     expect(sleepServiceMock.watchForDashboard).not.toHaveBeenCalled();
     expect(routeServiceMock.watchHasAnyRoutePreview).not.toHaveBeenCalled();
     expect(derivedMetricsServiceMock.watch).not.toHaveBeenCalled();

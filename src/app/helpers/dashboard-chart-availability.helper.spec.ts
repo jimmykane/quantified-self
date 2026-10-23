@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DataStartPosition } from '@sports-alliance/sports-lib';
+import { DataStartPosition, FileType, Privacy } from '@sports-alliance/sports-lib';
+import { AppEventSummary } from '@shared/event-summary';
 import { getDashboardChartCatalog } from './dashboard-chart-catalog.helper';
 import { buildDashboardThumbnailPreview, buildDashboardExampleEvents, buildDashboardExamplePreview, type DashboardPreviewInput } from './dashboard-chart-preview.helper';
 import { resolveDashboardChartAvailability } from './dashboard-chart-availability.helper';
@@ -11,10 +12,14 @@ const preview = (id: string, input: Partial<DashboardPreviewInput> = {}) => buil
 
 describe('chart availability', () => {
   it('requires coordinates for maps and real route geometry for saved routes', () => {
-    const events = buildDashboardExampleEvents(Date.now());
+    const json = { id: 'map-activity', name: 'Run', startDate: Date.now(), endDate: Date.now() + 3600000,
+      srcFileType: FileType.FIT, privacy: Privacy.Private, description: null, isMerge: false };
+    const stats = { Duration: 3600, 'Activity Types': ['Running'] };
+    const events = [new AppEventSummary({ ...json, stats: { ...stats,
+      [DataStartPosition.type]: { latitudeDegrees: 60, longitudeDegrees: 24 } } })];
     const input = { previewEventsByRange: { '90d': events } };
     expect(preview('map-default-clustered', input).availability?.state).toBe('ready');
-    events.forEach(event => event.removeStat(DataStartPosition.type));
+    input.previewEventsByRange['90d'] = [new AppEventSummary({ ...json, stats })];
     expect(preview('map-default-clustered', input).availability?.state).toBe('no-data');
     expect(preview('map-routes-preview', { routePreviews: [{ id: 'empty-route' }] as never }).availability?.state).toBe('no-data');
     expect(preview('custom-weekly-training-time', input).availability?.state).toBe('ready');

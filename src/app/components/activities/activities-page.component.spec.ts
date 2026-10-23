@@ -690,7 +690,7 @@ describe('ActivitiesPageComponent', () => {
   it('shows the compact notice only for ready empty results and opens existing date controls without queries or duplicate feedback', async () => {
     const c = await setup('', true);
     const stream = new Subject<AppEventInterface[]>();
-    c.events.getEventsBy.mockReturnValue(stream);
+    c.events.getEventSummariesBy.mockReturnValue(stream);
     const settle = async () => { c.fixture.detectChanges(); await c.fixture.whenStable(); c.fixture.detectChanges(); };
     await settle();
     const root = c.fixture.nativeElement as HTMLElement;
@@ -710,13 +710,13 @@ describe('ActivitiesPageComponent', () => {
     c.component.openDateFilter(); expect(c.haptics.selection).toHaveBeenCalledOnce();
     presets.close(); await settle();
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.component.selectPeriod('custom'); await settle(); c.haptics.selection.mockClear();
     root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
     const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
     expect(picker.opened).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
     c.component.openDateFilter(); await settle(); expect(c.haptics.selection).toHaveBeenCalledOnce();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); picker.close(); await settle();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); picker.close(); await settle();
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
     c.component.cancelCustomRange(); await settle();
     const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(),
@@ -744,7 +744,7 @@ describe('ActivitiesPageComponent', () => {
 
   it('keeps empty-result hints specific to date ranges and filters, including All dates', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValue(of([])); await render(c);
+    c.events.getEventSummariesBy.mockReturnValue(of([])); await render(c);
     const table = () => c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
     expect(table().emptyHint).toBe('Try a wider date range.');
     c.component.selectPeriod('year'); await render(c);
