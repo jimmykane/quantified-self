@@ -408,10 +408,12 @@ benchmark charts, particularly overlapping lines and map backgrounds.
 ### Benchmark R–R summaries and plots
 
 All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
-alongside the existing categories. It is not part of Device or Physiological. The existing metric-card renderer
+immediately before Device, preserving category IDs for remembered selections. It is not part of Device or Physiological. The existing metric-card renderer
 shows up to seven primary statistics with short contextual labels, matching the other summary tabs without extra
-headings, recording captions or explanatory paragraphs. The shared plain disclosure places **Show/Hide details** below
-the readings, including expanded details. If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
+headings, recording captions or explanatory paragraphs. The shared plain disclosure passes its existing **Show/Hide details**
+control to an overview template, placing it in the metric renderer's grid/chip suffix beside the readings, with no footer row.
+Expanded details remain below that overview. The same control keeps its state, ARIA target and single haptic owner.
+If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
 and recorded zero remains zero. `rr-metrics.ts` owns the common catalog; values and units remain Sports Lib's.
 Each selected activity is inspected separately; parent-event and multisport aggregates are never used for R–R.
 A local Recording selector preserves source identity across filtering. Two-source benchmarks use the shared stat

@@ -21,13 +21,18 @@
   @if (variant() === 'flat' && headline()) {
     <p class="summary-disclosure-headline" role="status" aria-atomic="true">{{ headline() }}</p>
   }
-  <ng-content select="[summaryOverview]" />
+  @let overview = variant() === 'plain' ? plainOverviewTemplate() : null;
+  @if (overview) {
+    <ng-container [ngTemplateOutlet]="overview" [ngTemplateOutletContext]="{detailsControl: detailsControl}" />
+  } @else {
+    <ng-content select="[summaryOverview]" />
+  }
   @if (detailsAvailable()) {
     <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
       <ng-content select="[summaryDetails]" />
     </div>
   }
-  @if (variant() === 'plain' && detailsAvailable()) {
+  @if (variant() === 'plain' && detailsAvailable() && !overview) {
     <div class="summary-disclosure-footer">
       <ng-container [ngTemplateOutlet]="detailsControl" />
     </div>
@@ -35,7 +40,7 @@
 </section>
 <ng-template #detailsControl>
   @if (detailsAvailable()) {
-    <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
+    <button mat-button type="button" class="summary-disclosure-control" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
       (click)="toggleDetails()">
       {{ expanded() ? 'Hide details' : 'Show details' }}
       <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>

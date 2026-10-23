@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, effect, inject, input, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -22,6 +22,8 @@ export class SummaryDisclosureComponent {
   readonly variant = input<'flat' | 'rail' | 'plain'>('flat');
   readonly tone = input<SummaryDisclosureTone>('neutral');
   readonly detailsAvailable = input(false);
+  /** Plain callers can place the shared control inside their overview layout. */
+  readonly plainOverviewTemplate = input<TemplateRef<{ detailsControl: TemplateRef<unknown> }> | null>(null);
   readonly expanded = signal(false);
   private readonly haptics = inject(AppHapticsService);
   constructor() {

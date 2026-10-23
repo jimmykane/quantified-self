@@ -187,7 +187,9 @@ describe('help.content', () => {
     expect(copy).toContain('Older saved summaries need an original-file reparse');
     expect(copy).toContain('Multisport legs keep their own values');
     expect(copy).toContain('**R–R & HRV** summary tab appears on any Event Details page');
-    expect(copy).toContain('a separate category alongside Performance, Device');
+    expect(copy).toContain('immediately before **Device**');
+    expect(copy).toContain('without a separate action row');
+    expect(copy).toContain('**Show details**, alongside the metric tiles');
     expect(copy).toContain('statistics present and valid in both recordings');
     expect(copy).toContain('Ordinary events and multisport legs do not show benchmark deltas');
     expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');

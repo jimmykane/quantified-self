@@ -567,18 +567,18 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     metricTypes: [],
   },
   {
+    id: 'rr',
+    label: 'R–R & HRV',
+    metricTypes: RR_METRICS.map(metric => metric.type),
+    singleValueTypes: RR_METRICS.map(metric => metric.type),
+  },
+  {
     id: 'device',
     label: 'Device',
     metricTypes: [
       ...DEVICE_EXTRA_TYPE_STRINGS,
       ...DEVICE_SIGNAL_EXTRA_TYPE_STRINGS,
     ],
-  },
-  {
-    id: 'rr',
-    label: 'R–R & HRV',
-    metricTypes: RR_METRICS.map(metric => metric.type),
-    singleValueTypes: RR_METRICS.map(metric => metric.type),
   },
 ];
 

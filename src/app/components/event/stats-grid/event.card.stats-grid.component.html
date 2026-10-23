@@ -29,11 +29,18 @@
             </div>
             }
             <app-summary-disclosure variant="plain" [title]="recording.label" [summaryId]="recording.summaryId"
-                [scopeKey]="recording.key" [detailsAvailable]="recording.detailTypes.length > 0">
+                [scopeKey]="recording.key" [detailsAvailable]="recording.detailTypes.length > 0" [plainOverviewTemplate]="rrOverview">
+                <ng-template #rrOverview let-detailsControl="detailsControl">
                 <app-header-stats summaryOverview [statsToShow]="recording.primaryTypes" [stats]="recording.stats"
                     [singleValueTypes]="recording.primaryTypes" [unitSettings]="unitSettings" [layout]="layout"
                     [statLabels]="rrStatLabels" [showDiff]="rrShowDiff" [diffByType]="rrDiffByType">
+                    @if (recording.detailTypes.length > 0 && layout === 'grid') {
+                      <span grid-suffix class="rr-summary-details-action"><ng-container [ngTemplateOutlet]="detailsControl" /></span>
+                    } @else if (recording.detailTypes.length > 0) {
+                      <span chip-suffix class="rr-summary-details-action"><ng-container [ngTemplateOutlet]="detailsControl" /></span>
+                    }
                 </app-header-stats>
+                </ng-template>
                 <app-header-stats summaryDetails [statsToShow]="recording.detailTypes" [stats]="recording.stats"
                     [singleValueTypes]="recording.detailTypes" [unitSettings]="unitSettings" [layout]="layout"
                     [statLabels]="rrStatLabels" [showDiff]="rrShowDiff" [diffByType]="rrDiffByType">

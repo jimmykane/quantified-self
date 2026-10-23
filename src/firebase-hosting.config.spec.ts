@@ -355,7 +355,7 @@ describe('Firebase Hosting configuration', () => {
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
     // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
-    // Help covers power data, ascent corrections, history-import refresh timing, and HRV chart source eligibility.
+    // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

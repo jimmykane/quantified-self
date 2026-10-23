@@ -9,6 +9,7 @@
 }
 
 .rr-recording-summary { overflow-wrap: anywhere; }
+.rr-summary-details-action { --mat-button-text-with-icon-horizontal-padding: 8px; display: flex; align-items: center; min-width: 0; }
 .rr-recording-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 12px; }
 .rr-recording-toolbar mat-form-field { width: 280px; max-width: 100%; }
 

@@ -306,11 +306,11 @@ describe('EventCardStatsGridComponent', () => {
         expect(host.querySelector('.stat-label')?.textContent?.trim()).toBe('RMSSD');
         expect(readStreams).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
         const button = host.querySelector<HTMLButtonElement>('app-summary-disclosure button')!;
-        expect(summary.querySelector('section')?.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
-        expect(summary.querySelector('app-header-stats')!.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(summary.querySelector('.summary-disclosure-footer')).toBeNull();
+        expect(button.closest('.grid')?.lastElementChild).toBe(button.closest('.rr-summary-details-action'));
         expect(button.getAttribute('aria-expanded')).toBe('false'); button.click(); fixture.detectChanges();
         expect(button.getAttribute('aria-expanded')).toBe('true'); expect(haptics.selection).toHaveBeenCalledOnce();
-        expect(summary.querySelector('section')?.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
+        expect(summary.querySelectorAll('.rr-summary-details-action button')).toHaveLength(1);
         expect(fixture.debugElement.queryAll(By.directive(HeaderStatsComponent)).every(node => node.componentInstance.showDiff === benchmark)).toBe(true);
         if (benchmark) {
             expect(host.querySelector('.stat-diff-value')?.textContent).toContain('9.1 ms');
@@ -323,6 +323,11 @@ describe('EventCardStatsGridComponent', () => {
             expect(button.getAttribute('aria-expanded')).toBe('false');
             expect(haptics.selection).toHaveBeenCalledTimes(2);
         }
+
+        fixture.componentRef.setInput('layout', 'condensed'); fixture.detectChanges();
+        expect(summary.querySelectorAll('.condensed .rr-summary-details-action button')).toHaveLength(1);
+        expect(summary.querySelector('.summary-disclosure-footer')).toBeNull();
+        fixture.componentRef.setInput('layout', 'grid'); fixture.detectChanges();
 
         // An ordinary event with heart rate, but no beat-interval statistics,
         // keeps its other summaries and removes the R–R category entirely.
@@ -351,6 +356,7 @@ describe('EventCardStatsGridComponent', () => {
         fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
         expect(host.querySelector('.rr-recording-summary .stat-value-grid')?.textContent).toContain('0.0 ms');
         expect(fixture.componentInstance.rrShowDiff).toBe(false);
+        expect(host.querySelector('.rr-summary-details-action')).toBeNull();
         expect(host.querySelector('.rr-recording-summary .stat-diff-value')).toBeNull();
         expect(host.querySelector('.rr-recording-summary mat-select')).toBeNull();
         expect(host.querySelector('app-summary-disclosure button')).toBeNull();
