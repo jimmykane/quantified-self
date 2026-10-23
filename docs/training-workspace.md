@@ -3796,7 +3796,14 @@ callables and Training worker. The public provider rollout also requires the mat
 the owner setting does not. This implementation does not set secret values or deploy.
 Documented APIM subscription-key rejection signatures are application configuration failures, not revoked user OAuth
 consent: they do not block the connection generation or request reconnect. After correcting the key, Retry uses the
-same connection and consent. Other 401 responses retain the OAuth reconnect behavior; raw error bodies are never exposed.
+same connection and consent. Resource 401/403 responses allow one forced refresh through the existing coordinator,
+bound to the same exact account and connection generation. Before that refresh, Guide writes durably checkpoint the
+definitive rejection; before repeating the request they recheck Pro, consent, deletion and lifecycle authority. A persistent
+401/403 retains the existing auth/permission repair policy. Refresh failures are not treated as proven resource permission
+failures, and timeouts or ambiguous success responses never trigger this authorization replay. Raw error bodies are never
+exposed. Monitoring is covered/unchanged by the existing Training worker and committed-outcome signals (#655); no new
+counter dimensions, queue policy or resources are required. MCP impact: private transport recovery only, with no change
+to tools, strict proposal/confirmation schemas, read projections, scopes, consent, provider actions or registered contract.
 
 Authority resolves one server-bound account, never an account supplied by the browser. Multiple retained Suunto accounts
 require an existing authoritative selection; ambiguity shows connection repair, not a picker or arbitrary first match.

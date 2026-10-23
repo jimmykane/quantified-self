@@ -1,7 +1,9 @@
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 import { executeWithTokenRetry } from './retry-helper';
-import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
+
+vi.mock('firebase-functions/logger', () => ({ info: vi.fn() }));
 
 // Mock dependencies
 const tokensMocks = {
@@ -31,17 +33,17 @@ describe('executeWithTokenRetry', () => {
         expect(result).toBe('success');
         expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(1);
         expect(tokensMocks.getTokenData).toHaveBeenCalledWith(mockTokenDoc, expect.anything(), false);
-        expect(mockOperation).toHaveBeenCalledWith('valid-token');
+        expect(mockOperation).toHaveBeenCalledWith('valid-token', expect.objectContaining({ accessToken: 'valid-token' }));
     });
 
-    it('should retry on 401 error', async () => {
+    it.each([401, 403])('should retry once on HTTP %s', async statusCode => {
         // First token fetch succeeds
         tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'stale-token' });
         // Second token fetch (force refresh) succeeds
         tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'fresh-token' });
 
         // First operation fails with 401
-        mockOperation.mockRejectedValueOnce({ statusCode: 401 });
+        mockOperation.mockRejectedValueOnce({ statusCode });
         // Second operation succeeds
         mockOperation.mockResolvedValueOnce('retry-success');
 
@@ -56,8 +58,8 @@ describe('executeWithTokenRetry', () => {
 
         // Verify operation calls
         expect(mockOperation).toHaveBeenCalledTimes(2);
-        expect(mockOperation).toHaveBeenNthCalledWith(1, 'stale-token');
-        expect(mockOperation).toHaveBeenNthCalledWith(2, 'fresh-token');
+        expect(mockOperation).toHaveBeenNthCalledWith(1, 'stale-token', expect.anything());
+        expect(mockOperation).toHaveBeenNthCalledWith(2, 'fresh-token', expect.anything());
     });
 
     it('should retry on invalid_grant error', async () => {
@@ -122,5 +124,49 @@ describe('executeWithTokenRetry', () => {
             .rejects.toThrow('Database down');
 
         expect(mockOperation).not.toHaveBeenCalled();
+    });
+
+    it('does not loop on a persistent resource 403', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'token' });
+        const error = { response: { statusCode: 403 } };
+        mockOperation.mockRejectedValue(error);
+        await expect(executeWithTokenRetry(mockTokenDoc, mockOperation, 'test-context')).rejects.toBe(error);
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        expect(mockOperation).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not interpret a refresh endpoint 403 as another resource rejection', async () => {
+        tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'token' });
+        const refreshError = { statusCode: 403 };
+        tokensMocks.getTokenData.mockRejectedValueOnce(refreshError);
+        mockOperation.mockRejectedValueOnce({ statusCode: 403 });
+        await expect(executeWithTokenRetry(mockTokenDoc, mockOperation, 'test-context')).rejects.toMatchObject({ statusCode: 503 });
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        expect(mockOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('never retries against a different account after refresh', async () => {
+        tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'old', userName: 'account' })
+            .mockResolvedValueOnce({ accessToken: 'new', userName: 'other-account' });
+        mockOperation.mockRejectedValueOnce({ statusCode: 403 });
+        await expect(executeWithTokenRetry(mockTokenDoc, mockOperation, 'test-context')).rejects.toThrow('account changed');
+        expect(mockOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not label an initial expiry-refresh 403 as a resource permission rejection', async () => {
+        tokensMocks.getTokenData.mockRejectedValueOnce({ statusCode: 403 });
+        await expect(executeWithTokenRetry(mockTokenDoc, mockOperation, 'private-context')).rejects.toMatchObject({ statusCode: 503 });
+        expect(mockOperation).not.toHaveBeenCalled();
+        expect(tokensMocks.getTokenData).toHaveBeenCalledOnce();
+    });
+
+    it('logs only a fixed recovery message and numeric auth status, never private context or provider text', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'private-token' });
+        mockOperation.mockRejectedValueOnce({ statusCode: 'private-provider-text', error: { error: 'invalid_grant' } })
+            .mockResolvedValueOnce('success');
+        await executeWithTokenRetry(mockTokenDoc, mockOperation, 'private-context');
+        expect(logger.info).toHaveBeenCalledExactlyOnceWith(
+            '[SuuntoAuth] Resource request rejected; attempting one same-account refresh.', { statusCode: undefined },
+        );
     });
 });

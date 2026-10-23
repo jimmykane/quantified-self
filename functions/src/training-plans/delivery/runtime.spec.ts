@@ -193,7 +193,7 @@ describe('Production Training delivery rollout', () => {
         }),
       }));
     }
-    expect(authorizeSuuntoGuideRequest).toHaveBeenCalledWith(runtime.db, 'owner', inspection);
+    expect(authorizeSuuntoGuideRequest).toHaveBeenCalledWith(runtime.db, 'owner', inspection, false);
     expect(guard).toHaveBeenCalled();
   });
 

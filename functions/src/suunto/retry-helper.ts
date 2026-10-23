@@ -4,53 +4,62 @@ import { getTokenData } from '../tokens';
 import { SERVICE_NAME } from './constants';
 import * as admin from 'firebase-admin';
 import { SuuntoAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { isSuuntoOAuthRejection } from './authorization-recovery';
+
+async function tokenForRequest(
+    tokenDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
+    forceRefresh: boolean,
+): Promise<SuuntoAPIAuth2ServiceTokenInterface> {
+    try {
+        return await getTokenData(tokenDoc, SERVICE_NAME, forceRefresh) as SuuntoAPIAuth2ServiceTokenInterface;
+    } catch (error: any) {
+        // A token-endpoint 403 did not test resource permission. Leave credential
+        // handling to the coordinator and durable retry to the caller, including when the
+        // initial expiry-based refresh fails before the first resource request.
+        if ((error?.statusCode ?? error?.response?.statusCode) === 403) {
+            throw Object.assign(new Error('Suunto token refresh was rejected; resource access was not retried.'), { statusCode: 503 });
+        }
+        throw error;
+    }
+}
 
 /**
- * Executes an operation with a Suunto token, automatically handling 401 retries by refreshing the token.
+ * Retries one explicitly rejected OAuth resource request after same-account refresh.
+ * Never wrap signed blob requests, refresh calls, or a complete multi-step upload.
  * 
  * @param tokenDoc The Firestore document snapshot of the token.
  * @param operation A function that takes the access token and returns a Promise.
- * @param contextDescription A description of the operation for logging purposes.
+ * @param _contextDescription Legacy caller context; never logged because it may contain private identifiers.
  * @returns The result of the operation.
  * @throws The last error encountered if retries fail.
  */
 export async function executeWithTokenRetry<T>(
     tokenDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
-    operation: (accessToken: string) => Promise<T>,
-    contextDescription: string
+    operation: (accessToken: string, token: SuuntoAPIAuth2ServiceTokenInterface) => Promise<T>,
+    _contextDescription: string
 ): Promise<T> {
-    let serviceToken: SuuntoAPIAuth2ServiceTokenInterface;
-
     // First attempt: Get token without force refresh
-    try {
-        serviceToken = (await getTokenData(tokenDoc, SERVICE_NAME, false)) as SuuntoAPIAuth2ServiceTokenInterface;
-    } catch (e: any) {
-        logger.warn(`Initial token fetch failed for ${contextDescription} (Token ID: ${tokenDoc.id})`, e);
-        throw e;
-    }
+    let serviceToken = await tokenForRequest(tokenDoc, false);
 
     try {
-        return await operation(serviceToken.accessToken);
+        return await operation(serviceToken.accessToken, serviceToken);
     } catch (e: any) {
-        // Check for 401 Unauthorized or specific invalid_grant errors
-        const statusCode = e.statusCode || (e.response && e.response.statusCode);
-        const isAuthError = statusCode === 401 || (e.error && e.error.error === 'invalid_grant');
+        const statusCode = e?.statusCode ?? e?.response?.statusCode;
+        const isAuthError = isSuuntoOAuthRejection(e);
 
         if (isAuthError) {
-            logger.warn(`Unauthorized (${statusCode}) during ${contextDescription} for token ${tokenDoc.id}. Attempting force refresh and retry...`);
+            logger.info('[SuuntoAuth] Resource request rejected; attempting one same-account refresh.', {
+                statusCode: statusCode === 401 || statusCode === 403 ? statusCode : undefined,
+            });
 
-            try {
-                // Force refresh
-                serviceToken = (await getTokenData(tokenDoc, SERVICE_NAME, true)) as SuuntoAPIAuth2ServiceTokenInterface;
-
-                // Retry operation
-                return await operation(serviceToken.accessToken);
-            } catch (retryError: any) {
-                logger.error(`Retry failed regarding ${contextDescription} for token ${tokenDoc.id} even after force refresh`, retryError);
-                throw retryError;
+            const previousAccount = serviceToken.userName;
+            serviceToken = await tokenForRequest(tokenDoc, true);
+            if (previousAccount && serviceToken.userName !== previousAccount) {
+                throw new Error('Suunto account changed during authorization recovery.');
             }
+            return operation(serviceToken.accessToken, serviceToken);
         } else {
-            // Not a 401, rethrow original error
+            // Preserve the original classification for other failures.
             throw e;
         }
     }

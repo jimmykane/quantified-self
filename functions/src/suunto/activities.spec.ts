@@ -834,7 +834,7 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
-    it('should refresh only the status poll after a 401 without initializing or sending the blob again', async () => {
+    it.each([401, 403])('refreshes only the status poll after HTTP %s without repeating initialization or blob delivery', async statusCode => {
         vi.useFakeTimers();
         try {
             tokensMocks.getTokenData
@@ -848,7 +848,7 @@ describe('importActivityToSuuntoApp', () => {
             });
             requestMocks.put.mockResolvedValue({});
             requestMocks.get
-                .mockRejectedValueOnce(createStatusCodeError('Unauthorized', 401))
+                .mockRejectedValueOnce(createStatusCodeError('Unauthorized', statusCode))
                 .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'workout-key' });
 
             const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('data'));
@@ -865,6 +865,46 @@ describe('importActivityToSuuntoApp', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('recovers an initialization 403 before sending the FIT exactly once', async () => {
+        tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'old', userName: 'account' })
+            .mockResolvedValue({ accessToken: 'new', userName: 'account' });
+        requestMocks.post.mockRejectedValueOnce(createStatusCodeError('Forbidden', 403))
+            .mockResolvedValueOnce({ id: 'upload', url: 'https://storage.suunto.com/upload', headers: {} });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED' });
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('fit'), {
+            statusPollOptions: { maxAttempts: 1, pollDelayMs: 0 },
+        })).resolves.toMatchObject({ status: 'success', uploadId: 'upload' });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(requestMocks.put).toHaveBeenCalledOnce();
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), ServiceNames.SuuntoApp, true);
+        expect(requestMocks.post).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer new' }),
+        }));
+    });
+
+    it.each([401, 403])('does not refresh for a known application subscription rejection (%s)', async statusCode => {
+        requestMocks.post.mockRejectedValue(Object.assign(createStatusCodeError('Forbidden', statusCode), {
+            error: { statusCode, message: 'Access denied due to invalid subscription key.' },
+        }));
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('fit'))).rejects.toMatchObject({
+            disposition: 'permanent', providerCode: 'subscription_key_rejected',
+        });
+        expect(tokensMocks.getTokenData).toHaveBeenCalledOnce();
+        expect(requestMocks.post).toHaveBeenCalledOnce();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+    });
+
+    it('does not send FIT bytes after a persistent initialization 403', async () => {
+        requestMocks.post.mockRejectedValue(createStatusCodeError('Forbidden', 403));
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('fit'))).rejects.toMatchObject({
+            disposition: 'permission_required', retryMode: 'none', statusCode: 403,
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        expect(requestMocks.put).not.toHaveBeenCalled();
     });
 
     it('should not replay the persisted signed blob when the existing upload is already processed', async () => {

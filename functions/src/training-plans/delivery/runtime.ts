@@ -41,7 +41,7 @@ function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDe
 
 function suuntoTransport(db: admin.firestore.Firestore, uid: string, owner: string): TrainingDeliveryTransport {
   const bound = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new SuuntoGuideTransport(
-    createSuuntoGuideClient(() => authorizeSuuntoGuideRequest(db, uid, operation), () => config.suuntoapp.subscription_key), owner);
+    createSuuntoGuideClient(forceRefresh => authorizeSuuntoGuideRequest(db, uid, operation, forceRefresh), () => config.suuntoapp.subscription_key), owner);
   const policy = new SuuntoGuideTransport(async () => { throw new Error('Unbound transport'); }, owner);
   return {
     mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays, withdrawOutsideHorizon: true,

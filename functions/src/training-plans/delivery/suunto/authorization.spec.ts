@@ -21,7 +21,14 @@ describe('Suunto exact-account refresh fencing', () => {
     expect(mocks.refresh).toHaveBeenCalledWith(expect.anything(), ServiceNames.SuuntoApp, false, { opaqueTelemetry: true, expectedActiveOAuthCredentialGeneration: 'root' });
     expect(mocks.read).toHaveBeenCalledTimes(2);
   });
-  it.each(['account', 'generation', 'deletion', 'token', 'disconnect'])('rejects %s changing during refresh', async change => {
+  it('forces recovery through the same guarded token coordinator', async () => {
+    await authorizeSuuntoGuideRequest(db, 'uid', operation, true);
+    expect(mocks.refresh).toHaveBeenCalledWith(expect.anything(), ServiceNames.SuuntoApp, true,
+      { opaqueTelemetry: true, expectedActiveOAuthCredentialGeneration: 'root' });
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+  });
+  it.each(['account', 'generation', 'deletion', 'token', 'disconnect'].flatMap(change =>
+    [false, true].map(force => ({ change, force }))))('rejects $change changing during refresh (forced: $force)', async ({ change, force }) => {
     mocks.refresh.mockImplementation(async () => {
       const changed = authority();
       if (change === 'account') changed.account = 'other';
@@ -32,7 +39,7 @@ describe('Suunto exact-account refresh fencing', () => {
       mocks.read.mockResolvedValue(changed);
       return { accessToken: 'fixture', userName: 'account', expiresAt: Date.now() + 60_000 };
     });
-    await expect(authorizeSuuntoGuideRequest(db, 'uid', operation)).rejects.toThrow();
+    await expect(authorizeSuuntoGuideRequest(db, 'uid', operation, force)).rejects.toThrow();
   });
   it.each([undefined, NaN, Infinity, 0, '9999999999999'])('rejects malformed or expired credential expiry: %s', async expiresAt => {
     mocks.refresh.mockResolvedValue({ accessToken: 'fixture', userName: 'account', expiresAt });

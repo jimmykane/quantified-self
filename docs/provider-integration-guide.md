@@ -109,8 +109,12 @@ Both remain ERROR logs, without raw error text, payloads or credentials. Monitor
 worker/committed-transition events, not these diagnostic messages or queue IDs. Requests, retries and lifecycle guards
 are unchanged; release requires separate approval for only `processSleepSyncTask`. Existing Help and MCP are unaffected.
 
-Suunto workout downloads, activity-history reads, and Health pulls allow one same-account forced token refresh and
-read retry after HTTP 401 or 403. Health shares that recovery budget across all feeds/subrequests in one invocation;
+Suunto workout downloads, activity-history reads, Health/Sleep pulls, activity upload initialization/status, route
+listing/export/import and Training Guides allow one same-account forced token refresh after a resource HTTP 401 or 403.
+The shared upload/route/Sleep helper and Guide client exclude known application subscription-key rejection;
+signed blob delivery and ambiguous write responses never qualify for authorization replay.
+Guide writes durably journal rejection before refreshing and repeat current authority/consent guards before retrying.
+Health shares its recovery budget across all feeds/subrequests in one invocation;
 its existing durable queue retry policy remains unchanged. Never select another connected account to recover old work.
 A workout still returning 403 moves to `SUUNTO_WORKOUT_ACCESS_DENIED` without fabricating a retry increment; legacy
 shared-account rows still try other matching owners, and transient failures or refresh contention remain retryable.
