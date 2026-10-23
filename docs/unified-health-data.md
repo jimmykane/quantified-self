@@ -629,7 +629,7 @@ their existing public result shapes.
 - The callable requires Firebase Authentication and App Check and ignores any caller-supplied UID.
 - Provider account IDs, provider source-record keys, and provider revision tokens are hashed before persistence. Credentials, raw payloads, raw values in logs, signed URLs, and free-form provider errors are prohibited.
 - Large metric/sample arrays are excluded from automatic Firestore indexes.
-- Health source records, sample chunks, and sync state live below `users/{uid}`, so the configured recursive Delete User Data extension removes them with the account.
+- Health source records, sample chunks, and sync state live below `users/{uid}`, so the native `cleanupUserAccounts` function recursively removes them with the account.
 - Background and transactional writes no-op when the user is missing or deletion is active.
 
 ## Retention and disconnect

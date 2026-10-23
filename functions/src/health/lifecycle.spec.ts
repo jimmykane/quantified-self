@@ -1,19 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type * as admin from 'firebase-admin';
+import { ACCOUNT_DELETION_ROOT_COLLECTIONS, deleteAccountFirestoreRoot } from '../users/data-cleanup';
 
 describe('unified health account lifecycle', () => {
-    it('keeps all health collections beneath the recursively deleted user root', () => {
-        const extensionEnvironment = readFileSync(
-            resolve(__dirname, '../../../extensions/delete-user-data.env'),
+    it('uses native recursive user cleanup after extension retirement', async () => {
+        const manifest = JSON.parse(readFileSync(
+            resolve(__dirname, '../../../firebase.json'),
             'utf8',
-        );
+        ));
+        expect(manifest.extensions).not.toHaveProperty('delete-user-data');
+        expect(ACCOUNT_DELETION_ROOT_COLLECTIONS).toContain('users');
 
-        expect(extensionEnvironment).toMatch(/^FIRESTORE_DELETE_MODE=recursive$/m);
-        expect(extensionEnvironment).toMatch(/^FIRESTORE_PATHS=users\/\{UID\},customers\/\{UID\}$/m);
-        expect(extensionEnvironment).not.toContain('healthSourceRecords');
-        expect(extensionEnvironment).not.toContain('healthSampleChunks');
-        expect(extensionEnvironment).not.toContain('healthSyncState');
-        expect(extensionEnvironment).not.toContain('manualHealthMeasurementDeletions');
+        const db = {
+            collection: (collection: string) => ({ doc: (id: string) => ({ path: `${collection}/${id}` }) }),
+            recursiveDelete: vi.fn().mockResolvedValue(undefined),
+        };
+        // Deleting the complete user tree includes Health records, chunks, sync
+        // state and deletion receipts, plus Timeline notes and their receipts.
+        await deleteAccountFirestoreRoot(db as unknown as admin.firestore.Firestore, 'test-owner', 'users');
+        expect(db.recursiveDelete).toHaveBeenCalledExactlyOnceWith({ path: 'users/test-owner' });
     });
 });

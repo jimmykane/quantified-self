@@ -163,7 +163,7 @@
                 Tombstone -->|"2. Marker stored"| Auth
                 end
 
-                subgraph Triggers["⚡ Parallel Cleanup Triggers"]
+                subgraph Triggers["⚡ Native Account Cleanup"]
                 direction TB
 
                 subgraph CustomCleanup["🛠️ cleanupUserAccounts (Functions)"]
@@ -183,24 +183,15 @@
                 Wahoo -->|"1. DELETE permissions<br />2. Delete Tokens<br />3. Delete Mapping"| Wahoo
                 end
 
-                subgraph ExtensionCleanup["📦 delete-user-data (installed until approved cutover)"]
-                Config["Configuration Rules"]
-                Firestore["🔥 Firestore Recursive Delete"]
-                Storage["📂 Storage Bucket Delete"]
-
-                Firestore -->|"paths: users/{uid}, customers/{uid}"| Firestore
-                end
                 end
 
                 Auth -->|onDelete Trigger| CustomCleanup
-                Auth -->|onDelete Trigger| ExtensionCleanup
 
                 style Frontend fill:#0d1117,stroke:#58a6ff,stroke-width:2px
                 style Backend fill:#0d1117,stroke:#a371f7,stroke-width:2px
                 style CustomCleanup fill:#161b22,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5
-                style ExtensionCleanup fill:#161b22,stroke:#238636,stroke-width:2px,stroke-dasharray: 5 5
             </div>
-            <p>The existing Gen 1 <code>cleanupUserAccounts</code> function takes over the configured extension scope with 1 GB memory, a 540-second timeout and retries. After approved deployment and verified cleanup, retire the Delete User Data extension and keep this native owner. This code change performs no deployment or resource deletion.</p>
+            <p>The Gen 1 <code>cleanupUserAccounts</code> function owns recursive account data cleanup with 1 GB memory, a 540-second timeout and retries. The Delete User Data extension was retired on 23 October 2026 after approved deployment and a successful overlap check. A fresh account deletion with only the native owner remains the final verification step.</p>
             <p>Before removing provider identity sources, <code>cleanupUserAccounts</code> stores a deletion-surviving checkpoint. Both Firestore roots and the exact Storage prefix are verified before recording completion. Pending deletion markers do not expire; completed markers retain a seven-day TTL. Independent cleanup stages continue after failure before the trigger throws for retry.</p>
             <p><code>deleteSelf</code> deletes the Firebase Auth user only after the deletion tombstone is stored. If
                 that write fails, deletion aborts so guarded background writers cannot race recursive cleanup without a
@@ -209,8 +200,8 @@
 
         <div class="card">
             <h2>🗑️ Data Cleanup Matrix</h2>
-            <p>The installed extension 0.1.30 uses a bare Storage prefix that can match a longer custom UID and interprets replacement tokens inside custom UIDs. Resolve both scope issues before approving overlapping deletion; the native helper uses an exact object and a slash-delimited folder. See the runbook’s pinned source comparison.</p>
-            <p>The native owner below is prepared in source; deployment and extension retirement are separate steps. See the <a href="delete-user-data-migration.md">cutover, completion and recovery runbook</a>.</p>
+            <p>The native helper uses an exact Storage object and a slash-delimited folder. The retired extension's UID-prefix and replacement-token defects were absent from the audited production UID inventory; the runbook retains the pinned source comparison.</p>
+            <p>The native owner below is deployed. See the <a href="delete-user-data-migration.md">cutover evidence, remaining verification and recovery runbook</a>.</p>
             <table>
                 <thead>
                     <tr>

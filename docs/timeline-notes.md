@@ -39,8 +39,8 @@ following revision. Deletion writes a content-free `{deleted: true}` receipt at
 `users/{uid}/timelineNoteDeletions/{noteId}`; receipts have no TTL so delayed creates cannot resurrect deleted notes.
 
 Browser reads are owner-only and bounded to 65 documents (64 plus lookahead). Browser writes, note descendants and
-receipt reads/writes are denied. Notes are permanent leaves. The existing Delete User Data extension's recursive
-`users/{UID}` cleanup removes notes and receipts. Provider disconnection retains them. No note text enters logs,
+receipt reads/writes are denied. Notes are permanent leaves. The native `cleanupUserAccounts` function's recursive
+`users/{uid}` cleanup removes notes and receipts. Provider disconnection retains them. No note text enters logs,
 analytics events, public projections, or provider syncing. Details use Angular text interpolation;
 chart tooltips HTML-escape titles. This version does not change a measurement or Training/readiness calculation.
 

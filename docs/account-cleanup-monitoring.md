@@ -7,6 +7,12 @@ natural **post-filter-correction heartbeat and Monitoring time series** are veri
 the approved production verification for #836 is complete. No account deletion, disconnect,
 forced recovery, test mail, index or Rules deployment was performed for validation.
 
+On 23 October 2026, the separately approved Delete User Data extension retirement
+left the native cleanup owner and this monitoring bundle active. Before/after readback
+matched all nine metrics, seven enabled policies and the dashboard. Filters do not
+depend on the retired extension, so monitoring coverage is **unchanged**. See the
+[cutover evidence and remaining native-only verification](delete-user-data-migration.md#production-status--23-october-2026).
+
 ## Ownership and meanings
 
 `tools/cleanup-monitoring/` reuses the shared `tools/monitoring/` provisioner. Owner
@@ -33,7 +39,7 @@ The flows are intentionally different:
 
 | Flow | What the observation establishes | What it does not establish |
 | --- | --- | --- |
-| `account` | Auth cleanup started, returned ACK, failed, or a local substage remained partial | Complete Delete User Data/Stripe extension cleanup, successful remote revocation, or a complete deletion audit |
+| `account` | Auth cleanup started, returned ACK, failed, or a local substage remained partial | Stripe extension cleanup, successful remote revocation, or a complete deletion audit |
 | `disconnect` | Explicit local cleanup/finalization or subscription-retry outcome | Deletion of recorded provider activities, or successful remote cleanup merely because local tokens disappeared |
 | `operational` | An existing `serviceDisconnectCleanup` page committed, completed, deferred, retried or was superseded | Deletion of another owner's data; complete global backlog coverage |
 | `recovery` | Existing Health projection, route restoration, queue-release or scheduler outcome | Fresh imported data or automatic Training consent |
@@ -42,9 +48,9 @@ Explicit token cleanup emits `acknowledged`; only the existing finalization resu
 `cleared`/`root_missing` emits `completed`. Stale finalization is `superseded`.
 Account `completed` observations are local provider-token substages, while the
 whole Auth handler emits `acknowledged`. Counts are attempts/stages, not unique
-accounts or exactly-once deletion totals. A partial stage can coexist with ACK
-because pre-existing cleanup helpers deliberately continue after some failures.
-No exception handling or deletion behavior is changed to make monitoring greener.
+accounts or exactly-once deletion totals. Inspect the completed deletion receipt and
+scoped absence checks alongside ACK: mandatory native cleanup failures reject for
+retry, while remote-provider limitations can remain after local completion.
 
 `remote_unconfirmed` means partner deauthorization failed or could not be established.
 Revoked/expired access may make remote operations impossible. A dedicated policy
@@ -113,8 +119,8 @@ Missing, malformed or future timing is omitted, never converted to healthy zero.
 Completed deletion tombstones are never scanned, counted as pending or aged.
 There is no new global account-deletion backlog inventory. An idle event-only Auth
 handler must not have an absence alert; its native execution errors additionally
-cover abrupt termination that cannot emit the structured outcome. Extension
-completion remains an independent resource boundary, not inferred from Auth ACK.
+cover abrupt termination that cannot emit the structured outcome. Stripe completion
+and remote-provider revocation remain independent boundaries, not inferred from Auth ACK.
 
 Logging/Monitoring ingestion, active time-series storage and enabled alert policies
 can incur normal platform charges. Incremental application Firestore cost is zero.
