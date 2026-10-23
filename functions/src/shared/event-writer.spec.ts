@@ -350,6 +350,20 @@ describe('EventWriter', () => {
         }));
     });
 
+    it('writes only validated source provenance bound to the final saved activity ID', async () => {
+        const sourceIdentity = { version: 1, activityId: 'activity-1', startMs: 1000, endMs: 61000, importedType: 'Yoga' };
+        activityMock.sourceIdentity = sourceIdentity;
+        activityMock.toJSON.mockReturnValue({ id: 'activity-1', sourceIdentity: { privateCanary: 'untrusted' } });
+        await writer.writeAllEventData('user-1', eventMock);
+        const activityWrite = vi.mocked(adapter.setDoc).mock.calls.find(([path]) => path[2] === 'activities')![1];
+        expect(activityWrite).toHaveProperty('sourceIdentity', sourceIdentity);
+        expect(JSON.stringify(activityWrite)).not.toContain('untrusted');
+        vi.mocked(adapter.setDoc).mockClear();
+        activityMock.sourceIdentity = { ...sourceIdentity, activityId: 'foreign-id' };
+        await writer.writeAllEventData('user-1', eventMock);
+        expect(vi.mocked(adapter.setDoc).mock.calls.find(([path]) => path[2] === 'activities')![1]).not.toHaveProperty('sourceIdentity');
+    });
+
     it('should persist sourceActivityKey when available on activity instance', async () => {
         activityMock.sourceActivityKey = 'sha256:signature:0';
         activityMock.toJSON.mockReturnValue({

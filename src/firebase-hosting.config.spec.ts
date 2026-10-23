@@ -398,6 +398,7 @@ describe('Firebase Hosting configuration', () => {
     // Account deletion now lives in the separate Data management settings section.
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
+    // Recording-update help also covers stable legs, saved preferences and retained-original reprocessing.
     // Benchmark R–R help covers source-separated summaries, linked plots and the original-timing boundary.
     // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
     // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.

@@ -906,23 +906,40 @@ Provider OAuth / webhook / history request
 
 This is preferred over processing partner payloads directly in a webhook or callable because provider requests can be retried, payloads may be incomplete, original files may need another download, and processing can exceed partner timeouts.
 
-Shared recorded-activity imports and manual reuploads reuse an existing event's stored activity document IDs and
-source keys rather than adding legacy event/index IDs beside source-keyed reparse results. The shared
-`functions/src/shared/import-preservation.ts` helper reads only that owner's event activities, with a field mask and
-the existing 100-leg bound, inside the existing source-write reservation transaction before marking load pending.
-Rejected identities leave the saved source, load metadata and cache untouched; matched IDs/keys are applied only
-after the reservation commits, before original-file/source writes. Unique identity matching includes verified sport
-refinements and reordered multisport legs; ambiguous or changed saved leg sets fail through the existing error/retry
-path instead of guessing, appending or deleting rows.
-The existing first-import marker still permits missing legs on an interrupted initial-write retry, subject to ID
-collision checks. New imports retain their existing ID behavior; this is not a historical duplicate cleanup.
-Guarded document transactions preserve live titles, descriptions, tags, privacy, notes, legacy feedback fields,
-canonical Feeling/RPE stats (including cleared ratings), and custom device names. Parsed measurements and source-file
-provenance keep their existing write behavior. Reparse shares the event-edit preservation policy.
-Monitoring coverage is **unchanged**: the existing #829 provider/worker retry, failure and committed-outcome metrics
-still cover these imports; no queue, schedule, lease, retry, metric label, alert, Rules or index changes are added.
-Training formulas, source-write reservation/finalization, planning and MCP contracts remain unchanged. Existing Help
-already promises retained activity names and saved load preferences; no frontend release or client refresh is needed.
+Shared recorded-activity imports and original-file reparses retain matched activity document IDs across source
+revisions. The server-owned `sourceIdentity` snapshot records the stable document ID, complete source time window and
+last imported sport, separately from the owner's visible sport choice. Mutable sport names, statistics and export
+hashes do not create a second activity. `sourceActivityKey` remains a compatible legacy source-derived key, not a
+promise that it hashes the newest export.
+
+`functions/src/shared/import-preservation.ts` validates associations inside the existing owner/deletion-guarded
+source-write reservation, before marking load pending. The shared pure matcher in `shared/activity-identity.ts` serves
+imports, reparse, frontend original-file hydration and MCP charts. Only a persisted match of provider account/workout
+identity authorizes a provider revision to match a unique complete source time window across a sport change. COROS
+component identity must also agree. Reparse has the corresponding retained-original scope. Ordinary uploads and
+read-only hydration keep their existing source/signature checks; they never guess by array position or the last leg.
+
+Legacy records are adopted lazily. For an unexplained provider sport change, read the retained original outside the
+transaction to distinguish its old imported sport from an owner override, then recheck its reference revision inside
+the reservation. This exceptional proof is bounded to four owner/event-scoped originals, 30 MiB raw, 64 MiB unpacked,
+100 legs and a checked 20-second processing budget. Storage outages remain retryable. Missing proof, ambiguous
+windows, overlapping split/merge replacements or incompatible saved corrections preserve the saved source and load
+and produce `ACTIVITY_IDENTITY_CONFLICT` for review. Existing provider dead-letter handling commits that terminal
+outcome once; Wahoo retains its current revision/lease fences. No automated reassociation or deletion is performed.
+
+Verified assignments are passed only in memory from the committed reservation to Training finalization. They preserve
+zero overrides, exclusions and dated applied policy across a sport revision without making arbitrary reused IDs
+trusted. Guarded source transactions preserve live event edits, custom device names and explicit owner sport labels.
+Owner labels do not reinterpret the file-calibrated load evaluation. Interrupted reparses use their existing active
+leg snapshot, not partial duplicate copies. Finalization still checks the current reservation, source fingerprints,
+latest controls and deletion guards. New imports keep their existing ID allocation. No historical reparse campaign,
+provider refresh, duplicate cleanup, Sports Lib release or dependency update is required by this change.
+
+Monitoring coverage is **covered** by existing committed `dead_lettered` outcomes and fixed provider labels; native
+queue backlog and retry probes are unchanged. The new fixed context is an existing dead-letter diagnostic, not a
+metric dimension. See [recorded-import monitoring](activity-import-monitoring.md). Rules protect `sourceIdentity`
+from client creation, replacement or removal; no new index, queue, scheduler or monitoring resource is introduced.
+MCP uses the validated snapshot internally for matching/cache freshness only; public contracts and scopes stay frozen.
 Local tests do not authorize deployment, provider calls, replay or production data cleanup.
 
 Provider health/wellness data uses the separate [unified health foundation](unified-health-data.md):

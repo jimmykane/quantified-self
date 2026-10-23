@@ -1,3 +1,4 @@
+import { retainedSourceRevision } from '../shared/retained-activity-source';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { randomUUID } from 'node:crypto';
 import { FitBaseType, FitEncoder } from 'fit-file-parser/encoder';
@@ -6,7 +7,7 @@ vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { ActivityParsingOptions, ActivityTypes, ActivityUtilities, DataDistance, DataEnergy, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -61,8 +62,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
-  function reuploadWriter(uid: string) {
-    const guard = new TrainingLoadSourceWrite(uid, event => prepareImportedEventWrite(uid, event));
+  function reuploadWriter(uid: string, providerMetadata?: Record<string, unknown>) {
+    const guard = new TrainingLoadSourceWrite(uid, event => prepareImportedEventWrite(uid, event, undefined, providerMetadata));
     const setDoc = vi.fn(async (path: string[], data: unknown) => db.runTransaction(async transaction => {
       await guard.assertCurrent(db, transaction);
       const ref = db.doc(path.join('/')); const current = await transaction.get(ref);
@@ -134,13 +135,13 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', null));
     expect((await child.get()).data()?.stats.Ascent).toBe(250);
   });
-  it('preserves a correction saved during parsing even when source-derived activity IDs change', async () => {
+  it('preserves a correction saved during parsing while keeping the saved activity ID stable', async () => {
     const uid = setup(); await importWorkout(uid, ascentWorkout());
     const parent = await db.doc(`users/${uid}/events/workout`).get();
     const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
     await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
     await persistReparsedEvent(uid, 'workout', ascentWorkout('reparsed-id', 250), parent.data()!, children.docs, '23.3.0');
-    const saved = (await db.doc(`users/${uid}/activities/reparsed-id`).get()).data()!;
+    const saved = (await db.doc(`users/${uid}/activities/leg`).get()).data()!;
     expect(saved).toMatchObject({ stats: { Ascent: 75 }, ascentCorrection: { value: 75, sourceValue: 250 } });
     expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats.Ascent).toBe(75);
   });
@@ -164,12 +165,12 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       await expect(persistReparsedEvent(uid, 'workout', ascentWorkout('partial-id', 250), parent.data()!, children.docs, '23.3.0'))
         .rejects.toThrow('interrupted ascent reparse');
     } finally { spy.mockRestore(); }
-    expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).size).toBe(2);
+    expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).size).toBe(1);
     await persistReparsedEvent(uid, 'workout', ascentWorkout('retry-id', 300), parent.data()!, children.docs, '23.3.0');
     const saved = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
-    expect(saved.docs.map(child => child.id)).toEqual(['retry-id']);
+    expect(saved.docs.map(child => child.id)).toEqual(['leg']);
     expect(saved.docs[0].data()).toMatchObject({ stats: { Ascent: 75 }, ascentCorrection: { value: 75, sourceValue: 300 } });
-    await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'retry-id', null));
+    await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'leg', null));
     expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats.Ascent).toBe(300);
   });
   it('rejects stale edits, cross-recording targets, pending imports and deleting owners before writes', async () => {
@@ -238,13 +239,13 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await updateActivityElevation(uid, 'workout', await descentRequest(uid, null));
     expect((await child.get()).data()?.stats).toMatchObject({ Ascent: 75, Descent: 300 });
   });
-  it('retains descent saved during parsing when reparse changes activity IDs', async () => {
+  it('retains descent saved during parsing when the parser proposes different activity IDs', async () => {
     const uid = setup(); await importWorkout(uid, elevationWorkout());
     const parent = await db.doc(`users/${uid}/events/workout`).get();
     const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
     await updateActivityElevation(uid, 'workout', await descentRequest(uid));
     await persistReparsedEvent(uid, 'workout', elevationWorkout('reparsed-id', 300), parent.data()!, children.docs, '23.3.0');
-    expect((await db.doc(`users/${uid}/activities/reparsed-id`).get()).data()).toMatchObject({ stats: { Ascent: 100, Descent: 80 },
+    expect((await db.doc(`users/${uid}/activities/leg`).get()).data()).toMatchObject({ stats: { Ascent: 100, Descent: 80 },
       descentCorrection: { value: 80, sourceValue: 300 } });
     expect((await db.doc(`users/${uid}/events/workout`).get()).data()?.stats.Descent).toBe(80);
   });
@@ -269,10 +270,50 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     } finally { spy.mockRestore(); }
     await persistReparsedEvent(uid, 'workout', elevationWorkout('retry-id', 400, 350), parent.data()!, children.docs, '23.3.0');
     const saved = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
-    expect(saved.docs.map(doc => doc.id)).toEqual(['retry-id']);
+    expect(saved.docs.map(doc => doc.id)).toEqual(['leg']);
     expect(saved.docs[0].data()).toMatchObject({ stats: { Ascent: 75, Descent: 80 },
       ascentCorrection: { value: 75, sourceValue: 350 }, descentCorrection: { value: 80, sourceValue: 400 } });
   });
+  it('keeps source IDs, dated policies and live controls through a provider sport revision and another reparse', async () => {
+    const uid = setup(); const original = workout('stable-leg');
+    const old = original.getFirstActivity(); old.type = ActivityTypes.Stretching;
+    await importWorkout(uid, original);
+    const child = db.doc(`users/${uid}/activities/stable-leg`);
+    await child.update({ sourceIdentity: { version: 1, activityId: 'stable-leg', startMs: +old.startDate,
+      endMs: +old.endDate, importedType: ActivityTypes.Stretching }, 'creator.name': 'Owner device' });
+    const provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic-account', serviceWorkoutID: 'synthetic-workout' };
+    await db.doc(`users/${uid}/events/workout/metaData/${ServiceNames.SuuntoApp}`).set(provider);
+    const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data() as TrainingLoadMetadata;
+    const policy = before.legs!['stable-leg'].policy;
+    const updated = workout('new-parser-id'); updated.getFirstActivity().type = ActivityTypes.Yoga;
+    const { writer, setDoc } = reuploadWriter(uid, provider);
+    const firstWrite = gate(), continueWrite = gate();
+    const write = setDoc.getMockImplementation()!;
+    setDoc.mockImplementationOnce(async (...args) => { firstWrite.release(); await continueWrite.promise; return write(...args); });
+    const pending = writer.writeAllEventData(uid, updated);
+    await firstWrite.promise;
+    // Owner edits happen after reservation but before the source activity commits.
+    await ref.update({ controls: { 'stable-leg': { override: 0 } }, revision: before.revision + 2 });
+    await child.update({ 'creator.name': 'Latest owner device', type: ActivityTypes.Pilates });
+    continueWrite.release(); await pending;
+    expect((await child.get()).data()).toMatchObject({ type: ActivityTypes.Pilates, creator: { name: 'Latest owner device' },
+      sourceIdentity: { activityId: 'stable-leg', importedType: ActivityTypes.Yoga } });
+    const metadata = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(metadata.sourceWritePending).toBe(false);
+    expect(metadata.controls).toEqual({ 'stable-leg': { override: 0 } });
+    expect(metadata.legs!['stable-leg'].policy).toEqual(policy);
+    expect(resolveEffectiveTrainingLoad({}, metadata)).toMatchObject({ score: 0, status: 'available' });
+    const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    expect(children.docs.map(doc => doc.id)).toEqual(['stable-leg']);
+    const again = workout('another-parser-id'); again.getFirstActivity().type = ActivityTypes.Yoga;
+    const parent = await db.doc(`users/${uid}/events/workout`).get();
+    await persistReparsedEvent(uid, 'workout', again, parent.data()!, children.docs, '23.6.0');
+    expect(again.getFirstActivity().getID()).toBe('stable-leg');
+    expect((await child.get()).data()).toMatchObject({ type: ActivityTypes.Pilates,
+      sourceIdentity: { activityId: 'stable-leg', importedType: ActivityTypes.Yoga } });
+    expect((await ref.get()).data()).toMatchObject({ controls: { 'stable-leg': { override: 0 } }, sourceWritePending: false });
+  });
+
   it('reuploads a source-keyed activity without duplicating it or losing live edits and load overrides', async () => {
     const uid = setup(); await importWorkout(uid, workout('source-keyed-id'));
     const parent = db.doc(`users/${uid}/events/workout`);
@@ -352,6 +393,28 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     }
   });
 
+  it.each([false, true])('separates bucket repair from a concurrent original replacement (replaced: %s)', async replaced => {
+    const uid = setup(); await source(uid, workout('stable'));
+    const parent = db.doc(`users/${uid}/events/workout`);
+    const originalFiles = [{ path: `users/${uid}/events/workout/original.fit`, bucket: 'old-bucket', generation: '1' }];
+    await parent.update({ originalFiles });
+    const initial = (await parent.get()).data()!;
+    const children = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
+    const healed = { ...initial, originalFiles: originalFiles.map(file => ({ ...file, bucket: 'recovered-bucket' })) };
+    if (replaced) await parent.update({ originalFiles: originalFiles.map(file => ({ ...file, generation: '2' })) });
+    const operation = persistReparsedEvent(uid, 'workout', workout('incoming'), healed, children.docs, '23.6.0', retainedSourceRevision(initial));
+    if (replaced) {
+      await expect(operation).rejects.toThrow('Recording source changed');
+      expect((await db.doc(metadataPath(uid)).get()).exists).toBe(false);
+      expect((await parent.get()).data()?.originalFiles[0].generation).toBe('2');
+    } else {
+      await operation;
+      expect((await parent.get()).data()?.originalFiles).toEqual(healed.originalFiles);
+      expect((await db.doc(metadataPath(uid)).get()).data()?.sourceWritePending).toBe(false);
+    }
+    expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).docs.map(doc => doc.id)).toEqual(['stable']);
+  });
+
   it('finalizes a real writer reparse when Firestore omits an unnamed source device', async () => {
     const { SPORTS_LIB_VERSION } = await import('../shared/sports-lib-version.node');
     const uid = setup(); await source(uid, workout('old'));
@@ -364,7 +427,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
 
     // Exercise EventWriter and Firestore directly: a JSON roundtrip would turn undefined into null.
     const result = await persistReparsedEvent(uid, 'workout', parsed, (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
-    expect(result.staleActivitiesDeleted).toBe(1);
+    expect(result.staleActivitiesDeleted).toBe(0);
     expect((await ref.get()).data()).toMatchObject({ stats: { 'Device Names': ['Test'] }, benchmarkSourceWritePending: false });
     expect((await ref.collection('metaData').doc('processing').get()).data()?.sportsLibVersion).toBe(SPORTS_LIB_VERSION);
     const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
@@ -403,10 +466,10 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await persistReparsedEvent(uid, 'workout', comparison('new'), (await ref.get()).data()!, oldLegs.docs, SPORTS_LIB_VERSION);
     const first = (await ref.get()).data()!;
     expect(first).toMatchObject({ comparisonTitle: 'Saved comparison', tags: ['firmware'], mergeType: 'benchmark', benchmarkSourceRevision: 1 });
-    expect(first.benchmarkResults['ref-new_test-new']).toMatchObject({ referenceId: 'ref-new', testId: 'test-new',
+    expect(first.benchmarkResults['ref-old_test-old']).toMatchObject({ referenceId: 'ref-old', testId: 'test-old',
       requiresRegeneration: true, activityLinksResolved: true, metrics: { gnss: null } });
     const newLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
-    expect(newLegs.docs.map(doc => doc.id).sort()).toEqual(['ref-new', 'test-new']);
+    expect(newLegs.docs.map(doc => doc.id).sort()).toEqual(['ref-old', 'test-old']);
     await persistReparsedEvent(uid, 'workout', comparison('new'), first, newLegs.docs, SPORTS_LIB_VERSION);
     const second = (await ref.get()).data()!;
     expect(second.benchmarkResults).toEqual(first.benchmarkResults);
@@ -450,7 +513,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
         // A preview hydrated at either partial stage must fail the completed revision check too.
         expect(complete.benchmarkSourceRevision).not.toBe(partial.benchmarkSourceRevision);
         const current = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
-        expect(current.docs.map(doc => doc.id).sort()).toEqual(['new-first', 'new-second']);
+        expect(current.docs.map(doc => doc.id).sort()).toEqual(['new-second', 'old']);
       } finally { resume.release(); await outcome; spy.mockRestore(); }
     });
 
@@ -472,7 +535,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const partialLegs = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
     await persistReparsedEvent(uid, 'workout', workout('new'), (await ref.get()).data()!, partialLegs.docs, SPORTS_LIB_VERSION);
     expect((await ref.get()).data()).toMatchObject({ benchmarkSourceRevision: 1, benchmarkSourceWritePending: false });
-    expect((await db.doc(`users/${uid}/activities/old`).get()).exists).toBe(false);
+    expect((await db.doc(`users/${uid}/activities/old`).get()).exists).toBe(true);
+    expect((await db.doc(`users/${uid}/activities/new`).get()).exists).toBe(false);
   });
 
   it('keeps processing eligible for retry when the atomic source completion fails', async () => {
@@ -597,7 +661,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       expect((await db.doc(`users/${uid}/events/workout/metaData/processing`).get()).exists).toBe(false);
     } finally { resume.release(); await result; spy.mockRestore(); }
   });
-  it('retries an interrupted real multisport reparse with new IDs without losing zero overrides, exclusions or saved policies', async () => {
+  it('retries an interrupted real multisport reparse without changing IDs, zero overrides, exclusions or saved policies', async () => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     const multi = (suffix: string) => {
       const event = workout(`first-${suffix}`);
@@ -625,16 +689,18 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     } finally { spy.mockRestore(); }
     expect((await ref.get()).data()?.sourceWritePending).toBe(true);
     const existing = await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get();
-    expect(existing.docs).toHaveLength(4);
+    expect(existing.docs).toHaveLength(2);
+    // Also simulate partial copies left by an older deployed writer; active metadata must disambiguate them.
+    for (const leg of existing.docs) await db.doc(`users/${uid}/activities/partial-${leg.id}`).set(leg.data());
     const retry = multi('retry');
     await persistReparsedEvent(uid, 'workout', retry, {}, earlierSnapshot.docs, '22.0.0');
     const after = (await ref.get()).data() as TrainingLoadMetadata;
     expect(after.controls).toEqual(before.controls);
-    expect(after.legs?.['first-initial']).toMatchObject({ activityId: 'first-retry', policy: before.legs!['first-initial'].policy });
-    expect(after.legs?.['second-initial']).toMatchObject({ activityId: 'second-retry', policy: before.legs!['second-initial'].policy });
+    expect(after.legs?.['first-initial']).toMatchObject({ activityId: 'first-initial', policy: before.legs!['first-initial'].policy });
+    expect(after.legs?.['second-initial']).toMatchObject({ activityId: 'second-initial', policy: before.legs!['second-initial'].policy });
     expect(resolveEffectiveTrainingLoad(retry, after)).toMatchObject({ score: 0, status: 'available' });
     expect((await db.collection(`users/${uid}/activities`).where('eventID', '==', 'workout').get()).docs.map(doc => doc.id).sort())
-      .toEqual(['first-retry', 'second-retry']);
+      .toEqual(['first-initial', 'second-initial']);
   });
   afterAll(async () => {
     if (!db) return;

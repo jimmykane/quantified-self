@@ -1,3 +1,4 @@
+import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
@@ -23,13 +24,14 @@ function identity(data: any): TrainingLoadLeg['identity'] {
     type: `${data.type}`, duration: stat('Duration'), distance: stat('Distance') };
 }
 function matchable(leg: TrainingLoadLeg) {
-  return { startDate: leg.identity.startMs, endDate: leg.identity.endMs, type: leg.identity.type,
+  return { getID: () => leg.activityId, startDate: leg.identity.startMs, endDate: leg.identity.endMs, type: leg.identity.type,
     getStat: (type: string) => ({ getValue: () => type === 'Duration' ? leg.identity.duration : leg.identity.distance }) };
 }
 
 /** Pure reconciliation: TSS and permissive unmatched-leg fallbacks never participate in identity. */
 export function reconcileTrainingLoadLegs(
   previous: TrainingLoadMetadata | null, candidates: TrainingLoadLeg[],
+  verifiedActivityIds?: ReadonlySet<string>,
 ): Pick<TrainingLoadMetadata, 'legs' | 'controls'> {
   const controls = { ...previous?.controls };
   const priorLegs = { ...previous?.legs };
@@ -60,7 +62,7 @@ export function reconcileTrainingLoadLegs(
   const legacyContext = Object.entries(previous?.legacyLegs ?? {})
     .filter(([key, leg]) => leg.activityId && !Object.prototype.hasOwnProperty.call(priorLegs, key));
   const matches = resolveActivityIdentityAssignments(
-    [...previousEntries, ...legacyContext].map(([, leg]) => matchable(leg)), candidates.map(matchable));
+    [...previousEntries, ...legacyContext].map(([, leg]) => matchable(leg)), candidates.map(matchable), { verifiedActivityIds });
   const legs: Record<string, TrainingLoadLeg> = {};
   candidates.forEach((candidate, index) => {
     const oldIndex = matches.assignments.get(index);
@@ -98,7 +100,7 @@ async function policyAt(
 /** Freeze legacy identities durably before any source overwrite, including retries after a partial write. */
 export async function prepareTrainingLoadMetadata(
   uid: string, event: EventInterface,
-  authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
+  authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<ReadonlySet<string> | void>,
 ): Promise<PreparedTrainingLoadWrite> {
   const db = admin.firestore();
   const eventId = event.getID();
@@ -112,11 +114,11 @@ export async function prepareTrainingLoadMetadata(
   // can derive stats, so finish it before EventWriter snapshots source documents.
   // The final metadata transaction then reads the cached, non-mutating results.
   activities.forEach(activity => ActivityUtilities.getTrainingStressScoreEvaluations(activity));
-  const firstImport = await db.runTransaction(async transaction => {
+  const reservation = await db.runTransaction(async transaction => {
     const { guard, snapshots: [parent, snapshot] } = await getUserDeletionGuardedDocumentsInTransaction(
       db, transaction, uid, [eventRef, metaRef]);
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
-    if (authorize) await authorize(db, transaction);
+    const verifiedActivityIds = await authorize?.(db, transaction);
     const previous = snapshot.data() as TrainingLoadMetadata | undefined;
     const prepare = async (fields: Partial<TrainingLoadMetadata>) => {
       const pending: TrainingLoadMetadata = { version: 1, excluded: false, controls: {}, revision: 1, ...previous, ...fields };
@@ -130,7 +132,7 @@ export async function prepareTrainingLoadMetadata(
       const pending = { sourceWritePending: true, sourceWriteId, ...(!parent.exists ? { sourceFirstImport: true } : {}),
         revision: (previous?.revision ?? 0) + 1 };
       await prepare(pending);
-      return previous?.sourceFirstImport === true || !parent.exists;
+      return { firstImport: previous?.sourceFirstImport === true || !parent.exists, verifiedActivityIds };
     }
     // A partial first import can already have owner controls. Freeze its current
     // identities before a retry overwrites/reuses their IDs, just like legacy data.
@@ -146,22 +148,24 @@ export async function prepareTrainingLoadMetadata(
     const frozen = { legacyLegs, sourceWritePending: true, sourceWriteId, revision: (previous?.revision ?? 0) + 1 };
     // Pending reads are unavailable; finalization advances freshness and owns invalidation.
     await prepare(frozen);
-    return previous?.sourceFirstImport === true;
+    return { firstImport: previous?.sourceFirstImport === true, verifiedActivityIds };
   });
-  return Object.assign(() => finalizeTrainingLoadMetadata(uid, event, sourceWriteId, firstImport, authorize), { sourceWriteId });
+  return Object.assign(() => finalizeTrainingLoadMetadata(uid, event, sourceWriteId, reservation.firstImport,
+    authorize, reservation.verifiedActivityIds || undefined), { sourceWriteId });
 }
 
 /** Only the prepared attempt can finalize its persisted source and cached candidates. */
 async function finalizeTrainingLoadMetadata(
   uid: string, event: EventInterface, expectedSourceWriteId: string, firstImport: boolean,
-  authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
+  authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<ReadonlySet<string> | void>,
+  verifiedActivityIds?: ReadonlySet<string>,
 ): Promise<void> {
   const db = admin.firestore();
   const eventId = event.getID();
   if (!eventId) throw new Error('Training load requires a persisted event identity.');
   const activities = event.getActivities();
   if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
-  const candidates: TrainingLoadLeg[] = activities.map(activity => ({
+  const parsedCandidates: TrainingLoadLeg[] = activities.map(activity => ({
     activityId: activity.getID() as string, identity: identity(activity.toJSON()),
     recordedTss: recordedTrainingStressScore(activity),
     evaluations: ActivityUtilities.getTrainingStressScoreEvaluations(activity),
@@ -173,9 +177,21 @@ async function finalizeTrainingLoadMetadata(
   await db.runTransaction(async transaction => {
     const { guard, snapshots: [parent, snapshot, ...savedActivities] } = await getUserDeletionGuardedDocumentsInTransaction(
       db, transaction, uid, [eventRef, metaRef,
-        ...candidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`))]);
+        ...parsedCandidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`))]);
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
     if (authorize) await authorize(db, transaction);
+    // The guarded activity writer can preserve an owner sport edit made after preparation.
+    // Accept only that label difference for this certified leg and exactly the same raw source snapshot.
+    // Every measurement/time change must still fail the full source fingerprint below.
+    const candidates = parsedCandidates.map((candidate, index) => {
+      const saved = savedActivities[index]?.data();
+      const current = readActivitySourceIdentity((activities[index] as { sourceIdentity?: unknown }).sourceIdentity, candidate.activityId);
+      const persisted = readActivitySourceIdentity(saved?.sourceIdentity, candidate.activityId);
+      if (!saved || !current || !persisted || !verifiedActivityIds?.has(candidate.activityId!)
+        || JSON.stringify(current) !== JSON.stringify(persisted)) return candidate;
+      const expected = { ...activities[index].toJSON(), type: saved.type };
+      return { ...candidate, identity: identity(expected), sourceFingerprint: trainingLoadSourceFingerprint(expected) };
+    });
     if (!parent.exists || trainingLoadSourceFingerprint(parent.data() ?? {}) !== parentFingerprint ||
       candidates.some((leg, index) => !savedActivities[index]?.exists ||
         savedActivities[index].data()?.eventID !== eventId ||
@@ -206,7 +222,7 @@ async function finalizeTrainingLoadMetadata(
       }
       previous = { ...previous, legs };
     }
-    const reconciled = reconcileTrainingLoadLegs(previous, candidates);
+    const reconciled = reconcileTrainingLoadLegs(previous, candidates, verifiedActivityIds);
     // Matched legs already own an immutable dated policy. Only genuinely new legs query history.
     for (const [key, leg] of Object.entries(reconciled.legs ?? {})) {
       if (leg.activityId && !previous?.legs?.[key])

@@ -1,3 +1,4 @@
+import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
@@ -1330,6 +1331,22 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 1,
                 undefined
             );
+        });
+
+        it('dead-letters a permanent source identity conflict without retrying or labelling it a parse failure', async () => {
+            const error = new ActivityIdentityConflictError();
+            mockSetEvent.mockRejectedValueOnce(error);
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, error, undefined, 'ACTIVITY_IDENTITY_CONFLICT');
+            expect(mockUploadDebugFile).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+        });
+
+        it('returns a lifecycle skip when the guarded conflict move was superseded', async () => {
+            mockSetEvent.mockRejectedValueOnce(new ActivityIdentityConflictError());
+            mockMoveToDeadLetterQueue.mockResolvedValueOnce('PROCESSED');
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('PROCESSED');
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
         });
 
         it('should handle uploadDebugFile failure gracefully and still increment retry count', async () => {

@@ -79,6 +79,21 @@ describe('AppOriginalFileHydrationService', () => {
     vi.useRealTimers();
   });
 
+  it('matches retained source type while preserving an owner sport label without changing the saved activity', () => {
+    const sourceIdentity = { version: 1, activityId: 'stable', startMs: 1000, endMs: 61000, importedType: 'Yoga' };
+    const saved = { getID: () => 'stable', startDate: new Date(1000), endDate: new Date(61000), type: 'Pilates',
+      sourceIdentity, getStat: () => null, creator: { name: 'Owner device' } };
+    let id: string | null = null;
+    const parsed = { getID: () => id, setID: (next: string) => { id = next; }, startDate: new Date(1000),
+      endDate: new Date(61000), type: 'Yoga', getStat: () => null, creator: { name: 'Source device' } };
+    (service as any).applyExistingActivityIdentity({ getActivities: () => [saved] }, { getActivities: () => [parsed] });
+    expect(parsed).toMatchObject({ type: 'Pilates', creator: { name: 'Owner device' }, sourceIdentity });
+    expect(parsed.getID()).toBe('stable');
+    expect(saved.type).toBe('Pilates');
+    expect(saved.sourceIdentity).toEqual(sourceIdentity);
+    expect(storageMocks.getBytes).not.toHaveBeenCalled();
+  });
+
   it('hydrates sparse distance from the original without moving HR readings onto invented distances', async () => {
     const start = Date.parse('2026-01-01T00:00:00Z');
     const iso = (second: number) => new Date(start + second * 1000).toISOString();
@@ -137,10 +152,13 @@ describe('AppOriginalFileHydrationService', () => {
 
   it('should preserve activity IDs and creator overrides by default', async () => {
     const parsedActivity = {
+      startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
+      getID: () => 'existing-activity-id',
       setID: vi.fn(),
       creator: { name: 'Parser name' },
     };
     const existingActivity = {
+      startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
       getID: () => 'existing-activity-id',
       creator: { name: 'User renamed device' },
     };
@@ -161,10 +179,13 @@ describe('AppOriginalFileHydrationService', () => {
 
   it('should let newly parsed device metadata replace an existing Unknown placeholder', async () => {
     const parsedActivity = {
+      startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
+      getID: () => 'existing-activity-id',
       setID: vi.fn(),
       creator: { name: 'Garmin Edge 1030 Plus' },
     };
     const existingActivity = {
+      startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
       getID: () => 'existing-activity-id',
       creator: { name: 'Unknown' },
     };

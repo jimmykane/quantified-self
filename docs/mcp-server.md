@@ -2966,3 +2966,14 @@ Root and Functions now pin published 23.0.0, retaining the 22.0.0 EnergySense su
 chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
 release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
 promotion, real-profile plugin install or historical reparse is performed by this implementation.
+
+## Stable activity source associations
+
+Chart/sample source reads use the common pure activity matcher and the validated server-owned `sourceIdentity`
+snapshot internally. This allows a saved owner sport label to differ from the raw retained recording without
+borrowing another leg's data. Its allowlisted snapshot participates in the opaque source-context fingerprint so
+stale pagination/cache context cannot survive a source association change. Read-only consumers retain strict matching;
+provider-only cross-sport window authorization and write-reservation certificates never come from MCP inputs.
+`sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,
+schemas, grants, units and original-file budgets are unchanged; no mutation or reparse capability is added. Negative
+activity projection fixtures cover the new stored field. Training plan/workout contracts have no impact.

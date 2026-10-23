@@ -361,7 +361,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareImportedEventWrite(userID, event, async (db, transaction) => {
     await assertHistoryWrite(transaction);
     await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
-  }));
+  }, metaData.toJSON() as Record<string, unknown>));
   const assertSourceWrite: NonNullable<SetEventWriteOptions['assertWriteAuthorizationInTransaction']> = async (db, transaction) => {
     await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
     await sourceWrite.assertCurrent(db, transaction);

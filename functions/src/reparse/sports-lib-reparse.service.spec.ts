@@ -1,3 +1,4 @@
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE } from '../shared/activity-identity-conflict';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 // EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
 // training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
@@ -403,6 +404,12 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Invalid target sports-lib version');
         expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', 'not-semver'))
             .toThrow('Invalid runtime sports-lib version');
+    });
+
+    it('classifies source identity review failures as terminal, without treating retryable source changes as terminal', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(ACTIVITY_IDENTITY_CONFLICT_MESSAGE)).toBe(true);
+        expect(getSportsLibReparseFailureReason(ACTIVITY_IDENTITY_CONFLICT_MESSAGE)).toBe('ACTIVITY_IDENTITY_CONFLICT');
+        expect(isSportsLibReparseTerminalFailureMessage('Recording source changed while reparsing; retry from the current original files.')).toBe(false);
     });
 
     it('isSportsLibReparseTerminalFailureMessage should treat size and runtime budget failures as terminal', () => {

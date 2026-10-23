@@ -6166,6 +6166,32 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+### Stable recording associations across source revisions
+
+Existing activity document IDs survive verified provider sport revisions and retained-original reparses. A
+server-owned `sourceIdentity` on each activity stores its document ID, complete source start/end window and last
+imported sport; the visible owner-selected sport remains separate. `shared/activity-identity.ts` is the common pure
+matcher for backend writes, read-only source hydration and MCP chart reads. Source sport, summary statistics and
+export bytes may change without creating another leg. Cross-sport window matching is allowed only inside a verified
+provider account/workout scope or retained-original reparse; a unique complete window is required on both sides.
+Ordinary uploads and read-only chart hydration cannot opt into that relaxation. Overlapping splits/merges and
+ambiguous windows fail before the source reservation writes anything. No positional or unmatched-leg guess is made.
+
+The committed reservation carries its verified activity IDs in memory into load reconciliation. This certificate
+preserves each matched leg's dated applied policy and latest controls, including a numeric zero, when the imported
+sport changes. It does not authorize ID-only matching for unrelated source writes. Existing source-write IDs,
+fingerprints, concurrent owner-edit checks and deletion fences remain authoritative. Late owner sport/device edits
+are preserved inside the document transaction. An owner sport label does not recalculate the file's physiological
+inputs or replace its cached load evaluation. The parent activity-type summary is refreshed from prepared legs.
+
+Legacy associations are established on demand; an unexplained provider sport change requires bounded retained-file
+proof of the old imported type, with reference revision revalidation. A source conflict uses the existing terminal
+review/dead-letter lifecycle (`ACTIVITY_IDENTITY_CONFLICT`), without overwriting saved load, retrying forever or
+automatically moving controls. Interrupted reparse recovery uses the existing active leg snapshot to ignore partial
+copies. Read-only chart hydration consumes the saved source snapshot and preserves owner labels without updating
+Firestore. No mass historical reparse or provider fetch is necessary. See the [provider lifecycle](provider-integration-guide.md)
+and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
+
 ### File-only TSS evaluation and owner load controls
 
 Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain

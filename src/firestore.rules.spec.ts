@@ -2704,6 +2704,22 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('protects source identity while allowing an owner sport edit', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            const path = `users/${userId}/activities/${activityId}`;
+            const source = { type: 'Stretching', eventID: 'original_event' };
+            const sourceIdentity = { version: 1, activityId, startMs: 1000, endMs: 61000, importedType: 'Stretching' };
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({ type: 'Stretching' });
+                await context.firestore().doc(path).set(source);
+            });
+            await assertFails(db.doc(path).update({ sourceIdentity }));
+            await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(path).update({ sourceIdentity }));
+            await assertSucceeds(db.doc(path).update({ type: 'Yoga' }));
+            await assertFails(db.doc(path).update({ sourceIdentity: { ...sourceIdentity, importedType: 'Yoga' } }));
+            await assertFails(db.doc(path).set(source));
+        });
+
         it('should deny user from reading another users activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').get());

@@ -876,11 +876,20 @@ re-reads the current event document and keeps the latest values plus event tags,
 in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
-- regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
-- derive sourceActivityKey from source-content hash + activity signature (order-independent)
-- `assignReimportActivityIds(...)` performs strict sourceActivityKey restamping and fails fast if any activity still lacks a valid SHA-derived key (no fallback key generation)
-- use deterministic matching for creator-name carryover (prefer sourceActivityKey, then signatures)
-- delete stale old activities not present in the new parsed ID set
+- Retain an existing matched activity document ID. Generate a deterministic source-derived ID only for a genuinely new leg.
+- Keep source key generation/validation for new and legacy compatibility; a source-content hash or sport refinement must not rename an already verified leg.
+- Use the shared pure matcher and a unique complete retained-source window for mutable sport/statistics. Do not fall back to array order or the only unmatched leg.
+- Persist a server-owned `sourceIdentity` containing stable ID, raw start/end and imported type; preserve an explicit owner sport label separately.
+- Validate assignments and saved corrections before reserving a source write. Recheck the pre-parse retained references after long parsing, separately from any bucket repair being saved; source replacement remains retryable.
+- Use the committed association certificate for Training controls/policies and refresh benchmark selection remaps after preparation assigns final IDs.
+- Preserve live activity device/sport edits inside guarded document transactions, alongside the existing parent edit policy.
+- Reject overlapping splits/merges and ambiguous windows with terminal `ACTIVITY_IDENTITY_CONFLICT`; leave the saved source/load available for review.
+- Interrupted retries use the existing active leg snapshot rather than partial copies. Delete only stale children outside the final verified ID set using existing reservation/deletion guards.
+
+This metadata is adopted on normal writes/reparses; do not launch a historical campaign just to populate it. A reparse
+reads retained originals, not the newest provider export, so it cannot discover a provider-side sport edit that was
+never downloaded. A provider resync verifies the persisted provider account/workout identity before accepting that
+revision. Read-only source hydration and MCP charts consume the saved association without writing it.
 
 ## Bucket Fallback + Auto-Heal
 To handle incorrect bucket metadata safely, reparse download tries the known canonical buckets and auto-heals metadata when fallback succeeds.
