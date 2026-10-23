@@ -1569,6 +1569,12 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.7.0 indexes existing constructors and aliases without changing catalog membership, canonical names/units,
+validators, persisted-only availability or sensitive-field exclusions. QS retains its full event readers; the additive
+summary reader introduces no MCP projection. This performance-only adoption changes no tool, field, schema, scope,
+consent, planning/provider capability or plugin contract. No registered-contract promotion, client rescan, plugin
+rebuild, historical reparse or derived-data refresh is required.
+
 Sports Lib 23.6.0 preserves catalog membership, canonical names/units, validators and existing JSON/output schemas.
 Its GPS calculation changes can affect generated distance, speed, pace and dependent summaries on new imports or
 authorized reparses; saved metric queries still read persisted values, while on-demand charts/samples use the current

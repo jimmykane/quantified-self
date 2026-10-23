@@ -6819,7 +6819,7 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.6.0 with matching package integrity. The direct Functions FIT Parser
+Root and Functions now pin published Sports Lib 23.7.0 with matching package integrity. The direct Functions FIT Parser
 pin remains 6.2.2; Sports Lib retains its own compatible parser dependency.
 Both consumers use the installed canonical metric catalog, including the 20 R–R summary types. The earlier 22.0.0
 integration and its historical verification remain recorded here; package adoption does not deploy either consumer or start a production reparse.
@@ -6915,6 +6915,20 @@ MCP impact review: no new metric name, unit, tool, field, schema, scope, consent
 or plugin change. Existing persisted metric reads and bounded source chart/sample reads keep their projections.
 No registered-contract promotion or client refresh is required by this dependency change. The reparse runbook owns
 the adoption and historical-data checklist; deployment and production reparse remain separate approvals.
+
+#### Sports Lib 23.7.0 metric lookup performance adoption
+
+Root and Functions use the same published 23.7.0 artifact. Indexed constructor and alias lookup accelerates existing
+hydration without changing canonical values, units, parsing, Training load or durability calculations. QS keeps its
+current full event readers; adopting the additive lazy summary reader requires a separate read-path change.
+
+No historical reparse, summary regeneration, Training rebuild or derived schema bump is required. Existing source
+evidence, controls, dated policies and sanitized persistence retain their current behavior. Runtime reparse targets
+advance with the package; scanner settings and deployment authorization do not change.
+
+MCP impact review: discovery, persisted-only availability, aliases, sensitive-field exclusions and public projections
+are unchanged. No new tool, scope, consent, planning/provider capability, registered-contract promotion, client refresh
+or plugin rebuild is required. The reparse runbook owns the adoption checklist.
 
 #### Earlier published dependency verification
 

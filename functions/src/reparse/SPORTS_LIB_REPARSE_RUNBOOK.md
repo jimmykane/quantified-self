@@ -7,6 +7,23 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.7.0 metric lookup performance adoption
+
+Root and Functions pin the same published 23.7.0 artifact with matching lockfile integrity. Built-in metric constructors
+and aliases are indexed once, accelerating existing hydration while preserving canonical names, precedence, values,
+units and validation. QS keeps its current full event readers; the additive `EventSummary.fromJSON` API is not adopted
+by this dependency update and must not be cast to an editable event or used as a persistence payload.
+
+No historical activity or saved-route reparse, summary regeneration, Training rebuild or derived schema change is
+required. Existing Training, durability, parsing, sanitized persistence, retry/deletion and version-mismatch contracts
+remain in force. Runtime version detection and activity/route reparse targets follow the installed version; scanner
+settings are unchanged. Review already-enabled scanners before any separately approved deployment.
+
+MCP metric discovery, aliases, persisted-only availability, sensitive-field exclusions and public contracts are
+unchanged. No registered-contract promotion, client rescan or plugin rebuild is needed. User-facing workflows and
+metric meanings are unchanged, so existing Help content remains applicable. This adoption does not deploy or start a
+production reparse.
+
 ### Sports Lib 23.6.0 dependency and GPS calculation adoption
 
 Root and Functions pin the same published 23.6.0 artifact with matching lockfile integrity. Runtime version detection
