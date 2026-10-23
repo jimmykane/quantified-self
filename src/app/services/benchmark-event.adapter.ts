@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import type { AppEventMetadata } from '@shared/event-read';
-import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
+import { BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { normalizeEventTags } from '@shared/event-tags';
 
 @Injectable({

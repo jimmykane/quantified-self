@@ -1,4 +1,3 @@
-import type { EventRead } from '@shared/event-read';
 import { DashboardHrvService } from './dashboard-hrv.service';
 import { inject, Injectable } from '@angular/core';
 import { Observable, catchError, defer, finalize, map, merge, of, scan, shareReplay, startWith } from 'rxjs';
