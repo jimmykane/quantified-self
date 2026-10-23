@@ -346,6 +346,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
+    // Help also describes the open activity table, phone row details and inline empty states.
     // Help also documents the collapsed R-R chart panel, overlaid recordings and legend labels for unavailable beats.
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,

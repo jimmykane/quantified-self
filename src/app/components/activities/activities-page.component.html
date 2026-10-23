@@ -28,6 +28,7 @@
         [isLoading]="loading()" [showTagFilter]="false"
         [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
         [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
+        [hasExternalFilters]="hasFilters()" (clearFiltersRequested)="clearFilters()"
         (eventsChange)="onEventsChange($event)">
         <div event-table-filters class="activity-explorer-filters">
           <app-activity-filter-picker label="Tags" allLabel="All tags" searchLabel="Search tags"

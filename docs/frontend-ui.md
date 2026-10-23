@@ -1296,3 +1296,24 @@ Health category chips retain the existing single-row overflow rail. `ChartSource
 Health thumbnails reuse completed browser evidence for the same owner, metric, range and source while their visible subscription hydrates. Their latest value uses the existing canonical display string. The inert ECharts sparkline fits the span of recorded points, preserving values, gaps and colors; single readings and zero-valued bars remain visible. Full charts retain their selected date axis. Source options require drawable points in the selected window (or renderable Sleep sessions). A saved missing source retains its identity and displays `Source unavailable` with an explanation. The menu offers available replacements without silently substituting one; with no replacements it remains plain attribution.
 
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
+
+## Open activity table
+
+The shared event table in Activities, Dashboard and Calendar inherits its parent workspace surface. Its toolbar,
+selection actions and empty state use separators and Material tokens without a glass wrapper, shadow, tinted header
+ribbon or raised empty-state card. Named headers retain their full accessible names, sorting and selected-column
+preferences. The count describes the matching loaded rows; filtering does not introduce another query.
+
+At phone widths, tables with an activity identity column show compact rows with up to three selected metrics.
+Duration, Distance and TSS take priority when selected; all other saved columns remain available through the per-row
+**More stats** button. Its state is local, silent on initialization, cleared across owner/context changes, and emits
+one selection haptic per accepted toggle. The button stops row navigation and disables native touch-tooltip gestures.
+Text headings remain horizontally scrollable for sorting; row content uses page scrolling. Tables without an activity
+identity column and browse presentations retain a normal horizontally scrollable table. Desktop keeps the bounded
+thin-scrollbar table and persistent paginator. Sticky cells retain an opaque theme surface.
+
+Empty and loading states remain distinct. Empty views omit the header and paginator visually while retaining their
+instances, preserving the table's existing sort/paginator subscriptions. Local search/tag resets stay local;
+Activities delegates external date/sport/tag reset to its existing owner-aware route handler and haptic owner.
+Recorded values, metric formatting, data readers, persistence, MCP/Assistant contracts, consent and provider actions
+are unchanged. This is a completed-activity presentation change with no Training planning impact.

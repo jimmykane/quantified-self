@@ -18,9 +18,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface-container-low), transparent 12%);
+  padding: 0 0 12px;
 }
 
 .table-toolbar-main {
@@ -37,26 +35,6 @@
   --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
   width: 100%;
   min-width: 0;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
-  min-height: 46px;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-icon-button {
-  width: 38px;
-  height: 38px;
-  padding: 7px;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-flex {
-  min-height: 46px;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep input.mat-mdc-input-element {
-  font-size: 0.95rem;
 }
 
 .table-toolbar-main .qs-search-field mat-icon {
@@ -94,9 +72,7 @@
 
 .table-selection-toolbar {
   align-items: center;
-  background: var(--mat-sys-surface-container);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
+  border-block: 1px solid var(--mat-sys-outline-variant);
   color: var(--mat-sys-on-surface);
   display: flex;
   gap: 12px;
@@ -150,7 +126,7 @@
 
 .bulk-action-button-content {
   align-items: center;
-  display: inline-flex;
+  display: flex;
   gap: 6px;
   justify-content: center;
   min-width: 0;
@@ -245,7 +221,7 @@
 @include bp.handset-or-tablet-portrait {
 
   .table-toolbar {
-    padding: 10px 12px;
+    padding: 0 0 12px;
   }
 
   .table-toolbar-main {
@@ -319,6 +295,7 @@
 .event-table-header {
   // App container tokens are translucent; sticky content needs a solid surface.
   background: var(--mat-sys-surface-bright);
+  background: rgb(from var(--mat-sys-background) r g b);
 }
 
 .event-table-header > th {
@@ -335,13 +312,19 @@
 .mat-mdc-header-cell {
   color: var(--mat-sys-on-surface-variant) !important;
   font-weight: 500 !important;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.5px;
+  font: var(--mat-sys-label-medium);
+  text-transform: none;
 }
 
 .mat-mdc-cell {
   font-family: 'Barlow Condensed', sans-serif;
+}
+
+.activity-type-cell,
+.description-text,
+.device-names-list,
+.event-activity-name {
+  font: var(--mat-sys-body-medium);
 }
 
 .mat-mdc-row {
@@ -354,30 +337,6 @@
 
 
 
-/* Gradient strip on the left of the first cell */
-.activity-row td:first-child {
-  position: relative;
-}
-
-.activity-row td:first-child::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--row-gradient);
-  opacity: 0.8;
-  border-top-right-radius: 4px;
-  border-bottom-right-radius: 4px;
-  transition: width 0.2s ease;
-}
-
-.activity-row:hover td:first-child::before {
-  width: 6px;
-  opacity: 1;
-}
-
 .mat-column-Activity-Types {
   // min-width: 140px;
 }
@@ -387,8 +346,9 @@
 .mat-mdc-cell.cdk-column-Activity-Types,
 .mat-mdc-cell.mat-column-activity-types,
 .mat-mdc-cell.cdk-column-activity-types {
-  width: 120px;
-  max-width: 140px;
+  width: 180px;
+  min-width: 160px;
+  max-width: 240px;
 }
 
 /* Truncate only row description values (not header) */
@@ -491,26 +451,50 @@ mat-icon {
 }
 
 
-/* Removed mat-card specific margins/padding since table container now uses qs-glass-card-panel */
-
 .merged {
   opacity: 0.7;
 }
 
-/* Table Container and Glass Card Styles (matching Admin Dashboard) */
+/* Open table: the parent workspace owns its surface. */
 .table-container {
-  --qs-glass-panel-blur: 0px;
-
-  border-radius: 12px;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background: var(--mat-sys-surface-container-low);
-  border: 1px solid var(--mat-sys-outline-variant);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  overflow: hidden;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  background: transparent;
 }
+
+.table-container [hidden] { display: none !important; }
+
+.table-results-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-height: 28px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.table-results-summary > span { flex: 0 0 auto; }
+
+.event-table-column-label { white-space: nowrap; }
+
+.activity-table-empty {
+  min-height: 224px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  text-align: center;
+  font: var(--mat-sys-body-medium);
+}
+
+.activity-table-empty > mat-icon { color: var(--mat-sys-on-surface-variant); margin-bottom: 4px; }
+.activity-table-empty > strong { font-weight: 500; }
+.activity-table-empty > p { margin: 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 
 .table-wrapper {
   overflow: auto;
@@ -545,27 +529,9 @@ mat-icon {
   color: var(--mat-sys-on-surface-variant);
 }
 
-.activity-table-overlay {
-  --loading-overlay-top-offset: 56px;
-  --loading-shade-error-background: color-mix(in srgb, var(--mat-sys-surface-container-high) 76%, transparent);
-  --loading-shade-error-border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 78%, transparent);
-  --loading-shade-error-radius: 16px;
-  --loading-shade-error-padding: 18px 22px;
-  --loading-shade-error-blur: 16px;
-  --loading-shade-error-shadow: var(--qs-overlay-shadow);
-}
+.activity-table-overlay { --loading-overlay-top-offset: 0px; }
 
-.activity-table-no-data-row--hidden {
-  display: none;
-}
-
-@include bp.xsmall {
-  .activity-table-overlay {
-    --loading-shade-error-padding: 16px 18px;
-  }
-}
-
-/* Paginator styling to match glass theme */
+/* Keep pagination on the same open surface. */
 mat-paginator {
   background: transparent !important;
   color: var(--mat-sys-on-surface-variant) !important;
@@ -616,7 +582,7 @@ mat-paginator {
 }
 
 .activity-custom-name {
-  max-width: 140px;
+  max-width: 200px;
   margin-top: 4px;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
@@ -689,7 +655,7 @@ mat-paginator {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 140px;
+  max-width: 200px;
   min-width: 0;
 }
 
@@ -720,4 +686,64 @@ mat-paginator {
 
 .benchmark-icon:hover mat-icon {
   opacity: 0.85;
+}
+
+.mobile-cell-label, .mobile-stats-toggle { display: none; }
+
+@include bp.xsmall {
+  .table-container--mobile-rows {
+    .table-wrapper { max-height: none; overflow: visible; }
+    table, tbody { display: block; width: 100%; }
+    thead { display: block; }
+    .event-table-header {
+      position: static !important;
+      display: flex;
+      overflow-x: auto;
+      min-height: 40px;
+      border-block: 1px solid var(--mat-sys-outline-variant);
+    }
+    .event-table-header > th { flex: 0 0 auto; border-bottom: 0; padding: 8px !important; min-height: 40px; }
+    .activity-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 32px repeat(4, minmax(0, 1fr)) 44px;
+      align-items: start;
+      gap: 8px 10px;
+      padding-block: 12px;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
+      min-height: 0;
+      height: auto;
+    }
+    .activity-row > .event-table-cell {
+      position: static !important;
+      left: auto !important;
+      right: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      width: auto !important;
+      border: 0;
+      padding: 0 !important;
+      white-space: normal !important;
+      background: transparent;
+    }
+    .activity-row > .mat-column-Checkbox { grid-column: 1; grid-row: 1 / 3; }
+    .activity-row > .event-table-cell--activity { grid-column: 2 / 6; grid-row: 1; position: relative !important; padding-right: 32px !important; }
+    .activity-row > .mat-column-Actions { grid-column: 6; grid-row: 1 / 3; }
+    .activity-row > .mat-column-Start-Date { grid-column: 2 / 4; grid-row: 2; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+    .activity-row > .mat-column-Tags { grid-column: 4 / 7; grid-row: 2; justify-self: end; }
+    .activity-row > .event-table-cell--metric { grid-row: 3; grid-column: var(--mobile-metric-column); }
+    .activity-row > .event-table-cell--metric .data-cell { white-space: nowrap; }
+    .activity-row > .event-table-cell--secondary { display: none; }
+    .activity-row--expanded > .event-table-cell--secondary { display: block; grid-column: 2 / -1; }
+    .activity-row > .event-table-cell--metric .mobile-cell-label,
+    .activity-row--expanded > .event-table-cell--secondary .mobile-cell-label { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); margin-bottom: 3px; }
+    .mobile-stats-toggle { display: inline-flex; position: absolute; right: 0; top: -6px; --mat-icon-button-state-layer-size: 32px; width: 32px; height: 32px; padding: 6px; }
+    .mobile-stats-toggle mat-icon { width: 20px; height: 20px; font-size: 20px; }
+    .activity-type-cell, .activity-custom-name { max-width: none; }
+    .activity-type-cell { font: var(--mat-sys-body-medium); }
+    .data-cell { min-width: 0; }
+    .description-text, .device-name-label, .event-activity-name { white-space: normal; overflow-wrap: anywhere; }
+    .event-tags-cell-button { width: auto; min-height: 28px; }
+    .mat-column-Tags .mobile-cell-label { display: none; }
+  }
 }

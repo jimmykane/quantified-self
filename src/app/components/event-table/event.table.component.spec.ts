@@ -757,37 +757,57 @@ describe('EventTableComponent', () => {
         expect(styles).toMatch(/\.bulk-action-button\s*{[\s\S]*--mat-button-text-state-layer-color:\s*var\(--mat-sys-on-surface\);/);
     });
 
-    it('should avoid backdrop blur on the large table surface under hover overlays', () => {
-        const styles = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
-            'utf8'
-        );
-
-        expect(styles).toMatch(/\.table-container\s*{[\s\S]*--qs-glass-panel-blur:\s*0px;/);
-        expect(styles).toMatch(/\.table-container\s*{[\s\S]*backdrop-filter:\s*none;/);
-        expect(styles).toMatch(/\.table-container\s*{[\s\S]*-webkit-backdrop-filter:\s*none;/);
+    it('shows an inline empty state without empty headings or pagination', () => {
+        component.events = [];
+        component.data.data = [];
+        component.isLoading = false;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty').textContent).toContain('No activities yet');
+        expect(fixture.nativeElement.querySelector('.table-wrapper').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('.qs-glass-card-panel')).toBeNull();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
-    it('should use activity language and keep the glass empty state clear of the paginator', () => {
-        const template = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
-            'utf8'
-        );
-        const styles = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
-            'utf8'
-        );
+    it('keeps loading distinct from an empty result', () => {
+        component.data.data = [];
+        component.isLoading = true;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.table-wrapper').hidden).toBe(false);
+    });
 
-        expect(template).toContain('placeholder="Search activities"');
-        expect(template).toContain('[errorMessage]="emptyMessage"');
-        expect(component.emptyMessage).toBe('No activities yet');
-        expect(component.emptyHint).toBe('Import an activity or change your filters');
-        expect(template).toContain('[allowErrorPassthrough]="true"');
-        expect(template).toContain('activity-table-no-data-row--hidden');
-        expect(template).not.toContain('No events found');
-        expect(template.indexOf('</app-loading-overlay>')).toBeLessThan(template.indexOf('<mat-paginator'));
-        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-blur:\s*16px;/);
-        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-shadow:\s*var\(--qs-overlay-shadow\);/);
+    it('clears local table filters with one haptic and delegates external-filter feedback', () => {
+        component.searchTerm = 'ride'; component.tagFilters = ['Race']; component.untaggedFilter = true;
+        component.clearTableFilters();
+        expect(component.searchTerm).toBe(''); expect(component.tagFilters).toEqual([]);
+        expect(component.untaggedFilter).toBe(false); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        component.clearTableFilters(); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        component.hasExternalFilters = true;
+        const clear = vi.spyOn(component.clearFiltersRequested, 'emit');
+        component.clearTableFilters();
+        expect(clear).toHaveBeenCalledOnce(); expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        component.isLoading = true; component.clearTableFilters(); expect(clear).toHaveBeenCalledOnce();
+    });
+
+    it('preserves saved columns while choosing three primary phone metrics and keeps disclosure local', () => {
+        component.selectedColumns = ['Activity Types', 'Duration', 'Distance', 'Ascent', 'Average Heart Rate'];
+        const saved = [...component.selectedColumns];
+        (component as any).updateDisplayedColumns();
+        expect([...component.mobileMetricColumns]).toEqual(['Duration', 'Distance', 'Ascent']);
+        expect(component.mobileSecondaryColumns.has('Average Heart Rate')).toBe(true);
+        expect(component.selectedColumns).toEqual(saved);
+        const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as Event;
+        component.toggleMobileStats(event, 'event1');
+        expect(component.expandedMobileRows.has('event1')).toBe(true);
+        expect(event.stopPropagation).toHaveBeenCalledOnce();
+        component.toggleMobileStats(event, 'event1');
+        expect(component.expandedMobileRows.has('event1')).toBe(false);
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        component.expandedMobileRows.add('event1');
+        component.ngOnChanges({ targetUser: new SimpleChange(null, new User('other'), false) });
+        expect(component.expandedMobileRows.size).toBe(0);
     });
 
     it('should clear the contextual table selection', () => {
@@ -2401,5 +2421,22 @@ describe('EventTableActionsComponent Material menu', () => {
         trigger.closeMenu();
         await menuFixture.whenStable();
         expect(changes).toHaveBeenCalledWith(['Duration', 'Distance', 'Ascent']);
+    });
+});
+
+
+describe('Event table open presentation styles', () => {
+    it('uses the workspace surface and readable headings without a glass empty-state overlay', () => {
+        const template = readFileSync(join(process.cwd(), 'src/app/components/event-table/event.table.component.html'), 'utf8');
+        const styles = readFileSync(join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'), 'utf8');
+        expect(template).not.toContain('qs-glass-card-panel');
+        expect(template).not.toContain('app-data-type-icon');
+        expect(template).not.toContain('[errorMessage]');
+        expect(template).toContain('matTooltipTouchGestures="off"');
+        expect(styles).not.toContain('box-shadow:');
+        expect(styles).not.toContain('--loading-shade-error');
+        expect(styles).toContain('background: transparent;');
+        expect(styles).toContain('background: rgb(from var(--mat-sys-background) r g b);');
+        expect(styles).toMatch(/\.activity-row\s*\{[^}]*height: auto;/);
     });
 });

@@ -1,5 +1,5 @@
 <!-- Table Section -->
-<div class="qs-glass-card-panel table-container">
+<div class="table-container" [class.table-container--mobile-rows]="!!mobileActivityColumn">
   @if (showToolbar) {
   <div class="table-toolbar">
     <div class="table-toolbar-main" [class.table-toolbar-main--compact]="isLibraryPresentation">
@@ -8,7 +8,7 @@
           aria-label="Search activities"
           autocomplete="off">
         <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
-        <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+        <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear search">
           <mat-icon>close</mat-icon>
         </button>
       </mat-form-field>
@@ -33,7 +33,12 @@
       }
     </div>
 
-    <ng-content select="[event-table-active-filters]"></ng-content>
+    <div class="table-results-summary">
+      @if (!isLoading) {
+        <span role="status" aria-live="polite">{{ filteredActivityCount }} {{ filteredActivityCount === 1 ? 'activity' : 'activities' }}</span>
+      }
+      <ng-content select="[event-table-active-filters]"></ng-content>
+    </div>
 
     @if (canManageEvents && selection.selected.length > 0) {
       <div class="table-selection-toolbar" aria-live="polite">
@@ -123,10 +128,21 @@
   }
 
   <app-loading-overlay class="activity-table-overlay" [isLoading]="isLoading"
-    [hasError]="!isLoading && this.events && this.events.length === 0" [allowErrorPassthrough]="true"
-    [errorMessage]="emptyMessage" [errorHint]="emptyHint"
-    [errorIcon]="'directions_run'" [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="12px">
-    <div class="table-wrapper qs-scrollbar" tabindex="0" role="region" aria-label="Activity table">
+    [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="0px">
+    @if (!isLoading && filteredActivityCount === 0) {
+      <div class="activity-table-empty" role="status">
+        <mat-icon aria-hidden="true">directions_run</mat-icon>
+        <strong>{{ resolvedEmptyMessage }}</strong>
+        @if (emptyHint) { <p>{{ emptyHint }}</p> }
+        @if (hasTableFilters || hasExternalFilters) {
+          <button mat-button type="button" (click)="clearTableFilters()">
+            <mat-icon aria-hidden="true">restart_alt</mat-icon>Clear filters
+          </button>
+        }
+      </div>
+    }
+    <div class="table-wrapper qs-scrollbar" tabindex="0" role="region" aria-label="Activity table"
+      [hidden]="!isLoading && filteredActivityCount === 0">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
         [matSortDirection]="tableSortDirection" matSortDisableClear>
         @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
@@ -143,13 +159,29 @@
           <th mat-header-cell *matHeaderCellDef aria-label="Activity actions"></th>
           }
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
-          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-            <app-data-type-icon [dataType]="column" aria-hidden="true"></app-data-type-icon>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)"
+            [sortActionDescription]="'Sort by ' + column">
+            <span class="event-table-column-label" aria-hidden="true" [matTooltip]="column" matTooltipTouchGestures="off">{{ isLibraryPresentation && column === 'Name' ? 'Activity' : (columnLabels[column] || column) }}</span>
             <span class="cdk-visually-hidden">{{ isLibraryPresentation && column === 'Name' ? 'Activity' : column }}</span>
           </th>
           }
           <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)"
+            class="event-table-cell"
+            [class.event-table-cell--activity]="column === mobileActivityColumn"
+            [class.event-table-cell--metric]="mobileMetricColumns.has(column)"
+            [style.--mobile-metric-column]="mobileMetricGridColumns[column]"
+            [class.event-table-cell--secondary]="mobileSecondaryColumns.has(column)"
             [class.event-activity-cell]="isLibraryPresentation && column === 'Name'">
+            <span class="mobile-cell-label" aria-hidden="true">{{ columnLabels[column] || column }}</span>
+            @if (column === mobileActivityColumn && mobileSecondaryColumns.size) {
+              <button mat-icon-button type="button" class="mobile-stats-toggle"
+                [attr.aria-label]="(expandedMobileRows.has(row.Event.getID()) ? 'Hide' : 'Show') + ' more stats for ' + (row['Library Activity Label'] || row.Name || row['Activity Types'] || 'activity')"
+                [attr.aria-expanded]="expandedMobileRows.has(row.Event.getID())"
+                [matTooltip]="expandedMobileRows.has(row.Event.getID()) ? 'Fewer stats' : 'More stats'" matTooltipTouchGestures="off"
+                (click)="toggleMobileStats($event, row.Event.getID())">
+                <mat-icon aria-hidden="true">{{ expandedMobileRows.has(row.Event.getID()) ? 'expand_less' : 'expand_more' }}</mat-icon>
+              </button>
+            }
             @if (isLibraryPresentation && column === 'Name') {
               <a class="event-activity-name" [class.activity-type-cell]="!row['Library Activity Name']"
                 [class.description-text]="!!row['Library Activity Name']"
@@ -278,18 +310,17 @@
         }
 
 
-        <tr mat-header-row class="event-table-header" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-header-row class="event-table-header qs-scrollbar" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"
           [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-          [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
+          [class.merged]="row['Merged Event']" [class.activity-row--expanded]="expandedMobileRows.has(row.Event.getID())"
+          class="normal-row activity-row">
         </tr>
 
         <!-- Row shown when there is no matching data. -->
-        <tr class="mat-row activity-table-no-data-row" *matNoDataRow
-          [class.activity-table-no-data-row--hidden]="!isLoading && events?.length === 0">
+        <tr class="mat-row activity-table-no-data-row" *matNoDataRow>
           <td class="mat-cell" [attr.colspan]="displayedColumns.length">
-            <span *ngIf="searchTerm && !isLoading">No activities match "{{searchTerm}}"</span>
-            <span *ngIf="!searchTerm && !isLoading">No activities found</span>
+            @if (isLoading) { <span role="status">Loading activities…</span> }
           </td>
         </tr>
       </table>
@@ -297,6 +328,7 @@
   </app-loading-overlay>
 
   <mat-paginator (page)="pageChanges($event)" [length]="data.data.length"
+    [hidden]="!isLoading && filteredActivityCount === 0" [disabled]="isLoading"
     [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
     [pageSizeOptions]="isLibraryPresentation ? [5, 10, 25, 50, 100, 250] : [10, 25, 50, 100, 250]"></mat-paginator>
 </div>

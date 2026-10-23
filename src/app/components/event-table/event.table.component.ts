@@ -120,6 +120,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() hideGeneratedNames = false;
   @Input() emptyMessage = 'No activities yet';
   @Input() emptyHint = 'Import an activity or change your filters';
+  @Input() hasExternalFilters = false;
+  @Output() clearFiltersRequested = new EventEmitter<void>();
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
@@ -140,6 +142,53 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
   ];
   displayedColumns: string[] = [];
+  readonly columnLabels: Readonly<Record<string, string>> = {
+    'Start Date': 'Date', 'Activity Types': 'Activity', 'Average Heart Rate': 'Avg HR',
+    'Average Speed': 'Avg speed', 'Average Power': 'Avg power', 'Device Names': 'Devices',
+    'Aerobic Training Effect': 'Training effect', 'Recovery Time': 'Recovery', 'Peak EPOC': 'EPOC',
+    'Training Stress Score': 'TSS', 'VO2 Max': 'VO₂ max',
+  };
+  mobileActivityColumn = '';
+  mobileMetricColumns = new Set<string>();
+  mobileMetricGridColumns: Record<string, string> = {};
+  mobileSecondaryColumns = new Set<string>();
+  readonly expandedMobileRows = new Set<string>();
+  private readonly rowContextColumns = new Set(['Checkbox', 'Actions', 'Start Date', 'Tags', 'Activity Types', 'Name', 'Description', 'Device Names', 'Shared']);
+
+  get filteredActivityCount(): number {
+    return this.data.filteredData?.length ?? this.data.data.length;
+  }
+
+  get hasTableFilters(): boolean {
+    return !!this.searchTerm.trim() || this.tagFilters.length > 0 || this.untaggedFilter;
+  }
+
+  get resolvedEmptyMessage(): string {
+    return this.hasTableFilters ? 'No activities match your filters' : this.emptyMessage;
+  }
+
+  clearTableFilters(): void {
+    if (this.isLoading || (!this.hasTableFilters && !this.hasExternalFilters)) return;
+    this.searchTerm = '';
+    this.searchSubject.next('');
+    this.tagFilters = [];
+    this.untaggedFilter = false;
+    this.search('');
+    this.suppressLibraryPageFeedback = true;
+    this.paginator?.firstPage();
+    this.suppressLibraryPageFeedback = false;
+    if (this.hasExternalFilters) this.clearFiltersRequested.emit();
+    else this.hapticsService.selection();
+  }
+
+  toggleMobileStats(event: Event, eventID: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.destroyed || !eventID || !this.mobileSecondaryColumns.size) return;
+    if (this.expandedMobileRows.has(eventID)) this.expandedMobileRows.delete(eventID);
+    else this.expandedMobileRows.add(eventID);
+    this.hapticsService.selection();
+  }
 
   public show = true
 
@@ -240,6 +289,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation || simpleChanges.filterContext) {
+      this.expandedMobileRows.clear();
+    }
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
       // The loading base renders synchronously. Initialize the picker first so
@@ -954,6 +1006,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         ...(this.canManageEvents ? ['Checkbox'] : []), 'Start Date', 'Name',
         ...this.libraryColumns, 'Tags', ...(this.showRowActions ? ['Actions'] : []),
       ];
+      this.updateMobileColumns();
       return;
     }
     const sortedSelectedColumns = (this.selectedColumns || [])
@@ -987,6 +1040,20 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       return true;
     });
+    this.updateMobileColumns();
+  }
+
+  private updateMobileColumns(): void {
+    this.mobileActivityColumn = this.isBrowsePresentation ? ''
+      : this.isLibraryPresentation ? 'Name' : this.displayedColumns.includes('Activity Types') ? 'Activity Types' : '';
+    const metrics = this.displayedColumns.filter(column => !this.rowContextColumns.has(column));
+    const preferred = ['Duration', 'Distance', 'Training Stress Score'].filter(column => metrics.includes(column));
+    this.mobileMetricColumns = new Set([...preferred, ...metrics.filter(column => !preferred.includes(column))].slice(0, 3));
+    this.mobileMetricGridColumns = Object.fromEntries([...this.mobileMetricColumns].map((column, index) =>
+      [column, ['1 / span 2', '3 / span 2', '5 / span 2'][index]]));
+    this.mobileSecondaryColumns = new Set(this.displayedColumns.filter(column =>
+      !this.mobileMetricColumns.has(column)
+      && !['Checkbox', 'Actions', 'Start Date', 'Tags', this.mobileActivityColumn].includes(column)));
   }
 
   async saveEventDescription(description: string, event: EventInterface) {

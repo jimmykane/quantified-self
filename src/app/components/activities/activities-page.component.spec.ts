@@ -12,7 +12,7 @@ import { By } from '@angular/platform-browser';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import dayjs, { type Dayjs } from 'dayjs';
-import { ActivityTypes, DataActivityTypes, DataDeviceNames, DataDistance, EventImporterJSON, FileType, Privacy, DistanceUnits, User, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, DataDeviceNames, DataDistance, DataDuration, DataAscent, DataHeartRateAvg, EventImporterJSON, FileType, Privacy, DistanceUnits, User, type EventInterface } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import type { AppUserInterface } from '../../models/app-user.interface';
@@ -54,6 +54,8 @@ class EventTableStub {
   @Input() hideGeneratedNames: boolean;
   @Input() emptyMessage: string;
   @Input() emptyHint: string;
+  @Input() hasExternalFilters: boolean;
+  @Output() clearFiltersRequested = new EventEmitter<void>();
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
 }
 
@@ -684,6 +686,60 @@ describe('ActivitiesPageComponent', () => {
       expect(c.haptics.selection).not.toHaveBeenCalled();
       c.fixture.destroy(); await vi.advanceTimersByTimeAsync(60_000); expect(clock).toHaveBeenCalledOnce();
     } finally { c.fixture.destroy(); vi.useRealTimers(); }
+  });
+
+  it('renders the open table and resets empty views without losing paging, saved columns or single-owner feedback', async () => {
+    const c = await setup('', true);
+    const savedColumns = ['Activity Types', 'Duration', 'Distance', 'Ascent', 'Average Heart Rate'];
+    c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns = savedColumns;
+    const data = Array.from({ length: 5 }, (_, index) => {
+      const record = EventImporterJSON.getEventFromJSON({
+        name: ['Afternoon trails', 'Strength session', 'Easy spin', 'Morning loop', 'Technique session'][index],
+        startDate: Date.now() - index * 86_400_000, endDate: Date.now() - index * 86_400_000 + 6031000,
+        srcFileType: FileType.FIT, isMerge: false, privacy: Privacy.Private, stats: {}, activities: [],
+      }) as AppEventInterface;
+      record.setID('open-table-' + index);
+      record.addStat(new DataActivityTypes([index === 1 ? ActivityTypes.StrengthTraining : ActivityTypes.Cycling]));
+      record.addStat(new DataDeviceNames([])); record.addStat(new DataDistance(14190 + index * 1000));
+      record.addStat(new DataDuration(6031 + index * 60)); record.addStat(new DataAscent(510 + index * 10));
+      record.addStat(new DataHeartRateAvg(132 + index)); record.tags = ['Endurance'];
+      return record;
+    });
+    c.events.getEventsBy.mockReturnValue(of(data)); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    const root = c.fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.qs-glass-card-panel')).toBeNull();
+    expect(root.querySelector('.table-results-summary')?.textContent).toContain('5 activities');
+    expect(root.querySelector('.event-table-header')?.textContent).toContain('Activity');
+    expect(root.querySelector('.event-table-header app-data-type-icon')).toBeNull();
+
+    const toggle = root.querySelector<HTMLButtonElement>('.mobile-stats-toggle')!;
+    c.haptics.selection.mockClear(); const navigations = c.router.navigate.mock.calls.length;
+    toggle.click(); await render(c);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('.activity-row')?.classList.contains('activity-row--expanded')).toBe(true);
+    expect(c.router.navigate).toHaveBeenCalledTimes(navigations);
+    expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+    expect(table.selectedColumns).toEqual(savedColumns);
+
+    table.search('not recorded'); await render(c);
+    expect(root.querySelector('.activity-table-empty')?.textContent).toContain('No activities match your filters');
+    expect(root.querySelector<HTMLElement>('.table-wrapper')?.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(true);
+    c.haptics.selection.mockClear();
+    root.querySelector<HTMLButtonElement>('.activity-table-empty button')!.click(); await render(c);
+    expect(table.filteredActivityCount).toBe(5); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(table.data.sort).toBe(table.sort); expect(table.data.paginator).toBe(table.paginator);
+
+    c.component.selectSports(['Running']); await render(c);
+    expect(table.hasExternalFilters).toBe(true);
+    c.haptics.selection.mockClear();
+    root.querySelector<HTMLButtonElement>('.activity-table-empty button')!.click(); await render(c);
+    expect(c.component.selectedSports()).toEqual([]);
+    expect(table.filteredActivityCount).toBe(5); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.fixture.destroy();
   });
 
   it('uses the real shared paginator, totals, full search and metric sorting without extra queries', async () => {
