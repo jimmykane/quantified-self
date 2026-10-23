@@ -409,6 +409,21 @@ brightening preserves achromatic black/gray rather than adding red saturation. P
 https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
 benchmark charts, particularly overlapping lines and map backgrounds.
 
+### Saved comparison R–R statistics
+
+The Compare Files / Saved comparisons table places one **R–R & HRV** column after HR. Per-recording lines follow the
+same activity order as Devices, distance and elevation, displaying canonical saved RMSSD, **Stats available** when only
+other valid R–R metrics exist, or a dash when loaded stats are unavailable. One Material button opens the full set of
+saved catalog metrics grouped by eligible recording, preserving device identity and colors without grading HRV magnitude.
+The dialog links to Event Details; charts are opened there with **Show charts**. Table cells use a minimum 44px target
+and retain the existing horizontal scroll owner; the dialog wraps labels and keeps its standard scrollable content/actions.
+
+This display reuses the existing page-limited, cache-first activity hydration (`preferCache: true`, `warmServer: false`).
+It adds no reads, writes, stream inspection, parsing, workers, backend fields or indexes. Metadata-only drafts retain
+their existing skipped hydration and show **Not loaded**, including after an unsuccessful/empty activity load. This state
+is deliberately distinct from a loaded recording with no saved HRV. Additional metric formatting happens only when the
+dialog opens. Help describes the data boundary; there is no MCP contract or consent change.
+
 ### Event R–R summaries and plots
 
 All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),

@@ -399,6 +399,7 @@ describe('Firebase Hosting configuration', () => {
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
     // Benchmark R–R help covers source-separated summaries, linked plots and the original-timing boundary.
     // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
+    // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.

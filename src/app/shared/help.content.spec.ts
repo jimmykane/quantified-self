@@ -192,6 +192,9 @@ describe('help.content', () => {
     expect(copy).toContain('**Show details**, alongside the metric tiles');
     expect(copy).toContain('statistics present and valid in both recordings');
     expect(copy).toContain('Ordinary events and multisport legs do not show benchmark deltas');
+    expect(copy).toContain('**Saved comparisons** table includes a compact **R–R & HRV** column');
+    expect(copy).toContain('without additional reads or analysis');
+    expect(copy).toContain('show **Not loaded** rather than claiming HRV is missing');
     expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
     expect(copy).toContain('seven key R–R & HRV statistics side by side');
     expect(copy).toContain('differences appear only when both recordings have a valid value');
