@@ -125,6 +125,7 @@ export function billingEvent(event: { id: string; type: string; created: number;
 export interface BillingJob {
   kind: 'event' | 'checkout' | 'delete'; uid: string | null; customerId: string | null;
   event?: BillingEvent; requestId?: string; request?: CheckoutRequest;
+  deleteIds?: string[];
   state: 'pending' | 'done' | 'failed' | 'skipped'; createdAt: Timestamp;
   dueAt: Timestamp; recoverAt: Timestamp; attempts: number; generation: number;
   recoveries?: number; dispatchedAt?: Timestamp; dispatchRetryAt?: Timestamp; lease?: string; leaseUntil?: Timestamp;

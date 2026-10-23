@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import type Stripe from 'stripe';
 import { Decimal } from 'stripe';
-import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, billingId, type BillingEvent } from './model';
+import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, BillingContention, billingId, type BillingEvent } from './model';
 import { admitBillingCheckout, admitBillingEvent, processBillingJob } from './queue';
 import { acquireBillingLease, commitBillingProjections, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
 import { dispatchBillingJob } from './dispatch';
@@ -255,6 +255,23 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
     expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/customer`).get()).exists).toBe(false);
   });
+  it('stops cleanup customer recovery if billing ownership changes during the Stripe lookup', async () => {
+    const f = await fixture();
+    f.stripe.customers.create.mockRejectedValueOnce(new Error('uncertain customer creation'));
+    await expect(f.run((await f.admit())!)).rejects.toThrow();
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    await requestBillingDeletion(db, f.uid);
+    f.stripe.customers.search.mockImplementationOnce(async () => {
+      await db.doc(BILLING_CONTROL).update({ owner: 'extension' });
+      return { data: [], has_more: false };
+    });
+    try {
+      await expect(f.run(billingId('delete', f.uid))).rejects.toThrow();
+      expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+      expect(f.stripe.customers.del).not.toHaveBeenCalled();
+      expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/customer`).get()).get('result')).toBeUndefined();
+    } finally { await db.doc(BILLING_CONTROL).update({ owner: 'native' }); }
+  });
   it.each(['auth-first', 'document-first'])('preserves deletion identity with %s ordering', async ordering => {
     const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
     await db.doc(`userDeletionTombstones/${f.uid}`).set({});
@@ -265,6 +282,91 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     await f.run(billingId('delete', f.uid));
     expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
     expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('retains a late customer deletion identity when Auth cleanup is already removing the private journal', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    // Auth cleanup can see an already removed customer root before its delete
+    // event delivers the only copy of the legacy Stripe customer identity.
+    await requestBillingDeletion(db, f.uid);
+    const remove = db.recursiveDelete.bind(db);
+    let lateEventDelivered = false;
+    const spy = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+      if (!lateEventDelivered && ref.path === `${BILLING_ACCOUNTS}/${f.uid}/operations`) {
+        lateEventDelivered = true;
+        await requestBillingDeletion(db, f.uid, f.customerId);
+      }
+      return remove(ref, writer);
+    });
+    try { await expect(f.run(id)).rejects.toBeInstanceOf(BillingContention); }
+    finally { spy.mockRestore(); }
+    expect(lateEventDelivered).toBe(true);
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    expect((await job.get()).get('deleteIds')).toContain(f.customerId);
+    expect((await job.get()).get('state')).toBe('pending');
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).exists).toBe(false);
+    await job.update({ dueAt: Timestamp.fromMillis(0), leaseUntil: Timestamp.fromMillis(0) });
+    await f.run(id);
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await job.get()).exists).toBe(false);
+  });
+  it('does not reopen an exhausted deletion from duplicate lifecycle events', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    await requestBillingDeletion(db, f.uid);
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ attempts: PROVIDER_MAX_RETRY_COUNT - 1 });
+    f.stripe.customers.del.mockRejectedValueOnce(new Error('temporary deletion failure'));
+    await f.run(id);
+    expect((await ref.get()).get('state')).toBe('failed');
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await requestBillingDeletion(db, f.uid);
+    expect((await ref.get()).get('state')).toBe('failed');
+    expect((await ref.get()).get('attempts')).toBe(PROVIDER_MAX_RETRY_COUNT);
+    expect((await ref.get()).get('generation')).toBe(0);
+    expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    await f.run(id, 1);
+    expect((await ref.get()).get('state')).toBe('done');
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    expect((await ref.get()).get('state')).toBe('done');
+    expect((await ref.get()).get('generation')).toBe(1);
+  });
+  it.each(['done', 'failed'])('retains newly discovered identities after a %s deletion', async state => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    if (state === 'failed') {
+      await ref.update({ attempts: PROVIDER_MAX_RETRY_COUNT - 1 });
+      f.stripe.customers.del.mockRejectedValueOnce(new Error('temporary deletion failure'));
+    }
+    await f.run(id);
+    expect((await ref.get()).get('state')).toBe(state);
+    const lateCustomerId = `cus_late_${f.uid}`;
+    await requestBillingDeletion(db, f.uid, lateCustomerId);
+    expect((await ref.get()).get('deleteIds')).toEqual(expect.arrayContaining([f.customerId, lateCustomerId]));
+    if (state === 'failed') {
+      expect((await ref.get()).get('state')).toBe('failed');
+      expect((await ref.get()).get('attempts')).toBe(PROVIDER_MAX_RETRY_COUNT);
+      expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    } else expect((await ref.get()).get('state')).toBe('pending');
+    await f.run(id, 1);
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(lateCustomerId);
+    expect((await ref.get()).get('state')).toBe('done');
+  });
+  it('removes the retained deletion fence when Auth cleanup follows completed customer-document cleanup', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await f.run(id);
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const account = db.doc(`${BILLING_ACCOUNTS}/${f.uid}`);
+    expect((await ref.get()).get('state')).toBe('done');
+    expect((await account.get()).get('deleted')).toBe(true);
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    await requestBillingDeletion(db, f.uid);
+    expect((await ref.get()).get('state')).toBe('pending');
+    await f.run(id, 1);
+    expect((await ref.get()).exists).toBe(false);
+    expect((await account.get()).exists).toBe(false);
   });
   it('fences webhook projection when deletion begins during the API request', async () => {
     const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });

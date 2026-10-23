@@ -70,11 +70,15 @@ export async function writeCheckoutError(db: Firestore, uid: string, requestId: 
     if (!guard.shouldSkip && !account.get('deleting') && current.exists && !current.get('sessionId')) tx.update(ref, { error: safeBillingError(error) });
   });
 }
-export async function finishBillingJob(db: Firestore, id: string, generation: number, state: 'done' | 'skipped'): Promise<boolean> {
+export async function finishBillingJob(db: Firestore, id: string, generation: number, state: 'done' | 'skipped', deletedCustomerIds: readonly string[] = []): Promise<boolean> {
   return db.runTransaction(async tx => {
     const ref = db.collection(BILLING_JOBS).doc(id);
     const snapshot = await tx.get(ref);
     if (!snapshot.exists || snapshot.get('generation') !== generation || snapshot.get('state') !== 'pending') return false;
+    // Lifecycle admission can add identities while the worker removes private
+    // journals. Complete atomically only after every retained identity was handled.
+    if (snapshot.get('kind') === 'delete' && ((snapshot.get('deleteIds') ?? []) as string[]).some(customer => !deletedCustomerIds.includes(customer)))
+      throw new BillingContention();
     if (snapshot.get('uid') && (await getUserDeletionGuardStateInTransaction(db, tx, snapshot.get('uid'))).shouldSkip) {
       // Receipt/outbox records are leaves. Account deletion removes identifying
       // receipts immediately; TTL only retains completed events for active users.
@@ -158,8 +162,8 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
     if (!job) return;
     if (job.attempts > PROVIDER_MAX_RETRY_COUNT) throw new BillingError('retry_exhausted');
     if (job.kind === 'delete') {
-      await deleteBillingCustomer(ctx, lease, job.uid!);
-      if (await finishBillingJob(ctx.db, id, generation, 'done')) observeBilling('processed');
+      const deletedCustomerIds = await deleteBillingCustomer(ctx, lease, job.uid!);
+      if (await finishBillingJob(ctx.db, id, generation, 'done', deletedCustomerIds)) observeBilling('processed');
       await ctx.db.recursiveDelete(ctx.db.collection('failed_jobs').doc(`stripe_billing_${id}`));
       return;
     }

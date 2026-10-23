@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { guardedBillingStripe } from './guarded-client';
 import type Stripe from 'stripe';
 import type { Auth } from 'firebase-admin/auth';
 import { FieldPath, FieldValue, Timestamp, type DocumentData, type DocumentReference, type Firestore, type Transaction } from 'firebase-admin/firestore';
@@ -398,38 +399,53 @@ export async function requestBillingDeletion(db: Firestore, uid: string, deleted
     const ids = [...new Set([deletedCustomerId, stripeId(customer.get('stripeId')), stripeId(account.get('customerId'))].filter((id): id is string => !!id))];
     const jobRef = db.collection(BILLING_JOBS).doc(billingId('delete', uid));
     const prior = await tx.get(jobRef);
+    const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid);
+    const priorIds = (prior.get('deleteIds') ?? []) as string[];
+    const deleteIds = [...new Set([...priorIds, ...(account.get('deleteIds') ?? []) as string[], ...ids])];
+    const addedIds = deleteIds.some(id => !priorIds.includes(id));
     tx.set(accountRef(db, uid), { uid, deleting: true, ...(ids.length ? { deleteIds: FieldValue.arrayUnion(...ids) } : {}) }, { merge: true });
-    if (!prior.exists || prior.get('state') !== 'pending') {
+    if (prior.exists && ['pending', 'failed'].includes(prior.get('state'))) {
+      // The outbox survives recursive journal cleanup. A late lifecycle event
+      // must retain its identity there without resetting terminal retry budgets.
+      if (addedIds) tx.update(jobRef, { deleteIds });
+    } else if (!prior.exists || addedIds || guard.shouldSkip || !account.get('deleted')) {
       const timestamp = Timestamp.now();
-      tx.set(jobRef, { kind: 'delete', uid, customerId: null, state: 'pending', createdAt: timestamp,
+      tx.set(jobRef, { kind: 'delete', uid, customerId: null, deleteIds, state: 'pending', createdAt: timestamp,
         dueAt: timestamp, recoverAt: timestamp, attempts: 0, generation: (prior.get('generation') ?? -1) + 1 } satisfies BillingJob);
     }
   });
 }
 
-export async function deleteBillingCustomer(ctx: BillingDependencies, lease: BillingLease, uid: string): Promise<void> {
+export async function deleteBillingCustomer(ctx: BillingDependencies, lease: BillingLease, uid: string): Promise<string[]> {
   const root = accountRef(ctx.db, uid);
-  const account = await root.get();
-  if (!account.get('deleting')) return;
+  const [account, job] = await ctx.db.getAll(root, ctx.db.collection(BILLING_JOBS).doc(billingId('delete', uid)));
+  if (job.get('kind') !== 'delete' || job.get('state') !== 'pending') throw new BillingContention();
   const operation = (await operationRef(ctx.db, uid, 'customer').get()).data() as Operation | undefined;
-  const ids = new Set<string>(account.get('deleteIds') ?? []);
+  // A prior attempt may already have removed the account journal before a late
+  // customer-document event added another identity to the retained deletion job.
+  const ids = new Set<string>([...(account.get('deleteIds') ?? []), ...(job.get('deleteIds') ?? [])]);
+  const assertDeletionAuthority = (customerId?: string) => ctx.db.runTransaction(async tx => {
+    await checkLease(tx, lease, now(ctx));
+    const control = billingControl((await tx.get(ctx.db.doc(BILLING_CONTROL))).data());
+    if (control.owner !== 'native' || !control.nativeSince) throw new BillingError('maintenance', true);
+    if (customerId) {
+      const owners = await tx.get(ctx.db.collection('customers').where('stripeId', '==', customerId).limit(2));
+      if (owners.docs.some(d => d.id !== uid)) throw new BillingError('customer_conflict');
+    }
+  });
   if (operation) {
     if (operation.result) ids.add(operation.result.id);
     else {
       // Cleanup is the sole exception to the active-user gate: recover the
       // original possibly accepted POST, then remove that exact remote object.
-      const recovered = await recoverCustomer(ctx, operation, uid);
+      const stripe = guardedBillingStripe(ctx.stripe, () => assertDeletionAuthority());
+      const recovered = await recoverCustomer({ ...ctx, stripe }, operation, uid);
       await checkpointOperation(ctx, lease, uid, 'customer', operation.key, { id: recovered.id });
       ids.add(recovered.id);
     }
   }
   for (const id of ids) {
-    await ctx.db.runTransaction(async tx => {
-      await checkLease(tx, lease, now(ctx));
-      if (billingControl((await tx.get(ctx.db.doc(BILLING_CONTROL))).data()).owner !== 'native') throw new BillingError('maintenance', true);
-      const owners = await tx.get(ctx.db.collection('customers').where('stripeId', '==', id).limit(2));
-      if (owners.docs.some(d => d.id !== uid)) throw new BillingError('customer_conflict');
-    });
+    await assertDeletionAuthority(id);
     try { await ctx.stripe.customers.del(id); }
     catch (e) { if ((e as { code?: string }).code !== 'resource_missing') throw e; }
   }
@@ -446,4 +462,5 @@ export async function deleteBillingCustomer(ctx: BillingDependencies, lease: Bil
   // Auth deletion removes the private root after all remote work is complete.
   if ((await getUserDeletionGuardState(ctx.db, uid)).shouldSkip) await ctx.db.recursiveDelete(root);
   else await root.update({ deleteIds: [], deleted: true });
+  return [...ids];
 }
