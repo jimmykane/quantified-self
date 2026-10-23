@@ -338,6 +338,10 @@ Activity details use the workspace shell's inline gutters once. The primary summ
 activity selector, statistics, map, charts, and lap/jump/swim sections align to the same content edges without extra
 section-wide side insets. Section headings omit redundant top padding and retain an 8px gap below. Material controls,
 table cells, chart axes, overlays, and fullscreen/export frames keep their internal spacing.
+Summary metric tabs use `--header-stats-padding: 8px 0 0` so the tab header's 8px offset and the summary's 16px
+section gap or bottom padding leave equal space above and below the metric cards, including on phones.
+Desktop tab height follows the selected category's intrinsic content, retaining resize/font measurements and the
+small rounding tolerance without reserving blank space for a taller hidden category. Phones retain natural sizing.
 The Jumps divider reuses the performance-chart divider's 16px top and 8px bottom margins in addition to the section
 stack's existing gap, so the heading is separated from the preceding lap table or chart. No divider is rendered when
 no selected activity has jumps. A single jump-bearing activity renders its table directly, matching Laps and Swim
@@ -405,7 +409,22 @@ brightening preserves achromatic black/gray rather than adding red saturation. P
 https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
 benchmark charts, particularly overlapping lines and map backgrounds.
 
-### Benchmark R–R summaries and plots
+### Saved comparison R–R statistics
+
+The Compare Files / Saved comparisons table places one **R–R & HRV** column after HR. Per-recording lines follow the
+same activity order as Devices, distance and elevation, displaying canonical saved RMSSD, **Stats available** when only
+other valid R–R metrics exist, or a dash when loaded stats are unavailable. One Material button opens the full set of
+saved catalog metrics grouped by eligible recording, preserving device identity and colors without grading HRV magnitude.
+The dialog links to Event Details; charts are opened there with **Show charts**. Table cells use a minimum 44px target
+and retain the existing horizontal scroll owner; the dialog wraps labels and keeps its standard scrollable content/actions.
+
+This display reuses the existing page-limited, cache-first activity hydration (`preferCache: true`, `warmServer: false`).
+It adds no reads, writes, stream inspection, parsing, workers, backend fields or indexes. Metadata-only drafts retain
+their existing skipped hydration and show **Not loaded**, including after an unsuccessful/empty activity load. This state
+is deliberately distinct from a loaded recording with no saved HRV. Additional metric formatting happens only when the
+dialog opens. Help describes the data boundary; there is no MCP contract or consent change.
+
+### Event R–R summaries and plots
 
 All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
 immediately before Device, preserving category IDs for remembered selections. It is not part of Device or Physiological. The existing metric-card renderer
@@ -446,9 +465,12 @@ reserved space. Keep its host measurable and observable (visibility/ARIA hiding,
 refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
 excerpt/full-recording context with an automatically generated list of coordinates.
 
-`BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
-(including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
-full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.
+`BenchmarkRRComponent` is shared by ordinary workouts, explicit multisport merges and benchmarks. Event Details
+mounts it after the performance/dive charts only when a selected activity has valid saved R–R statistics or an original
+IBI stream with usable timing metadata. The panel independently filters to those same eligible recordings; no-data
+selections leave no empty section or host in the summary stack. It follows selected activities and full-event device
+color assignments, preserving each multisport leg's original timing without combining its statistics with other legs.
+It does not change Training impact, benchmark reports, alignment or accuracy grades, persistence, or MCP contracts.
 The panel starts collapsed as a compact section-header row. The surface-free **Show/Hide charts** Material button
 owns one selection haptic and a stable `aria-controls` target; collapsed content neither materializes beats nor starts a worker.
 Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each plotted source's

@@ -4,7 +4,6 @@ import type { ActivityInterface, RRAnalysis, UserUnitSettingsInterface } from '@
 import type { EChartsType } from 'echarts/core';
 import type { TooltipComponentOption } from 'echarts/components';
 import type { AppEventInterface } from '@shared/app-event.interface';
-import { isBenchmarkEvent } from '@shared/event-classification';
 import { RR_STAT_LABELS } from '../../constants/rr-metrics';
 import { MaterialModule } from '../../modules/material.module';
 import { SharedModule } from '../../modules/shared.module';
@@ -119,12 +118,10 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
       this.worker.cancel(); this.disposeCharts();
       this.cache = new WeakMap(); this.analyses.set(new Map()); this.sourceErrors.set([]);
       this.status.set('idle'); this.errorMessage.set('');
-      this.visible.set(isBenchmarkEvent(this.event) && this.activities.length > 0);
-      if (differentEvent || !this.visible()) { this.expanded.set(false); this.showSummary.set(false); }
       const labels = getBenchmarkRRLabels(this.activities);
       const allActivities = this.event?.getActivities() ?? this.activities;
       const patterns: RRSource['lineStyle'][] = ['solid', 'dashed', 'dotted', 'dash-dot'];
-      const sources = this.visible() ? this.activities.map((activity, index): RRSource => {
+      const sources = this.activities.map((activity, index): RRSource => {
         const id = activity.getID();
         const eventIndex = allActivities.indexOf(activity);
         const position = eventIndex >= 0 ? eventIndex : index;
@@ -135,8 +132,10 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
           color: this.colors.getActivityColor(allActivities, activity), lineStyle: patterns[position % patterns.length], activity,
           hasStats: hasBenchmarkRRStats(activity), raw: getBenchmarkRRIntervalSource(activity),
         };
-      }).filter(source => source.hasStats || source.raw) : [];
+      }).filter(source => source.hasStats || source.raw);
       this.sources.set(sources);
+      this.visible.set(sources.length > 0);
+      if (differentEvent || !this.visible()) { this.expanded.set(false); this.showSummary.set(false); }
       const retained = sources.filter(source => differentEvent || !previousSources.length || selectedAll || previousKeys.includes(source.key));
       // A parent selection can remove every locally selected source. Recover to the
       // remaining event sources, while preserving a deliberate local clear.

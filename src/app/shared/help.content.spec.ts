@@ -192,12 +192,17 @@ describe('help.content', () => {
     expect(copy).toContain('**Show details**, alongside the metric tiles');
     expect(copy).toContain('statistics present and valid in both recordings');
     expect(copy).toContain('Ordinary events and multisport legs do not show benchmark deltas');
+    expect(copy).toContain('**Saved comparisons** table includes a compact **R–R & HRV** column');
+    expect(copy).toContain('without additional reads or analysis');
+    expect(copy).toContain('show **Not loaded** rather than claiming HRV is missing');
     expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
     expect(copy).toContain('seven key R–R & HRV statistics side by side');
     expect(copy).toContain('differences appear only when both recordings have a valid value');
     expect(copy).toContain('cover each entire recording, not only the aligned overlap');
     expect(copy).toContain('do not affect the hardware agreement grade');
-    expect(copy).toContain('On **benchmark event details**, **R–R & HRV**');
+    expect(copy).toContain('On **Event Details**, **R–R & HRV** appears after the performance charts');
+    expect(copy).toContain('ordinary workouts, multisport legs and benchmarks');
+    expect(copy).toContain('Events without beat intervals or valid saved HRV statistics do not show this section');
     expect(copy).toContain('all 20 recorded R–R metrics');
     expect(copy).toContain('starts collapsed');
     expect(copy).toContain('one, two or more overlaid recordings');
@@ -300,6 +305,16 @@ describe('help.content', () => {
     expect(dashboard).toContain('withholds the readiness score and confidence');
     expect(dashboard).toContain('**Last available** with their date');
     expect(dashboard).toContain('updates at local midnight');
+  });
+  it('distinguishes account deletion acceptance from background data cleanup', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('after sign-in access is removed');
+    expect(copy).toContain('Data cleanup continues in the background');
+    expect(copy).toContain('does not confirm that every file or record has already been removed');
+    expect(copy).toContain('protected recovery storage for up to 30 days');
+    expect(copy).toContain('Some older email delivery records may remain after account deletion');
+    expect(copy).toContain('Those with a 90-day expiry are removed automatically after that date');
+    expect(copy).toContain('This action cannot be undone');
   });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;

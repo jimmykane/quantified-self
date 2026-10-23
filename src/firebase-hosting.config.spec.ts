@@ -399,7 +399,8 @@ describe('Firebase Hosting configuration', () => {
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
     // Benchmark R–R help covers source-separated summaries, linked plots and the original-timing boundary.
-    // The R–R & HRV summary category also covers ordinary events and benchmark-only deltas for valid paired stats.
+    // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
+    // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.

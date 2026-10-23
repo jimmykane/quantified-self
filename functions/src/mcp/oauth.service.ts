@@ -2526,9 +2526,9 @@ export class McpOAuthCleanupIncompleteError extends Error {
 }
 
 async function cleanupMcpOAuthQuery(
-  db: admin.firestore.Firestore,
   baseQuery: admin.firestore.Query,
   maxDocuments: number,
+  deleteDocument: (ref: admin.firestore.DocumentReference) => Promise<unknown>,
 ): Promise<McpOAuthCleanupPageResult> {
   let deletedCount = 0;
 
@@ -2551,7 +2551,7 @@ async function cleanupMcpOAuthQuery(
       const results = await Promise.allSettled(
         docsToDelete
           .slice(index, index + MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY)
-          .map(doc => db.recursiveDelete(doc.ref)),
+          .map(doc => deleteDocument(doc.ref)),
       );
       const failedDelete = results.find(
         (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -2570,7 +2570,10 @@ async function cleanupMcpOAuthQuery(
   return { deletedCount, hasMore: true };
 }
 
-export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
+export async function cleanupMcpOAuthStateForUser(
+  uid: string,
+  deleteDocument?: (ref: admin.firestore.DocumentReference) => Promise<unknown>,
+): Promise<void> {
   const db = admin.firestore();
   const queries: admin.firestore.Query[] = [
     db.collection(MCP_OAUTH_COLLECTIONS.authorizationRequests).where('uid', '==', uid),
@@ -2591,7 +2594,7 @@ export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
       }
       continue;
     }
-    const result = await cleanupMcpOAuthQuery(db, queries[index], remainingBudget);
+    const result = await cleanupMcpOAuthQuery(queries[index], remainingBudget, deleteDocument ?? (ref => db.recursiveDelete(ref)));
     deletedCount += result.deletedCount;
     if (result.hasMore) {
       throw new McpOAuthCleanupIncompleteError(deletedCount);

@@ -25,6 +25,8 @@ import {
     DataHeartRate,
     DataSpeed,
     DataDuration,
+    DataRRRMSSD,
+    IBIStream,
     DataStamina,
     LapTypes,
     ActivityTypeGroups,
@@ -121,6 +123,7 @@ describe('EventCardComponent', () => {
 
         return {
             startDate: new Date('2024-01-01T00:00:00.000Z'),
+            endDate: new Date('2024-01-01T01:00:00.000Z'),
             type: 'Running',
             getID: () => id,
             getLaps: () => hasData ? [{ type: 'Manual' }] as any : [],
@@ -133,6 +136,7 @@ describe('EventCardComponent', () => {
             getStreams: () => [],
             getAllStreams: () => [],
             getStream: () => null,
+            getStat: () => null,
             clearStreams: vi.fn(),
             addStreams: vi.fn(),
             getDiveSourceRecords: () => diveSourceRecords,
@@ -333,7 +337,9 @@ describe('EventCardComponent', () => {
             hasCadencePower: false,
             hasAny: true,
         });
-        component.selectedActivitiesInstant.set([{ ...mockActivity }]);
+        component.selectedActivitiesInstant.set([{
+            ...mockActivity, getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
+        }]);
         component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
         fixture.detectChanges();
 
@@ -350,13 +356,33 @@ describe('EventCardComponent', () => {
         ]);
     });
 
-    it('keeps Training impact available for a combined multisport workout', () => {
+    it.each([{ isMerge: false }, { isMerge: true, mergeType: 'multi' }])('supports ordinary HRV alongside Training impact %j', classification => {
         mockTrainingImpactService.watch.mockClear();
-        component.event.set({ ...mockEvent, isMerge: true, mergeType: 'multi' } as AppEventInterface);
+        component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
+        component.selectedActivitiesInstant.set([{
+            ...mockActivity, getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
+        }]);
         fixture.detectChanges();
         expect(component.trainingImpact()?.availability).toBe('missing-tss');
         expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser', [component.event()]);
         expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
+        expect(component.hasRRDataFlag()).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
+    });
+
+    it('shows ordinary HRV charts from original intervals even without saved HRV statistics', () => {
+        const stream = new IBIStream([800, 800, 800], [800, 1600, 2400]);
+        const readBeats = vi.spyOn(stream, 'getStreamDataByDuration');
+        component.selectedActivitiesInstant.set([{ ...mockActivity, getAllStreams: () => [stream] }]);
+        fixture.detectChanges();
+        expect(component.isBenchmark()).toBe(false);
+        expect(component.hasRRDataFlag()).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
+        expect(readBeats).not.toHaveBeenCalled();
+    });
+
+    it('does not mount an empty HRV panel when the selected activity has no HRV', () => {
+        expect(component.hasRRDataFlag()).toBe(false);
         expect(fixture.nativeElement.querySelector('app-benchmark-rr')).toBeNull();
     });
 
@@ -910,6 +936,8 @@ describe('EventCardComponent', () => {
     describe('computed flags with activities that have data', () => {
         const activityWithData = {
             getID: () => 'act2',
+            getStat: () => null,
+            getAllStreams: () => [],
             getLaps: () => [{ type: 'Manual' }],
             getSwimLengths: () => [{
                 index: 1,

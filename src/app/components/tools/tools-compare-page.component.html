@@ -662,6 +662,37 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="rr">
+            <th mat-header-cell *matHeaderCellDef>
+              <span class="comparison-header-label" title="RMSSD per recording. Open for all available saved R–R and HRV statistics.">
+                <mat-icon class="comparison-header-icon" aria-hidden="true">ecg_heart</mat-icon>
+                <span class="rr-column-label">R–R &amp; HRV<span class="rr-column-hint">RMSSD</span></span>
+              </span>
+            </th>
+            <td mat-cell *matCellDef="let item" [attr.title]="item.rrTitle">
+              @if (item.hasRRStats) {
+              <button mat-button type="button" class="rr-summary-button"
+                [disabled]="bulkActionInProgress()"
+                [attr.aria-label]="'View saved R–R and HRV statistics for ' + item.title"
+                (click)="openRRStats(item, rrStatsDialog); $event.stopPropagation()">
+                <span class="summary-stack rr-summary-stack">
+                  @for (summary of item.activitySummaries; track summary.id) {
+                  <span class="summary-line" [attr.aria-label]="summary.rrTitle">{{ summary.rrLabel }}</span>
+                  }
+                </span>
+              </button>
+              } @else if (item.activitySummaries.length > 0) {
+              <div class="summary-stack rr-summary-stack">
+                @for (summary of item.activitySummaries; track summary.id) {
+                <span class="summary-line" [attr.aria-label]="summary.rrTitle">{{ summary.rrLabel }}</span>
+                }
+              </div>
+              } @else {
+              <span class="summary-fallback">Not loaded</span>
+              }
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="altitude">
             <th mat-header-cell *matHeaderCellDef>
               <span class="comparison-header-label">
@@ -986,3 +1017,28 @@
   </section>
   }
 </main>
+
+<ng-template #rrStatsDialog let-data let-dialogRef="dialogRef">
+  <h2 mat-dialog-title>R–R &amp; HRV</h2>
+  <mat-dialog-content>
+    <p class="rr-dialog-context">Saved statistics for each full recording. HRV values do not measure device accuracy.</p>
+    @for (source of data.sources; track source.id; let sourceIndex = $index) {
+    <section class="rr-dialog-source" [attr.aria-labelledby]="'rr-source-' + sourceIndex">
+      <h3 class="rr-dialog-device" [id]="'rr-source-' + sourceIndex" [style.border-color]="source.deviceColor">{{ source.deviceLabel }}</h3>
+      <dl class="rr-dialog-metrics">
+        @for (metric of source.metrics; track metric.type) {
+        <div class="rr-dialog-metric">
+          <dt>{{ metric.label }}</dt>
+          <dd>{{ metric.display }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="closeRRStats(dialogRef)">Close</button>
+    <button mat-button type="button" [disabled]="bulkActionInProgress()"
+      (click)="openComparison(data.item, false); dialogRef.close()">Open event details</button>
+  </mat-dialog-actions>
+</ng-template>

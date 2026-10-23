@@ -809,11 +809,13 @@ When an original file contains beat-to-beat R–R intervals, newly imported or r
 
 The **R–R & HRV** summary tab appears on any Event Details page with valid saved beat-interval statistics, immediately before **Device**. Coverage, artifacts, suspected pairs, RMSSD, SDNN, pNN50 and median DFA α1 appear when recorded; **Show details**, alongside the metric tiles, reveals the other available R–R metrics without a separate action row. Choose a **Recording** when several have saved values. Values always belong to that recording, never a combined workout average. Benchmarks with two selected recordings show the usual **Δ** and percentage difference only for statistics present and valid in both recordings. Ordinary events and multisport legs do not show benchmark deltas. Recorded zero remains zero; missing or invalid values are omitted, not replaced with zero.
 
+The **Saved comparisons** table includes a compact **R–R & HRV** column next to HR. It shows RMSSD per recording when saved, **Stats available** when other R–R statistics exist without RMSSD, and a dash when the loaded recording has no valid saved values. Open the cell for all available statistics, then **Open event details** for the recording and charts. Values describe each full recording and do not rank device accuracy. The column reuses already loaded activity summaries without additional reads or analysis. Draft rows whose activities have not been loaded show **Not loaded** rather than claiming HRV is missing.
+
 Generated **benchmark reports**, including shared and saved images, show the seven key R–R & HRV statistics side by side: coverage, artifact percentage, suspected pairs, RMSSD, SDNN, pNN50 and median DFA α1. Artifact counts, pair rates and DFA ranges accompany available values. Absolute and percentage differences appear only when both recordings have a valid value. These summaries cover each entire recording, not only the aligned overlap, and do not affect the hardware agreement grade. The section is omitted when neither recording has a key saved statistic or the report needs regeneration.
 
 The public reviewer showcase uses a fixed, anonymized 90-second excerpt from one real R–R recording. Its coverage, artifact percentage and RMSSD values describe that full recording, not just the excerpt. The sample is separate from the other example device charts and is not a live view of your account.
 
-On **benchmark event details**, **R–R & HRV** starts collapsed. **Show charts** opens the interval and DFA charts directly, with compact per-recording statistics in a top legend. **Recordings** selects one, two or more overlaid recordings; each keeps its device colour and line pattern. Coverage, artifacts, suspected pairs, RMSSD, SDNN, pNN50 and median DFA α1 appear in the legend when saved. **Show statistics** opens the full comparison table, and **Summary statistics** chooses from all 20 recorded R–R metrics. Missing values show a dash; a recorded zero stays zero. On phones, the metric legend wraps so every available value stays visible. The full statistics table scrolls horizontally to compare recordings.
+On **Event Details**, **R–R & HRV** appears after the performance charts when a selected recording has original beat intervals or valid saved HRV statistics. This includes ordinary workouts, multisport legs and benchmarks; the section starts collapsed. **Show charts** opens the interval and DFA charts directly, with compact per-recording statistics in a top legend. **Recordings** selects one, two or more overlaid recordings; each keeps its device colour and line pattern. Coverage, artifacts, suspected pairs, RMSSD, SDNN, pNN50 and median DFA α1 appear in the legend when saved. **Show statistics** opens the full statistics table, and **Summary statistics** chooses from all 20 recorded R–R metrics. Missing values show a dash; a recorded zero stays zero. On phones, the metric legend wraps so every available value stays visible. The full statistics table scrolls horizontally to compare recordings. Events without beat intervals or valid saved HRV statistics do not show this section.
 
 The plots share zoom and a timeline starting at the first plotted recording. Original recording start offsets, per-beat timing, gaps and unavailable DFA windows are preserved. **Reset zoom** restores both charts. **Exclude flagged intervals** hides flagged beats and markers without repairing data or changing the full-recording summaries. Devices without R–R intervals or saved HRV statistics are omitted from this section's recording choices. The chart legend includes only recordings with usable beat intervals. A recording without raw intervals or usable beats can still show valid saved values under **Show statistics**; one failed analysis does not hide the other recordings. The 0.75 and 0.50 DFA guides are reference lines, not a diagnosis or an automatic training-zone recommendation. Artifact and suspected-pair flags do not establish a medical condition or prove which device is more accurate.
 
@@ -1724,7 +1726,7 @@ You can copy the endpoint and manage connected clients in [**Connections -> MCP*
 
 Open [Settings → Data management](/settings?section=data-management), then choose **Delete account…**. Review the consequences and confirm in the dialog. Opening Account or your profile does not show the deletion controls.
 
-If your account has an email address, self-deletion sends a confirmation email after the request completes.
+If your account has an email address, self-deletion sends a confirmation email after sign-in access is removed. Data cleanup continues in the background; this email does not confirm that every file or record has already been removed.
 
 Deleting your account permanently removes:
 
@@ -1734,7 +1736,9 @@ Deleting your account permanently removes:
 - uploaded files,
 - and any active subscription.
 
-This action cannot be undone.
+This action cannot be undone in the app. Deleted uploaded files can remain in protected recovery storage for up to 30 days before expiry.
+
+Some older email delivery records may remain after account deletion. Those with a 90-day expiry are removed automatically after that date.
 
 ## Exports and legal requests
 

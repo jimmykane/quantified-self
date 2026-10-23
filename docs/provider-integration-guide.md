@@ -1646,7 +1646,7 @@ and are unchanged. See [Suunto queued disconnects](suunto-integration.md#queued-
 
 The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten cleanup tasks concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle for an active user, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup for an active user. Transient failures retain the intent without a finite event-retry or TTL deadline.
 
-Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the same bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.
+Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the existing bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.
 
 The same scheduler also reclaims one expired explicit-disconnect episode per provider per execution, retaining its original operation generation. The existing ten-minute lease orders this against in-flight callables; failures renew that lease, and a cursor in the existing scheduler-cursor collection advances past roots belonging to deleted users or otherwise unable to renew. This also finalizes interrupted legacy roots that already have an operation/lease, but cannot reconstruct operational identities from credentials removed before durable intents existed. Entitlement restoration cannot clear an explicit disconnect. An explicit operation may use subscription-pending credentials only with its matching operation generation, so recovery can finish without enabling ordinary sync. Failed revocation or metadata finalization stays pending rather than reporting successful disconnect.
 
@@ -1695,7 +1695,29 @@ Account deletion is not merely token deletion. Add provider identity discovery a
 
 Existing imported events are product-policy decisions. State explicitly whether disconnect, entitlement expiry, and account deletion each retain or remove them. Wahoo retains imported events on disconnect but removes account-associated data on account deletion.
 
-Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the configured recursive extension owns account cleanup; provider adapters must not delete historical health source records during ordinary deauthorization.
+Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the native account owner prepared in this phase recursively covers them (the installed extension remains until separately approved cutover); provider adapters must not delete historical health source records during ordinary deauthorization.
+
+The existing Gen 1 `cleanupUserAccounts` owner replaces the installed extension's
+configured Firestore/Storage scope, using 1 GB memory, a 540-second timeout and
+retries. It keeps its Auth deletion trigger, runtime identity and provider secrets;
+tenant users are ignored because these UID paths belong to default-project accounts.
+Deploy the write fences and UID-bearing mail writers, update this owner, verify
+cleanup, then retire the extension under a separately approved cutover. Keep
+`cleanupUserAccounts` deployed after retirement. The source comparison found that
+extension 0.1.30 uses a bare Storage prefix, which can include a longer custom UID,
+and interprets replacement tokens in custom UIDs. Resolve both extension scope
+issues before approving overlapping deletion. See the runbook source comparison.
+
+The deletion owner checkpoints provider identities before removing credentials or UID-owned queue sources. Failed discovery/checkpoint reads preserve those sources; mandatory local failures continue independent cleanup and then fail the Auth event for retry. Pending tombstones have no expiry. Completion follows scoped Firestore/Storage/operational absence verification, including deferred original-file and disconnect intents, and only completed markers receive a seven-day TTL. Provider deauthorization/archival remain best-effort and remote copies can remain. See [Delete User Data extension replacement and recovery](delete-user-data-migration.md) for exact scope, release boundaries and the existing activated monitoring coverage (#836).
+
+Operational queue and MCP targets are checkpointed before recursive deletion so retries can remove descendants after a parent disappears from ownership queries. Replay validates the fixed collection allowlist and current ownership. Every recursive child/root delete transaction checks the selected parent revision or continued absence and the current attempt; provider-only targets retain minimal lookup attribution and recheck connected credentials transactionally even after their parent disappears. A native recursive BulkWriter bounds this at ten concurrent transactions and commits queue tombstones with root removal. Changed or unavailable ownership keeps cleanup pending; provider-only identifiers remain scoped to their own provider. Completion and checkpoint removal require the current cleanup attempt, preventing stale invocations from releasing the fence. Exact UID/provider queries are paged at 100 rows for discovery, deletion and readback; unrelated queues are not globally scanned, and canonical safe numeric legacy provider IDs are covered alongside strings. See the native-cleanup runbook for recovery and release gates.
+
+The latest native account owner also checkpoints provider attribution from `connectionHistoryImports`
+before deleting those UID-owned trees. It invokes the existing UID-scoped `activitySendUploadCleanup`
+reconciler and keeps the completion fence pending until all reservations have cleared; future upload
+reservations and active cleanup leases must survive user-root deletion. The hourly activity-send owner
+retains its role. The account owner preserves #836 telemetry and its existing Gen 1
+structured/native failure coverage; no monitoring resources or activation changes are required.
 
 ## 9. Frontend, help, public pages, and attribution
 

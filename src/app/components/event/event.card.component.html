@@ -45,7 +45,7 @@
     </div>
     }
 
-    @if (isBenchmark()) {
+    @if (hasRRDataFlag()) {
     <app-benchmark-rr after-stats [event]="activeEvent" [activities]="selectedActivitiesInstant()"
       [unitSettings]="userUnitSettings()" [darkTheme]="darkTheme()"></app-benchmark-rr>
     }
