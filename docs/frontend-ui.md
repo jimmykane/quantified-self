@@ -338,6 +338,10 @@ Activity details use the workspace shell's inline gutters once. The primary summ
 activity selector, statistics, map, charts, and lap/jump/swim sections align to the same content edges without extra
 section-wide side insets. Section headings omit redundant top padding and retain an 8px gap below. Material controls,
 table cells, chart axes, overlays, and fullscreen/export frames keep their internal spacing.
+Summary metric tabs use `--header-stats-padding: 8px 0 0` so the tab header's 8px offset and the summary's 16px
+section gap or bottom padding leave equal space above and below the metric cards, including on phones.
+Desktop tab height follows the selected category's intrinsic content, retaining resize/font measurements and the
+small rounding tolerance without reserving blank space for a taller hidden category. Phones retain natural sizing.
 The Jumps divider reuses the performance-chart divider's 16px top and 8px bottom margins in addition to the section
 stack's existing gap, so the heading is separated from the preceding lap table or chart. No divider is rendered when
 no selected activity has jumps. A single jump-bearing activity renders its table directly, matching Laps and Swim

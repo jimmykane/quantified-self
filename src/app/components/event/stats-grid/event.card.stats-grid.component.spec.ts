@@ -1339,13 +1339,16 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.getTabIcon('other')).toBe('category');
     });
 
-    it('should apply tallest tab panel height as shared min-height', () => {
+    it('sizes the tab panel to the selected category instead of the tallest hidden category', () => {
         const tabGroupElement = createTabGroupElement([120, 220, 190]);
         component.summaryTabGroupRef = new ElementRef(tabGroupElement);
 
         (component as any).syncTabBodyHeight();
 
-        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
+        component.selectedTabIndex = 2;
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('190px');
     });
 
     it('should clear shared min-height and skip height sync on mobile viewport', () => {
@@ -1392,7 +1395,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('216px');
     });
 
-    it('should not shrink shared min-height during tab-switch grow-only sync', () => {
+    it('preserves the height during an explicit grow-only sync', () => {
         const heights = [220, 180];
         const tabGroupElement = createTabGroupElement(heights);
         component.summaryTabGroupRef = new ElementRef(tabGroupElement);
@@ -1418,13 +1421,29 @@ describe('EventCardStatsGridComponent', () => {
         ] as any;
 
         (component as any).syncTabBodyHeight('allow_shrink');
-        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('292px');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
 
         tabGroupElement.style.setProperty('--summary-tabs-body-min-height', '220px');
         (component as any).lastAppliedMinHeightPx = 220;
         component.onSelectedTabIndexChange(1);
 
         expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('292px');
+    });
+
+    it('shrinks when switching to a shorter category without measuring the old shared floor', () => {
+        const tabGroupElement = createTabGroupElementWithResizableIntrinsicHeights([220, 120]);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+        component.metricTabs = [
+            { id: 'overall', label: 'Overall', metricTypes: [] },
+            { id: 'rr', label: 'R–R & HRV', metricTypes: [] },
+        ] as any;
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+
+        component.onSelectedTabIndexChange(1);
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
     });
 
     it('should coalesce repeated height sync scheduling into one animation frame', () => {

@@ -250,7 +250,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
     }
     this.setupTabBodyResizeObserver();
-    this.applyGrowOnlyHeightFromSelectedTab(index);
+    this.applyHeightFromSelectedTab(index);
     this.scheduleTabBodyHeightSyncAfterTabSwitch();
   }
 
@@ -402,7 +402,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     if (typeof requestAnimationFrame === 'undefined') {
-      this.scheduleTabBodyHeightSync('only_grow');
+      this.scheduleTabBodyHeightSync('allow_shrink', true);
       return;
     }
 
@@ -416,7 +416,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
         return;
       }
       if (typeof requestAnimationFrame === 'undefined') {
-        this.scheduleTabBodyHeightSync('only_grow');
+        this.scheduleTabBodyHeightSync('allow_shrink', true);
         return;
       }
       this.tabSwitchMeasureRafId = requestAnimationFrame(() => {
@@ -424,7 +424,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
         if (this.isDestroyed) {
           return;
         }
-        this.scheduleTabBodyHeightSync('only_grow');
+        this.scheduleTabBodyHeightSync('allow_shrink', true);
       });
     });
   }
@@ -559,11 +559,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     const layoutSignature = this.buildTabBodyLayoutSignature(tabGroupElement, tabBodyContents.length);
     this.lastMeasuredTabBodyLayoutSignature = layoutSignature;
 
-    const maxHeight = Array.from(tabBodyContents).reduce((currentMax, tabBodyContent) => {
-      return Math.max(currentMax, this.getIntrinsicTabBodyContentHeight(tabBodyContent));
-    }, 0);
+    const selectedHeight = this.getTabIntrinsicHeightByIndex(this.selectedTabIndex);
 
-    const heightDelta = Math.abs(maxHeight - this.lastAppliedMinHeightPx);
+    const heightDelta = Math.abs(selectedHeight - this.lastAppliedMinHeightPx);
     if (heightDelta === 0) {
       return;
     }
@@ -572,7 +570,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    if (mode === 'only_grow' && maxHeight < this.lastAppliedMinHeightPx) {
+    if (mode === 'only_grow' && selectedHeight < this.lastAppliedMinHeightPx) {
       return;
     }
 
@@ -580,8 +578,8 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.lastAllowShrinkSyncAtMs = performance.now();
     }
 
-    this.lastAppliedMinHeightPx = maxHeight;
-    tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${maxHeight}px`);
+    this.lastAppliedMinHeightPx = selectedHeight;
+    tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${selectedHeight}px`);
   }
 
   private getIntrinsicTabBodyContentHeight(tabBodyContent: HTMLElement): number {
@@ -607,7 +605,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     return this.getIntrinsicTabBodyContentHeight(tabBody);
   }
 
-  private applyGrowOnlyHeightFromSelectedTab(selectedIndex: number) {
+  private applyHeightFromSelectedTab(selectedIndex: number) {
     const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
     if (!tabGroupElement || selectedIndex < 0) {
       return;
@@ -619,14 +617,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    const selectedTabHeight = Math.max(
-      this.getIntrinsicTabBodyContentHeight(selectedTabBody),
-      Math.ceil(selectedTabBody.scrollHeight || 0),
-      Math.ceil(selectedTabBody.offsetHeight || 0),
-      Math.ceil(selectedTabBody.clientHeight || 0),
-    );
+    const selectedTabHeight = this.getIntrinsicTabBodyContentHeight(selectedTabBody);
 
-    if (selectedTabHeight <= this.lastAppliedMinHeightPx) {
+    if (selectedTabHeight <= 0) {
       return;
     }
 
