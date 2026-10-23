@@ -13,7 +13,11 @@ export async function cleanupMarketingCampaignRecipients(db: admin.firestore.Fir
       const [campaign, current] = await Promise.all([tx.get(campaignRef), tx.get(recipient.ref)]);
       if (!current.exists) return false;
       const status = current.get('status') as MarketingRecipientStatus;
-      if (campaign.exists && (status === 'pending' || status === 'queued' || status === 'failed')) {
+      // Preparation can leave a partial audience before counters are published,
+      // including after a failed attempt returns to draft. Account erasure must
+      // not depend on those uninitialized counters; preparation recounts at commit.
+      const countersPublished = campaign.exists && !['draft', 'preparing', 'deleting'].includes(campaign.get('status'));
+      if (countersPublished && (status === 'pending' || status === 'queued' || status === 'failed')) {
         tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, status, 'skipped') });
       }
       tx.delete(recipient.ref);

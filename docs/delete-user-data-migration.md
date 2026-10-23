@@ -145,6 +145,13 @@ their existing rules. The MCP campaign script rechecks the shared deletion guard
 inside each mail transaction after recipient selection; skipped deleted users
 are counted separately. These changes require their own approved rollout.
 
+Campaign audience preparation also rechecks each account's deletion fence and
+user root inside bounded recipient-write transactions. A selection made before
+cleanup cannot recreate a recipient after deletion starts or completes. Cleanup
+can remove unpublished snapshots from preparing, failed-draft or deleting
+campaigns without requiring initialized counters; preparation publishes counts
+from the remaining snapshot in its final transaction.
+
 Repeated or overlapping native invocations use durable attempt/checkpoint guards;
 a superseded attempt fails for retry and cannot replace a newer completion receipt.
 The installed extension does not participate in those checkpoints. Never reuse an
@@ -319,13 +326,13 @@ emulators or claim live Auth trigger delivery.
    above before approving overlapping account deletion. Keep its manifest/env
    declarations until a separately approved retirement; their presence is not
    proof that overlap is safe.
-2. After separate deployment approval, deploy the client write fence and
-   UID-bearing registration/subscription mail writers first. Account mail cleanup
+2. After separate deployment approval, deploy the client write fence,
+   guarded campaign preparation and UID-bearing registration/subscription mail writers first. Account mail cleanup
    uses explicit UID ownership only; historical email-only records are excluded.
    Use the updated, guarded campaign scripts for any separately authorized sends.
 
    ```sh
-   firebase deploy --project quantified-self-io --only firestore:rules,functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated
+   firebase deploy --project quantified-self-io --only firestore:rules,functions:prepareMarketingCampaign,functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated
    ```
 
 3. Deploy the updated existing cleanup owner and callable:

@@ -7,6 +7,8 @@ import { handleMarketingUnsubscribe } from './handlers';
 import { cleanupMarketingCampaignRecipients } from './cleanup';
 import { cloneCampaign, completeCampaignIfDrained, deleteCampaign, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
 import { utcDay } from './core';
+import * as deletionGuard from '../../shared/user-deletion-guard';
+import { beginAccountDataCleanup, completeAccountDataCleanup } from '../../users/data-cleanup';
 
 vi.unmock('firebase-admin');
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
@@ -107,6 +109,103 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout
     await recordMailDelivery(mailId, { ...mail.data(), delivery: { state: 'PENDING' } }, { ...mail.data(), delivery: { state: 'SUCCESS' } });
     const final = (await db.collection('marketingCampaigns').doc(created.id).get()).data()!;
     expect(final.stats).toMatchObject({ eligible: 2, pending: 0, queued: 0, accepted: 1, skipped: 1 });
+  });
+
+  it.each(['pending', 'complete'] as const)('does not recreate recipients when cleanup becomes %s after audience selection', async status => {
+    const user = await admin.auth().createUser({ email: `deleting-${randomUUID()}@example.com` });
+    const neighbour = await admin.auth().createUser({ email: `preserved-${randomUUID()}@example.com` });
+    for (const account of [user, neighbour]) {
+      await db.doc(`users/${account.uid}`).set({ test: true });
+      await db.doc(`users/${account.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });
+    }
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const originalGuard = deletionGuard.getUserDeletionGuardState;
+    let selected!: () => void;
+    let release!: () => void;
+    const selection = new Promise<void>(resolve => { selected = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const guard = vi.spyOn(deletionGuard, 'getUserDeletionGuardState').mockImplementation(async (...args) => {
+      const result = await originalGuard(...args);
+      if (args[1] === user.uid) { selected(); await released; }
+      return result;
+    });
+    const preparation = prepareCampaign(campaign.id);
+    try {
+      await selection;
+      const attempt = await beginAccountDataCleanup(db, user.uid);
+      if (status === 'complete') {
+        await admin.auth().deleteUser(user.uid);
+        await cleanupMarketingCampaignRecipients(db, user.uid);
+        await db.recursiveDelete(db.doc(`users/${user.uid}`));
+        await completeAccountDataCleanup(db, user.uid, attempt.attemptId);
+      }
+      release();
+      const prepared = await preparation;
+      expect((await ref.collection('recipients').doc(user.uid).get()).exists).toBe(false);
+      expect((await ref.collection('recipients').doc(neighbour.uid).get()).get('uid')).toBe(neighbour.uid);
+      expect(prepared.exclusions[status === 'pending' ? 'deletionMarked' : 'noProfile']).toBeGreaterThanOrEqual(1);
+      const recipients = await ref.collection('recipients').get();
+      expect(prepared.stats).toMatchObject({ eligible: recipients.size, pending: recipients.size });
+      expect((await db.doc(`userDeletionTombstones/${user.uid}`).get()).get('cleanupStatus')).toBe(status);
+    } finally {
+      release();
+      await preparation.catch(() => undefined);
+      guard.mockRestore();
+    }
+  });
+
+  it.each(['draft', 'preparing', 'deleting'])('cleans unpublished recipient snapshots from a %s campaign', async status => {
+    const uid = `partial-${randomUUID()}`;
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status });
+    await ref.collection('recipients').doc(uid).set({ uid, snapshotId: 'partial', status: 'pending' });
+    const originalStats = (await ref.get()).get('stats');
+
+    expect(await cleanupMarketingCampaignRecipients(db, uid)).toBe(1);
+    expect((await ref.collection('recipients').doc(uid).get()).exists).toBe(false);
+    expect((await ref.get()).get('stats')).toEqual(originalStats);
+  });
+
+  it('publishes audience counts after cleanup removes an already-written recipient', async () => {
+    const user = await admin.auth().createUser({ email: `preparing-${randomUUID()}@example.com` });
+    await db.doc(`users/${user.uid}`).set({ test: true });
+    await db.doc(`users/${user.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const recipient = ref.collection('recipients').doc(user.uid);
+    const runTransaction = db.runTransaction.bind(db);
+    let written!: () => void;
+    let release!: () => void;
+    let paused = false;
+    const persisted = new Promise<void>(resolve => { written = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const transaction = vi.spyOn(db, 'runTransaction').mockImplementation(async (update, options) => {
+      const result = await runTransaction(update, options);
+      if (!paused && (await recipient.get()).exists) {
+        paused = true;
+        written();
+        await released;
+      }
+      return result;
+    });
+    const preparation = prepareCampaign(campaign.id);
+    try {
+      await persisted;
+      expect((await ref.get()).get('status')).toBe('preparing');
+      await beginAccountDataCleanup(db, user.uid);
+      expect(await cleanupMarketingCampaignRecipients(db, user.uid)).toBeGreaterThanOrEqual(1);
+      release();
+      const prepared = await preparation;
+      const retained = await ref.collection('recipients').get();
+      expect(prepared.stats).toMatchObject({ eligible: retained.size, pending: retained.size });
+      expect((await recipient.get()).exists).toBe(false);
+    } finally {
+      release();
+      await preparation.catch(() => undefined);
+      transaction.mockRestore();
+    }
   });
 
   it('recovers a timed-out audience preparation and replaces its partial snapshot', async () => {
@@ -252,7 +351,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout
     const uid = `delete_${randomUUID().replace(/-/g, '')}`;
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
-    await ref.update({ stats: { eligible: 1, pending: 0, queued: 0, accepted: 0, failed: 1, skipped: 0 } });
+    await ref.update({ status: 'paused', stats: { eligible: 1, pending: 0, queued: 0, accepted: 0, failed: 1, skipped: 0 } });
     const recipient = ref.collection('recipients').doc(uid);
     await recipient.set({ uid, status: 'failed', attempt: 1 });
     expect(await cleanupMarketingCampaignRecipients(db, uid)).toBe(1);

@@ -303,21 +303,43 @@ export async function prepareCampaign(idInput: unknown): Promise<MarketingCampai
       for (const doc of existing.docs.slice(i, i + 400)) batch.delete(doc.ref);
       await batch.commit();
     }
-    for (let i = 0; i < eligible.length; i += 400) {
-      const batch = db().batch();
-      for (const recipient of eligible.slice(i, i + 400)) {
-        batch.set(ref.collection('recipients').doc(recipient.uid), {
-          ...recipient, snapshotId, status: 'pending', attempt: 0, mailId: null,
-        });
-      }
-      await batch.commit();
+    for (let i = 0; i < eligible.length; i += 100) {
+      const chunk = eligible.slice(i, i + 100);
+      const skipped = await db().runTransaction(async tx => {
+        const [latest, guards] = await Promise.all([
+          tx.get(ref),
+          Promise.all(chunk.map(recipient => getUserDeletionGuardStateInTransaction(db(), tx, recipient.uid))),
+        ]);
+        if (latest.get('status') !== 'preparing' || latest.get('snapshotId') !== snapshotId) {
+          throw new HttpsError('aborted', 'Campaign preparation changed.');
+        }
+        const excluded: Array<'noProfile' | 'deletionMarked'> = [];
+        for (const [index, recipient] of chunk.entries()) {
+          // Selection can precede account cleanup by minutes. Serialize each
+          // identifying snapshot write with its user root and deletion fence.
+          const guard = guards[index];
+          if (guard.shouldSkip) {
+            excluded.push(guard.userExists ? 'deletionMarked' : 'noProfile');
+            continue;
+          }
+          tx.set(ref.collection('recipients').doc(recipient.uid), {
+            ...recipient, snapshotId, status: 'pending', attempt: 0, mailId: null,
+          });
+        }
+        return excluded;
+      });
+      // Transaction retries must not double-count exclusions.
+      for (const reason of skipped) exclusions[reason]++;
     }
     await db().runTransaction(async tx => {
       const latest = await tx.get(ref);
       if (latest.get('status') !== 'preparing' || latest.get('snapshotId') !== snapshotId) {
         throw new HttpsError('aborted', 'Campaign preparation changed.');
       }
-      tx.update(ref, { status: 'ready', stats: blankStats(eligible.length), exclusions,
+      // Account cleanup may have removed recipients between chunk commits.
+      // Read only document identities and publish counters in the same transaction.
+      const retained = await tx.get(ref.collection('recipients').where('snapshotId', '==', snapshotId).select());
+      tx.update(ref, { status: 'ready', stats: blankStats(retained.size), exclusions,
         preparedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     });
     return getCampaign(id);
