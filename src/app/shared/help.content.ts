@@ -837,6 +837,8 @@ If a saved source is updated while Event Details is open, its charts refresh and
 If a source update cannot be matched safely, the saved workout is kept and the update needs review. Quantified Self
 does not guess how to move preferences between multisport legs. Reprocessing reads the retained originals, so it does
 not fetch a sport change that exists only in the service's newer export.
+If a repeat manual upload reports that the saved activities cannot be matched, review the source change before
+retrying; repeating the upload cannot resolve an ambiguous leg association.
 
 ### FIT calorie metrics
 

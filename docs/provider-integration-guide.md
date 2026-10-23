@@ -934,6 +934,8 @@ zero overrides, exclusions and dated applied policy across a sport revision with
 trusted. Guarded source transactions preserve live event edits, custom device names and explicit owner sport labels.
 First adoption of a legacy leg carries its verified previous imported sport in memory through the reservation, so
 the final write can distinguish a late owner label/reset without another database read or a new stored field.
+Repeat manual uploads pass the same context. An unmatchable upload returns HTTP 409 with
+`ACTIVITY_IDENTITY_CONFLICT` and the review explanation, rather than a retryable server-error response.
 Owner labels do not reinterpret the file-calibrated load evaluation. Interrupted reparses use their existing active
 leg snapshot, not partial duplicate copies. Finalization still checks the current reservation, source fingerprints,
 latest controls and deletion guards. New imports keep their existing ID allocation. No historical reparse campaign,

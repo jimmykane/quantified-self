@@ -21,6 +21,8 @@ describe('help.content', () => {
     expect(copy).toContain('Training load override, exclusion and saved policy stay with');
     expect(copy).toContain('does not fetch a sport change');
     expect(copy).toContain('does not guess how to move preferences between multisport legs');
+    expect(copy).toContain('repeat manual upload');
+    expect(copy).toContain('repeating the upload cannot resolve an ambiguous leg association');
   });
 
   it('explains independent ascent/descent correction, reviewed reset and source preservation', () => {

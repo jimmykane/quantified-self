@@ -6197,6 +6197,8 @@ For a legacy leg's first source adoption, preparation also carries the previousl
 keyed by the final stable activity ID. The guarded activity write uses it when the live document has no valid source
 snapshot yet, preserving a late owner sport edit or reset. This context is not persisted, exposed through MCP or
 recovered from incoming JSON, and adds no import reads or writes.
+Provider imports, repeat manual uploads and retained-original reparse all pass this committed context to their
+activity write adapters; none may fall back to the sport label captured before a live legacy edit.
 
 Legacy associations are established on demand; an unexplained provider sport change requires bounded retained-file
 proof of the old imported type, with reference revision revalidation. A source conflict uses the existing terminal
