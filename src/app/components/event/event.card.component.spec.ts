@@ -449,6 +449,46 @@ describe('EventCardComponent', () => {
         expect(component.event()).toBe(refreshedEvent);
     });
 
+    it.each([false, true])('keeps the latest stable-ID source update during a refresh (already fetched: %s)', async alreadyFetched => {
+        const version = (generation: string, name: string) => ({
+            ...createEvent('evt1', [createActivity('act1')], name),
+            originalFile: { path: 'original.fit', generation, startDate: new Date(0) },
+        }) as AppEventInterface;
+        component.event.set(version('1', 'Old source'));
+        const loading$ = new Subject<AppEventInterface>();
+        const latest = version('3', 'Latest source');
+        mockEventService.getEventActivitiesAndSomeStreams
+            .mockReturnValueOnce(loading$).mockReturnValueOnce(of(latest));
+
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(version('2', 'First update'));
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(latest);
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
+        loading$.next(version(alreadyFetched ? '3' : '2', 'First refresh'));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(alreadyFetched ? 1 : 2);
+        expect(component.event()?.name).toBe('Latest source');
+        expect(component.selectedActivitiesInstant().map(activity => activity.getID())).toEqual(['act1']);
+    });
+
+    it('does not apply an old account refresh after navigating to another account', async () => {
+        const loading$ = new Subject<AppEventInterface>();
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValueOnce(loading$);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(createEvent('evt1', [createActivity('act2')]));
+        const otherAccountEvent = createEvent('evt1', [createActivity('act1')], 'Other account');
+        routeUserID = 'otherUser';
+        routeData$.next({ event: otherAccountEvent });
+        loading$.next(createEvent('evt1', [createActivity('act1')], 'Old account refresh'));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.event()).toBe(otherAccountEvent);
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
+    });
+
     it('requests HR on full refresh even when HR charts are disabled', async () => {
         mockUser.settings.chartSettings.showAllData = false;
         mockUserService.getUserChartDataTypesToUse.mockReturnValue([]);
@@ -719,6 +759,29 @@ describe('EventCardComponent', () => {
         expect(component.loadError()).toBe('unavailable');
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockSnackBar.open).not.toHaveBeenCalled();
+    });
+
+    it.each(['missing', 'permission-denied'])('does not restore a public share from a pending refresh after %s', async reason => {
+        routeUserID = 'ownerUser';
+        routeData$.next({ event: { event: createEvent('evt1', [createActivity('act1')]),
+            user: null, publicShare: true, shareKind: 'event' } as any });
+        const loading$ = new Subject<AppEventInterface>();
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValueOnce(loading$);
+        const live$ = liveEventDetailsByRouteKey.get('ownerUser:evt1');
+        live$?.next(createEvent('evt1', [createActivity('act2')]));
+        live$?.next(createEvent('evt1', [createActivity('act3')]));
+        if (reason === 'missing') live$?.next(null);
+        else live$?.error(new Error(reason));
+        expect(component.event()).toBeNull();
+
+        loading$.next(createEvent('evt1', [createActivity('act2')]));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.event()).toBeNull();
+        expect(component.loadError()).toBe(reason === 'missing' ? 'not_found' : 'unavailable');
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
     });
 
     it('should set targetUserID signal from route', () => {

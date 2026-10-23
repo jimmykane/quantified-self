@@ -6202,6 +6202,13 @@ copies. Read-only chart hydration consumes the saved source snapshot and preserv
 Firestore. No mass historical reparse or provider fetch is necessary. See the [provider lifecycle](provider-integration-guide.md)
 and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
 
+Stable leg IDs do not identify a stream revision. Event Details live deduplication and stream reconciliation share a
+bounded source version: original paths/buckets/generations, completed reparse revision and validated leg source
+snapshots. A changed version reloads source streams while keeping selected IDs; owner metadata edits and unchanged
+multisport reorderings reuse streams. Updates arriving during a refresh are coalesced to the latest live snapshot.
+Old reads cannot replace another account/route or restore a public share after access is lost. This is browser-only
+refresh behavior; it adds no backend trigger, stored field or account mutation.
+
 Before retrying a pending legacy write, an activity without valid source provenance must still agree with the frozen
 leg's complete time window. An older writer's reused/overwritten ID cannot certify controls for another leg; conflicts
 require review before further writes. Valid source snapshots preserve recovery of already verified source revisions.

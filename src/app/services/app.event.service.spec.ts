@@ -275,9 +275,13 @@ describe('AppEventService', () => {
             getActivities: vi.fn().mockReturnValue([]),
             startDate: new Date()
         });
-        mocks.getActivityFromJSON.mockReturnValue({
-            setID: vi.fn().mockReturnThis(),
-            toJSON: vi.fn().mockReturnValue({})
+        mocks.getActivityFromJSON.mockImplementation(() => {
+            let id: string | null = null;
+            return {
+                setID: vi.fn(function (value: string) { id = value; return this; }),
+                getID: () => id,
+                toJSON: vi.fn().mockReturnValue({}),
+            };
         });
         mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
         mocks.batchCommit.mockResolvedValue(undefined);
@@ -506,6 +510,19 @@ describe('AppEventService', () => {
         const full = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
         expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(1);
         expect(full[0]).not.toBe(live[0]);
+    });
+
+    it.each(['file', 'provenance'])('includes source-only %s changes omitted by Sports Lib JSON in live fingerprints', change => {
+        const sourceIdentity = { version: 1, activityId: 'stable', startMs: 0, endMs: 1000, importedType: 'Running' };
+        const event = (updated: boolean) => ({
+            getID: () => 'event', toJSON: () => ({ name: 'Same summary' }),
+            originalFile: { path: 'original.fit', generation: updated && change === 'file' ? '2' : '1' },
+            getActivities: () => [{ getID: () => 'stable', toJSON: () => ({ type: 'Walking' }),
+                sourceIdentity: { ...sourceIdentity, importedType: updated && change === 'provenance' ? 'Cycling' : 'Running' } }],
+        });
+
+        expect((service as any).buildEventDetailsFingerprint(event(false)))
+            .not.toBe((service as any).buildEventDetailsFingerprint(event(true)));
     });
 
     it('should reuse one-shot event parsing for an identical initial live snapshot', async () => {

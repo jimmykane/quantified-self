@@ -2,6 +2,7 @@ import { AppEventSummary } from '@shared/event-summary';
 import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { resolveActivityIdentityAssignments, type ActivityIdentityLike } from '@shared/activity-identity';
 import { readActivitySourceIdentity, carryActivitySourceIdentity } from '@shared/activity-source-identity';
+import { eventSourceVersion } from '../utils/event-live-reconcile';
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
@@ -423,6 +424,7 @@ export class AppEventService implements OnDestroy {
 
     return this.buildSnapshotFingerprint({
       eventID: typeof eventAny?.getID === 'function' ? eventAny.getID() : null,
+      sourceVersion: eventSourceVersion(event),
       event: eventSnapshot,
       tags: Array.isArray(event.tags) ? event.tags : event.benchmarkReviewTags,
       benchmark: {

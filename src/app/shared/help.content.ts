@@ -832,6 +832,7 @@ When a connected service changes the sport in an existing recording, Quantified 
 when it can verify which recording and leg changed. Your Training load override, exclusion and saved policy stay with
 that leg. An explicit sport or device-name edit made in Quantified Self is preserved. Opening charts only reads the
 retained original; it does not download a newer recording from the service or change saved statistics.
+If a saved source is updated while Event Details is open, its charts refresh and keep your selected activities.
 
 If a source update cannot be matched safely, the saved workout is kept and the update needs review. Quantified Self
 does not guess how to move preferences between multisport legs. Reprocessing reads the retained originals, so it does
