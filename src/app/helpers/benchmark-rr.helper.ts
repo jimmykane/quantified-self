@@ -5,7 +5,8 @@ import {
   type RRAnalysis, type RRIntervalSample, type UserUnitSettingsInterface,
   type DataInterface,
 } from '@sports-alliance/sports-lib';
-import { resolveUnitAwareDisplayStat, type UnitAwareStatDisplay } from '@shared/unit-aware-display';
+import { getDefaultUserUnitSettings, resolveUnitAwareDisplayStat, type UnitAwareStatDisplay } from '@shared/unit-aware-display';
+import { computeStatDiff, type StatDiffResult } from './stats-diff.helper';
 import { RR_METRICS as BENCHMARK_RR_METRICS } from '../constants/rr-metrics';
 export { RR_METRICS as BENCHMARK_RR_METRICS } from '../constants/rr-metrics';
 
@@ -14,6 +15,7 @@ export interface BenchmarkRRIntervalSource { stream: IBIStream; durationMs: numb
 export type BenchmarkRRWorkerResponse = { analysis: RRAnalysis | null } | { error: string };
 export interface BenchmarkRRCell { display: string | null; detail: string | null; }
 export interface BenchmarkRRRow { type: string; label: string; cells: BenchmarkRRCell[]; }
+export interface BenchmarkRRReportRow extends BenchmarkRRRow { difference: StatDiffResult | null; }
 export interface RRStatSummary { stats: DataInterface[]; primaryTypes: string[]; detailTypes: string[]; }
 
 /** Saved statistics for one recording only; never aggregate beats or sources here. */
@@ -69,6 +71,22 @@ export function buildBenchmarkRRRows(
       return { display, detail };
     }),
   }));
+}
+
+/** Full-recording comparisons, independent of stream alignment and accuracy grades. */
+export function buildBenchmarkRRReportRows(
+  reference: ActivityInterface, test: ActivityInterface, unitSettings?: UserUnitSettingsInterface,
+): BenchmarkRRReportRow[] {
+  const settings = unitSettings ?? getDefaultUserUnitSettings();
+  const types = BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type);
+  return buildBenchmarkRRRows([reference, test], types, settings)
+    .filter(row => row.cells.some(cell => cell.display !== null))
+    .map(row => ({
+      ...row,
+      difference: row.cells.every(cell => cell.display !== null)
+        ? computeStatDiff(reference, test, row.type, row.type, settings)
+        : null,
+    }));
 }
 
 export function hasBenchmarkRRStats(activity: ActivityInterface): boolean {

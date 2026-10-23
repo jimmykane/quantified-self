@@ -6,7 +6,8 @@ import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
 import { MatCheckbox } from '@angular/material/checkbox';
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataRRCoverage, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataRRCoverage, DataRRArtifactPercentage, DataRRSuspectedEctopicPairCount, DataRRRMSSD, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median, DistanceUnits, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { MaterialModule } from '../../modules/material.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
@@ -81,23 +82,64 @@ describe('benchmark R–R panel', () => {
     const panel = fixture.componentInstance;
     const host = fixture.nativeElement as HTMLElement;
     async function openCharts() {
-      const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
-      tabs[1].click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      if (!panel.expanded()) host.querySelector<HTMLButtonElement>('.rr-disclosure')!.click();
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
       await fixture.whenStable();
     }
     return { fixture, panel, host, activities, analysis, worker, haptics, loader, core, charts, logger, openCharts };
   }
 
-  it('renders independent source summaries, including a recorded zero and missing values, without eager analysis or feedback', async () => {
-    const { host, worker, haptics } = await render();
+  it('starts collapsed without large summary content, beat materialization, workers or haptics', async () => {
+    const strap = recording('Strap', true);
+    const readBeats = vi.spyOn(strap.getStream('IBI'), 'getStreamDataByDuration');
+    const { host, panel, worker, haptics, loader } = await render('benchmark', [strap]);
+    expect(panel.expanded()).toBe(false);
+    expect(host.querySelector('.rr-disclosure')?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector(`[id="${panel.contentId}"]`)?.hasAttribute('hidden')).toBe(true);
+    expect(host.querySelector('table')).toBeNull(); expect(host.querySelector('.rr-chart')).toBeNull();
+    expect(host.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect(worker.analyze).not.toHaveBeenCalled(); expect(readBeats).not.toHaveBeenCalled();
+    expect(loader.init).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('opens directly to charts with compact source statistics above them and the full table behind a disclosure', async () => {
+    const { host, fixture, openCharts } = await render();
+    await openCharts(); fixture.detectChanges();
+    const legend = host.querySelector('.rr-source-legends')!;
+    expect(legend.getAttribute('tabindex')).toBe('0');
+    expect(legend.getAttribute('role')).toBe('region');
+    expect(legend.textContent).toContain('0.0 %');
+    expect(legend.textContent).toContain('No saved R–R statistics');
+    expect(legend.textContent).toContain('No raw R–R');
+    expect(host.querySelector('table')).toBeNull();
+    expect(legend.compareDocumentPosition(host.querySelector('.rr-chart')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
     expect(host.querySelector('table')?.textContent).toContain('0.0 %');
-    expect(host.querySelector('table')?.textContent).toContain('No R–R summaries');
     expect(host.querySelectorAll('[aria-label="Unavailable"]').length).toBeGreaterThan(0);
     expect(host.querySelectorAll('.rr-device-dot')).toHaveLength(2);
     expect(host.querySelector('.rr-table-scroll')?.getAttribute('tabindex')).toBe('0');
     expect(host.textContent).toContain('Scroll horizontally to compare recordings');
-    expect(worker.analyze).not.toHaveBeenCalled();
-    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('keeps all seven canonical metrics in each recording legend with %s preferences', async distanceUnits => {
+    const recordings = [recording('Reference chest strap with a long recording name', true), recording('Watch', true)];
+    for (const source of recordings) {
+      [new DataRRArtifactPercentage(1.5), new DataRRSuspectedEctopicPairCount(24), new DataRRRMSSD(8.14),
+        new DataRRSDNN(37.2), new DataRRPNN50(.5), new DataRRDFAAlpha1Median(.62)].forEach(stat => source.addStat(stat));
+    }
+    const { fixture, host, openCharts } = await render('benchmark', recordings);
+    fixture.componentRef.setInput('unitSettings', { ...getDefaultUserUnitSettings(), distanceUnits }); fixture.detectChanges();
+    await openCharts(); fixture.detectChanges();
+    const legends = host.querySelectorAll('.rr-source-legend');
+    expect(legends).toHaveLength(2);
+    for (const legend of legends) {
+      expect(Array.from(legend.querySelectorAll('dt'), label => label.textContent)).toEqual([
+        'Coverage', 'Artifacts', 'Suspected pairs', 'RMSSD', 'SDNN', 'pNN50', 'DFA α1 · median',
+      ]);
+      expect(Array.from(legend.querySelectorAll('dd'), value => value.textContent)).toEqual([
+        '0.0 %', '1.5 %', '24', '8.1 ms', '37.2 ms', '0.5 %', '0.62',
+      ]);
+    }
   });
 
   it('excludes explicit multi-sport events even with the legacy merge flag', async () => {
@@ -107,10 +149,13 @@ describe('benchmark R–R panel', () => {
   });
 
   it('binds the Material summary picker and ignores invalid or unchanged selections', async () => {
-    const { fixture, panel, host, haptics } = await render();
+    const { fixture, panel, host, haptics, openCharts } = await render();
+    await openCharts();
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
+    haptics.selection.mockClear();
     panel.onStatsChange([...panel.selectedStats(), 'not a metric']);
     expect(haptics.selection).not.toHaveBeenCalled();
-    fixture.debugElement.query(By.directive(MatSelect)).triggerEventHandler('selectionChange', { value: [] });
+    fixture.debugElement.queryAll(By.directive(MatSelect)).at(-1)!.triggerEventHandler('selectionChange', { value: [] });
     fixture.detectChanges();
     expect(host.textContent).toContain('Choose at least one summary statistic');
     expect(haptics.selection).toHaveBeenCalledOnce();
@@ -149,14 +194,14 @@ describe('benchmark R–R panel', () => {
   it('disposes old plots when switching to a source without raw intervals', async () => {
     const { fixture, panel, host, openCharts, charts, core, worker, haptics } = await render();
     await openCharts();
-    fixture.debugElement.queryAll(By.directive(MatSelect)).at(-1)!.triggerEventHandler('selectionChange', { value: panel.sources()[1].key });
+    fixture.debugElement.queryAll(By.directive(MatSelect)).at(-1)!.triggerEventHandler('selectionChange', { value: [panel.sources()[1].key] });
     fixture.detectChanges(); await fixture.whenStable();
-    expect(panel.status()).toBe('unavailable'); expect(panel.analysis()).toBeNull();
+    expect(panel.status()).toBe('unavailable'); expect(panel.analyses().size).toBe(0);
     expect(host.querySelector('.rr-chart')).toBeNull();
     expect(host.textContent).toContain('Original beat intervals are unavailable');
     expect(charts.every(chart => chart.dispose.mock.calls.length === 1)).toBe(true);
     expect(core.disconnect).toHaveBeenCalledWith('test-rr-group');
-    panel.onSourceChange(panel.sources()[1].key); panel.onSourceChange('unknown');
+    panel.onSourcesChange([panel.sources()[1].key, 'unknown']);
     expect(worker.analyze).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
@@ -168,7 +213,7 @@ describe('benchmark R–R panel', () => {
     expect(panel.status()).toBe('loading');
     fixture.componentRef.setInput('activities', [recording('Other watch')]); fixture.detectChanges();
     resolve(analysis); await fixture.whenStable(); fixture.detectChanges();
-    expect(panel.analysis()).toBeNull(); expect(panel.status()).toBe('unavailable');
+    expect(panel.analyses().size).toBe(0); expect(panel.status()).toBe('unavailable');
   });
 
   it('offers a working retry with one feedback owner after a calculation failure', async () => {
@@ -198,7 +243,7 @@ describe('benchmark R–R panel', () => {
     loader.load.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
     await openCharts();
     await vi.waitFor(() => expect(loader.load).toHaveBeenCalled());
-    panel.onSourceChange(panel.sources()[1].key); fixture.detectChanges();
+    panel.onSourcesChange([panel.sources()[1].key]); fixture.detectChanges();
     reject(new Error('Obsolete chart load failure')); await fixture.whenStable();
     expect(panel.status()).toBe('unavailable'); expect(logger.error).not.toHaveBeenCalled();
   });
@@ -216,7 +261,7 @@ describe('benchmark R–R panel', () => {
     expect(worker.analyze).toHaveBeenCalledOnce();
   });
 
-  it('does not materialize raw beat arrays until the Charts tab is opened', async () => {
+  it('does not materialize raw beat arrays until the chart section is expanded', async () => {
     const strap = recording('Strap', true);
     const readBeats = vi.spyOn(strap.getStream('IBI'), 'getStreamDataByDuration');
     const { openCharts, worker } = await render('benchmark', [strap]);
@@ -234,11 +279,11 @@ describe('benchmark R–R panel', () => {
     if (!hasIDs) recordings.forEach(activity => activity.setID(''));
     const { fixture, panel, openCharts, haptics } = await render('benchmark', recordings);
     await openCharts();
-    panel.onSourceChange(panel.sources()[2].key); fixture.detectChanges(); await fixture.whenStable();
-    const key = panel.selectedSourceKey();
+    panel.onSourcesChange([panel.sources()[2].key]); fixture.detectChanges(); await fixture.whenStable();
+    const key = panel.selectedSourceKeys()[0];
     fixture.componentRef.setInput('activities', recordings.slice(1)); fixture.detectChanges(); await fixture.whenStable();
-    expect(panel.selectedSource()?.activity).toBe(recordings[2]);
-    expect(panel.selectedSourceKey()).toBe(key);
+    expect(panel.selectedSources()[0]?.activity).toBe(recordings[2]);
+    expect(panel.selectedSourceKeys()).toEqual([key]);
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
@@ -260,5 +305,129 @@ describe('benchmark R–R panel', () => {
     await openCharts();
     expect(panel.status()).toBe('error'); expect(charts).toHaveLength(1);
     expect(charts[0].dispose).toHaveBeenCalledOnce();
+  });
+
+  it('overlays every selected recording and reuses independent analyses when the Material picker changes', async () => {
+    const recordings = [recording('Strap', true), recording('Watch', true), recording('Ring', true)];
+    recordings[1].startDate = new Date(1000); recordings[1].endDate = new Date(11000);
+    const { fixture, panel, worker, charts, host, openCharts, haptics } = await render('benchmark', recordings);
+    await openCharts(); fixture.detectChanges();
+    expect(worker.analyze).toHaveBeenCalledTimes(3);
+    expect(panel.chartRecordings()).toHaveLength(3);
+    expect(host.querySelectorAll('.rr-source-legend')).toHaveLength(3);
+    await vi.waitFor(() => expect(charts[0]?.setOption).toHaveBeenCalled());
+    expect(charts[0].getOption().series).toHaveLength(9);
+    expect(charts[1].getOption().series).toHaveLength(3);
+    expect(charts[0].getOption().series[3]).toMatchObject({ id: 'activity:Watch:rr', lineStyle: { type: 'dashed' } });
+    expect(charts[0].getOption().series[3].data[0][0]).toBe(1800);
+    fixture.debugElement.query(By.directive(MatSelect)).triggerEventHandler('selectionChange', { value: [panel.sources()[2].key] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.chartRecordings().map(source => source.label)).toEqual(['Ring']);
+    expect(panel.summaryRows()[0].cells).toHaveLength(1);
+    await vi.waitFor(() => expect(charts.at(-2)?.setOption).toHaveBeenCalled());
+    expect(charts.at(-2)!.getOption().series).toHaveLength(3);
+    expect(charts.at(-2)!.getOption().series[0]).toMatchObject({ id: 'activity:Ring:rr', lineStyle: { type: 'dotted' } });
+    expect(worker.analyze).toHaveBeenCalledTimes(3);
+    panel.onSourcesChange([panel.sources()[2].key, 'unknown']);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    panel.onSourcesChange([]); fixture.detectChanges();
+    expect(panel.status()).toBe('unavailable'); expect(host.textContent).toContain('Choose at least one recording');
+    expect(host.querySelector('.rr-chart')).toBeNull();
+  });
+
+  it('keeps successful recordings chartable when another source fails, and retries only the failed analysis', async () => {
+    const { fixture, panel, worker, charts, host, openCharts, analysis } = await render('benchmark', [recording('Strap', true), recording('Watch', true)]);
+    worker.analyze.mockRejectedValueOnce(new Error('Unreadable source')).mockResolvedValue(analysis);
+    await openCharts(); fixture.detectChanges();
+    expect(panel.status()).toBe('ready'); expect(worker.analyze).toHaveBeenCalledTimes(2);
+    expect(panel.chartRecordings().map(source => source.label)).toEqual(['Watch']);
+    expect(host.textContent).toContain('Strap: Unreadable source');
+    await vi.waitFor(() => expect(charts[0]?.setOption).toHaveBeenCalled());
+    expect(charts[0].getOption().series).toHaveLength(3);
+    host.querySelector<HTMLButtonElement>('.rr-error button')!.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.chartRecordings()).toHaveLength(2); expect(panel.sourceErrors()).toEqual([]);
+    expect(worker.analyze).toHaveBeenCalledTimes(3);
+  });
+
+  it('releases charts on collapse and reopens without recalculating completed analyses', async () => {
+    const { fixture, host, panel, worker, charts, haptics, openCharts } = await render();
+    await openCharts();
+    host.querySelector<HTMLButtonElement>('.rr-disclosure')!.click(); fixture.detectChanges();
+    expect(panel.expanded()).toBe(false); expect(host.querySelector('.rr-source-legends')).toBeNull();
+    expect(charts.every(chart => chart.dispose.mock.calls.length === 1)).toBe(true);
+    await openCharts();
+    expect(panel.status()).toBe('ready'); expect(charts).toHaveLength(4);
+    expect(worker.analyze).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('ignores in-flight analysis after collapse and keeps a replacement event collapsed', async () => {
+    const { fixture, host, panel, worker, openCharts, analysis, charts } = await render();
+    let resolve!: (value: RRAnalysis) => void;
+    worker.analyze.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    await openCharts();
+    host.querySelector<HTMLButtonElement>('.rr-disclosure')!.click(); fixture.detectChanges();
+    resolve(analysis); await fixture.whenStable(); fixture.detectChanges();
+    expect(panel.analyses().size).toBe(0); expect(charts).toHaveLength(0);
+    fixture.componentRef.setInput('event', { mergeType: 'benchmark', isMerge: true, getActivities: () => [] });
+    fixture.detectChanges();
+    expect(panel.expanded()).toBe(false); expect(worker.analyze).toHaveBeenCalledOnce();
+  });
+
+  it('selects the remaining event recording when the locally selected source is removed', async () => {
+    const recordings = [recording('Strap', true), recording('Watch', true)];
+    const { fixture, panel, openCharts, haptics } = await render('benchmark', recordings);
+    await openCharts();
+    panel.onSourcesChange([panel.sources()[0].key]); fixture.detectChanges(); await fixture.whenStable();
+    fixture.componentRef.setInput('activities', [recordings[1]]); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(panel.selectedSources().map(source => source.activity)).toEqual([recordings[1]]);
+    expect(panel.status()).toBe('ready');
+    expect(panel.chartRecordings()[0].lineStyle).toBe('dashed');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an intentionally empty selection recoverable when only one event recording remains', async () => {
+    const recordings = [recording('Strap', true), recording('Watch', true)];
+    const { fixture, host, panel, openCharts } = await render('benchmark', recordings);
+    await openCharts();
+    panel.onSourcesChange([]); fixture.detectChanges();
+    fixture.componentRef.setInput('activities', [recordings[1]]); fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.selectedSources()).toEqual([]);
+    const picker = fixture.debugElement.query(By.directive(MatSelect));
+    expect(picker).not.toBeNull();
+    picker.triggerEventHandler('selectionChange', { value: [panel.sources()[0].key] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(panel.status()).toBe('ready'); expect(host.querySelector('.rr-chart')).not.toBeNull();
+  });
+
+  it('labels sources with no usable intervals instead of silently omitting them from a working overlay', async () => {
+    const invalid = recording('Invalid watch');
+    invalid.addStream(new IBIStream([null, null], [800, 1600]));
+    invalid.addStat(new DataRRCoverage(0));
+    const { fixture, host, panel, worker, openCharts } = await render('benchmark', [recording('Strap', true), invalid]);
+    worker.analyze.mockImplementation(async input => analyzeRRIntervals(input.samples, input.durationMs));
+    await openCharts(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(panel.status()).toBe('ready'); expect(panel.chartRecordings().map(source => source.label)).toEqual(['Strap']);
+    expect(host.querySelectorAll('.rr-source-legend')[1].textContent).toContain('No usable R–R intervals');
+    expect(host.querySelectorAll('.rr-source-legend')[1].textContent).toContain('0.0 %');
+    expect(panel.sourceErrors()).toEqual([]);
+  });
+
+  it('preserves disclosure and source choices on a same-event refresh, resetting them for a different event', async () => {
+    const recordings = [recording('Strap', true), recording('Watch', true)];
+    const { fixture, host, panel, openCharts, haptics } = await render('benchmark', recordings);
+    const event = { mergeType: 'benchmark', isMerge: true, getID: () => 'benchmark-event', getActivities: () => recordings };
+    fixture.componentRef.setInput('event', event); fixture.detectChanges();
+    await openCharts();
+    panel.onSourcesChange([panel.sources()[1].key]); fixture.detectChanges(); await fixture.whenStable();
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
+    fixture.componentRef.setInput('event', { ...event }); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(panel.expanded()).toBe(true); expect(panel.showSummary()).toBe(true);
+    expect(panel.selectedSources().map(source => source.activity)).toEqual([recordings[1]]);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.componentRef.setInput('event', { ...event, getID: () => 'another-event' }); fixture.detectChanges();
+    expect(panel.expanded()).toBe(false); expect(panel.showSummary()).toBe(false);
+    expect(panel.selectedSources()).toHaveLength(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
 });

@@ -421,20 +421,58 @@ and category changes and the shared disclosure own one selection haptic. This su
 start a worker, fetch originals, reparse, persist statistics or add backend reads. MCP metric projections, consent,
 catalog discovery and query/index contracts are unchanged; this is presentation of already-adopted saved metrics.
 
+`BenchmarkReportComponent` includes the seven primary R–R metrics as a
+reference/test table, using the exact report participant IDs and the common canonical formatter. It omits all-missing
+rows, preserves one-sided and zero values, and includes available artifact counts, pair rates and DFA ranges. Neutral
+absolute/percentage differences require valid values in both recordings. Symmetric percentages use the mean absolute
+magnitudes, so opposite-signed DFA values cannot cancel the denominator. These whole-recording summaries are not
+trimmed to the aligned benchmark overlap. R–R metrics are excluded from stat-difference chips and the hardware
+agreement grade. Stale reports, unresolved or ambiguous participant links and missing activities do not show current
+R–R values. The section is inside the existing share/image export frame and uses the global scrollbar skin on phones.
+Image exports hide the screen-only horizontal-scrolling hint, including when generated from a phone viewport.
+It reads no streams, starts no worker and changes no saved report schema, Firestore query/index or MCP contract.
+
+The shared public reviewer showcase also includes an R–R/HRV row on Home and the comparison feature page. A fixed,
+approved excerpt contains only the first 90 seconds of relative beat times, intervals and version-one classification flags
+from one recorded source. Its three verified full-recording summaries remain separate from excerpt data. There are no account,
+event, device, calendar-time or location fields. The sample is independent of the existing multi-device HR/altitude examples.
+Use the shared R–R option builder and viewport-deferred ECharts host; the public preview does not parse originals, run analysis
+workers, query accounts or add input listeners. Keep its numeric example under `data-nosnippet`, with capability copy in ordinary
+prerendered HTML outside that boundary. The phone layout stacks the plot and a wrapping two-column metric table without horizontal
+scrolling. Chart initialization/drawing failures retain the summary table and show a short fallback over the chart's
+reserved space. Keep its host measurable and observable (visibility/ARIA hiding, never `display: none`) so a later theme
+refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
+excerpt/full-recording context with an automatically generated list of coordinates.
+
 `BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
 (including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
 full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.
-The default seven rows show per-recording coverage, artifacts, suspected pairs, RMSSD, SDNN, pNN50 and DFA median;
-the local selector includes all 20 canonical R–R metrics. Values and units use Sports Lib classes through the shared
-unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
-Artifact counts/rates and the DFA range stay attached to their source. The horizontal table keeps metric labels sticky,
-uses the global scrollbar skin and supports keyboard scrolling; phone layouts include a scrolling hint.
-The selected chart source follows its activity ID (or full-event position for unsaved recordings), so hiding an
-earlier recording does not silently select a different device.
+The panel starts collapsed as a compact section-header row. The surface-free **Show/Hide charts** Material button
+owns one selection haptic and a stable `aria-controls` target; collapsed content neither materializes beats nor starts a worker.
+Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each selected source's
+seven available primary saved statistics, with quality details in tooltips. At phone widths the source names and metric
+pairs wrap inside the panel, keeping all available values visible without a sideways gesture. The artifact/pair key takes
+its own row below the chart heading. Wider layouts retain a bounded horizontal legend with the shared scrollbar skin and
+keyboard access. Values and units use Sports Lib classes through
+the shared unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
+**Show/Hide statistics** reveals the full table and its 20-metric selector. The table follows the local recording selection,
+keeps metric labels sticky, and uses the global scrollbar skin with a phone scrolling hint.
+The multi-select **Recordings** picker defaults to every selected event recording, preserving IDs (or full-event positions
+for unsaved/duplicate IDs), colours and distinct full-event-order line patterns. It overlays two or more original R–R and DFA
+series on shared axes. Beat and window times retain each recording's start offset relative to the earliest plotted source;
+no resampling, concatenation or per-device zero alignment is introduced. Markers and tooltip series names retain source identity.
+If the parent event selection removes every locally chosen source, the remaining event sources become selected. A deliberate
+local clear stays empty, with the picker still available even for one remaining source. Sources whose analysis contains no
+usable intervals are labelled in the legend; saved statistics and successful recordings remain available.
+Same-event metadata refreshes preserve disclosure and local recording choices. A different event ID resets both;
+unsaved events use object identity. Analysis caches are still invalidated when event/activity inputs refresh.
 
-Charts are lazy: opening the tab analyzes an already-loaded original `IBIStream` in a component-scoped module worker.
-The summary view inspects eligibility only; it does not expand or copy beat arrays. Unreadable timing is handled
-inside the chart request, leaving saved summaries and other recordings usable.
+Charts are lazy: expansion analyzes already-loaded original `IBIStream` sources sequentially in a component-scoped module worker.
+The collapsed panel inspects eligibility only; it does not expand or copy beat arrays. Each activity is analyzed independently;
+completed analyses are cached only in component memory and reused across local source changes and collapse/reopen. Input changes
+invalidate that cache. A source failure leaves successful plots and all saved summaries available; Retry reruns only failed sources.
+Collapsing cancels pending work, disconnects/disposes both hosts and fences late results. Unreadable timing is handled inside
+its source request, leaving other recordings usable.
 Eligibility and analysis ignore any stream display filter and preserve the original unsmoothed intervals.
 Regular one-second `Stream` data is ineligible. Original elapsed beat times and invalid-observation barriers are preserved.
 The worker calls Sports Lib's `analyzeRRIntervals`; QS does not implement another artifact or DFA algorithm.
@@ -451,7 +489,7 @@ The two ECharts hosts share native zoom/hover with matching zoom IDs (including 
 Reset uses the shared sync-source suppression so the button owns its single haptic response. Chart gestures use the
 shared ECharts feedback helper. Shared host lifecycle, theme/contrast, tooltip and resize helpers remain authoritative.
 Flag exclusion masks plot values only; null windows and recording segment boundaries stay gaps. Native LTTB is disabled
-because it can join unrelated points around null barriers. Dense artifact/pair markers are capped at 4,000 per kind by
+because it can join unrelated points around null barriers. Dense artifact/pair markers are capped at 4,000 per kind per recording by
 sampling the complete time domain, with a visible notice; recorded summary counts remain complete. Zoom and exclusion
 never recalculate persisted statistics. DFA guides at 0.75 and 0.50 carry no automatic intensity or medical conclusion.
 Axis ticks stay compact; hover timing retains canonical seconds. Tooltip metric values use

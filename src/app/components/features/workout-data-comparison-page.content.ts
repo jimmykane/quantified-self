@@ -78,13 +78,18 @@ export const COMPARISON_ANALYSIS_ITEMS: readonly ComparisonFeatureItem[] = [
     title: 'Sensor agreement and artifacts',
     copy: 'Review available correlation and error metrics for shared streams, then surface detected dropouts, stuck values, cadence lock, and preprocessing context.',
   },
+  {
+    icon: 'ecg_heart',
+    title: 'R–R intervals and heart rate variability (HRV)',
+    copy: 'Compare original beat-to-beat intervals and per-recording coverage, artifact flags, RMSSD, SDNN, pNN50 and DFA α1 when R–R data is available. Full-recording summaries remain separate from the hardware agreement grade.',
+  },
 ];
 
 export const COMPARISON_REVIEW_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'summarize',
     title: 'At-a-glance benchmark reports',
-    copy: 'Save the device pair, overall agreement, GNSS, heart-rate, altitude, quality, and timing context in one reusable report.',
+    copy: 'Save the device pair, overall agreement, GNSS, heart-rate, altitude, quality, timing context and available R–R/HRV summaries in one reusable report.',
   },
   {
     icon: 'palette',
@@ -104,6 +109,10 @@ export const COMPARISON_REVIEW_ITEMS: readonly ComparisonFeatureItem[] = [
 ];
 
 export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
+  {
+    question: 'Can I compare R–R intervals and HRV from workout recordings?',
+    answer: 'Yes, when the original recordings contain beat-to-beat R–R intervals. Inspect their interval charts, recording coverage, artifact flags and saved activity HRV statistics. Ordinary heart-rate samples cannot supply missing beat intervals. Each summary describes its full recording, separately from overnight HRV and the hardware agreement grade.',
+  },
   {
     question: 'Can I compare Garmin, COROS, Suunto, Wahoo, and uploaded workout files?',
     answer: 'Yes. Import provider activities or upload FIT, TCX, GPX, JSON, and SML files, then compare compatible recordings with source-aware maps, charts, overlays, and benchmark reports from the same dashboard.',

@@ -1,36 +1,55 @@
+@use '@angular/material' as mat;
+
 :host { display: block; min-width: 0; }
-.benchmark-rr { padding: 16px 0; border-top: 1px solid var(--mat-sys-outline-variant); color: var(--mat-sys-on-surface); }
-.rr-intro, .rr-note, .rr-secondary, .rr-summary-toolbar > span, .rr-plot-heading > span { color: var(--mat-sys-on-surface-variant); }
-.rr-intro { margin: 0 0 12px; }
-.rr-summary-toolbar, .rr-chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px 0; }
-.rr-summary-toolbar mat-form-field, .rr-chart-toolbar mat-form-field { width: 240px; max-width: 100%; }
+.benchmark-rr { --event-section-header-padding: 4px 0; border-top: 1px solid var(--mat-sys-outline-variant); color: var(--mat-sys-on-surface); font: var(--mat-sys-body-small); }
+.rr-note, .rr-secondary { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.rr-note { margin: 8px 0; }
+.rr-disclosure, .rr-summary-toggle { min-height: 44px; }
+.rr-summary-toolbar, .rr-chart-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 0; @include mat.form-field-density(-3); @include mat.checkbox-density(-3); }
+.rr-summary-toolbar mat-form-field, .rr-chart-toolbar mat-form-field { width: 200px; max-width: 100%; }
+.rr-source-legends { display: grid; gap: 6px; max-width: 100%; overflow-x: auto; margin: 4px 0 12px; }
+.rr-source-legends:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: -2px; }
+.rr-source-legend { display: flex; align-items: baseline; gap: 12px; width: max-content; min-width: 100%; }
+.rr-source-legend > .rr-source-name { flex: 0 0 12rem; max-width: 12rem; }
+.rr-source-name { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; font: var(--mat-sys-label-medium); }
+.rr-device-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rr-device-line { width: 24px; border-top: 2px solid var(--rr-device-color); flex: 0 0 auto; }
+.rr-device-line-dash-dot { height: 2px; border-top: 0; background: repeating-linear-gradient(to right, var(--rr-device-color) 0 8px, transparent 8px 11px, var(--rr-device-color) 11px 13px, transparent 13px 16px); }
+.rr-metrics-legend { display: flex; gap: 14px; margin: 0; }
+.rr-metrics-legend > div { display: flex; align-items: baseline; gap: 4px; }
+.rr-metrics-legend dt, .rr-metrics-legend dd { white-space: nowrap; }
+.rr-metrics-legend dt { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.rr-metrics-legend dd { margin: 0; }
+.rr-value { display: block; font: 600 .875rem 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
 .rr-table-scroll { overflow-x: auto; max-width: 100%; }
 .rr-table-scroll:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: -2px; }
-.rr-table-hint { display: none; color: var(--mat-sys-on-surface-variant); }
+.rr-table-hint { display: none; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .rr-summary-table { width: 100%; background: transparent; }
-.rr-summary-table th, .rr-summary-table td { min-width: 170px; padding: 12px 16px; vertical-align: middle; }
-.rr-summary-table .mat-column-metric { min-width: 150px; width: 25%; background: var(--mat-sys-surface); }
-.rr-source-name { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
-.rr-device-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.rr-value { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
-.rr-secondary { display: block; font-size: .75rem; margin-top: 3px; }
+.rr-summary-table th, .rr-summary-table td { min-width: 145px; padding: 8px 12px; vertical-align: middle; }
+.rr-summary-table .mat-column-metric { min-width: 125px; width: 25%; background: var(--mat-sys-surface); }
+.rr-summary-table .rr-secondary { display: block; margin-top: 2px; }
 .rr-missing { color: var(--mat-sys-on-surface-variant); }
-.rr-metric-label { font-size: .85rem; }
-.rr-note { margin: 14px 0 0; }
-.rr-loading, .rr-error { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 20px 0; }
-.rr-chart { width: 100%; height: 300px; min-width: 0; }
+.rr-metric-label { font: var(--mat-sys-body-small); }
+.rr-loading, .rr-error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+.rr-error p { margin: 0; }
+.rr-chart { width: 100%; height: var(--event-chart-panel-height, 300px); min-width: 0; touch-action: pan-y pinch-zoom; }
 .rr-dfa-chart { height: 220px; }
-.rr-plot-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
-.rr-plot-heading h3 { margin: 0; font-size: 1rem; font-weight: 500; }
-.rr-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; }
-.rr-legend > span { display: flex; align-items: center; gap: 6px; }
-.rr-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
-.rr-ectopic-key { border: 1.3px solid var(--mat-sys-on-surface); }
+.rr-plot-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+.rr-plot-heading h3 { margin: 0; font: 600 1.1rem 'Barlow Condensed', sans-serif; }
+.rr-marker-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.rr-marker-legend > span { display: flex; align-items: center; gap: 5px; }
+.rr-marker-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.rr-ectopic-key { border: 1px solid var(--mat-sys-on-surface); }
 @media (max-width: 600px) {
+  .rr-source-legends { gap: 12px; }
+  .rr-source-legend { display: grid; gap: 4px; width: 100%; min-width: 0; }
+  .rr-source-legend > .rr-source-name { min-width: 0; max-width: none; }
+  .rr-metrics-legend { flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+  .rr-metrics-legend > div { flex-wrap: wrap; max-width: 100%; }
+  .rr-metrics-legend dt { white-space: normal; overflow-wrap: anywhere; }
+  .rr-marker-legend { flex: 1 1 100%; min-width: 0; }
   .rr-table-hint { display: block; margin: 0 0 8px; }
-  .rr-summary-toolbar, .rr-chart-toolbar { align-items: flex-start; }
-  .rr-summary-table th, .rr-summary-table td { min-width: 145px; padding: 10px; }
-  .rr-summary-table .mat-column-metric { min-width: 125px; }
+  .rr-summary-table th, .rr-summary-table td { padding: 8px; }
   .rr-chart { height: 270px; }
   .rr-dfa-chart { height: 220px; }
 }
