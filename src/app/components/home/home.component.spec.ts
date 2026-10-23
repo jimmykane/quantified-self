@@ -124,6 +124,9 @@ describe('HomeComponent', () => {
     expect(health.querySelector('.preview-placeholder--note-comparison')).toBeTruthy();
     expect(health.querySelector('app-health-note-comparison-preview')).toBeNull();
     expect(copy).toContain('reference and test devices');
+    const comparisonCopy = fixture.nativeElement.querySelector('#home-comparisons .section-heading') as HTMLElement;
+    expect(comparisonCopy.textContent).toContain('R–R intervals and heart rate variability (HRV)');
+    expect(comparisonCopy.closest('[data-nosnippet]')).toBeNull();
     expect(copy).toContain('location access remains separate');
     expect(fixture.nativeElement.querySelectorAll('.training-plans-section app-compact-row')).toHaveLength(6);
     expect(fixture.nativeElement.querySelector('#home-plans-example-title')?.textContent)

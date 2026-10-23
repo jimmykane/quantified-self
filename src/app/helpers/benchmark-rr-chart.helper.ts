@@ -6,10 +6,11 @@ import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY } from './e
 import { deviceChartLineType } from './device-chart-appearance.helper';
 
 type Point = [number, number | null];
+export type BenchmarkRRChartAnalysis = Pick<RRAnalysis, 'beats' | 'windows'>;
 export interface BenchmarkRRChartRecording {
   key: string;
   label: string;
-  analysis: RRAnalysis;
+  analysis: BenchmarkRRChartAnalysis;
   startTimeMs: number;
   durationMs: number;
   color: string;
@@ -33,7 +34,7 @@ function sampleMarkers(points: Point[]): Point[] {
   return Array.from({ length: MAX_MARKERS }, (_, index) => points[Math.round(index * (points.length - 1) / (MAX_MARKERS - 1))]);
 }
 
-export function buildBenchmarkRRSeries(analysis: RRAnalysis, excludeFlagged: boolean) {
+export function buildBenchmarkRRSeries(analysis: BenchmarkRRChartAnalysis, excludeFlagged: boolean) {
   const intervals: Point[] = [];
   const artifacts: Point[] = [];
   const ectopics: Point[] = [];

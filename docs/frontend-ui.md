@@ -432,6 +432,15 @@ R–R values. The section is inside the existing share/image export frame and us
 Image exports hide the screen-only horizontal-scrolling hint, including when generated from a phone viewport.
 It reads no streams, starts no worker and changes no saved report schema, Firestore query/index or MCP contract.
 
+The shared public reviewer showcase also includes an R–R/HRV row on Home and the comparison feature page. A fixed,
+approved excerpt contains only the first 90 seconds of relative beat times, intervals and version-one classification flags
+from one recorded source. Its three verified full-recording summaries remain separate from excerpt data. There are no account,
+event, device, calendar-time or location fields. The sample is independent of the existing multi-device HR/altitude examples.
+Use the shared R–R option builder and viewport-deferred ECharts host; the public preview does not parse originals, run analysis
+workers, query accounts or add input listeners. Keep its numeric example under `data-nosnippet`, with capability copy in ordinary
+prerendered HTML outside that boundary. The phone layout stacks the plot and a wrapping two-column metric table without horizontal
+scrolling. Chart initialization failures retain the server-renderable summary table and show a short fallback.
+
 `BenchmarkRRComponent` is mounted only on benchmark event details, using the shared benchmark classification
 (including legacy benchmark merges, excluding explicit multisport merges). It follows the selected activities and
 full-event device color assignments. It does not change the benchmark report, alignment or accuracy grades.

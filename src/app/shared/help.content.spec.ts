@@ -200,6 +200,8 @@ describe('help.content', () => {
     expect(copy).toContain('starts collapsed');
     expect(copy).toContain('one, two or more overlaid recordings');
     expect(copy).toContain('statistics in a top legend');
+    expect(copy).toContain('a fixed, anonymized 90-second excerpt from one real R–R recording');
+    expect(copy).toContain('not a live view of your account');
     expect(copy).toContain('the metric legend wraps so every available value stays visible');
     expect(copy).toContain('The full statistics table scrolls horizontally');
     expect(copy).toContain('Original recording start offsets');

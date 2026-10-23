@@ -356,8 +356,8 @@ describe('Firebase Hosting configuration', () => {
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
     // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
     // Help covers power data, ascent corrections, and history-import refresh timing.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-22');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
@@ -368,7 +368,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
@@ -405,7 +405,7 @@ describe('Firebase Hosting configuration', () => {
     // Pool swims default to Duration and disable the Distance chart axis.
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-22');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
