@@ -6180,6 +6180,8 @@ ambiguous windows fail before the source reservation writes anything. No positio
 Saved leg ID reuse belongs only to guarded source preparation. Parsing/source-key generation uses provisional IDs,
 and edit carryover preserves names without assigning IDs. The writer builds benchmark associations once, after
 preparation establishes the final IDs. Normal reparse and interrupted recovery share the same preparation path.
+Saved elevation corrections must pass strict matching for that same ID pairing. Conflicting key/window evidence
+cannot move a correction to a different leg and fails before the reservation marks load pending.
 
 The committed reservation carries its verified activity IDs in memory into load reconciliation. This certificate
 preserves each matched leg's dated applied policy and latest controls, including a numeric zero, when the imported
@@ -6187,6 +6189,8 @@ sport changes. It does not authorize ID-only matching for unrelated source write
 fingerprints, concurrent owner-edit checks and deletion fences remain authoritative. Late owner sport/device edits
 are preserved inside the document transaction. An owner sport label does not recalculate the file's physiological
 inputs or replace its cached load evaluation. The parent activity-type summary is refreshed from prepared legs.
+Restoring the source sport during preparation clears the earlier owner label and adopts the refreshed imported
+sport; the activity write must not restore that stale override.
 
 Legacy associations are established on demand; an unexplained provider sport change requires bounded retained-file
 proof of the old imported type, with reference revision revalidation. A source conflict uses the existing terminal

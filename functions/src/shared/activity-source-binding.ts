@@ -78,6 +78,10 @@ export function prepareActivitySourceBindings(event: EventInterface, documents: 
   const strictAssignments = resolveActivityIdentityAssignments(before, activities as ActivityIdentityLike[], {
     requireStrictMatch: true, allowSourceWindowMatch: options.allowSourceWindowMatch,
   }).assignments;
+  // Corrections may validate the chosen ID pairing, never independently choose a different saved leg.
+  strictAssignments.forEach((existingIndex, parsedIndex) => {
+    if (matches.assignments.get(parsedIndex) !== existingIndex) strictAssignments.delete(parsedIndex);
+  });
   return { verifiedActivityIds, strictAssignments, activityTypes: bindings.map(binding => binding.type), apply: () => {
     bindings.forEach(({ activity, id, type, sourceIdentity, saved }) => {
       activity.setID(id);

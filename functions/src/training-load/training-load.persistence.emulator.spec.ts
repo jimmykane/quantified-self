@@ -274,13 +274,14 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(saved.docs[0].data()).toMatchObject({ stats: { Ascent: 75, Descent: 80 },
       ascentCorrection: { value: 75, sourceValue: 350 }, descentCorrection: { value: 80, sourceValue: 400 } });
   });
-  it('keeps source IDs, dated policies and live controls through a provider sport revision and another reparse', async () => {
+  it.each([false, true])('keeps source IDs, policies and live sport edits through revision/reparse (reset: %s)', async reset => {
     const uid = setup(); const original = workout('stable-leg');
     const old = original.getFirstActivity(); old.type = ActivityTypes.Stretching;
     await importWorkout(uid, original);
     const child = db.doc(`users/${uid}/activities/stable-leg`);
     await child.update({ sourceIdentity: { version: 1, activityId: 'stable-leg', startMs: +old.startDate,
-      endMs: +old.endDate, importedType: ActivityTypes.Stretching }, 'creator.name': 'Owner device' });
+      endMs: +old.endDate, importedType: ActivityTypes.Stretching }, 'creator.name': 'Owner device',
+      ...(reset ? { type: ActivityTypes.Pilates } : {}) });
     const provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic-account', serviceWorkoutID: 'synthetic-workout' };
     await db.doc(`users/${uid}/events/workout/metaData/${ServiceNames.SuuntoApp}`).set(provider);
     const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data() as TrainingLoadMetadata;
@@ -294,9 +295,10 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await firstWrite.promise;
     // Owner edits happen after reservation but before the source activity commits.
     await ref.update({ controls: { 'stable-leg': { override: 0 } }, revision: before.revision + 2 });
-    await child.update({ 'creator.name': 'Latest owner device', type: ActivityTypes.Pilates });
+    await child.update({ 'creator.name': 'Latest owner device', type: reset ? ActivityTypes.Stretching : ActivityTypes.Pilates });
     continueWrite.release(); await pending;
-    expect((await child.get()).data()).toMatchObject({ type: ActivityTypes.Pilates, creator: { name: 'Latest owner device' },
+    const expectedType = reset ? ActivityTypes.Yoga : ActivityTypes.Pilates;
+    expect((await child.get()).data()).toMatchObject({ type: expectedType, creator: { name: 'Latest owner device' },
       sourceIdentity: { activityId: 'stable-leg', importedType: ActivityTypes.Yoga } });
     const metadata = (await ref.get()).data() as TrainingLoadMetadata;
     expect(metadata.sourceWritePending).toBe(false);
@@ -309,9 +311,42 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const parent = await db.doc(`users/${uid}/events/workout`).get();
     await persistReparsedEvent(uid, 'workout', again, parent.data()!, children.docs, '23.6.0');
     expect(again.getFirstActivity().getID()).toBe('stable-leg');
-    expect((await child.get()).data()).toMatchObject({ type: ActivityTypes.Pilates,
+    expect((await child.get()).data()).toMatchObject({ type: expectedType,
       sourceIdentity: { activityId: 'stable-leg', importedType: ActivityTypes.Yoga } });
     expect((await ref.get()).data()).toMatchObject({ controls: { 'stable-leg': { override: 0 } }, sourceWritePending: false });
+  });
+
+  it.each(['ascent', 'descent'] as const)('preserves source and load when ID and %s correction pairings conflict', async metric => {
+    const uid = setup(); const original = elevationWorkout('first');
+    original.addActivity(elevationWorkout('second').getFirstActivity());
+    original.getActivities()[1].startDate = new Date(Date.UTC(2026, 0, 2, 1));
+    original.getActivities()[1].endDate = new Date(Date.UTC(2026, 0, 2, 2));
+    await importWorkout(uid, original);
+    const first = db.doc(`users/${uid}/activities/first`), second = db.doc(`users/${uid}/activities/second`);
+    await first.update({ sourceActivityKey: 'first-source' });
+    await second.update({ sourceActivityKey: 'second-source' });
+    if (metric === 'ascent') await updateActivityAscent(uid, 'workout', await ascentRequest(uid, 'first'));
+    else await updateActivityElevation(uid, 'workout', await descentRequest(uid, 80, 'first'));
+    const provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic', serviceWorkoutID: 'workout' };
+    await db.doc(`users/${uid}/events/workout/metaData/${ServiceNames.SuuntoApp}`).set(provider);
+    const metadataRef = db.doc(metadataPath(uid)), parent = db.doc(`users/${uid}/events/workout`);
+    const before = await db.getAll(metadataRef, parent, first, second);
+    const incoming = elevationWorkout('incoming-first');
+    const next = elevationWorkout('incoming-second').getFirstActivity();
+    next.startDate = original.getActivities()[1].startDate;
+    next.endDate = original.getActivities()[1].endDate;
+    incoming.addActivity(next);
+    Object.assign(incoming.getActivities()[0], { sourceActivityKey: 'second-source' });
+    Object.assign(incoming.getActivities()[1], { sourceActivityKey: 'first-source' });
+    const { writer, setDoc } = reuploadWriter(uid, provider);
+    await expect(writer.writeAllEventData(uid, incoming)).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    const after = await db.getAll(metadataRef, parent, first, second);
+    after.forEach((document, index) => {
+      expect(document.data()).toEqual(before[index].data());
+      expect(document.updateTime?.isEqual(before[index].updateTime!)).toBe(true);
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(incoming.getActivities().map(activity => activity.getID())).toEqual(['incoming-first', 'incoming-second']);
   });
 
   it('reuploads a source-keyed activity without duplicating it or losing live edits and load overrides', async () => {

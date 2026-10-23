@@ -926,6 +926,8 @@ the reservation. This exceptional proof is bounded to four owner/event-scoped or
 windows, overlapping split/merge replacements or incompatible saved corrections preserve the saved source and load
 and produce `ACTIVITY_IDENTITY_CONFLICT` for review. Existing provider dead-letter handling commits that terminal
 outcome once; Wahoo retains its current revision/lease fences. No automated reassociation or deletion is performed.
+Strict elevation-correction matches must agree with the selected saved-ID pairing; contradictory key/window matches
+are rejected before reserving a source write rather than transferring a correction to another leg.
 
 Verified assignments are passed only in memory from the committed reservation to Training finalization. They preserve
 zero overrides, exclusions and dated applied policy across a sport revision without making arbitrary reused IDs

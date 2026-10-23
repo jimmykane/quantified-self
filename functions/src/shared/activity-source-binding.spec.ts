@@ -75,6 +75,19 @@ describe('stable activity source bindings', () => {
     expect(parsed.getActivities().map(activity => activity.getID())).toEqual(['incoming-0', 'incoming-1']);
   });
 
+  it('does not certify corrections for a different pairing than the saved leg IDs', () => {
+    const parsed = event([ActivityTypes.Running, ActivityTypes.Running]);
+    Object.assign(parsed.getActivities()[0], { sourceActivityKey: 'second-source' });
+    Object.assign(parsed.getActivities()[1], { sourceActivityKey: 'first-source' });
+    const plan = prepareActivitySourceBindings(parsed, [
+      saved('first', 'Running', { sourceActivityKey: 'first-source' }),
+      saved('second', 'Running', { sourceActivityKey: 'second-source', startDate: new Date(61000), endDate: new Date(121000) }),
+    ], { allowSourceWindowMatch: true });
+    expect(plan.strictAssignments.size).toBe(0);
+    plan.apply();
+    expect(parsed.getActivities().map(activity => activity.getID())).toEqual(['second', 'first']);
+  });
+
   it('stamps new imports without replacing their chosen IDs', () => {
     const parsed = event([ActivityTypes.Yoga, ActivityTypes.Running]);
     const plan = prepareActivitySourceBindings(parsed, [], { allowNewActivities: true });

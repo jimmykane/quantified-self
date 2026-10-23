@@ -43,10 +43,10 @@ export function preserveImportedActivityEdits(incoming: admin.firestore.Document
   const name = getActivityCreatorNameCarryover(existing?.creator?.name, incoming.creator?.name);
   const priorSource = readActivitySourceIdentity(existing?.sourceIdentity);
   const currentSource = readActivitySourceIdentity(incoming.sourceIdentity);
-  const preserveType = priorSource && currentSource?.activityId === priorSource.activityId
-    && existing?.type !== priorSource.importedType;
+  const boundSource = priorSource && currentSource?.activityId === priorSource.activityId;
   return sanitizeActivityFirestoreWritePayload({ ...incoming,
-    ...(preserveType ? { type: existing!.type } : {}),
+    // Re-read both override and reset: a prepared owner label must not undo a later reset to the source sport.
+    ...(boundSource ? { type: existing!.type !== priorSource.importedType ? existing!.type : currentSource.importedType } : {}),
     ...(name ? { creator: { ...incoming.creator, name } } : {}),
     ...(existing?.sourceActivityKey ? { sourceActivityKey: existing.sourceActivityKey } : {}),
   });

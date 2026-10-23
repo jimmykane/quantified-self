@@ -93,6 +93,16 @@ describe('shared import preservation', () => {
       .toThrow('descent correction was not safely matched');
   });
 
+  it.each(['Stretching', 'Yoga'])('does not restore a cleared owner sport label during a source rewrite to %s', importedType => {
+    const sourceIdentity = { version: 1, activityId: 'stable', startMs: 1000, endMs: 61000, importedType: 'Stretching' };
+    const existing = { type: 'Stretching', sourceIdentity };
+    // Preparation saw Pilates, then the owner restored the source sport before the activity transaction.
+    const incoming = { type: 'Pilates', sourceIdentity: { ...sourceIdentity, importedType } };
+    expect(preserveImportedActivityEdits(incoming, existing)).toMatchObject({ type: importedType });
+    expect(existing.type).toBe('Stretching');
+    expect(incoming.type).toBe('Pilates');
+  });
+
   it.each([false, true])('adopts a verified legacy provider sport revision with retained-file proof (owner override: %s)', async ownerOverride => {
     const incoming = activity(0, 'Yoga');
     store('stable-id', activity(0, ownerOverride ? 'Pilates' : 'Stretching'));
@@ -212,6 +222,24 @@ describe('shared import preservation', () => {
     await expect(prepareImportedEventWrite('owner', event([parsed]))).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
     expect(state.commit).not.toHaveBeenCalled();
     expect(parsed.getID()).toBe('legacy-0');
+  });
+
+  it('rejects conflicting correction and ID pairings before committing a source reservation', async () => {
+    store('first', activity(), { sourceActivityKey: 'first-source', ascentCorrection: { value: 75, sourceValue: 100 } });
+    store('second', activity(1), { sourceActivityKey: 'second-source' });
+    const parsed = EventImporterJSON.getEventFromJSON({ name: 'Multisport', startDate: 1700000000000, endDate: 1700007200000,
+      activities: [activity(), activity(1)].map(item => ({ ...item.toJSON(), streams: [], laps: [], intensityZones: [] })), stats: {} }).setID('event');
+    parsed.getActivities().forEach((item, index) => {
+      item.setID(`incoming-${index}`);
+      Object.assign(item, { sourceActivityKey: index ? 'first-source' : 'second-source' });
+      item.addStat(new DataAscent(300));
+    });
+    state.provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic', serviceWorkoutID: 'workout' };
+    await expect(prepareImportedEventWrite('owner', parsed, authorize, state.provider))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(parsed.getActivities().map(item => item.getID())).toEqual(['incoming-0', 'incoming-1']);
+    expect(parsed.getActivities().every(item => !('ascentCorrection' in item))).toBe(true);
   });
 
   it('does not apply identities from a failed or retried reservation transaction', async () => {
