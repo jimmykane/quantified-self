@@ -12,6 +12,7 @@ import { fetchAndActivate, getString } from 'firebase/remote-config';
 vi.mock('../../environments/environment', () => ({
     environment: {
         production: false,
+        firebase: { projectId: 'test-project' },
         beta: false,
         localhost: true
     }

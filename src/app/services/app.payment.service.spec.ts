@@ -28,6 +28,7 @@ vi.mock('app/firebase/functions', async () => {
 
 
 const {
+    mockBillingControl,
     mockSetDoc,
     mockGetDoc,
     mockGetDocsFromServer,
@@ -41,6 +42,7 @@ const {
     mockRunInInjectionContext
 } = vi.hoisted(() => {
     return {
+        mockBillingControl: vi.fn(),
         mockSetDoc: vi.fn(),
         mockGetDoc: vi.fn(),
         mockGetDocsFromServer: vi.fn(),
@@ -55,7 +57,7 @@ const {
     };
 });
 
-const liteFirestore = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
+const liteFirestore = vi.hoisted(() => ({ getFirestore: vi.fn(), connectFirestoreEmulator: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
 vi.mock('firebase/firestore/lite', () => liteFirestore);
 
 // Mock the module
@@ -63,6 +65,7 @@ vi.mock('app/firebase/firestore', async () => {
     const actual = await vi.importActual('app/firebase/firestore');
     return {
         ...actual,
+        getDocFromServer: mockBillingControl,
         setDoc: mockSetDoc,
         getDoc: mockGetDoc,
         getDocsFromServer: mockGetDocsFromServer,
@@ -99,9 +102,18 @@ describe('AppPaymentService', () => {
     let service: AppPaymentService;
     let generatedCheckoutDocSequence = 0;
 
+    it('shows maintenance and prevents checkout writes and portal calls', async () => {
+        mockBillingControl.mockResolvedValue({ data: () => ({ requestsEnabled: false }) });
+        await expect(service.appendCheckoutSession('price_test')).rejects.toThrow('temporarily unavailable');
+        await expect(service.manageSubscriptions()).rejects.toThrow('temporarily unavailable');
+        expect(mockSetDoc).not.toHaveBeenCalled();
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    });
+
     beforeEach(() => {
         vi.clearAllMocks(); // Reset spies
         generatedCheckoutDocSequence = 0;
+        mockBillingControl.mockResolvedValue({ data: () => ({ requestsEnabled: true }) });
 
         mockAuth.currentUser = {
             uid: 'test_user_uid',

@@ -37,7 +37,7 @@ import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import type Stripe from 'stripe';
 
 const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
@@ -125,6 +125,10 @@ async function findAndLinkStripeCustomer(
 ): Promise<LinkResult> {
     const db = admin.firestore();
     const customerRef = db.collection('customers').doc(uid);
+    const billingAccountRef = db.doc(`stripeBillingAccounts/${uid}`);
+    const mayLink = async () => !(await getUserDeletionGuardState(db, uid)).shouldSkip
+        && (await billingAccountRef.get()).data()?.deleting !== true;
+    if (!await mayLink()) return { found: false };
     // This binding is server-owned: clients cannot write customers/{uid}.stripeId.
     const stripeId = (await customerRef.get()).data()?.stripeId;
     const boundStripeId = typeof stripeId === 'string' && stripeId ? stripeId : undefined;
@@ -177,6 +181,7 @@ async function findAndLinkStripeCustomer(
             continue;
         }
 
+        if (!await mayLink()) return { found: false };
         const subscriptions = await stripe.subscriptions.list({
             customer: customer.id,
             status: 'active',
@@ -199,6 +204,7 @@ async function findAndLinkStripeCustomer(
             const productId = typeof priceItem.price.product === 'string'
                 ? priceItem.price.product
                 : priceItem.price.product.id;
+            if (!await mayLink()) return { found: false };
             const product = await stripe.products.retrieve(productId);
             const role = product.metadata?.firebaseRole || product.metadata?.role;
             if (role !== 'free' && role !== 'basic' && role !== 'pro') {
@@ -209,13 +215,14 @@ async function findAndLinkStripeCustomer(
             // from binding the same customer to different UIDs. Never transfer an existing owner.
             const ownersQuery = db.collection('customers').where('stripeId', '==', customer.id);
             const linked = await db.runTransaction(async transaction => {
-                const [currentCustomer, owners, deletionGuard] = await Promise.all([
+                const [currentCustomer, owners, deletionGuard, billingAccount] = await Promise.all([
                     transaction.get(customerRef),
                     transaction.get(ownersQuery),
-                    getUserDeletionGuardStateInTransaction(db, transaction, uid)
+                    getUserDeletionGuardStateInTransaction(db, transaction, uid),
+                    transaction.get(billingAccountRef)
                 ]);
                 const currentStripeId = currentCustomer.data()?.stripeId;
-                if (deletionGuard.shouldSkip
+                if (deletionGuard.shouldSkip || billingAccount.data()?.deleting === true
                     || (boundStripeId && currentStripeId !== boundStripeId)
                     || (currentStripeId && currentStripeId !== customer.id)
                     || owners.docs.some(owner => owner.id !== uid)) {
@@ -236,6 +243,7 @@ async function findAndLinkStripeCustomer(
             }
 
             // Update Stripe Customer metadata with new Firebase UID
+            if (!await mayLink()) return { found: false };
             await stripe.customers.update(customer.id, {
                 metadata: {
                     linkedAt: Date.now().toString(),
@@ -248,6 +256,7 @@ async function findAndLinkStripeCustomer(
             // Trigger a subscription.updated webhook by updating subscription metadata
             // Also update the firebaseUID in the subscription metadata to match the new user
             // This causes the extension to sync the subscription to the new user's Firestore path
+            if (!await mayLink()) return { found: false };
             await stripe.subscriptions.update(sub.id, {
                 metadata: {
                     linkedAt: Date.now().toString(),
@@ -257,6 +266,7 @@ async function findAndLinkStripeCustomer(
             });
             logger.info(`[findAndLinkStripeCustomer] Triggered subscription.updated webhook for ${sub.id}`);
 
+            if (!await mayLink()) return { found: false };
             const existingClaims = user.customClaims || {};
             await admin.auth().setCustomUserClaims(uid, {
                 ...existingClaims,

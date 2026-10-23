@@ -1,5 +1,7 @@
 import functionsTest from 'firebase-functions-test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { requestBillingDeletion } from '../stripe/billing/service';
+vi.mock('../stripe/billing/service', () => ({ requestBillingDeletion: vi.fn().mockResolvedValue(undefined) }));
 import * as functions from 'firebase-functions/v1';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
@@ -287,6 +289,19 @@ function mockCollectionWhereResultsByName(
 }
 
 describe('cleanupUserAccounts', () => {
+    it('stages billing cleanup through the shared deletion helper', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'billing-owner' });
+        await cleanupUserAccounts(user, { eventId: 'billing-delete' } as unknown as functions.EventContext);
+        expect(requestBillingDeletion).toHaveBeenCalledWith(expect.anything(), 'billing-owner');
+    });
+
+    it('continues other account cleanup and retries failed billing admission', async () => {
+        vi.mocked(requestBillingDeletion).mockRejectedValueOnce(new Error('private database failure'));
+        const user = testEnv.auth.makeUserRecord({ uid: 'billing-owner' });
+        await expect(cleanupUserAccounts(user, { eventId: 'billing-delete' } as unknown as functions.EventContext))
+            .rejects.toThrow('Billing deletion admission failed.');
+        expect(cleanupServiceDisconnectTasksForUserMock).toHaveBeenCalledWith('billing-owner');
+    });
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset console mocks to keep output clean during tests if needed

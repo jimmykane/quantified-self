@@ -977,6 +977,15 @@ export const cleanupUserAccounts = functions
     .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
     .auth.user().onDelete(async (user, context) => observeAccountCleanup(context?.timestamp, async () => {
     const uid = user.uid;
+    // Staging is secret-free. The private billing worker owns retryable remote
+    // removal; the customer-delete trigger retains identity in the other ordering.
+    const { requestBillingDeletion } = await import('../stripe/billing/service');
+    let billingCleanupFailed = false;
+    try { await requestBillingDeletion(admin.firestore(), uid); }
+    catch {
+        billingCleanupFailed = true;
+        logger.error('[Cleanup] Billing deletion admission failed; continuing other cleanup before retry.');
+    }
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
 
     // Import constants locally to avoid top-level side effects if helpful, 
@@ -1133,6 +1142,8 @@ export const cleanupUserAccounts = functions
     // Disconnect may already have removed every credential. Its independent
     // cleanup records still own provider-only operational rows in that case.
     await cleanupServiceDisconnectTasksForUser(uid);
+
+    if (billingCleanupFailed) throw new Error('Billing deletion admission failed.');
 
     if (mailCleanupError) {
         throw mailCleanupError instanceof Error

@@ -8,11 +8,13 @@ const mockDelete = vi.fn();
 const mockUpdate = vi.fn();
 const mockGetDoc = vi.fn();
 let userExists = true;
+let billingDeleting = false;
 let systemStatusData: Record<string, unknown> = {};
 let deletionMarkerState: 'missing' | 'active' | 'expired' = 'missing';
 let customerData: Record<string, unknown> = {};
 
 const getDocSnapshot = (path?: string) => {
+    if (path?.startsWith('stripeBillingAccounts/')) return { exists: true, data: () => ({ deleting: billingDeleting }) };
     if (path?.startsWith('userDeletionTombstones/')) {
         if (deletionMarkerState === 'missing') {
             return {
@@ -86,6 +88,7 @@ const mockCollection = vi.fn((path?: string) => {
 const mockFirestore = {
     collection: mockCollection,
     doc: mockDoc,
+    getAll: (...refs: Array<{ get: () => Promise<unknown> }>) => Promise.all(refs.map(ref => ref.get())),
     runTransaction: mockRunTransaction
 };
 
@@ -152,6 +155,7 @@ beforeEach(() => {
     mockGetDoc.mockReset();
     mockRunTransaction.mockReset();
     userExists = true;
+    billingDeleting = false;
     systemStatusData = {};
     deletionMarkerState = 'missing';
     customerData = {};
@@ -414,6 +418,13 @@ describe('reconcileClaims', () => {
 });
 
 describe('linkExistingStripeCustomer', () => {
+    it('does not recover or recreate a billing account being deleted', async () => {
+        billingDeleting = true;
+        expect(await (linkExistingStripeCustomer as any)({ auth: { uid: 'user1' }, app: { appId: 'test' } })).toEqual({ linked: false });
+        expect(mockStripeCustomersSearch).not.toHaveBeenCalled();
+        expect(mockStripeCustomersRetrieve).not.toHaveBeenCalled();
+        expect(mockSet).not.toHaveBeenCalled();
+    });
     it('should throw unauthenticated error if no auth context', async () => {
         const req = { auth: null, app: { appId: 'test' } } as any;
         await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('The function must be called while authenticated');
