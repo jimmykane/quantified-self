@@ -71,8 +71,9 @@
 
       @if (user) {
       <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
+        emptyMessage="No activities in this date range" emptyHint="Try another date range or import an activity."
         [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events">
-        <app-event-search event-table-filters class="table-toolbar-layout compact-filter-layout"
+        <app-event-search #eventTableSearch event-table-filters class="table-toolbar-layout compact-filter-layout"
           [isLoading]="isLoading" [compact]="true" [selectedDateRange]="eventTableFilters.dateRange"
           [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
           [selectedActivityTypes]="eventTableFilters.activityTypes"
@@ -81,6 +82,9 @@
           [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"
           (searchChange)="search($event)">
         </app-event-search>
+        <button event-table-empty-action mat-button type="button" (click)="eventTableSearch.openToolbarDateFilter()">
+          <mat-icon aria-hidden="true">date_range</mat-icon>Change dates
+        </button>
       </app-event-table>
       }
     </div>

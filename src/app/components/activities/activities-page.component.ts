@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
+import { MatDateRangePicker } from '@angular/material/datepicker';
 import { combineLatest, Subscription, take } from 'rxjs';
 import dayjs, { type Dayjs } from 'dayjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
@@ -48,6 +49,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   private readonly datePresets = viewChild<MatSelect>('datePresets');
+  private readonly customPicker = viewChild<MatDateRangePicker<Dayjs>>('customPicker');
   private readonly customStartDate = viewChild<ElementRef<HTMLInputElement>>('customStartDate');
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
   private owner: FirebaseUserType | null = null;
@@ -300,6 +302,22 @@ export class ActivitiesPageComponent implements OnInit {
 
   onCustomPickerOpened(): void {
     this.haptics.selection();
+  }
+
+  openDateFilter(): void {
+    if (this.loading() || !this.owner || this.owner !== this.auth.currentUser || this.user()?.uid !== this.owner.uid) return;
+    if (this.showCustomRange()) {
+      const picker = this.customPicker();
+      if (!picker || picker.disabled || picker.opened) return;
+      this.customStartDate()?.nativeElement.focus();
+      picker.open(); // The existing opened handler owns feedback.
+      return;
+    }
+    const presets = this.datePresets();
+    if (!presets || presets.disabled || presets.panelOpen) return;
+    presets.focus();
+    presets.open();
+    if (presets.panelOpen) this.haptics.selection();
   }
 
   clearCustomRange(): void {

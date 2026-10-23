@@ -202,6 +202,8 @@ describe('DashboardComponent', () => {
         ) as HTMLElement;
 
         expect(projectedSearch).toBeTruthy();
+        const emptyAction = fixture.nativeElement.querySelector('app-event-table [event-table-empty-action]');
+        expect(emptyAction.textContent).toContain('Change dates');
     });
 
     it('renders dashboard summaries eagerly before the event table to avoid layout shifts', () => {

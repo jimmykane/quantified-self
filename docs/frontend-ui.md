@@ -1318,3 +1318,21 @@ Health category chips retain the existing single-row overflow rail. `ChartSource
 Health thumbnails reuse completed browser evidence for the same owner, metric, range and source while their visible subscription hydrates. Their latest value uses the existing canonical display string. The inert ECharts sparkline fits the span of recorded points, preserving values, gaps and colors; single readings and zero-valued bars remain visible. Full charts retain their selected date axis. Source options require drawable points in the selected window (or renderable Sleep sessions). A saved missing source retains its identity and displays `Source unavailable` with an explanation. The menu offers available replacements without silently substituting one; with no replacements it remains plain attribution.
 
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
+
+
+## Empty activity tables
+
+The shared event table keeps its existing surface, filter controls, icon headings, data rows and saved table preferences.
+A completed query with no displayed activities renders a compact, surface-free notice below the table's scroll owner;
+it does not use the loading shade's error card. Local text/tag no-matches use filter-specific copy. Loading, absent
+inputs and failed activity reads do not render the notice. Empty pagination is hidden without destroying the shared
+paginator or sort instances, so populated results retain their subscriptions and preferences.
+
+Dashboard and Activities project a Material **Change dates** button into the notice. It opens the existing preset
+selector or custom-date calendar without applying a range, changing filters, saving settings or fetching activities.
+Preset opening owns one selection haptic; custom calendars reuse their existing opened-event feedback. Disabled,
+loading and already-open controls are silent. Both controls receive focus before opening, keeping keyboard navigation
+and calendar focus return on the stable date field. The notice wraps its action below the copy at phone widths.
+
+MCP impact review: completed-activity presentation only; readers, canonical metrics, stored data, Training plan/workout
+contracts, consent and provider actions are unchanged.
