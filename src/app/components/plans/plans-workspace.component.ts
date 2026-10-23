@@ -2041,7 +2041,14 @@ export class PlansWorkspaceComponent {
 
   async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {
     const requestSequence = ++this.historyRequestSequence;
+    const uid = this.currentUser()?.uid;
     this.historyPanel.set({ scope, status: 'loading', entries: [], nextBeforeRevision: null, error: null });
+    afterNextRender(() => {
+      if (uid !== this.currentUser()?.uid || !this.isCurrentHistoryPanel(scope, requestSequence)) return;
+      const panel = this.host.nativeElement.querySelector<HTMLElement>('#history-panel');
+      panel?.focus({ preventScroll: true });
+      panel?.scrollIntoView?.({ block: 'start' });
+    }, { injector: this.injector });
     try {
       const response = await this.plansService.getHistory({ scope, limit: 50 });
       if (!this.isCurrentHistoryPanel(scope, requestSequence)) return;

@@ -1,4 +1,5 @@
 import { EventInterface } from '@sports-alliance/sports-lib';
+import type { ActivitySourceIdentity } from './activity-source-identity';
 
 export interface OriginalFileMetaData {
     path: string;
@@ -147,8 +148,10 @@ export interface FirestoreActivityJSON {
     eventID: string;
     /** Denormalized event start date for sorting across all user activities */
     eventStartDate?: Date;
-    /** Deterministic source-derived activity identity key */
+    /** Legacy source-derived identity key. Current export revisions live in original-file metadata. */
     sourceActivityKey?: string;
+    /** Server-owned imported classification/window, bound to this activity's stable document ID. */
+    sourceIdentity?: ActivitySourceIdentity;
 }
 
 /**

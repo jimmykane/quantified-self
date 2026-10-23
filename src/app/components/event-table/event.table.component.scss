@@ -547,22 +547,48 @@ mat-icon {
 
 .activity-table-overlay {
   --loading-overlay-top-offset: 56px;
-  --loading-shade-error-background: color-mix(in srgb, var(--mat-sys-surface-container-high) 76%, transparent);
-  --loading-shade-error-border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 78%, transparent);
-  --loading-shade-error-radius: 16px;
-  --loading-shade-error-padding: 18px 22px;
-  --loading-shade-error-blur: 16px;
-  --loading-shade-error-shadow: var(--qs-overlay-shadow);
 }
 
 .activity-table-no-data-row--hidden {
   display: none;
 }
 
+.activity-table-empty {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 116px;
+  padding: 20px 24px;
+}
+
+.activity-table-empty-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.activity-table-empty-main > mat-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.activity-table-empty-copy { min-width: 0; }
+.activity-table-empty-copy h3 { margin: 0; font: var(--mat-sys-body-medium); font-weight: 500; }
+.activity-table-empty-copy p { margin: 4px 0 0; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.activity-table-empty-actions { display: flex; align-items: center; }
+.activity-table-empty-actions:empty { display: none; }
+mat-paginator[hidden] { display: none !important; }
+
 @include bp.xsmall {
-  .activity-table-overlay {
-    --loading-shade-error-padding: 16px 18px;
-  }
+  .activity-table-empty { padding: 16px 12px; }
+  .activity-table-empty-actions { margin-inline-start: 32px; }
 }
 
 /* Paginator styling to match glass theme */

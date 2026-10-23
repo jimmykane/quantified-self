@@ -1,4 +1,5 @@
-import { DataAscent, DataDistance, DataDuration, type EventInterface, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import { DataAscent, DataDistance, DataDuration, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { aggregateWorkoutAnalysesV1, analyzeWorkoutStructureV1, type WorkoutAnalysisAggregateV1 } from '@shared/planned-workout-analysis';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
@@ -101,7 +102,7 @@ export function buildCalendarPeriodSummary(input: {
   window: ActivityCalendarQueryWindow;
   startLocalDate: string;
   endLocalDate: string;
-  events: CalendarPeriodSource<readonly EventInterface[]>;
+  events: CalendarPeriodSource<readonly EventRead[]>;
   schedule: CalendarPeriodSource<CalendarPeriodSchedule | null>;
   completions: CalendarPeriodSource<readonly TrainingWorkoutCompletionV1[]>;
   unitSettings?: UserUnitSettingsInterface | null;
@@ -112,7 +113,7 @@ export function buildCalendarPeriodSummary(input: {
   const recordedWarnings: string[] = [];
   const planningWarnings: string[] = [];
   const number = new Intl.NumberFormat(locale);
-  const recorded = new Map<string, EventInterface>();
+  const recorded = new Map<string, EventRead>();
   if (events.status === 'ready') for (const event of events.data) {
     const time = event.startDate?.getTime();
     if (time >= input.window.startMs && time < input.window.endExclusiveMs) recorded.set(event.getID(), event);

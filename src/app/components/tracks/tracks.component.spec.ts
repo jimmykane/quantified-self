@@ -1,3 +1,4 @@
+import { map } from 'rxjs/operators';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TracksComponent } from './tracks.component';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, PLATFORM_ID, signal } from '@angular/core';
@@ -280,6 +281,10 @@ describe('TracksComponent', () => {
 
     mockEventService = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
+      getEventDocumentsOnceBy: vi.fn().mockImplementation((...args: any[]) => mockEventService.getEventsBy(...args).pipe(map((events: any[]) => events.map(event => ({
+        id: event.getID(), startDate: event.startDate, isMerge: event.isMerge,
+        stats: { [DataStartPosition.type]: event.getStat?.(DataStartPosition.type)?.getValue() },
+      }))))),
       getEventsOnceBy: vi.fn().mockImplementation((...args: any[]) => mockEventService.getEventsBy(...args)),
       getActivities: vi.fn().mockReturnValue(of([])),
       getActivitiesOnceByEvent: vi.fn().mockImplementation((...args: any[]) => mockEventService.getActivities(...args)),

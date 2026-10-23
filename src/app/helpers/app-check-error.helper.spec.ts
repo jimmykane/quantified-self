@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { appCheckFailureDetails, initialAppCheckRejectionFromLog } from './app-check-error.helper';
+import { appCheckFailureDetails, initialAppCheckRejectionFromLog, isAppCheckVerificationFailure } from './app-check-error.helper';
 
 describe('appCheckFailureDetails', () => {
+  it('requires explicit App Check evidence before attributing a blocked operation', () => {
+    expect(isAppCheckVerificationFailure({ code: 'appCheck/recaptcha-error' })).toBe(true);
+    expect(isAppCheckVerificationFailure({ code: 'functions/failed-precondition', message: 'App Check verification failed.' })).toBe(true);
+    for (const error of [null, {}, { code: 'failed-precondition', message: 'The query requires an index.' },
+      { code: 'permission-denied' }, { code: 'functions/internal', message: 'App Check verification failed.' }]) {
+      expect(isAppCheckVerificationFailure(error)).toBe(false);
+    }
+  });
   it('recognizes only the exact SDK initial-rejection log grammar', () => {
     const warning = 'AppCheck: 403 error. Attempts allowed again after 01d:00m:00s (appCheck/initial-throttle).';
     expect(initialAppCheckRejectionFromLog(warning)).toEqual({

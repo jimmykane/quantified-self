@@ -8,6 +8,21 @@ export interface TripDetectionInput {
   longitudeDegrees: number;
 }
 
+/** Narrow persisted home-inference input. No metric or complete-event construction. */
+export function projectTripDetectionInput(document: Record<string, unknown> & { id: string }): TripDetectionInput | null {
+  if (!document.id || document.isMerge) return null;
+  const stats = document.stats as Record<string, unknown> | null;
+  const position = stats?.['Start Position'] as { latitudeDegrees?: number; longitudeDegrees?: number } | null;
+  const latitudeDegrees = position?.latitudeDegrees;
+  const longitudeDegrees = position?.longitudeDegrees;
+  if (!Number.isFinite(latitudeDegrees) || !Number.isFinite(longitudeDegrees)
+    || Math.abs(latitudeDegrees!) > 90 || Math.abs(longitudeDegrees!) > 180) return null;
+  let startDate = document.startDate;
+  if (startDate && typeof startDate === 'object' && 'toDate' in startDate && typeof startDate.toDate === 'function') startDate = startDate.toDate();
+  if (!(startDate instanceof Date) && typeof startDate !== 'number' && typeof startDate !== 'string') return null;
+  return { eventId: document.id, startDate, latitudeDegrees: latitudeDegrees!, longitudeDegrees: longitudeDegrees! };
+}
+
 export interface TripDetectionOptions {
   homeInferenceInputs?: TripDetectionInput[];
 }

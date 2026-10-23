@@ -12,6 +12,16 @@ const previous = (): TrainingLoadMetadata => ({ version: 1, revision: 5, exclude
     ...defaultAppliedTrainingLoadPolicy('Walking'), method: 'HR', included: false, revision: 3, effectiveAtMs: 500 } } } });
 
 describe('training load reconciliation', () => {
+  it('retains policy and zero override across a sport change only for the reservation-certified stable leg', () => {
+    const prior = previous();
+    const changed = { ...leg('old'), identity: { ...leg('old').identity, type: 'Yoga' }, recordedTss: 9 };
+    expect(reconcileTrainingLoadLegs(prior, [changed]).legs!.old.activityId).toBeNull();
+    const next = reconcileTrainingLoadLegs(prior, [changed], new Set(['old']));
+    expect(next.legs!.old).toMatchObject({ activityId: 'old', identity: { type: 'Yoga' }, recordedTss: 9 });
+    expect(next.legs!.old.policy).toEqual(prior.legs!.old.policy);
+    expect(next.controls).toEqual(prior.controls);
+    expect(reconcileTrainingLoadLegs({ ...prior, ...next }, [changed], new Set(['old']))).toEqual(next);
+  });
   it('retains the latest control and immutable policy across changed IDs, scores and dated defaults', () => {
     const prior = previous();
     prior.legacyLegs = { old: prior.legs!.old,

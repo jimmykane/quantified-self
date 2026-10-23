@@ -200,25 +200,19 @@
               <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Exclude Ascent for Sport Types</mat-label>
-              <mat-select formControlName="removeAscentForActivitiesSummaries" multiple (selectionChange)="onPreferenceChange()">
-                @for (type of activityTypes; track type) {
-                <mat-option [value]="type" [disabled]="isMandatoryExclusion(type)">{{ type }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>Ascent data will be hidden for these activities in summaries.</mat-hint>
-            </mat-form-field>
+            <app-activity-types-multi-select class="settings-sport-picker" label="Exclude Ascent for Sport Types"
+              emptyLabel="None excluded" [selectedActivityTypes]="userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value"
+              [lockedActivityTypes]="mandatoryAscentExclusions" lockedOptionDescription="Required exclusion"
+              hint="Ascent data will be hidden for these activities in summaries. Required exclusions stay selected."
+              [disabled]="isSaving || isDeleting"
+              (selectedActivityTypesChange)="changeElevationExclusions('ascent', $event)"></app-activity-types-multi-select>
 
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Exclude Descent for Sport Types</mat-label>
-              <mat-select formControlName="removeDescentForActivitiesSummaries" multiple (selectionChange)="onPreferenceChange()">
-                @for (type of activityTypes; track type) {
-                <mat-option [value]="type" [disabled]="isMandatoryDescentExclusion(type)">{{ type }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>Descent data will be hidden for these activities in summaries.</mat-hint>
-            </mat-form-field>
+            <app-activity-types-multi-select class="settings-sport-picker" label="Exclude Descent for Sport Types"
+              emptyLabel="None excluded" [selectedActivityTypes]="userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value"
+              [lockedActivityTypes]="mandatoryDescentExclusions" lockedOptionDescription="Required exclusion"
+              hint="Descent data will be hidden for these activities in summaries. Required exclusions stay selected."
+              [disabled]="isSaving || isDeleting"
+              (selectedActivityTypesChange)="changeElevationExclusions('descent', $event)"></app-activity-types-multi-select>
           </div>
         </ng-template>
 

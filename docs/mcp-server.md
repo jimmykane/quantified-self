@@ -1569,6 +1569,46 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.7.0 indexes existing constructors and aliases without changing catalog membership, canonical names/units,
+validators, persisted-only availability or sensitive-field exclusions. QS's dashboard/list readers use an explicit
+summary path while full event readers remain available. MCP selected-metric queries reuse the already validated
+persisted metric instances instead of constructing them again in a complete event. A per-request aggregation context
+reuses sorting, activity keys and timezone buckets across selectors. Existing field masks, cumulative stat/document/byte
+budgets, malformed-stat skipping, per-metric exclusions and output projections stay in force. Missing persisted pace
+is not inferred from a speed stat. See [the read-path guide](event-summary-reads.md) for maintenance and benchmarks.
+This performance change requires no historical reparse or derived refresh and changes no tool, field, schema, scope,
+consent, planning/provider capability or plugin contract. No registered-contract promotion, client rescan, plugin
+rebuild, historical reparse or derived-data refresh is required.
+
+Sports Lib 23.6.0 preserves catalog membership, canonical names/units, validators and existing JSON/output schemas.
+Its GPS calculation changes can affect generated distance, speed, pace and dependent summaries on new imports or
+authorized reparses; saved metric queries still read persisted values, while on-demand charts/samples use the current
+original-file parser without rewriting history. Deferred SML XML parser loading changes no public MCP projection.
+No tool, scope, consent, planning/provider capability, registered-contract promotion, client rescan or plugin rebuild
+is required by this adoption. See the reparse runbook and Training guide for historical-data and deployment boundaries.
+
+Sports Lib 23.5.1 corrects the existing `unitSystem` descriptor to `imperial` for feet-, mile- and yard-based variants.
+Catalog membership, identifiers, unit strings, validators and persisted-only availability are unchanged; corrected
+metadata does not synthesize a stat or expose raw data. The existing strict descriptor schema already permits both
+unit systems. No tool/schema, scope, consent, registered-contract promotion, client rescan or plugin change is needed.
+The separate per-yard swim-average calculation correction enters metric reads only after normal persistence; older
+incorrect saved derived values require the existing authorized source-backed reparse described in the runbook.
+
+Sports Lib 23.5.0 power adoption preserves this public contract. Corrected power, balance and multisport summary
+values enter metric reads only after normal persistence; an unavailable calculated summary stays absent and genuine zero
+remains available. On-demand charts/samples use the adopted original-file parser without rewriting history. Detailed
+samples preserve aligned nulls; chart reads retain measured points at their original offsets and report missing counts.
+No power-coverage field, metric alias, scope, schema, planning capability or mutation is added. Existing private Training
+evaluations/policies remain excluded. See the [Training adoption notes](training-workspace.md#sports-lib-2350-power-and-rr-adoption)
+and reparse runbook for the historical-data and deployment boundaries. This semantic correction requires no registered-contract
+promotion, client rescan or bundled-plugin change.
+
+Sports Lib 23.5.0 also registers 20 canonical R–R summary metrics. Available finite summaries become discoverable
+through the existing activity numeric-metric catalog after import/reparse persistence; missing statistics stay absent,
+and valid zero remains available. Raw beat intervals, sample timestamps and beat classifications are not exposed.
+These activity summaries do not enter Health/Sleep or Readiness. Multisport legs retain their summaries without an
+invented event-level aggregate. No new tool, scope, consent, registered schema, planning mutation or plugin is added.
+
 `metric-catalog.ts` enumerates public Sports Lib `DataStore` classes. A metric is eligible only when:
 
 1. the class has a stable canonical type;
@@ -2926,3 +2966,14 @@ Root and Functions now pin published 23.0.0, retaining the 22.0.0 EnergySense su
 chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
 release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
 promotion, real-profile plugin install or historical reparse is performed by this implementation.
+
+## Stable activity source associations
+
+Chart/sample source reads use the common pure activity matcher and the validated server-owned `sourceIdentity`
+snapshot internally to identify the bound recording without borrowing another leg's data. The parsed file supplies
+the sport; no sport override is inferred. The allowlisted snapshot participates in the opaque source-context fingerprint so
+stale pagination/cache context cannot survive a source association change. Read-only consumers retain strict matching;
+provider-only cross-sport window authorization and write-reservation certificates never come from MCP inputs.
+`sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,
+schemas, grants, units and original-file budgets are unchanged; no mutation or reparse capability is added. Negative
+activity projection fixtures cover the new stored field. Training plan/workout contracts have no impact.

@@ -25,6 +25,8 @@ import {
     DataHeartRate,
     DataSpeed,
     DataDuration,
+    DataRRRMSSD,
+    IBIStream,
     DataStamina,
     LapTypes,
     ActivityTypeGroups,
@@ -50,7 +52,7 @@ import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-c
 import { AppEventService } from '../../services/app.event.service';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
-import { TrainingImpactService } from '../../services/training-impact.service';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
 import type { AppEventInterface } from '@shared/app-event.interface';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
@@ -121,6 +123,7 @@ describe('EventCardComponent', () => {
 
         return {
             startDate: new Date('2024-01-01T00:00:00.000Z'),
+            endDate: new Date('2024-01-01T01:00:00.000Z'),
             type: 'Running',
             getID: () => id,
             getLaps: () => hasData ? [{ type: 'Manual' }] as any : [],
@@ -133,6 +136,7 @@ describe('EventCardComponent', () => {
             getStreams: () => [],
             getAllStreams: () => [],
             getStream: () => null,
+            getStat: () => null,
             clearStreams: vi.fn(),
             addStreams: vi.fn(),
             getDiveSourceRecords: () => diveSourceRecords,
@@ -289,8 +293,53 @@ describe('EventCardComponent', () => {
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
     });
 
-    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('does not show or load Training impact for benchmark event details %j', classification => {
+    it('shows updating before the owner impact stream initializes', () => {
+        const initialFixture = TestBed.createComponent(EventCardComponent);
+        const initialComponent = initialFixture.componentInstance;
+        initialComponent.currentUser.set(mockUser);
+        initialComponent.targetUserID.set(mockUser.uid);
+        initialComponent.event.set(mockEvent as AppEventInterface);
+
+        expect(initialComponent.trainingImpact()).toMatchObject({
+            availability: 'updating', message: 'Updating Training impact…', impact: null,
+        });
+        initialFixture.destroy();
+    });
+
+    it('keeps owner hydration in updating and removes impact immediately when ownership changes', () => {
+        const snapshots$ = new Subject<TrainingImpactSnapshotState>();
+        mockTrainingImpactService.watch.mockReturnValueOnce(snapshots$.asObservable());
+        component.event.set(createEvent('loading', []) as AppEventInterface);
+        fixture.detectChanges();
+        snapshots$.next({ status: 'private', formPoints: null });
+        fixture.detectChanges();
+        expect(component.trainingImpact()).toMatchObject({
+            availability: 'updating', message: 'Updating Training impact…', impact: null,
+        });
+        expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
+
+        snapshots$.next({ status: 'ready', formPoints: [] });
+        fixture.detectChanges();
+        expect(component.trainingImpact()?.availability).toBe('missing-tss');
+        component.currentUser.set(new User('other-user'));
+        expect(component.trainingImpact()).toBeNull();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
+        expect(snapshots$.observed).toBe(false);
+    });
+
+    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('keeps benchmark HRV after performance charts without loading Training impact %j', classification => {
         mockTrainingImpactService.watch.mockClear();
+        mockPerformanceCurveDataService.getAvailability.mockReturnValue({
+            hasPowerCurve: true,
+            hasDurability: false,
+            durabilityOutputUnavailable: false,
+            hasCadencePower: false,
+            hasAny: true,
+        });
+        component.selectedActivitiesInstant.set([{
+            ...mockActivity, getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
+        }]);
         component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
         fixture.detectChanges();
 
@@ -298,15 +347,43 @@ describe('EventCardComponent', () => {
         expect(component.trainingImpactState().status).toBe('private');
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
         expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
+        expect(Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(
+            'app-event-performance-charts, app-benchmark-rr',
+        )).map(element => element.tagName.toLowerCase())).toEqual([
+            'app-event-performance-charts',
+            'app-benchmark-rr',
+        ]);
     });
 
-    it('keeps Training impact available for a combined multisport workout', () => {
+    it.each([{ isMerge: false }, { isMerge: true, mergeType: 'multi' }])('supports ordinary HRV alongside Training impact %j', classification => {
         mockTrainingImpactService.watch.mockClear();
-        component.event.set({ ...mockEvent, isMerge: true, mergeType: 'multi' } as AppEventInterface);
+        component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
+        component.selectedActivitiesInstant.set([{
+            ...mockActivity, getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
+        }]);
         fixture.detectChanges();
         expect(component.trainingImpact()?.availability).toBe('missing-tss');
         expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser', [component.event()]);
         expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
+        expect(component.hasRRDataFlag()).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
+    });
+
+    it('shows ordinary HRV charts from original intervals even without saved HRV statistics', () => {
+        const stream = new IBIStream([800, 800, 800], [800, 1600, 2400]);
+        const readBeats = vi.spyOn(stream, 'getStreamDataByDuration');
+        component.selectedActivitiesInstant.set([{ ...mockActivity, getAllStreams: () => [stream] }]);
+        fixture.detectChanges();
+        expect(component.isBenchmark()).toBe(false);
+        expect(component.hasRRDataFlag()).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
+        expect(readBeats).not.toHaveBeenCalled();
+    });
+
+    it('does not mount an empty HRV panel when the selected activity has no HRV', () => {
+        expect(component.hasRRDataFlag()).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-benchmark-rr')).toBeNull();
     });
 
     it('should initialize event from route data as signal', () => {
@@ -370,6 +447,70 @@ describe('EventCardComponent', () => {
 
         expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
         expect(component.event()).toBe(refreshedEvent);
+    });
+
+    it.each([false, true])('keeps the latest stable-ID source update during a refresh (already fetched: %s)', async alreadyFetched => {
+        const version = (generation: string, name: string) => ({
+            ...createEvent('evt1', [createActivity('act1')], name),
+            originalFile: { path: 'original.fit', generation, startDate: new Date(0) },
+        }) as AppEventInterface;
+        component.event.set(version('1', 'Old source'));
+        const loading$ = new Subject<AppEventInterface>();
+        const latest = version('3', 'Latest source');
+        mockEventService.getEventActivitiesAndSomeStreams
+            .mockReturnValueOnce(loading$).mockReturnValueOnce(of(latest));
+
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(version('2', 'First update'));
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(latest);
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
+        loading$.next(version(alreadyFetched ? '3' : '2', 'First refresh'));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(alreadyFetched ? 1 : 2);
+        expect(component.event()?.name).toBe('Latest source');
+        expect(component.selectedActivitiesInstant().map(activity => activity.getID())).toEqual(['act1']);
+    });
+
+    it('does not apply an old account refresh after navigating to another account', async () => {
+        const loading$ = new Subject<AppEventInterface>();
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValueOnce(loading$);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(createEvent('evt1', [createActivity('act2')]));
+        const otherAccountEvent = createEvent('evt1', [createActivity('act1')], 'Other account');
+        routeUserID = 'otherUser';
+        routeData$.next({ event: otherAccountEvent });
+        loading$.next(createEvent('evt1', [createActivity('act1')], 'Old account refresh'));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.event()).toBe(otherAccountEvent);
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([{ selectedIDs: ['act2'] }, { selectedIDs: [] }])('keeps the selection changed to $selectedIDs during a source refresh', async ({ selectedIDs }) => {
+        const activities = [createActivity('act1'), createActivity('act2')];
+        const version = (generation: string, legs: ActivityInterface[]) => ({
+            ...createEvent('evt1', legs),
+            originalFile: { path: 'original.fit', generation, startDate: new Date(0) },
+        }) as AppEventInterface;
+        component.event.set(version('1', activities));
+        component.selectedActivitiesInstant.set(activities);
+        const loading$ = new Subject<AppEventInterface>();
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValueOnce(loading$);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(version('2', activities));
+
+        component.selectedActivitiesInstant.set(activities.filter(activity => selectedIDs.includes(activity.getID())));
+        const refreshedActivities = [createActivity('act1'), createActivity('act2')];
+        loading$.next(version('2', refreshedActivities));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.selectedActivitiesInstant()).toEqual(
+            refreshedActivities.filter(activity => selectedIDs.includes(activity.getID())),
+        );
     });
 
     it('requests HR on full refresh even when HR charts are disabled', async () => {
@@ -644,6 +785,29 @@ describe('EventCardComponent', () => {
         expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
+    it.each(['missing', 'permission-denied'])('does not restore a public share from a pending refresh after %s', async reason => {
+        routeUserID = 'ownerUser';
+        routeData$.next({ event: { event: createEvent('evt1', [createActivity('act1')]),
+            user: null, publicShare: true, shareKind: 'event' } as any });
+        const loading$ = new Subject<AppEventInterface>();
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValueOnce(loading$);
+        const live$ = liveEventDetailsByRouteKey.get('ownerUser:evt1');
+        live$?.next(createEvent('evt1', [createActivity('act2')]));
+        live$?.next(createEvent('evt1', [createActivity('act3')]));
+        if (reason === 'missing') live$?.next(null);
+        else live$?.error(new Error(reason));
+        expect(component.event()).toBeNull();
+
+        loading$.next(createEvent('evt1', [createActivity('act2')]));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.event()).toBeNull();
+        expect(component.loadError()).toBe(reason === 'missing' ? 'not_found' : 'unavailable');
+        expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
+    });
+
     it('should set targetUserID signal from route', () => {
         expect(component.targetUserID()).toBe('testUser');
     });
@@ -859,6 +1023,8 @@ describe('EventCardComponent', () => {
     describe('computed flags with activities that have data', () => {
         const activityWithData = {
             getID: () => 'act2',
+            getStat: () => null,
+            getAllStreams: () => [],
             getLaps: () => [{ type: 'Manual' }],
             getSwimLengths: () => [{
                 index: 1,

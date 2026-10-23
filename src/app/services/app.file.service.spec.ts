@@ -69,6 +69,16 @@ describe('AppFileService', () => {
         expect(service).toBeTruthy();
     });
 
+    it.each([
+        { value: 0, expected: 0 },
+        { value: { seconds: 0 }, expected: 0 },
+        { value: { seconds: 3 }, expected: 3000 },
+        { value: { seconds: 3, nanoseconds: null }, expected: 3000 },
+        { value: { seconds: 3, nanoseconds: 500000000 }, expected: 3500 },
+    ])('preserves epoch and legacy source-file timestamps: $value', ({ value, expected }) => {
+        expect(service.toDate(value)).toEqual(new Date(expected));
+    });
+
     describe('downloadFile', () => {
         it('should call saveAs with a named File preserving extension', () => {
             const blob = new Blob(['test content'], { type: 'text/plain' });

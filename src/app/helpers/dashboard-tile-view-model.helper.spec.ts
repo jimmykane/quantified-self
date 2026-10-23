@@ -680,6 +680,40 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).events.map((event: any) => event.getID())).toEqual(['earlier', 'later']);
   });
 
+  it('shares sorted inputs across maps and charts while isolating sources, filters and later builds', () => {
+    const ride = makeEvent({ id: 'ride', startDate: '2024-01-03', activityTypes: [ActivityTypes.Cycling] });
+    const run = makeEvent({ id: 'run', startDate: '2024-01-01', activityTypes: [ActivityTypes.Running] });
+    const merged = makeEvent({ id: 'merged', startDate: '2024-01-02', activityTypes: [ActivityTypes.Running], isMerge: true });
+    const otherRun = makeEvent({ id: 'other-run', startDate: '2024-02-01', activityTypes: [ActivityTypes.Running] });
+    const events = Object.freeze([ride, merged, run]) as any;
+    const otherSource = Object.freeze([otherRun]) as any;
+    const tile = (order: number, activityTypes: ActivityTypes[] = []) => ({
+      type: order % 2 ? TileTypes.Chart : TileTypes.Map, chartType: ChartTypes.IntensityZones, order,
+      eventFilters: { range: 'all', activityTypes }, size: { columns: 1, rows: 1 },
+    });
+    const input = {
+      events,
+      tiles: [tile(0), tile(1), tile(2, [ActivityTypes.Running]), tile(3, [ActivityTypes.Running]),
+        tile(4, [ActivityTypes.Running]), tile(5, [ActivityTypes.Running]), tile(6, [ActivityTypes.Cycling])] as any,
+      tileEventsByOrder: { 3: events, 4: otherSource, 5: otherSource },
+    };
+    const views = buildDashboardTileViewModels(input) as any[];
+    expect(views[0].events).toEqual([run, ride]);
+    expect(views[1].data).toBe(views[0].events);
+    expect(views[2].events).toEqual([run]);
+    expect(views[3].data).toBe(views[2].events);
+    expect(views[4].events).toEqual([otherRun]);
+    expect(views[5].data).toBe(views[4].events);
+    expect(views[6].events).toEqual([ride]);
+    expect(events).toEqual([ride, merged, run]);
+
+    run.isMerge = true;
+    const updated = buildDashboardTileViewModels(input) as any[];
+    expect(updated[0].events).toEqual([ride]);
+    expect(updated[2].events).toEqual([]);
+    expect(updated[4].events).toEqual([otherRun]);
+  });
+
   it('should build route map tiles from route previews without consuming event data', () => {
     const event = makeEvent({
       id: 'event-1',
@@ -693,6 +727,8 @@ describe('dashboard-tile-view-model.helper', () => {
       activityTypes: [ActivityTypes.Running],
       stats: { [DataDistance.type]: 5 },
     });
+    const events = [event];
+    const readEvents = vi.spyOn(events, Symbol.iterator);
     const routePreview = {
       id: 'route-1',
       preview: {
@@ -721,7 +757,7 @@ describe('dashboard-tile-view-model.helper', () => {
         eventFilters: { range: '14d', activityTypes: [ActivityTypes.Running] },
         size: { columns: 2, rows: 2 },
       } as any],
-      events: [event],
+      events,
       tileEventsByOrder: { 0: [tileEvent] },
       routePreviews: [routePreview],
     });
@@ -730,6 +766,7 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).mapSource).toBe('routes');
     expect((viewModels[0] as any).events).toEqual([]);
     expect((viewModels[0] as any).routePreviews).toEqual([routePreview]);
+    expect(readEvents).not.toHaveBeenCalled();
   });
 
   it('should apply aggregation preferences when building chart tile data', () => {

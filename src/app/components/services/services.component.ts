@@ -50,7 +50,6 @@ interface ServiceToolLaunch {
 interface ServiceOverviewCard extends ServiceToolLaunch {
   title: string;
   description: string;
-  detail: string;
   icon: string;
   actionLabel: string;
 }
@@ -202,7 +201,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Activity sync',
         description: 'New Garmin activities import automatically while connected. Backfill earlier activities from History import.',
-        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
         actionLabel: 'Backfill activities',
         tool: 'history',
@@ -210,7 +208,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Sleep & Health history',
         description: 'Backfill Garmin sleep and available Health metrics.',
-        detail: 'Historical Sleep and Health backfill · 30-day cooldown',
         icon: 'bedtime',
         actionLabel: 'Import history',
         tool: 'history',
@@ -218,7 +215,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send route files to Garmin',
         description: 'Send a GPX or FIT route file directly to Garmin Connect as a course without adding it to your Quantified Self route library.',
-        detail: 'Direct GPX and FIT route delivery',
         icon: 'route',
         actionLabel: 'Send route file',
         tool: 'uploads',
@@ -226,7 +222,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities to connected services',
         description: 'Automatically send new Garmin activities to Suunto, Wahoo, or COROS.',
-        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
@@ -236,7 +231,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Activity sync',
         description: 'New Suunto activities import automatically while connected. Backfill earlier activities from History import.',
-        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
         actionLabel: 'Backfill activities',
         tool: 'history',
@@ -244,7 +238,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Sleep & 24/7 Health history',
         description: 'Backfill Suunto sleep and available 24/7 Health metrics.',
-        detail: 'Historical Sleep and 24/7 Health backfill · 7-day cooldown',
         icon: 'bedtime',
         actionLabel: 'Import history',
         tool: 'history',
@@ -252,7 +245,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Route sync',
         description: 'Import existing Suunto routes and send saved routes to Garmin, Wahoo, or COROS.',
-        detail: 'Route import and automatic delivery',
         icon: 'route',
         actionLabel: 'Route sync settings',
         tool: 'routes',
@@ -260,7 +252,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities',
         description: 'Review local FIT files or saved activities and send them to Suunto in the background.',
-        detail: 'Recorded activity delivery',
         icon: 'cloud_upload',
         actionLabel: 'Send activities',
         tool: 'send-activities',
@@ -268,7 +259,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send past activities to Suunto',
         description: 'Choose saved provider imports and manual FIT uploads, preview them, and send a date range to Suunto.',
-        detail: 'One-time historical activity delivery',
         icon: 'history',
         actionLabel: 'Send past activities',
         tool: 'historical-send',
@@ -276,18 +266,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities to connected services',
         description: 'Automatically send new Suunto activities to Wahoo or COROS.',
-        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'activity-sync',
       },
-      { title: 'Send route files', description: 'Send GPX or FIT route files to Suunto.', detail: 'Route delivery', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
+      { title: 'Send route files', description: 'Send GPX or FIT route files to Suunto.', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
     coros: [
       {
         title: 'Activity sync',
         description: 'New COROS activities import automatically while connected. Backfill earlier activities from History import.',
-        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
         actionLabel: 'Backfill activities',
         tool: 'history',
@@ -295,7 +283,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Sleep & daily Health history',
         description: 'Backfill COROS sleep and available daily Health metrics.',
-        detail: 'Historical Sleep and daily Health backfill · 7-day cooldown',
         icon: 'bedtime',
         actionLabel: 'Import history',
         tool: 'history',
@@ -303,7 +290,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities',
         description: 'Send a FIT activity directly to COROS without adding it to your Quantified Self archive.',
-        detail: 'Recorded activity delivery',
         icon: 'send',
         actionLabel: 'Send activities',
         tool: 'send-activities',
@@ -311,7 +297,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send past activities to COROS',
         description: 'Choose saved provider imports and manual FIT uploads, preview them, and send a date range to COROS.',
-        detail: 'One-time historical activity delivery',
         icon: 'history',
         actionLabel: 'Send past activities',
         tool: 'historical-send',
@@ -319,18 +304,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities to connected services',
         description: 'Automatically send new COROS activities to Suunto or Wahoo.',
-        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
       },
-      { title: 'Send route files', description: 'Send GPX or FIT route files to COROS.', detail: 'Route delivery', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
+      { title: 'Send route files', description: 'Send GPX or FIT route files to COROS.', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
     wahoo: [
       {
         title: 'Activity sync',
         description: 'New Wahoo activities import automatically while connected.',
-        detail: 'History import',
         icon: 'sync',
         actionLabel: 'History import',
         tool: 'history',
@@ -338,7 +321,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities',
         description: 'Review local FIT files or saved activities and send them to Wahoo in the background.',
-        detail: 'Recorded activity delivery',
         icon: 'send',
         actionLabel: 'Send activities',
         tool: 'send-activities',
@@ -346,7 +328,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send past activities to Wahoo',
         description: 'Choose saved provider imports and manual FIT uploads, preview them, and send a date range to Wahoo.',
-        detail: 'One-time historical activity delivery',
         icon: 'history',
         actionLabel: 'Send past activities',
         tool: 'historical-send',
@@ -354,12 +335,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activities to connected services',
         description: 'Automatically send new Wahoo activities to Suunto or COROS.',
-        detail: 'Automatic activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
         tool: 'auto-sync',
       },
-      { title: 'Send route files', description: 'Send GPX or FIT route files to Wahoo.', detail: 'Route delivery', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
+      { title: 'Send route files', description: 'Send GPX or FIT route files to Wahoo.', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
   };
   public serviceNames = ServiceNames;

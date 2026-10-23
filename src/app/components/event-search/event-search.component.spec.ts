@@ -1,3 +1,4 @@
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { By } from '@angular/platform-browser';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { DateAdapter } from '@angular/material/core';
@@ -19,7 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { EventSearchComponent, Search } from './event-search.component';
-import { ActivityTypesFilterMenuComponent } from '../activity-types-filter-menu/activity-types-filter-menu.component';
+import { ActivityTypesMultiSelectComponent } from '../activity-types-multi-select/activity-types-multi-select.component';
 import { MaterialModule } from '../../modules/material.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -28,12 +29,15 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   selector: 'app-merged-filter-test-host',
   standalone: false,
   template: `<app-event-search class="table-toolbar-layout compact-filter-layout"
-    [compact]="true" [toolbarRangeLayout]="true" [selectedDateRange]="range"
-    [startOfTheWeek]="weekStart" [selectedActivityTypes]="[]" [showMergedEventsToggle]="true"
+    [compact]="true" [toolbarRangeLayout]="toolbar" [selectedDateRange]="range"
+    [startOfTheWeek]="weekStart" [selectedActivityTypes]="sports" [availableActivityTypes]="availableSports" [showMergedEventsToggle]="true"
     [includeMergedEvents]="includeMerged" [mergedEventsToggleDisabled]="disabled"
     (searchChange)="onSearch($event)"></app-event-search>`,
 })
 class MergedFilterTestHost {
+  toolbar = true;
+  sports: ActivityTypes[] | null | undefined = [];
+  availableSports?: ActivityTypes[];
   range = DateRanges.thisWeek;
   weekStart = DaysOfTheWeek.Monday;
   includeMerged = true;
@@ -55,9 +59,10 @@ describe('Merged toolbar filter rendering', () => {
   beforeEach(async () => {
     haptics.selection.mockClear();
     await TestBed.configureTestingModule({
-      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesFilterMenuComponent],
+      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesMultiSelectComponent],
       imports: [ActivityFilterPickerComponent, MergedActivitiesToggleComponent, CommonModule, ReactiveFormsModule, NoopAnimationsModule, MaterialModule, AppChartSharedModule],
-      providers: [{ provide: AppHapticsService, useValue: haptics }],
+      providers: [{ provide: AppHapticsService, useValue: haptics },
+        { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } }],
     }).compileComponents();
   });
 
@@ -77,6 +82,35 @@ describe('Merged toolbar filter rendering', () => {
     expect(button.textContent).toContain('check_box');
     expect(button.textContent).not.toContain('check_box_outline_blank');
     expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the toolbar date controls once without submitting a range or duplicating feedback', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+    const presets = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(haptics.selection).not.toHaveBeenCalled();
+    search.openToolbarDateFilter(); await settle(); expect(presets.panelOpen).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    search.openToolbarDateFilter(); expect(haptics.selection).toHaveBeenCalledOnce();
+    presets.close(); await settle(); haptics.selection.mockClear();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+    search.isLoading = true; search.openToolbarDateFilter(); expect(presets.panelOpen).toBe(false);
+    search.isLoading = false; search.showDatePicker = false; search.openToolbarDateFilter();
+    expect(presets.panelOpen).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
+    search.showDatePicker = true;
+    search.openToolbarDateFilter(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const customOption = [...overlay.querySelectorAll<HTMLElement>('mat-option')].find(option => option.textContent?.trim() === 'Custom dates')!;
+    customOption.click(); await settle(); haptics.selection.mockClear();
+    search.openToolbarDateFilter(); await settle();
+    const picker = fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
+    expect(picker.opened).toBe(true); expect(haptics.selection).toHaveBeenCalledOnce();
+    search.openToolbarDateFilter(); await settle(); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.requests).toEqual([]); picker.close(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
+    fixture.destroy();
   });
 
   it('replaces presets in place, applies native calendar selections once and restores focus on clear', async () => {
@@ -115,6 +149,50 @@ describe('Merged toolbar filter rendering', () => {
     expect(fixture.componentInstance.requests).toHaveLength(2);
     expect(fixture.componentInstance.requests[1].dateRange).toBe(DateRanges.lastThirtyDays);
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+  });
+
+  it('uses the same sport picker in the My Tracks layout and preserves available and selected no-match sports', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance; host.toolbar = false;
+    host.sports = [ActivityTypes.Running]; host.availableSports = [ActivityTypes.Cycling];
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input[aria-label="Sports"]') as HTMLInputElement;
+    expect(trigger).toBeTruthy(); trigger.click(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect([...overlay.querySelectorAll('mat-list-option')].map(option => option.getAttribute('aria-label'))).toEqual(['Cycling', 'Running']);
+    expect(host.requests).toEqual([]); expect(haptics.selection).toHaveBeenCalledOnce();
+    (overlay.querySelector('[aria-label="Cycling"]') as HTMLElement).click(); await settle();
+    expect(host.requests).toEqual([expect.objectContaining({ activityTypes: [ActivityTypes.Running, ActivityTypes.Cycling], dateRange: DateRanges.thisWeek })]);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it.each([undefined, null])('handles a missing My Tracks sport filter (%s) and later hydration without searching', async savedSports => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance;
+    host.toolbar = false; host.sports = savedSports; host.availableSports = [ActivityTypes.Cycling];
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('input[aria-label="Sports"]') as HTMLInputElement;
+    expect(trigger.value).toBe('All sports');
+    expect(host.requests).toEqual([]); expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    host.sports = [ActivityTypes.Running]; await settle();
+    expect(trigger.value).toBe('Running');
+    expect(overlay.querySelector('[aria-label="Running"]')?.getAttribute('aria-selected')).toBe('true');
+    host.sports = savedSports; await settle();
+    expect(trigger.value).toBe('All sports');
+    expect(overlay.querySelector('[aria-label="Running"]')).toBeNull();
+    expect(host.requests).toEqual([]); expect(haptics.selection).toHaveBeenCalledOnce();
+    const cycling = overlay.querySelector<HTMLElement>('mat-list-option[aria-label="Cycling"]')!;
+    cycling.focus(); cycling.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 32, bubbles: true })); await settle();
+    expect(host.requests).toEqual([expect.objectContaining({ activityTypes: [ActivityTypes.Cycling] })]);
+    expect(trigger.value).toBe('Cycling'); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('follows parent preferences silently and accepts one action after being enabled', async () => {

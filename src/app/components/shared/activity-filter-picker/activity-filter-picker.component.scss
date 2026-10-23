@@ -15,3 +15,12 @@
 .activity-picker-shortcuts { display: flex; flex-direction: column; }
 .activity-picker-body .activity-picker-option { height: auto; min-height: 48px; padding-block: 8px; }
 .activity-picker-option .activity-picker-option-label { display: block; white-space: normal; overflow-wrap: anywhere; }
+
+.activity-picker-compact-trigger {
+  --mat-icon-button-state-layer-size: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+.activity-picker-compact-trigger mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.activity-picker-compact-trigger.is-active { color: var(--mat-sys-primary); }

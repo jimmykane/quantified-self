@@ -12,6 +12,8 @@ export interface ActivityFilterPickerOption {
   label: string;
   activityType?: string;
   icon?: string;
+  disabled?: boolean;
+  description?: string;
 }
 
 export interface ActivityFilterPickerShortcut {
@@ -35,6 +37,12 @@ export class ActivityFilterPickerComponent {
   readonly selectedValues = input<readonly string[]>([]);
   readonly shortcuts = input<readonly ActivityFilterPickerShortcut[]>([]);
   readonly loading = input(false);
+  readonly disabled = input(false);
+  readonly compact = input(false);
+  readonly triggerLabel = input<string>();
+  readonly hint = input('');
+  readonly canClear = computed(() => this.selectedValues().some(value => !this.options().find(option => option.value === value)?.disabled));
+  readonly accessibleTriggerLabel = computed(() => `${this.triggerLabel() || this.label()}: ${this.summary()}`);
   // The filter owner validates the selection and owns its accepted-action feedback.
   readonly selectionChange = output<string[]>();
   readonly opened = output<void>();
@@ -56,7 +64,8 @@ export class ActivityFilterPickerComponent {
     const selected = new Set(this.selectedValues());
     return this.shortcuts().filter(shortcut => shortcut.label.toLowerCase().includes(search)).map(shortcut => {
       const count = shortcut.values.filter(value => selected.has(value)).length;
-      return { ...shortcut, selected: count === shortcut.values.length, partial: count > 0 && count < shortcut.values.length };
+      return { ...shortcut, selected: count === shortcut.values.length, partial: count > 0 && count < shortcut.values.length,
+        disabled: !shortcut.values.some(value => !this.options().find(option => option.value === value)?.disabled) };
     });
   });
   private readonly dialog = inject(MatDialog);
@@ -72,7 +81,7 @@ export class ActivityFilterPickerComponent {
 
   openPicker(event?: Event): void {
     event?.preventDefault();
-    if (this.dialogRef) return;
+    if (this.disabled() || this.dialogRef) return;
     this.search.set('');
     this.dialogRef = this.dialog.open(this.picker(), {
       width: '420px', maxWidth: 'calc(100vw - 32px)', ariaLabel: `Choose ${this.label().toLowerCase()}`,
@@ -93,7 +102,7 @@ export class ActivityFilterPickerComponent {
       if (option.selected) selected.add(option.value);
       else selected.delete(option.value);
     }
-    this.selectionChange.emit([...selected]);
+    this.emitSelection([...selected]);
   }
 
   toggleShortcut(shortcut: ActivityFilterPickerShortcut, checked: boolean): void {
@@ -102,7 +111,24 @@ export class ActivityFilterPickerComponent {
       if (checked) selected.add(value);
       else selected.delete(value);
     }
-    this.selectionChange.emit([...selected]);
+    this.emitSelection([...selected]);
+  }
+
+  clearSelection(): void {
+    this.emitSelection([]);
+  }
+
+  private emitSelection(values: readonly string[]): void {
+    if (this.disabled()) return;
+    const current = new Set(this.selectedValues());
+    const next = new Set(values);
+    for (const option of this.options()) {
+      if (!option.disabled) continue;
+      if (current.has(option.value)) next.add(option.value);
+      else next.delete(option.value);
+    }
+    if (next.size === current.size && [...next].every(value => current.has(value))) return;
+    this.selectionChange.emit([...next]);
   }
 
   clearSearch(input: HTMLInputElement): void {

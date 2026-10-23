@@ -458,6 +458,12 @@ this does not use the mail extension or create another notification channel.
   and the independent `[GarminHealthBackfillTaskWorker] Invocation summary`. `processed`
   includes lifecycle skips; HTTP acknowledgement and DLQ handling are not ingestion
   success. Existing #759 dispatcher diagnostics remain intact and are not dependencies.
+- A Health checkpoint with a confirmed enqueue and dispatch marker logs
+  `Health progress saved; remaining work scheduled.` at INFO. It still ACKs as
+  incomplete work with summary outcome `deferred`, not successful ingestion.
+  Unconfirmed enqueue/marker attempts retain their existing warning/error paths;
+  queue writes, retry budgets and scheduling are unchanged. No account, credential
+  or payload data is added to these diagnostics.
 - `worker_failures` counts failed/error/missing attempts and committed retry transitions;
   the matching `retry_incremented` summary is not counted again. Expected refresh/lease
   contention, stale tasks, already-processed work, deferrals and skips are excluded.

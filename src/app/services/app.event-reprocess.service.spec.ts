@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventUtilities } from '@sports-alliance/sports-lib';
+import { AppEventSummary } from '@shared/event-summary';
 
 import { AppEventReprocessService, ReprocessError, ReprocessProgress } from './app.event-reprocess.service';
 import { AppEventService } from './app.event.service';
@@ -17,6 +18,7 @@ describe('AppEventReprocessService', () => {
       activities: [{ getID: () => 'activity-1' }],
     };
     return {
+      toJSON: () => ({}),
       getID: vi.fn(() => 'event-1'),
       clearActivities: vi.fn(() => { state.activities = []; }),
       addActivities: vi.fn((activities: any[]) => { state.activities = activities; }),
@@ -33,7 +35,7 @@ describe('AppEventReprocessService', () => {
 
   beforeEach(() => {
     eventServiceMock = {
-      getEventAndActivities: vi.fn().mockReturnValue(of(makeSourceEvent())),
+      getEventAndActivitiesOnce: vi.fn().mockReturnValue(of(makeSourceEvent())),
     };
     functionsServiceMock = {
       call: vi.fn().mockResolvedValue({
@@ -68,8 +70,8 @@ describe('AppEventReprocessService', () => {
     expect(functionsServiceMock.call).toHaveBeenCalledWith('reprocessEvent', {
       eventId: 'event-1',
       mode: 'regenerate',
-    });
-    expect(eventServiceMock.getEventAndActivities).toHaveBeenCalledWith({ uid: 'u1' }, 'event-1');
+    }, undefined);
+    expect(eventServiceMock.getEventAndActivitiesOnce).toHaveBeenCalledWith({ uid: 'u1' }, 'event-1');
     expect(event.clearActivities).toHaveBeenCalled();
     expect(event.addActivities).toHaveBeenCalledWith([{ getID: expect.any(Function) }]);
     expect(result.sourceFilesCount).toBe(1);
@@ -94,10 +96,37 @@ describe('AppEventReprocessService', () => {
     expect(functionsServiceMock.call).toHaveBeenCalledWith('reprocessEvent', {
       eventId: 'event-1',
       mode: 'reimport',
-    });
+    }, undefined);
     expect(result.sourceFilesCount).toBe(2);
     expect(result.wasMultiFileSource).toBe(true);
   });
+
+  it.each(['regenerateEventStatistics', 'reimportEventFromOriginalFiles'] as const)(
+    'allows %s to repair a summary before any full hydration', async method => {
+      const summary = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+        stats: { 'Average Power': 'malformed stored value' } } as any);
+      summary.originalFiles = [{ path: 'source.fit' } as any];
+      const refreshed = makeSourceEvent();
+      let repaired = false;
+      functionsServiceMock.call.mockImplementation(async () => {
+        repaired = true;
+        return { data: { status: 'completed', sourceFilesCount: 1 } };
+      });
+      eventServiceMock.getEventAndActivitiesOnce.mockImplementation(() => {
+        if (!repaired) throw new Error('Cannot restore malformed source');
+        return of(refreshed);
+      });
+
+      const result = await service[method]({ uid: 'u1' } as any, summary);
+
+      expect(functionsServiceMock.call).toHaveBeenCalledExactlyOnceWith('reprocessEvent', {
+        eventId: 'event-1', mode: method === 'regenerateEventStatistics' ? 'regenerate' : 'reimport',
+      }, undefined);
+      expect(result.event).toBe(refreshed);
+      expect(eventServiceMock.getEventAndActivitiesOnce).toHaveBeenCalledTimes(1);
+      expect(EventUtilities.reGenerateStatsForEvent).not.toHaveBeenCalled();
+      expect(() => summary.getStat('Average Power')).toThrow();
+    });
 
   it('should map backend skip reason NO_ORIGINAL_FILES to typed error', async () => {
     const event = makeTargetEvent();
@@ -129,7 +158,7 @@ describe('AppEventReprocessService', () => {
     functionsServiceMock.call.mockResolvedValueOnce({ data: { status: 'skipped', reason, sourceFilesCount: 1 } });
     await expect(service.reimportEventFromOriginalFiles({ uid: 'u1' } as any, event, { onProgress }))
       .rejects.toMatchObject({ code: 'NON_ACTIVITY_SOURCE', message: expect.stringContaining(message) });
-    expect(eventServiceMock.getEventAndActivities).not.toHaveBeenCalled();
+    expect(eventServiceMock.getEventAndActivitiesOnce).not.toHaveBeenCalled();
     expect(event.clearActivities).not.toHaveBeenCalled();
     expect(onProgress.mock.calls.some(([progress]) => progress.phase === 'done')).toBe(false);
   });
@@ -163,11 +192,41 @@ describe('AppEventReprocessService', () => {
 
   it('should throw PERSIST_FAILED when refreshed event cannot be loaded', async () => {
     const event = makeTargetEvent();
-    eventServiceMock.getEventAndActivities.mockReturnValueOnce(of(null));
+    eventServiceMock.getEventAndActivitiesOnce.mockReturnValueOnce(of(null));
 
     await expect(service.regenerateEventStatistics({ uid: 'u1' } as any, event)).rejects.toMatchObject({
       code: 'PERSIST_FAILED',
+      message: expect.stringContaining('Activity was reprocessed'),
     });
+  });
+
+  it('reports a failed server refresh as a completed reprocess and does not retry the mutation', async () => {
+    const error = new Error('Server read failed');
+    eventServiceMock.getEventAndActivitiesOnce.mockReturnValueOnce(throwError(() => error));
+    await expect(service.regenerateEventStatistics({ uid: 'u1' } as any, makeTargetEvent())).rejects.toMatchObject({
+      code: 'PERSIST_FAILED', cause: error, message: expect.stringContaining('Refresh the page'),
+    });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels before callable dispatch if its view changes during preparation', async () => {
+    let current = true;
+    let ready!: () => void;
+    const preparation = new Promise<void>(resolve => { ready = resolve; });
+    const dispatch = vi.fn();
+    functionsServiceMock.call.mockImplementation(async (_name, _data, options) => {
+      await preparation;
+      if (!options.canExecute()) throw new Error('Operation cancelled before dispatch');
+      dispatch();
+      return { data: { status: 'completed', sourceFilesCount: 1 } };
+    });
+    const work = service.regenerateEventStatistics({ uid: 'u1' } as any, makeTargetEvent(), { canExecute: () => current });
+    const cancelled = expect(work).rejects.toMatchObject({ code: 'CANCELLED' });
+    current = false;
+    ready();
+    await cancelled;
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(eventServiceMock.getEventAndActivitiesOnce).not.toHaveBeenCalled();
   });
 
   it('should emit progress phases for reimport mode', async () => {

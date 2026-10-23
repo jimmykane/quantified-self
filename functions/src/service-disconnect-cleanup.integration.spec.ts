@@ -184,9 +184,14 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     await batch.commit();
     await deauthorizeServiceForUser(uid, service);
     const taskRef = (await tasks().get()).docs[0].ref;
-    const remove = vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(new Error('storage-independent Firestore failure'));
+    const remove = vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(
+      Object.assign(new Error(`private failure: ${uid} ${providerID} test-access`), { code: 14 }),
+    );
     await processServiceDisconnectCleanup(taskRef);
     expect((await taskRef.get()).exists).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith('[ExplicitDisconnectCleanup] Cleanup page outcome.', {
+      cleanupJobId: taskRef.id, serviceName: service, outcome: 'retry', reason: 'cleanup_retry', errorCode: 'unavailable',
+    });
     await taskRef.update({ nextAttemptAt: 0 });
     await processServiceDisconnectCleanup(taskRef);
     expect(remove).toHaveBeenCalled();
@@ -262,6 +267,70 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     expect((await work.get()).exists).toBe(true);
     expect((await ref.get()).exists).toBe(false);
     expect((await root().get()).data()!.activeOAuthCredentialGeneration).toBe('replacement');
+    expect(logger.info).toHaveBeenCalledWith('[ExplicitDisconnectCleanup] Cleanup page outcome.', {
+      cleanupJobId: ref.id, serviceName: service, outcome: 'superseded', reason: 'connection_changed', errorCode: 'unknown',
+    });
+    expect(vi.mocked(logger.warn).mock.calls.some(call => call[1]?.cleanupJobId === ref.id)).toBe(false);
+  });
+
+  it.each([
+    ['aborted', 'aborted'],
+    ['private-error-code', 'unknown'],
+  ])('logs a safe code when another worker replaces the lease (%s)', async (code, expectedCode) => {
+    const work = queue().doc(uid);
+    await work.set({ userName: providerID, firebaseUserID: uid });
+    await deauthorizeServiceForUser(uid, service);
+    const ref = (await tasks().get()).docs[0].ref;
+    vi.spyOn(db, 'recursiveDelete').mockImplementationOnce(async () => {
+      await ref.update({ lease: 'replacement-worker' });
+      throw Object.assign(new Error(`private failure: ${uid} ${providerID} test-access`), { code });
+    });
+    await processServiceDisconnectCleanup(ref);
+    expect((await work.get()).exists).toBe(true);
+    expect((await ref.get()).get('lease')).toBe('replacement-worker');
+    expect(logger.info).toHaveBeenCalledWith('[ExplicitDisconnectCleanup] Cleanup page outcome.', {
+      cleanupJobId: ref.id, serviceName: service, outcome: 'superseded', reason: 'lease_changed', errorCode: expectedCode,
+    });
+    expect(vi.mocked(logger.warn).mock.calls.some(call => call[1]?.cleanupJobId === ref.id)).toBe(false);
+  });
+
+  it('logs a guarded deferral as info without changing the retained cleanup', async () => {
+    await deauthorizeServiceForUser(uid, service);
+    const ref = (await tasks().get()).docs[0].ref;
+    const transact = db.runTransaction.bind(db);
+    let calls = 0;
+    vi.spyOn(db, 'runTransaction').mockImplementation(async callback => {
+      if (++calls === 2) {
+        await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
+        await token().set({ serviceName: service, userName: providerID });
+      }
+      return transact(callback);
+    });
+    await processServiceDisconnectCleanup(ref);
+    expect((await ref.get()).exists).toBe(true);
+    expect((await ref.get()).get('nextAttemptAt')).toBeGreaterThan(Date.now());
+    expect((await token().get()).exists).toBe(true);
+    expect(logger.info).toHaveBeenCalledWith('[ExplicitDisconnectCleanup] Cleanup page outcome.', {
+      cleanupJobId: ref.id, serviceName: service, outcome: 'deferred', reason: 'lifecycle_or_document_changed', errorCode: 'unknown',
+    });
+    expect(vi.mocked(logger.warn).mock.calls.some(call => call[1]?.cleanupJobId === ref.id)).toBe(false);
+  });
+
+  it('keeps retries intact when error-code access or diagnostic logging throws', async () => {
+    const work = queue().doc(uid);
+    await work.set({ userName: providerID, firebaseUserID: uid });
+    await deauthorizeServiceForUser(uid, service);
+    const ref = (await tasks().get()).docs[0].ref;
+    const getter = vi.fn(() => { throw new Error('private error-code getter'); });
+    vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(Object.defineProperty(new Error('private error'), 'code', { get: getter }));
+    vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('logger unavailable'); });
+    await expect(processServiceDisconnectCleanup(ref)).resolves.toBeUndefined();
+    expect(getter).not.toHaveBeenCalled();
+    expect((await ref.get()).exists).toBe(true);
+    expect((await work.get()).exists).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith('[ExplicitDisconnectCleanup] Cleanup page outcome.', {
+      cleanupJobId: ref.id, serviceName: service, outcome: 'retry', reason: 'cleanup_retry', errorCode: 'unknown',
+    });
   });
 
   // Synthetic accounts only. Model the completed OAuth write locally; run the

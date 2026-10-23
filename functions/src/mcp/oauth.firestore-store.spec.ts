@@ -1209,6 +1209,16 @@ describe('Firestore MCP OAuth store', () => {
     expect([...cleanup.documents.values()].flat()).toEqual([]);
   });
 
+  it('uses the account owner deletion callback within the existing cleanup budget', async () => {
+    const roots = Array.from({ length: 251 }, (_, index) => `${MCP_OAUTH_COLLECTIONS.accessTokens}/token-${index}`);
+    const cleanup = buildCleanupFirestore({ [MCP_OAUTH_COLLECTIONS.accessTokens]: roots });
+    const deleteDocument = vi.fn(ref => cleanup.recursiveDelete(ref));
+    await expect(cleanupMcpOAuthStateForUser('user-1', deleteDocument)).rejects.toMatchObject({ deletedCount: 250 });
+    expect(deleteDocument).toHaveBeenCalledTimes(250);
+    await cleanupMcpOAuthStateForUser('user-1', deleteDocument);
+    expect(deleteDocument).toHaveBeenCalledTimes(251);
+  });
+
   it('fails retryably at the total cleanup budget and completes idempotently on retry', async () => {
     const authorizationRequests = Array.from(
       { length: 251 },

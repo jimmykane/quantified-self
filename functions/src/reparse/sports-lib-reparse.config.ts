@@ -29,6 +29,7 @@ export const SPORTS_LIB_REPARSE_HEAVY_REASONS = {
 export type SportsLibReparseHeavyReason = typeof SPORTS_LIB_REPARSE_HEAVY_REASONS[keyof typeof SPORTS_LIB_REPARSE_HEAVY_REASONS];
 
 export const SPORTS_LIB_REPARSE_FAILURE_REASONS = {
+    IdentityConflict: 'ACTIVITY_IDENTITY_CONFLICT',
     ReparseFailed: 'REPARSE_FAILED',
     TooHeavyForAutoReparse: 'TOO_HEAVY_FOR_AUTO_REPARSE',
 } as const;

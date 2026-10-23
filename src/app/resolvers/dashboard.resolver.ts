@@ -1,8 +1,9 @@
+import type { EventRead } from '@shared/event-read';
 import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
 import { AppEventService, type EventsOnceSource } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
-import { EventInterface, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 import { map, switchMap, take } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
@@ -17,7 +18,7 @@ import {
 } from '../helpers/dashboard-tile-event-filters.helper';
 
 export interface DashboardResolverData {
-    events: EventInterface[];
+    events: EventRead[];
     user: AppUserInterface | null;
     targetUser?: AppUserInterface | null;
     hasMergedEvents?: boolean;
@@ -169,7 +170,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const limit = 0;
 
             const eventsFetchStart = performance.now();
-            const eventsResult = await firstValueFrom(eventService.getEventsOnceByWithMeta(
+            const eventsResult = await firstValueFrom(eventService.getEventSummariesOnceByWithMeta(
                 userContext,
                 where,
                 'startDate',

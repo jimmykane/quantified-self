@@ -68,7 +68,7 @@
         @if (state.configuring()) {
         <section class="chart-library-properties qs-scrollbar" [attr.aria-label]="draftPresentation().properties">
           <h3>{{ draftPresentation().properties }}</h3>
-          <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" [showCategorySelector]="!creatingCustom()" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
+          <app-dashboard-tile-editor [disabled]="state.busy()" [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" [showCategorySelector]="!creatingCustom()" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
         </section>
         }
         <section class="chart-library-preview qs-scrollbar" [attr.aria-label]="draftPresentation().preview">

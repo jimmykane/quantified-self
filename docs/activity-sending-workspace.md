@@ -88,6 +88,13 @@ MCP impact: no new tools, scopes, consent, metrics, Assistant access, or provide
 
 ## Operations and release boundary
 
+`uploadActivitySendFile` rejection logs contain only a fixed processing stage,
+allowlisted error code (otherwise `unknown`) and HTTP status. Correlate these with
+the existing Cloud Run request trace; no request headers, account/batch/file IDs,
+filenames, payloads, URLs or raw exceptions are copied. Validation rejections use
+WARNING and unexpected server failures use ERROR. Diagnostics cannot change the
+HTTP response or cleanup behavior. Existing monitoring and HTTP outcomes are unchanged.
+
 The Admin activity queue separates historical sends, manual origins and direct temporary files. The [delivery monitoring bundle](activity-delivery-monitoring.md) includes fixed `direct` mode, explicit confirmed processing failures, bounded dispatcher observation and hourly source-cleanup failures. No identifiers or raw error strings enter its labels. Admission/projection triggers use retry-enabled Firestore delivery; native function error/latency logs remain their diagnosis surface.
 
 Release requires separate approval for Functions, Rules, indexes and Hosting deployment, and applying the monitoring bundle. Configure the collection-group `activitySendOperations.cleanupAfter` index before the cleanup scheduler runs. New exports have direct loader ownership and trigger-contract checks; no new secrets are required. Follow existing deployment safety commands and read back metrics/policies after activation. Implementation tests use demo emulators and synthetic recordings; they do not call fitness providers or mutate production.

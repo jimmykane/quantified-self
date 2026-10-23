@@ -182,6 +182,22 @@ describe('HeaderStatsComponent', () => {
     expect(component.getNormalizedStatLabel(nonDerived)).toBe('Average Power');
   });
 
+  it('updates optional context labels without changing values or the default label', () => {
+    const stat = createStat(DataPowerAvg.type, 'Average Power', '250', 'W');
+    component.statsToShow = [DataPowerAvg.type]; component.stats = [stat];
+    component.singleValueTypes = [DataPowerAvg.type];
+    applyChanges(component);
+    expect(component.displayedStatCards[0].label).toBe('Average Power');
+    component.statLabels = { [DataPowerAvg.type]: 'Recorded power' };
+    component.ngOnChanges({ statLabels: new SimpleChange(undefined, component.statLabels, false) });
+    expect(component.displayedStatCards[0].label).toBe('Recorded power');
+    expect(component.getNormalizedStatLabel(stat)).toBe('Recorded power');
+    expect(component.displayedStatCards[0].valueItems[0].displayValue).toBe('250');
+    component.statLabels = undefined;
+    component.ngOnChanges({ statLabels: new SimpleChange({}, undefined, false) });
+    expect(component.displayedStatCards[0].label).toBe('Average Power');
+  });
+
   it('should hide NaN values from cards and remove single-value cards that only contain NaN', () => {
     component.layout = 'grid';
     component.statsToShow = [DataPowerAvg.type, DataHeartRateAvg.type];

@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import { Injectable } from '@angular/core';
 import {
   ActivityTypes,
@@ -6,7 +7,6 @@ import {
   DataPaceAvg,
   DataSpeedAvg,
   DataSwimPaceAvg,
-  EventInterface,
 } from '@sports-alliance/sports-lib';
 import { SummaryPrimaryInfoMetric } from '../../components/shared/summary-primary-info/summary-primary-info.component';
 import { AppUserSettingsQueryService } from '../app.user-settings-query.service';
@@ -30,7 +30,7 @@ export interface MapEventPopupContent {
 export class MapEventPopupContentService {
   constructor(private userSettingsQuery: AppUserSettingsQueryService) { }
 
-  public buildFromEvent(event: EventInterface | null | undefined): MapEventPopupContent {
+  public buildFromEvent(event: EventRead | null | undefined): MapEventPopupContent {
     if (!event) {
       return {
         eventType: 'Activity',
@@ -48,7 +48,7 @@ export class MapEventPopupContentService {
     };
   }
 
-  private buildMetricsFromEvent(event: EventInterface): SummaryPrimaryInfoMetric[] {
+  private buildMetricsFromEvent(event: EventRead): SummaryPrimaryInfoMetric[] {
     const unitSettings = this.resolveUnitSettings();
     const activityTypes = event.getActivityTypesAsArray?.() || [];
     return [
@@ -67,7 +67,7 @@ export class MapEventPopupContentService {
     return [{ value: '--', label: '' }, { value: '--', label: '' }, { value: '--', label: '' }];
   }
 
-  private resolveEventTypeLabel(event: EventInterface): string {
+  private resolveEventTypeLabel(event: EventRead): string {
     const displayType = event.getActivityTypesAsString?.();
     if (typeof displayType === 'string' && displayType.trim().length > 0) {
       return displayType.trim();
@@ -90,7 +90,7 @@ export class MapEventPopupContentService {
     return 'Activity';
   }
 
-  private resolveIconEventType(event: EventInterface): string {
+  private resolveIconEventType(event: EventRead): string {
     const types = event.getActivityTypesAsArray?.() || [];
     if (types.length === 1) {
       const type = types[0];
@@ -115,7 +115,7 @@ export class MapEventPopupContentService {
   }
 
   private resolveEffortMetricFromEvent(
-    event: EventInterface,
+    event: EventRead,
     activityTypes = event.getActivityTypesAsArray?.() || [],
   ): SummaryPrimaryInfoMetric {
     const primaryActivityType = activityTypes[0];
@@ -140,7 +140,7 @@ export class MapEventPopupContentService {
   }
 
   private resolveSummaryMetricFromEvent(
-    event: EventInterface,
+    event: EventRead,
     statType: string,
     activityTypes = event.getActivityTypesAsArray?.() || [],
   ): SummaryPrimaryInfoMetric {
@@ -182,7 +182,7 @@ export class MapEventPopupContentService {
     };
   }
 
-  private getEventSummaryStat(event: EventInterface, statType: string): any {
+  private getEventSummaryStat(event: EventRead, statType: string): any {
     if (statType === DataDuration.type && typeof event.getDuration === 'function') {
       return event.getDuration();
     }

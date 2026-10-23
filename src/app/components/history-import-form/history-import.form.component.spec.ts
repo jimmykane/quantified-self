@@ -534,6 +534,11 @@ describe('HistoryImportFormComponent', () => {
                 expect(component.nextImportAvailableDate.getTime()).toBe(nextAllowedAtMs);
             } else {
                 expect(fixture.nativeElement.textContent).toContain('Next available');
+                component.sleepSyncStatus.set('error'); fixture.detectChanges();
+                expect(fixture.nativeElement.querySelector('[aria-label="Sleep history import timing"]').textContent)
+                    .toContain(formatDate(nextAllowedAtMs, 'medium', 'en-US'));
+                expect(component.canSubmitSleepBackfill).toBe(false);
+                component.sleepSyncStatus.set('ready'); fixture.detectChanges();
             }
             await submit(domain);
             expect(call).toHaveBeenCalledTimes(1);
@@ -930,7 +935,11 @@ describe('HistoryImportFormComponent', () => {
 
                 expect(component.formGroup.disabled).toBe(true);
                 expect(component.isActivityHistoryImportRunning()).toBe(false);
-                expect(fixture.nativeElement.querySelector('app-status-info[title="History import cooldown"]')).not.toBeNull();
+                const timing = fixture.nativeElement.querySelector('[aria-label="Activity history import timing"]') as HTMLElement;
+                expect(timing).not.toBeNull();
+                expect(timing.textContent).toContain('Last requested: ' + formatDate(component.userMetaForService!.didLastHistoryImport!, 'medium', 'en-US'));
+                expect(timing.textContent).toContain('Next available: ' + formatDate(component.nextImportAvailableDate, 'medium', 'en-US'));
+                expect(fixture.nativeElement.querySelector('app-status-info[title="History import cooldown"]')).toBeNull();
                 expect(fixture.nativeElement.querySelector('app-status-info[title="Import In Progress"]')).toBeNull();
                 expect(fixture.nativeElement.querySelector('app-status-info[title="Import Active"]')).toBeNull();
                 expect(fixture.nativeElement.textContent).not.toContain('Activities are arriving via Garmin push.');
@@ -1386,7 +1395,7 @@ describe('HistoryImportFormComponent', () => {
         expect(text).toContain('Requests Suunto sleep');
         expect(text).toContain('Jan 1, 2000');
         expect(text).toContain('Only history available from Suunto can be imported');
-        expect(text).toContain('once every 7 days');
+        expect(text).toContain('Available now');
     });
 
     it('should render the combined Suunto Sleep and Health action when Health is enabled', async () => {
@@ -1518,7 +1527,7 @@ describe('HistoryImportFormComponent', () => {
         expect(text).toContain('Import Sleep history');
         expect(text).toContain('Imports Garmin sleep');
         expect(text).toContain('Records may appear gradually');
-        expect(text).toContain('once every 30 days');
+        expect(text).toContain('Available now');
     });
 
     it('should render Garmin sleep backfill for newly connected users without activity history meta', async () => {
@@ -1569,15 +1578,18 @@ describe('HistoryImportFormComponent', () => {
         expect(text).toContain('Import Sleep & daily Health history');
         expect(text).toContain('Imports available COROS sleep and daily Health metrics');
         expect(text).toContain('up to three months');
-        expect(text).toContain('once every 7 days');
+        expect(text).toContain('Available now');
     });
 
     it('should disable sleep backfill during the provider cooldown', async () => {
         await fixture.whenStable();
+        const lastRequestedAt = Date.now() - 86_400_000;
+        const nextAllowedAt = Date.now() + 60_000;
         mockSleepService.watchSyncState.mockReturnValueOnce(of({
             provider: 'SuuntoApp',
             status: 'ready',
-            nextBackfillAllowedAtMs: Date.now() + 60_000,
+            lastBackfillQueuedAtMs: lastRequestedAt,
+            nextBackfillAllowedAtMs: nextAllowedAt,
             updatedAtMs: Date.now(),
         }));
         component.serviceName = ServiceNames.SuuntoApp;
@@ -1591,7 +1603,10 @@ describe('HistoryImportFormComponent', () => {
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
         const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep history'));
         expect(sleepButton?.disabled).toBe(true);
-        expect(fixture.nativeElement.textContent).toContain('Next available');
+        const timing = fixture.nativeElement.querySelector('[aria-label="Sleep history import timing"]') as HTMLElement;
+        expect(timing.textContent).toContain('Last requested: ' + formatDate(lastRequestedAt, 'medium', 'en-US'));
+        expect(timing.textContent).toContain('Next available: ' + formatDate(nextAllowedAt, 'medium', 'en-US'));
+        expect(timing.textContent).not.toContain('Available now');
     });
 
     it('should queue Suunto sleep backfill from the separate action', async () => {
@@ -2143,7 +2158,10 @@ describe('HistoryImportFormComponent', () => {
             expect(component.isAllowedToDoHistoryImport).toBe(false);
             expect(component.formGroup.disabled).toBe(true);
             expect(fixture.nativeElement.textContent).toContain('500 activities scheduled from the last import.');
-            expect(fixture.nativeElement.textContent).toContain('Cooldown active for 1 day.');
+            const timing = fixture.nativeElement.querySelector('[aria-label="Activity history import timing"]') as HTMLElement;
+            expect(timing.textContent).toContain('Last requested:');
+            expect(timing.textContent).toContain('Next available:');
+            expect(timing.textContent).not.toContain('Cooldown');
             expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
         });
 

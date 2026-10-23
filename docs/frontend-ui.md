@@ -77,7 +77,8 @@ Health All and the owner Dashboard Today share the surface-free summary from
 `components/shared/health-change-summary/`. Its presentation delegates to
 `components/shared/summary-disclosure/`, shared with the saved-note and public-example
 `components/shared/note-comparison-summary/`. The shell owns headings, flat/rail layout, Material disclosure, haptics
-and local scope resets only; domain adapters retain their existing calculations. Note comparisons keep source-labelled
+and local scope resets only; its plain variant keeps just the disclosure control and accessible region label without
+visible headings or a surrounding border. Domain adapters retain their existing calculations. Note comparisons keep source-labelled
 differences and coverage visible and put the median table under **Show details**, without hiding the history chart.
 Their rail stays neutral regardless of the sign of a difference. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
 Health and note comparisons use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls`
@@ -135,6 +136,10 @@ omitted from updates. Section disclosures preserve unsaved form edits and emit s
 or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
+
+### Connection feature cards
+
+Connections feature cards keep one title, description and action. They do not repeat a promotional checkmark line or a generic cooldown duration. History import keeps actual last-requested and next-available dates together as quiet metadata, with activity and Sleep/Health timings separate. A request date is not a completed-delivery date. Existing pending/error states, provider limits, eligibility checks and exact expiry timers remain unchanged; presentation reuses already-loaded metadata without new provider reads or mutations. Monitoring and MCP contracts are unchanged.
 
 ## Dialog actions and haptic ownership
 
@@ -333,6 +338,10 @@ Activity details use the workspace shell's inline gutters once. The primary summ
 activity selector, statistics, map, charts, and lap/jump/swim sections align to the same content edges without extra
 section-wide side insets. Section headings omit redundant top padding and retain an 8px gap below. Material controls,
 table cells, chart axes, overlays, and fullscreen/export frames keep their internal spacing.
+Summary metric tabs use `--header-stats-padding: 8px 0 0` so the tab header's 8px offset and the summary's 16px
+section gap or bottom padding leave equal space above and below the metric cards, including on phones.
+Desktop tab height follows the selected category's intrinsic content, retaining resize/font measurements and the
+small rounding tolerance without reserving blank space for a taller hidden category. Phones retain natural sizing.
 The Jumps divider reuses the performance-chart divider's 16px top and 8px bottom margins in addition to the section
 stack's existing gap, so the heading is separated from the preceding lap table or chart. No divider is rendered when
 no selected activity has jumps. A single jump-bearing activity renders its table directly, matching Laps and Swim
@@ -400,6 +409,154 @@ brightening preserves achromatic black/gray rather than adding red saturation. P
 https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
 benchmark charts, particularly overlapping lines and map backgrounds.
 
+### Saved comparison R–R statistics
+
+The Compare Files / Saved comparisons table places one **R–R & HRV** column after HR. Per-recording lines follow the
+same activity order as Devices, distance and elevation, displaying canonical saved RMSSD, **Stats available** when only
+other valid R–R metrics exist, or a dash when loaded stats are unavailable. One Material button opens the full set of
+saved catalog metrics grouped by eligible recording, preserving device identity and colors without grading HRV magnitude.
+The dialog links to Event Details; charts are opened there with **Show charts**. Table cells use a minimum 44px target
+and retain the existing horizontal scroll owner; the dialog wraps labels and keeps its standard scrollable content/actions.
+
+This display reuses the existing page-limited, cache-first activity hydration (`preferCache: true`, `warmServer: false`).
+It adds no reads, writes, stream inspection, parsing, workers, backend fields or indexes. Metadata-only drafts retain
+their existing skipped hydration and show **Not loaded**, including after an unsuccessful/empty activity load. This state
+is deliberately distinct from a loaded recording with no saved HRV. Additional metric formatting happens only when the
+dialog opens. Help describes the data boundary; there is no MCP contract or consent change.
+
+### Event R–R summaries and plots
+
+All Event Details pages with valid saved R–R metrics expose a separate **R–R & HRV** summary category (`rr`),
+immediately before Device, preserving category IDs for remembered selections. It is not part of Device or Physiological. The existing metric-card renderer
+shows up to seven primary statistics with short contextual labels, matching the other summary tabs without extra
+headings, recording captions or explanatory paragraphs. The shared plain disclosure passes its existing **Show/Hide details**
+control to an overview template, placing it in the metric renderer's grid/chip suffix beside the readings, with no footer row.
+Expanded details remain below that overview. The same control keeps its state, ARIA target and single haptic owner.
+If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
+and recorded zero remains zero. `rr-metrics.ts` owns the common catalog; values and units remain Sports Lib's.
+Each selected activity is inspected separately; parent-event and multisport aggregates are never used for R–R.
+A local Recording selector preserves source identity across filtering. Two-source benchmarks use the shared stat
+delta formatter and card treatment, restricted to types valid in both sources. Explicit multisport merges and
+ordinary events have no R–R comparison deltas. Initialization and unchanged selections stay silent; accepted source
+and category changes and the shared disclosure own one selection haptic. This summary does not inspect streams,
+start a worker, fetch originals, reparse, persist statistics or add backend reads. MCP metric projections, consent,
+catalog discovery and query/index contracts are unchanged; this is presentation of already-adopted saved metrics.
+
+`BenchmarkReportComponent` includes the seven primary R–R metrics as a
+reference/test table, using the exact report participant IDs and the common canonical formatter. It omits all-missing
+rows, preserves one-sided and zero values, and includes available artifact counts, pair rates and DFA ranges. Neutral
+absolute/percentage differences require valid values in both recordings. Symmetric percentages use the mean absolute
+magnitudes, so opposite-signed DFA values cannot cancel the denominator. These whole-recording summaries are not
+trimmed to the aligned benchmark overlap. R–R metrics are excluded from stat-difference chips and the hardware
+agreement grade. Stale reports, unresolved or ambiguous participant links and missing activities do not show current
+R–R values. The section is inside the existing share/image export frame and uses the global scrollbar skin on phones.
+Image exports hide the screen-only horizontal-scrolling hint, including when generated from a phone viewport.
+It reads no streams, starts no worker and changes no saved report schema, Firestore query/index or MCP contract.
+
+The shared public reviewer showcase also includes an R–R/HRV row on Home and the comparison feature page. A fixed,
+approved excerpt contains only the first 90 seconds of relative beat times, intervals and version-one classification flags
+from one recorded source. Its three verified full-recording summaries remain separate from excerpt data. There are no account,
+event, device, calendar-time or location fields. The sample is independent of the existing multi-device HR/altitude examples.
+Use the shared R–R option builder and viewport-deferred ECharts host; the public preview does not parse originals, run analysis
+workers, query accounts or add input listeners. Keep its numeric example under `data-nosnippet`, with capability copy in ordinary
+prerendered HTML outside that boundary. The phone layout stacks the plot and a wrapping two-column metric table without horizontal
+scrolling. Chart initialization/drawing failures retain the summary table and show a short fallback over the chart's
+reserved space. Keep its host measurable and observable (visibility/ARIA hiding, never `display: none`) so a later theme
+refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
+excerpt/full-recording context with an automatically generated list of coordinates.
+
+`BenchmarkRRComponent` is shared by ordinary workouts, explicit multisport merges and benchmarks. Event Details
+mounts it after the performance/dive charts only when a selected activity has valid saved R–R statistics or an original
+IBI stream with usable timing metadata. The panel independently filters to those same eligible recordings; no-data
+selections leave no empty section or host in the summary stack. It follows selected activities and full-event device
+color assignments, preserving each multisport leg's original timing without combining its statistics with other legs.
+It does not change Training impact, benchmark reports, alignment or accuracy grades, persistence, or MCP contracts.
+The panel starts collapsed as a compact section-header row. The surface-free **Show/Hide charts** Material button
+owns one selection haptic and a stable `aria-controls` target; collapsed content neither materializes beats nor starts a worker.
+Expanding opens charts directly. A compact top legend uses the ordinary chart typography and shows each plotted source's
+seven available primary saved statistics, with quality details in tooltips. At phone widths the source names and metric
+pairs wrap inside the panel, keeping all available values visible without a sideways gesture. The artifact/pair key takes
+its own row below the chart heading. Wider layouts retain a bounded horizontal legend with the shared scrollbar skin and
+keyboard access. Values and units use Sports Lib classes through
+the shared unit-aware resolver. Missing saved values remain unavailable, never zero, combined totals or worker-generated replacements.
+**Show/Hide statistics** reveals the full table and its 20-metric selector. The table follows the local recording selection,
+keeps metric labels sticky, and uses the global scrollbar skin with a phone scrolling hint.
+The multi-select **Recordings** picker includes only selected event recordings with original R–R intervals or valid saved
+R–R/HRV statistics, defaulting to all eligible sources and preserving IDs (or full-event positions
+for unsaved/duplicate IDs), colours and distinct full-event-order line patterns. It overlays two or more original R–R and DFA
+series on shared axes. Beat and window times retain each recording's start offset relative to the earliest plotted source;
+no resampling, concatenation or per-device zero alignment is introduced. Markers and tooltip series names retain source identity.
+If the parent event selection removes every locally chosen source, the remaining event sources become selected. A deliberate
+local clear stays empty, with the picker still available even for one remaining source. Chart legends omit sources without
+usable analyzed intervals, including saved-summary-only recordings and failed/empty analyses. Their valid saved values remain
+available in the statistics table, and failed analyses keep their named retry message. Filtering never renumbers full-event
+line styles, alters the parent activity selection or hides devices from other event charts.
+Same-event metadata refreshes preserve disclosure and local recording choices. A different event ID resets both;
+unsaved events use object identity. Analysis caches are still invalidated when event/activity inputs refresh.
+
+Charts are lazy: expansion analyzes already-loaded original `IBIStream` sources sequentially in a component-scoped module worker.
+The collapsed panel inspects eligibility only; it does not expand or copy beat arrays. Each activity is analyzed independently;
+completed analyses are cached only in component memory and reused across local source changes and collapse/reopen. Input changes
+invalidate that cache. A source failure leaves successful plots and all saved summaries available; Retry reruns only failed sources.
+Collapsing cancels pending work, disconnects/disposes both hosts and fences late results. Unreadable timing is handled inside
+its source request, leaving other recordings usable.
+Eligibility and analysis ignore any stream display filter and preserve the original unsmoothed intervals.
+Regular one-second `Stream` data is ineligible. Original elapsed beat times and invalid-observation barriers are preserved.
+The worker calls Sports Lib's `analyzeRRIntervals`; QS does not implement another artifact or DFA algorithm.
+Sports Lib 23.5.0 has no analysis-only public entry, and its root barrel emits unused parser chunks in a separate
+worker build. The worker therefore imports the pinned pure ESM implementation directly. The compiled-worker test
+checks parity with the public API, a single small output and absence of parser/Angular/Firebase runtime. Review this
+path on library upgrades and replace it with a public analysis-only entry when available; do not copy the algorithm.
+Analysis stays in memory, with cancellation on source/input changes and teardown, a 30-second timeout, and stale-result
+fences for both calculation and chart initialization. Worker failures keep saved summaries available and offer Retry.
+Chart rendering failures dispose both hosts, including a partially initialized partner, before offering Retry.
+This panel introduces no Firestore query, write, index, reparse, original-file fetch or server endpoint.
+
+The local **Time series / Poincaré** Material toggle defaults to Time series. Poincaré lazily replaces the two time hosts
+with one unconnected scatter host using the same cached source analyses, source selection, unit preferences, theme and
+shared mobile tooltip/haptic handling. Switching views preserves timeline zoom; changing source/event or closing the
+panel retains the existing disposal/cancellation policy. Failed or stale scatter initialization is fenced and disposed,
+and the existing Retry path reuses successful analyses. Saved-only sources stay in statistics, outside the plots.
+
+The scatter host fills phone width and centres on desktop at up to 816 CSS pixels (720 pixels of plotting area).
+Its square geometry and identical axis bounds preserve interval-pair shape. The plot-only native fullscreen control
+is offered through `BrowserCompatibilityService` only when both entry and exit APIs are available and policy permits
+them, including the WebKit-prefixed API. Fullscreen keeps source identities, the flagged filter and point inspector
+accessible, sizes the same shared chart host to available height, and retains the cached analysis. Native exit events
+restore layout silently; pending requests are deduplicated, failures leave the chart usable, and a late entry for a
+removed plot is exited. Short viewports scroll with the global QS scrollbar skin rather than clipping controls.
+
+`benchmark-rr-poincare.helper.ts` pairs original adjacent analyzed observations within a source segment before applying
+quality filters. Invalid/nonpositive intervals, invalid time and non-increasing time break pairing. A point is artifact-flagged
+when either member has an artifact classification; otherwise either suspected-ectopic classification gives a ring.
+Removing flagged points never creates a new neighbouring pair. Each source preserves its full-event symbol assignment
+(circle, square, triangle, diamond) and device color. A two-pass scan bounds allocations/rendering to 4,000 points per
+category per recording, sampling ranks across the complete domain with first/last retention. Counts include all eligible
+pairs; axis extents include all pairs before filtering/sampling so rare extremes remain within the plot. Axes use equal
+canonical interval bounds and a square plot region. This is interval-pair geometry, not another classifier, an SD1/SD2
+implementation or a new persisted metric. Native ECharts point tooltips escape source labels. The keyboard/touch **Next
+flagged pair** action inspects displayed flagged points; its interval/time values use the shared canonical formatter.
+The adjacent-pair count is deliberately distinct from Sports Lib's suspected ectopic-pair count.
+
+MCP impact: this browser-only plot exposes no new MCP field, numeric class, parser/persistence change, grant or query.
+Raw beats/classifications remain outside the existing MCP surface. No original-file fetch, Firestore read/write/index,
+backend computation, reparse or Training change is introduced.
+
+The two time-series ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
+Reset uses the shared sync-source suppression so the button owns its single haptic response. Chart gestures use the
+shared ECharts feedback helper. Shared host lifecycle, theme/contrast, tooltip and resize helpers remain authoritative.
+Flag exclusion masks plot values only; null windows and recording segment boundaries stay gaps. Native LTTB is disabled
+because it can join unrelated points around null barriers. Dense artifact/pair markers are capped at 4,000 per kind per recording by
+sampling the complete time domain, with a visible notice; recorded summary counts remain complete. Zoom and exclusion
+never recalculate persisted statistics. DFA guides at 0.75 and 0.50 carry no automatic intensity or medical conclusion.
+Axis ticks stay compact; hover timing retains canonical seconds. Tooltip metric values use
+strict numeric validation, preserving a missing value instead of coercing it to zero.
+
+MCP impact review: browser-only benchmark presentation, with no version/parser/persistence or wire-contract change.
+The existing canonical numeric metric catalog and consent stay unchanged; benchmark events remain excluded from that
+catalog's activity history. Raw beats, classifications, detailed windows and device labels are not added to MCP.
+The existing R–R numeric adoption boundary is documented in `docs/mcp-server.md`.
+
 ## Shared scrollbars
 
 `src/styles/_scrollbars.scss`, included once by `src/styles.scss`, owns the app's thin, rounded QS scrollbar skin.
@@ -422,6 +579,38 @@ For changes, run `src/styles/scrollbars.spec.ts` and the affected component suit
 QA must include genuinely overflowing content in dialogs, sheets and nested panels, horizontal tables, long textareas,
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
+
+## Dashboard activity query sharing
+
+`SummariesComponent` owns a shared activity-query stream for each event owner and tile date window. Duration
+windows use one clock anchor during synchronization; a latest-window stream retains its first anchor while it
+has consumers. Matching charts and event maps share the listener, event hydration and merge exclusion. Sport
+filters remain per tile in the view-model builder. Historical windows remain separate from the latest window.
+
+Streams use reference-counted replay: removing the final consumer stops the SDK listener, and unused query
+entries are removed. Synchronization releases all departing consumers before starting replacements, so a
+window without remaining consumers gets a fresh clock anchor regardless of tile order. Dashboard destruction
+and event-owner changes clear the streams, values and transient navigation anchors. Tile reorder remaps
+consumers with their existing source keys without restarting reads. The next synchronization can then detect
+calendar windows that changed across a date boundary and replace the old shared listener. A startup failure is
+shared across matching tiles within one synchronization;
+failed streams may reconnect on the next synchronization. The activity table, route previews and derived-metric
+readers retain their independent query lifecycles.
+
+## Firestore Angular boundary
+
+`app/firebase/firestore.ts` runs the provider factory, live-listener registration/teardown and the exported
+one-shot document/query/count reads outside Angular's zone. Firestore transport and IndexedDB callbacks otherwise
+inherit Angular task tracking, which becomes expensive for large cached histories. The SDK offers no Angular
+scheduling integration, so this boundary lives in the existing adapter rather than individual consumers.
+
+Snapshot, error and observer-completion callbacks enter Angular at the application boundary; `collectionData`
+and `docData` still filter cache/pending snapshots before entering when `waitForServer` is requested. One-shot
+reads preserve the original promises and error objects, and caller continuations retain their own zone context.
+The provider's zone registry covers reads started outside an injection context; without a zone, reads execute
+directly. Access rules, persistence settings and write APIs are unchanged. Regression coverage belongs in
+`firestore.spec.ts` and the dashboard subscription tests. These scheduling changes add no product settings or
+MCP/Training planning contracts and require no app-help changes.
 
 ## Firestore HTTP error responses
 
@@ -503,12 +692,55 @@ payloads before filtering, which can add work to unrelated Firestore/Auth operat
 levels stay unchanged. `AppCheckReadinessService` also reports explicit token-request failures and invalidates memoized readiness
 after a background failure. The single `App Check verification failed` Sentry message uses fixed phase/code labels,
 a bounded HTTP status, a validated SDK retry duration (up to one day), source, online hint and document visibility.
-It never copies raw error messages/stacks, SDK custom data, response bodies, URLs, identifiers or tokens. Existing
-Sentry session context is retained. An initial rejection and its subsequent cooldown share one report until a usable
+Its custom diagnostic fields never copy raw error messages/stacks, SDK custom data, response bodies, URLs,
+identifiers or tokens. Useful existing Sentry identity and navigation context is retained through the targeted
+sanitizer described below. An initial rejection and its subsequent cooldown share one report until a usable
 fresh token arrives; repeated notifications of the same cached token do not reset deduplication. Token comparison
 is memory-only. An already active cooldown is labelled honestly when the original rejection was unavailable. These
 diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
 warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
+
+App Check failure events also record `appCheckAuthState`: `restoring` until the existing Auth subscription first
+resolves, then `signed-in` or `signed-out`. This includes startup before that subscription has initialized; it is
+not a claim that an unidentified visitor is signed out or automated. No additional Auth subscription or credential
+request is introduced. Each resolved Auth notification advances an in-memory generation. Operation completions
+from an earlier generation are ignored, and pending operation recovery state is cleared when Auth changes.
+
+`App Check verification outcome` distinguishes three observations: `token-available` when the existing token
+observer reports a different nonempty token after a failure; `operation-blocked` when profile loading or a callable
+finally fails with explicit App Check evidence; and `operation-succeeded` when a previously blocked profile loads
+authoritatively or the same callable subsequently succeeds in the same Auth generation. Recovery requires an
+operation started after the latest tracked blocked failure; older or already in-flight requests cannot clear it.
+Operation ordering is local and never enters telemetry or request data. Token availability alone
+does not prove application recovery or that the server minted a fresh token. `tokenChanged` is null if there was
+no earlier token to compare. Repeated notifications of the same cached token do not report recovery.
+
+Outcome fields use fixed operation/auth/code labels, elapsed time capped at one day, and notification counts capped
+at 1000. Notifications can duplicate a single failed verification across observer, console and request sources;
+they are not unique users or exact verification-attempt counts. Repeated final failures of the tracked operation
+are deduplicated and included in its eventual success count. At most one blocked profile and one blocked callable
+are tracked in memory. Each outcome/category is reported once per Auth generation, with at most **five additional
+outcome messages per page**, including across account changes. The budget does not reset on Auth changes and does
+not suppress the existing deduplicated failure reports. Local recovery tracking continues when telemetry is suppressed.
+Callable names are used only for local matching and never copied into the custom diagnostic fields. Generic permission, internal and index errors are
+not attributed to App Check. Diagnostic failures cannot replace application results or modify the retry budget.
+
+The `appCheckBeforeSend` callback sanitizes the complete outgoing event for the two fixed App Check diagnostic
+messages. It deliberately keeps the existing UID/email, release/environment, trace IDs, browser user agent and page
+paths, including path identifiers useful for investigation. It strips URL query strings, fragments and userinfo;
+request bodies, cookies and credential headers; arbitrary tags, contexts, extras and raw errors; and event attachments.
+Navigation/request breadcrumbs retain paths, methods, statuses, timestamps and levels. Console/click breadcrumbs
+retain their category, timestamp and level without arbitrary text, arguments or selectors; other categories are omitted.
+The shared Sentry scope is not changed. Other Sentry events keep their existing behavior and are not covered by this
+App Check-specific sanitizer. SDK tests inspect the final envelope with an in-memory transport, including inherited
+scope data and attachments, while verifying that a subsequent unrelated event still retains its original context.
+The scrubber is lazy-loaded only for these diagnostics, keeping it out of the initial public bundle. If that asset
+cannot load, the affected diagnostic is dropped rather than sent without scrubbing; unrelated errors remain synchronous.
+
+These diagnostics observe existing callbacks and completions only: they add no Firestore reads/writes, token
+requests, probes or timers. They do not identify bots or expose failures inside Google's cross-origin reCAPTCHA
+iframe. For a 403 investigation, compare Firebase's existing App Check request metrics and the reCAPTCHA Admin
+console score distribution before proposing any change to thresholds, TTLs, enforcement or allowed domains.
 
 Monitoring impact: **unchanged** for Cloud Monitoring queues, dashboards and alert policies. This is browser-only
 App Check recovery; no workers, schedules, backlog/lease/dead-letter semantics, provider connections or monitoring
@@ -1004,6 +1236,13 @@ Preview data paths never call metric ensure/rebuild APIs or persist settings. Ca
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
+The shared Form/TSS chart uses `dashboard-form-y-axis.helper.ts` to derive both value axes from the displayed date
+window, not the entire loaded history. The full render series and tooltip indices remain intact. At window edges,
+interpolated values preserve the visible portion of crossing weekly/monthly line segments without importing their
+offscreen extremes. Form always includes its neutral zero baseline; the load axis retains its existing baseline policy.
+This presentation-only range applies to every consumer of `ChartsFormComponent`, without changing stored values,
+load calculations, headline stats, timeline-note overlays, or saved W/M/Y choices.
+
 Dashboard tooltip metric rows use the shared `dashboard-echarts-style.helper.ts` renderer. Labels and values can wrap
 within the card's bounded width, with wrapped values remaining aligned to the end. Column-chart sport breakdowns keep
 the canonical metric on the main row and put the percentage of the total and activity count on a separate detail line,
@@ -1112,8 +1351,32 @@ commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
+At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for the metric plot; page scrolling exposes the complete chart and date axis. Shorter cards still fill their row, including Sleep. Desktop grids retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
+
 Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.
 
 Health thumbnails reuse completed browser evidence for the same owner, metric, range and source while their visible subscription hydrates. Their latest value uses the existing canonical display string. The inert ECharts sparkline fits the span of recorded points, preserving values, gaps and colors; single readings and zero-valued bars remain visible. Full charts retain their selected date axis. Source options require drawable points in the selected window (or renderable Sleep sessions). A saved missing source retains its identity and displays `Source unavailable` with an explanation. The menu offers available replacements without silently substituting one; with no replacements it remains plain attribution.
 
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
+
+
+## Empty activity tables
+
+The shared event table keeps its existing surface, filter controls, icon headings, data rows and saved table preferences.
+A completed query with no displayed activities renders a compact, surface-free notice below the table's scroll owner;
+it does not use the loading shade's error card. Empty date ranges suggest a wider range; sport, text and tag no-matches
+suggest changing dates or clearing a filter. All dates without filters uses a neutral message with no wider-range hint.
+Connection/upload guidance stays in Dashboard's confirmed first-activity state; connection setup is offered only when
+no service is connected. Calendar retains its period-specific empty message and uses the shared filter hint for local
+no-matches. Loading, absent
+inputs and failed activity reads do not render the notice. Empty pagination is hidden without destroying the shared
+paginator or sort instances, so populated results retain their subscriptions and preferences.
+
+Dashboard and Activities project a Material **Change dates** button into the notice. It opens the existing preset
+selector or custom-date calendar without applying a range, changing filters, saving settings or fetching activities.
+Preset opening owns one selection haptic; custom calendars reuse their existing opened-event feedback. Disabled,
+loading and already-open controls are silent. Both controls receive focus before opening, keeping keyboard navigation
+and calendar focus return on the stable date field. The notice wraps its action below the copy at phone widths.
+
+MCP impact review: completed-activity presentation only; readers, canonical metrics, stored data, Training plan/workout
+contracts, consent and provider actions are unchanged.

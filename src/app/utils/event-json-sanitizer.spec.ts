@@ -4,6 +4,9 @@ import { EventJSONSanitizer } from './event-json-sanitizer';
 import {
     ActivityTypes,
     ActivityTypesHelper,
+    analyzeActivityRR,
+    DataRRRMSSD,
+    DataRRGapCount,
     DataTrainingStressScore,
     DataTrainingStressScoreMethod,
     TrainingStressScoreMethod,
@@ -81,6 +84,29 @@ describe('EventJSONSanitizer', () => {
                 expect(roundTrip.getStat(DataTrainingStressScoreMethod.type)?.getValue()).toBe(TrainingStressScoreMethod.IMPORTED);
             });
         });
+    });
+
+    it.each([
+        { type: 'IBI', data: [800, 900], sampleTimes: [800, 5900] },
+        { type: 'IBI', data: [800, null, 900], sampling: '1Hz' },
+    ])('preserves raw and resampled IBI identity through native JSON sanitization: %j', stream => {
+        const stats = { [DataRRRMSSD.type]: 42.125, [DataRRGapCount.type]: 0 };
+        const json = {
+            name: 'Synthetic beats', startDate: 0, endDate: 10_000, stats,
+            activities: [{ startDate: 0, endDate: 10_000, type: ActivityTypes.Running, stats,
+                creator: { name: 'Synthetic', devices: [] }, laps: [], events: [], intensityZones: [], streams: [stream] }],
+        };
+        const before = JSON.stringify(json);
+        const result = EventJSONSanitizer.sanitize(json);
+        expect(result.unknownTypes).toEqual([]);
+        expect(result.issues).toEqual([]);
+        const event = EventImporterJSON.getEventFromJSON(result.sanitizedJson);
+        const activity = event.getFirstActivity();
+        expect(activity.getStream('IBI').toJSON()).toEqual(stream);
+        expect(event.getStat(DataRRRMSSD.type)?.getValue()).toBe(42.125);
+        expect(activity.getStat(DataRRGapCount.type)?.getValue()).toBe(0);
+        expect(analyzeActivityRR(activity) === null).toBe(stream.sampling === '1Hz');
+        expect(JSON.stringify(json)).toBe(before);
     });
 
     it('should remove unknown types from Event stats', () => {

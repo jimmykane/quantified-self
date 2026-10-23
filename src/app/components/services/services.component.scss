@@ -379,22 +379,6 @@
     font-size: 18px;
 }
 
-.service-overview-card__detail {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    color: var(--mat-sys-tertiary);
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-.service-overview-card__detail mat-icon {
-    width: 17px;
-    height: 17px;
-    font-size: 17px;
-}
-
 .service-overview-status {
     display: flex;
     align-items: center;

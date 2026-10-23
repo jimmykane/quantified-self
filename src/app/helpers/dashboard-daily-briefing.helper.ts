@@ -1,4 +1,5 @@
-import { DataDuration, type EventInterface, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import { DataDuration, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { isTimelineNoteVisible, timelineNoteOverlaps, type TimelineNote } from '@shared/timeline-notes';
 import { formatUnitAwareDataValue, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { formatActivityCalendarDateParam, resolveActivityCalendarPrimaryRange } from './activity-calendar.helper';
@@ -52,7 +53,7 @@ export interface DashboardBriefingContext {
   nowMs: number;
   window: DashboardBriefingWindow;
   signals: readonly HealthChangeSignal[];
-  events: CalendarPeriodSource<readonly EventInterface[]>;
+  events: CalendarPeriodSource<readonly EventRead[]>;
   schedule: CalendarPeriodSource<CalendarPeriodSchedule | null>;
   completions: CalendarPeriodSource<readonly TrainingWorkoutCompletionV1[]>;
   notes: readonly TimelineNote[];
@@ -85,7 +86,7 @@ export function buildDashboardDailyBriefing(input: DashboardBriefingContext): {
   const todayCoverage = resolveCalendarCompletionCoverage(todayWorkouts, completions);
   const todayLinked = new Set(todayCoverage.linkedWorkoutIds);
   const todayPlans = todayWorkouts.filter(workout => workout.lifecycle !== 'skipped' || todayLinked.has(workout.id));
-  const recorded = new Map<string, EventInterface>();
+  const recorded = new Map<string, EventRead>();
   if (events.status === 'ready') for (const event of events.data) {
     const time = event.startDate?.getTime();
     if (time >= window.todayStartMs && time < window.tomorrowMs && time <= input.nowMs && event.getID()) recorded.set(event.getID(), event);

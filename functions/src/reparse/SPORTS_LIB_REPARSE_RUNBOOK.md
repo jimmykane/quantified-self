@@ -7,6 +7,99 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.7.0 metric lookup performance adoption
+
+Root and Functions pin the same published 23.7.0 artifact with matching lockfile integrity. Built-in metric constructors
+and aliases are indexed once, accelerating existing hydration while preserving canonical names, precedence, values,
+units and validation. QS keeps its current full event readers; the additive `EventSummary.fromJSON` API is not adopted
+by this dependency update and must not be cast to an editable event or used as a persistence payload.
+
+No historical activity or saved-route reparse, summary regeneration, Training rebuild or derived schema change is
+required. Existing Training, durability, parsing, sanitized persistence, retry/deletion and version-mismatch contracts
+remain in force. Runtime version detection and activity/route reparse targets follow the installed version; scanner
+settings are unchanged. Review already-enabled scanners before any separately approved deployment.
+
+MCP metric discovery, aliases, persisted-only availability, sensitive-field exclusions and public contracts are
+unchanged. No registered-contract promotion, client rescan or plugin rebuild is needed. User-facing workflows and
+metric meanings are unchanged, so existing Help content remains applicable. This adoption does not deploy or start a
+production reparse.
+
+### Sports Lib 23.6.0 dependency and GPS calculation adoption
+
+Root and Functions pin the same published 23.6.0 artifact with matching lockfile integrity. Runtime version detection
+and the strict activity/route reparse target follow the installed version. The independent Functions FIT Parser pin
+remains 6.2.2. Existing parser calls already handle promises; SML XML loads its parser on demand, while SML JSON and
+native JSON hydration do not load that parser. Deploy all generated browser chunks together.
+
+Generated GPS distances now use the library's haversine calculation. Recorded distances retain priority. Small
+interval differences, including zero for identical coordinates, can affect generated speed, pace, moving time,
+grade-adjusted statistics and dependent Training evidence. New imports and on-demand source hydration use the new
+calculation; stored summaries and private load evaluations remain unchanged until the normal source-backed lifecycle
+rewrites them. To apply the calculation historically, use a separately authorized original-file reparse and normal
+derived invalidation. Preserve current controls, dated policies, strict leg identities, source-write reservations,
+retry/deletion guards and stream-stripping sanitizers. No blanket historical campaign, saved-route correction,
+derived schema bump or new persistence path is required.
+
+MCP catalog membership, canonical names/units, output schemas, scopes, consent, planning reads/mutations and provider
+delivery are unchanged. Existing persisted queries and bounded on-demand chart/sample projections consume the same
+fields. This adoption requires no registered-contract promotion, client rescan or plugin rebuild. Existing Help
+guidance about recorded values and source-backed reimport remains applicable.
+
+Scanner configuration, queues and monitoring are unchanged. Review already-enabled activity/route scanner settings
+before a separately approved deployment because their version target advances with the package. This upgrade does
+not deploy, change cloud configuration, enable scanning or authorize a production reparse.
+
+### Sports Lib 23.5.1 summary metadata and swim-average adoption
+
+Root and Functions pin the same published 23.5.1 artifact, with matching lockfile integrity. Runtime version detection
+and the strict activity/route reparse target follow that installed version. The direct Functions FIT Parser pin,
+scanner settings, queue lifecycle, retry/deletion guards and monitoring coverage are unchanged.
+
+Complete family metadata now groups the existing speed, swim-pace, air-power and partial dive summaries correctly.
+Existing feet-, mile- and yard-based variants report imperial metadata without changing their canonical values,
+unit strings or JSON. These metadata/display corrections require no historical reparse or summary regeneration.
+Training load, durability formulas and canonical swim-performance inputs are unchanged; no derived schema bump or
+Training rebuild is needed for this patch.
+
+New imports derive a missing per-100-yard swim average from `Average Swim Pace`, preserving genuine zero and existing
+source-provided per-yard summaries. Missing per-yard values can be regenerated from retained canonical swim averages.
+Previously saved incorrect derived per-yard values remain authoritative during JSON hydration: correct affected
+swimming activities only through the separately authorized original-file reparse lifecycle and sanitized writer.
+No blanket historical campaign or saved-route reparse is required.
+
+MCP catalog membership, metric identifiers, persisted-only availability, schemas, consent and sensitive-field exclusions
+are unchanged. Existing `unitSystem` descriptors reflect the imperial correction. No registered-contract promotion,
+client rescan, plugin rebuild, deployment or production reparse is part of this dependency adoption. Review any already
+enabled scanners before a separately approved deployment, because their version target advances with the package.
+
+### Sports Lib 23.5.0 power and R–R adoption
+
+Root and Functions install the same published 23.5.0 artifact, with matching lockfile integrity and runtime versions.
+The independent direct Functions FIT Parser pin remains unchanged. The reparse target follows the installed library;
+strict runtime/job version checks, superseded-job handling and rollout retries remain in force.
+
+Before a separately approved deployment:
+
+1. Verify both installed versions and lockfile integrity match the published artifact.
+2. Run power/R–R adoption, chart, Training load, reparse/worker, derived source and MCP contract tests; build Functions
+   and production/beta frontend outputs, including public-startup and service-worker guards.
+3. Review scanner runtime settings. An enabled scanner can enqueue eligible older activities/routes when the installed
+   version advances; disabling one requires its own explicit approval.
+
+Missing FIT/TCX/GPX watts remain null, while recorded zero remains coasting. The library calculates power summaries,
+efforts, work and load from supported active intervals; QS must not insert zeros or carry readings across gaps. New
+imports and on-demand source hydration use that behavior after adoption. Historical stored summaries, curves and load
+evaluations require the existing authorized source-backed reparse; a Training refresh cannot reconstruct source evidence.
+Reparse keeps imported scores, current controls, dated policies, strict leg identities, source reservations, retry and
+deletion guards. Sanitizers still strip all streams. Normal semantic source invalidation refreshes affected snapshots,
+including when a statistic becomes unavailable; there is no new schema, queue, scanner setting or bulk-write path.
+R–R statistics now come from supported original beat intervals, not ordinary HR or resampled IBI chart data.
+The SML XML adapter uses the first UTC sample to anchor beats; corrected timing can change derived HR/load. Native
+JSON retains raw IBI sample times for in-memory analysis, while Firestore still stores only sanitized summaries.
+Historical saved R–R statistics require the same authorized source-backed reparse. No saved-route correction is needed. See the
+[Training adoption contract](../../../docs/training-workspace.md#sports-lib-2350-power-and-rr-adoption) for calculation and
+MCP compatibility. Updating dependencies does not deploy or enable production reparse.
+
 ### Sports Lib 23.4.0 sparse distance adoption
 
 Root and Functions install the same published 23.4.0 artifact. Missing Distance samples remain null, while real zero
@@ -783,11 +876,29 @@ re-reads the current event document and keeps the latest values plus event tags,
 in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
-- regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
-- derive sourceActivityKey from source-content hash + activity signature (order-independent)
-- `assignReimportActivityIds(...)` performs strict sourceActivityKey restamping and fails fast if any activity still lacks a valid SHA-derived key (no fallback key generation)
-- use deterministic matching for creator-name carryover (prefer sourceActivityKey, then signatures)
-- delete stale old activities not present in the new parsed ID set
+
+- A pending legacy activity without valid `sourceIdentity` must still match the complete pre-write window in frozen
+  Training metadata. If an older interrupted writer overwrote/reused that ID for another leg, reject with
+  `ACTIVITY_IDENTITY_CONFLICT` before further writes. Do not retry by trusting the current document ID or moving its
+  old controls. Valid server-owned source snapshots continue to support interrupted source-revision recovery.
+  A legacy control without any frozen leg identity also requires valid source provenance before trusting its ID.
+- Guarded source preparation is the only owner of saved-ID reuse. Parsing/source-key generation assigns provisional deterministic IDs; matched saved IDs replace them before any write. Only genuinely new legs keep their generated IDs.
+- Keep source key generation/validation for new and legacy compatibility; a source-content hash or sport refinement must not rename an already verified leg.
+- Use the shared pure matcher and a unique complete retained-source window for mutable sport/statistics. Do not fall back to array order or the only unmatched leg.
+- Persist a server-owned `sourceIdentity` containing stable ID, raw start/end and imported type for interrupted-write recovery. The file supplies the sport; QS has no recorded-sport editor.
+- Validate assignments and saved corrections before reserving a source write. Recheck the pre-parse retained references after long parsing, separately from any bucket repair being saved; source replacement remains retryable.
+- Use the committed association certificate for Training controls/policies. Calculate benchmark selection remaps once, after preparation assigns final IDs; no pre-write guess or preparation callback is needed.
+- Preserve custom device names inside guarded document transactions, alongside the existing parent edit policy and strict elevation-correction matching.
+- Check event existence before reserving and inside subsequent parent/child writes. Reservation ownership and account status alone cannot stop a reparse from recreating a deleted workout. Child writes batch their existing child read with one parent read; event-body writes reuse their preservation read, and merge-flag writes also read the parent. Missing events use the existing skipped-write lifecycle.
+- Missing or foreign active leg references during interrupted recovery produce `ACTIVITY_IDENTITY_CONFLICT` for review. Retrying the same source cannot restore that saved association.
+- Reject overlapping splits/merges and ambiguous windows with terminal `ACTIVITY_IDENTITY_CONFLICT`; leave the saved source/load available for review.
+- Duplicate or indistinguishable source keys detected before reservation use the same terminal review outcome. Repeating the parse cannot disambiguate those legs; no source writes or new ID assignments are attempted.
+- Interrupted retries use the existing active leg snapshot rather than partial copies. Delete only stale children outside the final verified ID set using existing reservation/deletion guards.
+
+This metadata is adopted on normal writes/reparses; do not launch a historical campaign just to populate it. A reparse
+reads retained originals, not the newest provider export, so it cannot discover a provider-side sport edit that was
+never downloaded. A provider resync verifies the persisted provider account/workout identity before accepting that
+revision. Read-only source hydration and MCP charts consume the saved association without writing it.
 
 ## Bucket Fallback + Auto-Heal
 To handle incorrect bucket metadata safely, reparse download tries the known canonical buckets and auto-heals metadata when fallback succeeds.

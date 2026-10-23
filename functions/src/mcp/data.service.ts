@@ -1,3 +1,6 @@
+import type { EventStatAggregationEvent } from '../../../shared/event-stat-aggregation.types';
+import type { DataInterface } from '@sports-alliance/sports-lib/metrics';
+import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { getRejectedSwimTiming, resolveSwimTiming } from '../../../shared/swim-timing';
 import { getTrainingSportDefinition, type TrainingSportId } from '../../../shared/training-disciplines';
 import { runMcpWorkoutReflection } from './workout-reflections.service';
@@ -64,8 +67,6 @@ import {
   DataSpeedMax,
   DataStartPosition,
   decodeRoutePolyline5,
-  EventImporterJSON,
-  EventInterface,
   EventJSONInterface,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -109,6 +110,7 @@ import {
 } from '../../../shared/health';
 import {
   buildEventStatAggregation,
+  EventStatAggregationContext,
   isValidIanaTimeZone,
   resolveDateAggregationBucketStart,
 } from '../../../shared/event-stat-aggregation';
@@ -122,7 +124,6 @@ import {
   canonicalizePersistedSportsLibStats,
   getPersistedEventActivityTypes,
   getPersistedSportsLibMetricReadTypes,
-  normalizePersistedEventMetricSemantics,
 } from '../../../shared/sports-lib-metric-semantics';
 import {
   groupCanonicalSleepNightFragments,
@@ -688,7 +689,7 @@ export interface McpDataServiceDependencies {
     uid: string,
     connectionId: string,
   ) => Promise<void>;
-  importEvent: (data: EventJSONInterface, id: string) => EventInterface;
+  importEvent: (data: EventJSONInterface, id: string, stats: ReadonlyMap<string, DataInterface>) => EventStatAggregationEvent;
 }
 
 async function readStorageFileWithinLimit(
@@ -1185,6 +1186,7 @@ const defaultDependencies: McpDataServiceDependencies = {
           'endDate',
           'type',
           'sourceActivityKey',
+          'sourceIdentity',
           new FieldPath('stats', DataDuration.type),
           new FieldPath('stats', DataDistance.type),
         )
@@ -1316,9 +1318,7 @@ const defaultDependencies: McpDataServiceDependencies = {
   consumeGeocodingRateLimit: (uid, connectionId) => (
     consumeMcpGeocodingRateLimit(uid, connectionId)
   ),
-  importEvent: (data, id) => normalizePersistedEventMetricSemantics(
-    EventImporterJSON.getEventFromJSON(data).setID(id),
-  ),
+  importEvent: createMetricAggregationReader,
 };
 
 function asFiniteNumber(value: unknown): number | null {
@@ -2846,7 +2846,7 @@ function resolveActivityListQuery(
   };
 }
 
-function eventMatchesActivityFilter(event: EventInterface, activityTypes: readonly ActivityTypes[]): boolean {
+function eventMatchesActivityFilter(event: EventStatAggregationEvent, activityTypes: readonly ActivityTypes[]): boolean {
   if (!activityTypes.length) {
     return true;
   }
@@ -2854,10 +2854,22 @@ function eventMatchesActivityFilter(event: EventInterface, activityTypes: readon
   return activityTypes.some(activityType => eventActivityTypes.includes(activityType));
 }
 
+/** Validated persisted metrics only: implicit speed/pace derivation must not widen availability. */
+export function createMetricAggregationReader(data: EventJSONInterface, id: string,
+  stats: ReadonlyMap<string, DataInterface>): EventStatAggregationEvent {
+  return {
+    startDate: new Date(data.startDate),
+    getID: () => id,
+    getStat: <T>(type: string) => stats.get(type) as DataInterface<T> | undefined,
+    getActivityTypesAsArray: () => (stats.get(DataActivityTypes.type)?.getValue() || []) as string[],
+  };
+}
+
 function buildMetricAggregationEventJson(
   data: Record<string, unknown>,
   metricTypes: readonly string[],
-): EventJSONInterface {
+): { json: EventJSONInterface; stats: ReadonlyMap<string, DataInterface> } {
+  const instances = new Map<string, DataInterface>();
   const rawStats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
     ? data.stats as Record<string, unknown>
     : {};
@@ -2871,7 +2883,7 @@ function buildMetricAggregationEventJson(
         return [];
       }
       try {
-        DynamicDataLoader.getDataInstanceFromDataType(type, value);
+        instances.set(type, DynamicDataLoader.getDataInstanceFromDataType(type, value));
         return [[type, value]];
       } catch {
         return [];
@@ -2883,14 +2895,13 @@ function buildMetricAggregationEventJson(
     getPersistedEventActivityTypes(selectedStats),
   );
 
-  return {
-    ...data,
-    stats,
-    // Only the requested metric stats and activity type cross the Sports Lib
-    // import boundary after the cumulative query budgets have passed.
-    activities: [],
-    powerCurve: null,
-  } as unknown as EventJSONInterface;
+  // Compatibility renames need their canonical class; ordinary selected instances are reused.
+  const canonicalInstances = new Map(Object.entries(stats).map(([type, value]) => [type,
+    instances.get(type) || DynamicDataLoader.getDataInstanceFromDataType(type, value)]));
+  return { stats: canonicalInstances, json: {
+    ...data, stats, activities: [], powerCurve: null,
+  } as unknown as EventJSONInterface };
+
 }
 
 function measureStatsWork(data: Record<string, unknown>): {
@@ -3205,15 +3216,14 @@ async function querySelectedMetrics(
       return [];
     }
     try {
-      const event = dependencies.importEvent(
-        buildMetricAggregationEventJson(doc.data, metricTypes),
-        doc.id,
-      );
+      const selected = buildMetricAggregationEventJson(doc.data, metricTypes);
+      const event = dependencies.importEvent(selected.json, doc.id, selected.stats);
       return eventMatchesActivityFilter(event, activityTypes) ? [event] : [];
     } catch {
       return [];
     }
   });
+  const aggregationContext = new EventStatAggregationContext();
   const results = selectors.map(selector => ({
     metric: selector.metric,
     matchedEventCount: events.length,
@@ -3223,7 +3233,7 @@ async function querySelectedMetrics(
       categoryType: resolveCategoryType(input.groupBy),
       requestedTimeInterval: resolveTimeInterval(input.interval),
       timeZone,
-    }),
+    }, undefined, aggregationContext),
   }));
   const result = {
     results,
@@ -6144,9 +6154,11 @@ function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
     ? document.data.stats as Record<string, unknown>
     : {};
   return {
+    getID: () => document.id,
     startDate: document.data.startDate,
     endDate: document.data.endDate,
     type: document.data.type,
+    sourceIdentity: document.data.sourceIdentity,
     sourceActivityKey: asBoundedString(
       document.data.sourceActivityKey,
       256,
@@ -6223,6 +6235,7 @@ async function resolveActivityStreamContext(
     typeof activity.startDate === 'string' ? asBoundedString(activity.startDate, 64) : asTimestampMs(activity.startDate),
     typeof activity.endDate === 'string' ? asBoundedString(activity.endDate, 64) : asTimestampMs(activity.endDate),
     asBoundedString(activity.type, 120), activity.sourceActivityKey ?? null,
+    readActivitySourceIdentity(activity.sourceIdentity, activity.getID?.()),
     activity.getStat?.(DataDuration.type)?.getValue?.() ?? null,
     activity.getStat?.(DataDistance.type)?.getValue?.() ?? null,
   ]);

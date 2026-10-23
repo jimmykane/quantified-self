@@ -16,6 +16,7 @@ import {
   DataCadenceAvg,
   DataDescent,
   DataDistance,
+  DynamicDataLoader,
   DataDepthAvg,
   DataDuration,
   DataEndPosition,
@@ -74,6 +75,7 @@ import { normalizePersistedEventMetricSemantics } from '../../../shared/sports-l
 import { TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   createMcpDataService,
+  createMetricAggregationReader,
   McpDataError,
   McpDataServiceDependencies,
   projectDerivedMetricPayloadForMcp,
@@ -158,6 +160,8 @@ function activityDocument(overrides: Record<string, unknown> = {}) {
       type: ActivityTypes.Cycling,
       name: 'Private MTB workout',
       creator: { name: 'Private device' },
+      sourceIdentity: { version: 1, activityId: 'activity-1', startMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        endMs: Date.parse('2026-07-01T09:00:00.000Z'), importedType: 'Cycling', privateCanary: 'private-source-identity' },
       sourceActivityKey: 'private-source-key',
       powerMeter: true,
       trainer: false,
@@ -540,6 +544,8 @@ describe('MCP data service', () => {
     const activityRef = activities.activities[0].activityRef;
     expect(Buffer.from(activityRef, 'base64url').toString('utf8')).not.toContain('activity-1');
     expect(JSON.stringify(activities.activities[0])).not.toContain('Private device');
+    expect(activities.activities[0]).not.toHaveProperty('sourceIdentity');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-identity');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-key');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-source');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-payload');
@@ -4521,6 +4527,27 @@ describe('MCP data service', () => {
     );
   });
 
+  it('reuses each validated persisted metric without constructing an implicit missing metric', async () => {
+    dependencies.importEvent = vi.fn(createMetricAggregationReader);
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{ id: 'event-1', data: {
+      startDate: Date.parse('2024-04-01T08:00:00Z'), stats: { [DataDistance.type]: 5000,
+        [DataSpeedAvg.type]: 4, [DataActivityTypes.type]: [ActivityTypes.Running] },
+    } }]);
+    const construct = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType');
+    try {
+      const result = await createMcpDataService(dependencies).queryMetric({ uid: 'user-1', metric: DataDistance.type,
+        aggregation: 'total', groupBy: 'date', interval: 'daily', timeZone: 'UTC',
+        startTimeMs: Date.parse('2024-04-01T00:00:00Z'), endTimeMs: Date.parse('2024-04-02T00:00:00Z') });
+      expect(result.aggregation.buckets[0].aggregateValue).toBe(5000);
+      expect(construct.mock.calls.filter(([type, value]) => type === DataDistance.type && value === 5000)).toHaveLength(1);
+      const [json, id, instances] = vi.mocked(dependencies.importEvent).mock.calls[0];
+      const reader = createMetricAggregationReader(json, id, instances);
+      expect(reader.getStat(DataDistance.type)).toBe(instances.get(DataDistance.type));
+      expect(reader.getStat('Average Pace')).toBeUndefined();
+      expect(instances.has(DataSpeedAvg.type)).toBe(false);
+    } finally { construct.mockRestore(); }
+  });
+
   it('queries several canonical metrics through one bounded import pass', async () => {
     vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
       id: 'event-1',
@@ -4594,6 +4621,7 @@ describe('MCP data service', () => {
         },
       }),
       'event-1',
+      expect.any(Map),
     );
     expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
       'user-1',
@@ -4932,6 +4960,7 @@ describe('MCP data service', () => {
         },
       }),
       'event-1',
+      expect.any(Map),
     );
   });
 

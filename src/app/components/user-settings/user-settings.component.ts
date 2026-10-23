@@ -41,7 +41,8 @@ import { AppDashboardSettingsInterface } from '../../models/app-user.interface';
 import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import type { ActivityTypes } from '@sports-alliance/sports-lib';
+import { isSameActivityTypeSelection, normalizeActivityTypeSelection } from '../../helpers/activity-type-family-filter.helper';
 import {
   MapTypes,
   UserMapSettingsInterface
@@ -212,7 +213,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public swimPaceUnits = SwimPaceUnits;
   public userSettingsFormGroup: UntypedFormGroup;
 
-  public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
   private analyticsService = inject(AppAnalyticsService);
   private clipboard = inject(Clipboard);
   private hapticsService = inject(AppHapticsService);
@@ -552,6 +552,18 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     if (this.isSaving || this.isDeleting) return;
     this.customUnitsExpanded.update(expanded => !expanded);
     this.hapticsService.selection();
+  }
+
+  changeElevationExclusions(metric: 'ascent' | 'descent', values: readonly ActivityTypes[]): void {
+    if (this.isSaving || this.isDeleting) return;
+    const mandatory = metric === 'ascent' ? this.mandatoryAscentExclusions : this.mandatoryDescentExclusions;
+    const control = this.userSettingsFormGroup.get(metric === 'ascent'
+      ? 'removeAscentForActivitiesSummaries' : 'removeDescentForActivitiesSummaries');
+    const next = normalizeActivityTypeSelection([...values, ...mandatory]);
+    if (isSameActivityTypeSelection(normalizeActivityTypeSelection(control.value || []), next)) return;
+    control.setValue(next);
+    control.markAsDirty();
+    // The sport picker owns selection feedback; persistence remains in Save changes.
   }
 
   onPreferenceChange(): void {

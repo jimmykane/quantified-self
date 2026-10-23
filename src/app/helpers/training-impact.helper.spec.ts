@@ -45,6 +45,21 @@ function ready(loads: Array<{ dayMs: number; load: number }>): TrainingImpactSna
 }
 
 describe('training impact view helper', () => {
+  it.each([42, null])('keeps private session and day views silent with recorded TSS %s', tss => {
+    const activity = event('session', '2026-01-01T10:00:00Z', tss);
+    const source: TrainingImpactSnapshotState = { status: 'private', formPoints: null };
+    expect(buildTrainingSessionImpactView(activity, source))
+      .toMatchObject({ availability: 'private', message: '', headline: null, impact: null });
+    expect(buildTrainingDayImpactView([activity], source))
+      .toMatchObject({ availability: 'private', message: '', headline: null, trainingStressScore: 0, outcomes: [] });
+  });
+
+  it.each([42, null])('waits for owner data before deciding whether TSS %s is usable', tss => {
+    expect(buildTrainingSessionImpactView(event('session', '2026-01-01T10:00:00Z', tss), {
+      status: 'updating', formPoints: null,
+    })).toMatchObject({ availability: 'updating', message: 'Updating Training impact…', impact: null });
+  });
+
   it('uses Form classification for multi merges and ignores incidental benchmark display metadata', () => {
     const dayMs = Date.UTC(2026, 0, 1);
     const source = ready([{ dayMs, load: 42 }]);

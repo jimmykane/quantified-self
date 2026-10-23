@@ -107,11 +107,16 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
 .summary-stats-area {
   display: flex;
   flex-direction: column;
-  padding: 0 0 24px;
+  padding: 0 0 16px;
   gap: 16px;
   border-top: 1px solid var(--mat-sys-outline-variant);
   width: 100%;
   box-sizing: border-box;
+}
+
+// The collapsed row already owns its tap-target height; avoid an empty footer below it.
+.summary-stats-area:has(> app-benchmark-rr.benchmark-rr-collapsed:last-child) {
+  padding-bottom: 0;
 }
 
 .event-metadata-row {
@@ -239,16 +244,11 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
 
 .summary-activities-toggles {
   width: 100%;
-  padding: 0 0 16px;
   box-sizing: border-box;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 @include bp.xsmall {
-  .summary-stats-area {
-    padding-bottom: 12px;
-  }
-
   .event-tags-banner--populated {
     flex-basis: 100%;
     padding-block: 4px;

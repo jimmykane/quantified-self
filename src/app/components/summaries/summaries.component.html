@@ -312,12 +312,14 @@
         [cdkDropListDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
         [class.desktop-tile-drop-list]="desktopTileDragEnabled && section.tiles.length > 1"
         [class.dashboard-tile-board--activity-calendar]="section.hasActivityCalendar"
+        [class.dashboard-tile-board--health]="isOwnerDashboard && section.hasHealthCharts"
         [cols]="section.columns"
         [rowHeight]="rowHeight"
         (cdkDropListDropped)="onTilesDrop($event, section.id)">
         @for (cell of section.cells; track trackByTile($index, cell.tile)) {
         @let tile = cell.tile;
         <app-dashboard-tile-cell tabindex="-1" [attr.data-dashboard-tile-order]="tile.order"
+          [class.dashboard-health-cell]="isOwnerDashboard && tile.type === tileTypes.Chart && !!$any(getChartTile(tile)).healthMetric"
           [class.dashboard-calendar-cell]="tile.type === tileTypes.Chart && isDashboardActivityCalendarChartType(getChartTile(tile).chartType)"
           cdkDrag
           [cdkDragPreviewContainer]="'global'"
@@ -329,6 +331,7 @@
           @if (tile.type === tileTypes.Chart) {
           <app-tile-chart [healthSettingsSaving]="healthSavingOrders.has(tile.order)" [healthMetric]="isOwnerDashboard ? $any(getChartTile(tile)).healthMetric : null" (healthMetricChange)="onHealthMetricChange(tile.order, $event)" (healthSectionChange)="moveHealthTile(tile.order, $event)" (calendarDateChange)="calendarSelectedDateKey = $event" (calendarStateChange)="onCalendarStateChange($event)" [calendarView]="getChartTile(tile).displaySettings?.calendarView || 'month'" [calendarViewSaving]="calendarSavingOrders.has(tile.order)" (calendarViewChange)="onCalendarViewChange(tile.order, $event)" [timelineNotes]="timelineNotes" [timelineNotesStatus]="showActions && isOwnerDashboard ? timelineNotesStatus : null" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
             [class.dashboard-calendar-chart]="isDashboardActivityCalendarChartType(getChartTile(tile).chartType)"
+            [class.dashboard-health-chart]="isOwnerDashboard && !!$any(getChartTile(tile)).healthMetric"
             [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
             [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
             [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"

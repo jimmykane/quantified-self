@@ -1,15 +1,2 @@
-mat-form-field {
-  width: 100%;
-}
-
-mat-option {
-  font-size: 14px !important;
-  line-height: 3em !important;
-  height: 3em !important;
-}
-.activity-family-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-bottom: 8px;
-}
+:host { display: block; width: 100%; min-width: 0; }
+:host(.is-compact) { display: inline-flex; width: auto; align-items: center; }

@@ -1,7 +1,16 @@
 import type * as admin from 'firebase-admin';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 
-export type PreparedTrainingLoadWrite = (() => Promise<void>) & { readonly sourceWriteId: string };
+export class EventWriteSkippedForDeletedEventError extends Error {
+  readonly name = 'EventWriteSkippedForDeletedEventError';
+  constructor(uid: string, eventId: string) {
+    super(`Skipping source rewrite because event ${eventId} of user ${uid} no longer exists.`);
+  }
+}
+
+export type PreparedTrainingLoadWrite = (() => Promise<void>) & {
+  readonly sourceWriteId: string;
+};
 
 /** One instance per import attempt. Check inside every source/cleanup transaction, before writes. */
 export class TrainingLoadSourceWrite {

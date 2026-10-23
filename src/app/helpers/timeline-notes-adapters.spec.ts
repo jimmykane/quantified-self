@@ -92,7 +92,7 @@ describe('explicit Timeline note chart adapters', () => {
       'app-sleep-trend-chart',
     ], 'showingExample() ? null : timelineNotes()');
     expect(source('src/app/components/summaries/summaries.component.html')).toContain('<app-timeline-notes-workspace [ownerUid]="user?.uid"');
-    const cleanup = source('extensions/delete-user-data.env');
-    expect(cleanup).toContain('FIRESTORE_DELETE_MODE=recursive'); expect(cleanup).toContain('FIRESTORE_PATHS=users/{UID}');
+    // Native recursive account erasure is covered by the backend lifecycle and
+    // account-cleanup suites; chart adapters do not depend on extension config.
   });
 });

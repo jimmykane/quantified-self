@@ -216,16 +216,6 @@ mat-list-item, button[mat-list-item], a[mat-list-item] {
   margin-inline: 8px 16px;
 }
 
-.sidenav-status-label {
-  margin-inline-end: 16px;
-  color: var(--mat-sys-primary);
-  font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 :host ::ng-deep mat-list-item:not(.theme-toggle-item) .mat-mdc-list-item-unscoped-content {
   display: flex;
   align-items: center;

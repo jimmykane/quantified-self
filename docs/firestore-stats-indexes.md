@@ -1,6 +1,6 @@
 # Firestore stats index allowlist
 
-Committed rollout stage: **events-exempt**.
+Committed rollout stage: **both-exempt**.
 
 `firestore.indexes.json` always declares the **current deployable stage**, pinned by
 `tools/firestore-stats-indexes.stage.json`. Preparation explicitly retains the 11 audited children and leaves automatic
@@ -30,6 +30,12 @@ callers, frontend Firestore queries, backend/worker/scripts, MCP and Assistant r
 Read-only production metadata inspection found no event/activity field overrides and 22 READY composites (21 events,
 one activities), with no differences from the repository's event/activity composites. Those composites are unchanged.
 
+Incremental review on 2026-10-22 covers `develop` through `fbbe1064b`. The Activities workspace now replaces the tags
+page and queries events by `startDate`; sport, tag, merge and table-column filtering remains local. Ascent/descent
+editing reads activities by `eventID`, and import preservation selects Duration/Distance without filtering or ordering
+on those stats. The Health activity and MCP query implementations are unchanged. No additional stats index dependency
+was found; the explicit children and event/activity composites remain unchanged.
+
 The PR review also inspected the deployed `mcpApi` and `queryActivityHealthRange` source artifacts using read-only
 access. Their `health/activity-query.ts` and `mcp/data.service.ts` readers are byte-identical to the audited PR sources.
 An AST scan of each artifact's application sources confirmed that server-side stats filters/orders are the Weight and
@@ -39,7 +45,7 @@ The latest successful main Hosting build used `ca6232ecd`, the frontend revision
 | Reader | Server query shape / source | Stats indexing dependency |
 | --- | --- | --- |
 | Dashboard and resolver, summary tiles, Calendar, date-range activity section, Tracks | `startDate` range/order; `src/app/services/app.event.service.ts`, `src/app/components/dashboard/dashboard.component.ts`, `src/app/resolvers/dashboard.resolver.ts`, `src/app/components/summaries/summaries.component.ts`, `src/app/services/dashboard-chart-preview.service.ts`, `src/app/services/activity-calendar.service.ts`, `src/app/components/event-table/activity-range-table-section.component.ts`, `src/app/components/tracks/tracks.component.ts` | None. Stat selection, sport filtering and chart aggregation occur after retrieval. Dashboard text search also uses event `name`, outside `stats`. |
-| Activity table | `src/app/components/event-table/event.table.component.ts` sorts/filters loaded rows; tags workspace pages by date in `src/app/components/tags/tags-page.component.ts` | None; a table column is not a Firestore order clause. |
+| Activity table and Activities workspace | `src/app/components/event-table/event.table.component.ts` sorts/filters loaded rows; `src/app/components/activities/activities-page.component.ts` loads the selected date range and filters sports, tags and merge state locally | None; a table column is not a Firestore order clause. |
 | Saved comparisons and benchmark report | `mergeType == benchmark`, ordered by `startDate`; `src/app/services/app.tools-comparison.service.ts`; report compares loaded activities | Existing merge/date composite, no R-R or other metric index. |
 | Power Curve auto-tile eligibility | `stats.PowerCurve != null` plus `stats.Activity Types array-contains-any`; `watchHasAnyPowerCurveEventForActivityTypes` in `src/app/services/app.event.service.ts` | Preserve existing Activity Types/PowerCurve composite. Retain Activity Types array indexing for standalone filtering/compatibility. |
 | Workout-backed Health | `startDate` range and `stats.Weight > 0` on events; `startDate` range and `stats.VO2 Max > 0` on activities, ordered by date/stat/document ID; `functions/src/health/activity-query.ts` | Preserve both existing date/stat composites. Retain explicit child ordered indexes conservatively. |

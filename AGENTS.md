@@ -11,6 +11,7 @@ Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/backend-crud-boundary.md`
 - `.agent/rules/canonical-metric-display.md`
+- `.agent/rules/event-summary-reads.md` for event summary, list, chart, map, preview, or aggregation read paths
 - `.agent/rules/frontend-test-environments.md` for frontend specs, helper runtime imports, or frontend test runner/CI changes
 - `.agent/rules/functions-emulator-shards.md` for Functions emulator specs or their test runner/CI changes
 - `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes

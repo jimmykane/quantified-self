@@ -46,6 +46,24 @@ describe('BrowserCompatibilityService', () => {
         expect(service).toBeTruthy();
     });
 
+    it.each([false, true])('detects a complete fullscreen API and respects its policy flag (prefixed: %s)', legacy => {
+        const documentRef = document.implementation.createHTMLDocument('Fullscreen support');
+        const element = documentRef.createElement('section');
+        expect(BrowserCompatibilityService.checkFullscreenSupport(element)).toBe(false);
+        Object.defineProperty(element, legacy ? 'webkitRequestFullscreen' : 'requestFullscreen', { value: vi.fn() });
+        expect(BrowserCompatibilityService.checkFullscreenSupport(element)).toBe(false);
+        Object.defineProperty(documentRef, legacy ? 'webkitExitFullscreen' : 'exitFullscreen', { value: vi.fn() });
+        expect(BrowserCompatibilityService.checkFullscreenSupport(element)).toBe(true);
+        Object.defineProperty(documentRef, legacy ? 'webkitFullscreenEnabled' : 'fullscreenEnabled', { value: false });
+        expect(BrowserCompatibilityService.checkFullscreenSupport(element)).toBe(false);
+        expect(dialog.open).not.toHaveBeenCalled();
+    });
+
+    it('does not offer fullscreen before its host exists', () => {
+        expect(BrowserCompatibilityService.checkFullscreenSupport(null)).toBe(false);
+        expect(BrowserCompatibilityService.checkFullscreenSupport(undefined)).toBe(false);
+    });
+
     it('offers timezone choices when the optional Intl API is unavailable', () => {
         const descriptor = Object.getOwnPropertyDescriptor(Intl, 'supportedValuesOf');
         try {
@@ -175,5 +193,15 @@ describe('BrowserCompatibilityService', () => {
                 /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
             );
         });
+    });
+
+    it('detects optional Worker support without opening a compatibility dialog', () => {
+        const openCount = mockDialog.open.mock.calls.length;
+        vi.stubGlobal('Worker', class { });
+        expect(BrowserCompatibilityService.checkWorkerSupport()).toBe(true);
+        vi.stubGlobal('Worker', undefined);
+        expect(BrowserCompatibilityService.checkWorkerSupport()).toBe(false);
+        vi.unstubAllGlobals();
+        expect(mockDialog.open).toHaveBeenCalledTimes(openCount);
     });
 });

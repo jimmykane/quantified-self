@@ -6,6 +6,23 @@ import { AppWindowService } from './app.window.service';
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
+    public static checkFullscreenSupport(element: HTMLElement | null | undefined): boolean {
+        if (!element) return false;
+        const host = element as HTMLElement & { webkitRequestFullscreen?: () => void };
+        const documentRef = element.ownerDocument as Document & {
+            webkitFullscreenEnabled?: boolean;
+            webkitExitFullscreen?: () => void;
+        };
+        return (documentRef.fullscreenEnabled !== false && typeof host.requestFullscreen === 'function'
+            && typeof documentRef.exitFullscreen === 'function')
+            || (documentRef.webkitFullscreenEnabled !== false && typeof host.webkitRequestFullscreen === 'function'
+                && typeof documentRef.webkitExitFullscreen === 'function');
+    }
+
+    public static checkWorkerSupport(): boolean {
+        return typeof Worker !== 'undefined';
+    }
+
     /** Optional Intl API: older browsers still get useful timezone choices. */
     public static getSupportedTimeZones(): string[] {
         const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };

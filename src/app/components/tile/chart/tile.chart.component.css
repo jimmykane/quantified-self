@@ -60,6 +60,10 @@ app-activity-calendar-tile {
   position: relative;
 }
 
+@media (max-width: 767px) {
+  .tile-chart-health { display:flex; flex-direction:column; flex:1 0 auto; height:auto; min-height:100%; }
+}
+
 .actions {
   top: 12px;
 }

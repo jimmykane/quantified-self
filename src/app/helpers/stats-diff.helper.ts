@@ -60,7 +60,8 @@ export const computeStatDiff = (
   }
 
   const diffValue = Math.abs(valueA - valueB);
-  const denom = (valueA + valueB) / 2;
+  // Signed metrics such as DFA alpha1 can straddle zero without being equal.
+  const denom = (Math.abs(valueA) + Math.abs(valueB)) / 2;
   const percent = denom === 0 ? 0 : 100 * Math.abs((valueA - valueB) / denom);
   const diffStat = DynamicDataLoader.getDataInstanceFromDataType(displayStatType, diffValue);
   const display = displayStatType === DataDistance.type

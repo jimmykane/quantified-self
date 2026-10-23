@@ -413,6 +413,32 @@ describe('ChartsFormComponent', () => {
     expect(yearlyOption.toolbox).toBeUndefined();
   });
 
+  it.each(['w', 'm'] as const)('scales both %s-view panes to the visible period rather than older extremes', async timelineWindow => {
+    const history = buildLongRangePoints(1200).map((point, index) => index < 40
+      ? { ...point, ctl: 1000, atl: 2000, formSameDay: -1000 } : point);
+    component.data = history;
+    component.timelineWindow = timelineWindow;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const recent = getLastFullChartOption();
+    expect(recent.yAxis[0].min).toBe(0);
+    expect(recent.yAxis[0].max).toBeLessThan(500);
+    expect(recent.yAxis[1].min).toBe(0);
+    expect(recent.yAxis[1].max).toBeLessThan(100);
+    expect(recent.series[0].data[0][1]).toBe(1000);
+    expect(recent.series[1].data[0][1]).toBe(2000);
+    expect(recent.series[2].data[0][1]).toBe(-1000);
+
+    component.timelineWindow = 'y';
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    const full = getLastFullChartOption();
+    expect(full.yAxis[0].max).toBeGreaterThanOrEqual(2000);
+    expect(full.yAxis[1].min).toBeLessThanOrEqual(-1000);
+    expect(history[0]).toMatchObject({ ctl: 1000, atl: 2000, formSameDay: -1000 });
+  });
+
   it('should render a rich tooltip card with shared dashboard tooltip typography', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();

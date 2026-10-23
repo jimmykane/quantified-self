@@ -5,11 +5,18 @@ mat-icon {
   justify-content: center;
 }
 
-[data-letters]:before {
-  content: attr(data-letters);
-  display: inline-block;
-  font-size: 0.7em;
-  text-align: center;
+[data-letters] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   vertical-align: middle;
-  margin-right: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-letters]::before {
+  content: attr(data-letters);
+  font-size: 0.5em;
+  line-height: 1;
+  text-align: center;
 }

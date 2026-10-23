@@ -27,7 +27,7 @@ import {
   buildDashboardEChartsStyleTokens,
   renderDashboardEChartsTooltipCard,
 } from '../../../helpers/dashboard-echarts-style.helper';
-import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
+import { buildDashboardFormValueAxes } from '../../../helpers/dashboard-form-y-axis.helper';
 import {
   type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
@@ -255,9 +255,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const ctlSeriesValues = points.map(point => [point.time, point.ctl] as const);
     const atlSeriesValues = points.map(point => [point.time, point.atl] as const);
     const formSeriesValues = points.map(point => [point.time, resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE)] as const);
-    const ctlAxisValues = points.map(point => point.ctl);
-    const atlAxisValues = points.map(point => point.atl);
-    const formAxisValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const mobileAxisPointerHandle = isMobileTooltipViewport && this.showMobileAxisPointerHandle
       ? {
@@ -269,9 +266,11 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       }
       : { show: false };
 
-    const topAxisConfig = buildDashboardValueAxisConfig([...ctlAxisValues, ...atlAxisValues]);
-    const bottomAxisConfig = buildDashboardValueAxisConfig(
-      [...formAxisValues, 0].filter((value): value is number => Number.isFinite(value)),
+    const { load: topAxisConfig, form: bottomAxisConfig } = buildDashboardFormValueAxes(
+      points.map(point => ({ time: point.time, ctl: point.ctl, atl: point.atl,
+        form: resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE) })),
+      viewBounds.minTime,
+      viewBounds.maxTime,
     );
 
     const topXAxis = {

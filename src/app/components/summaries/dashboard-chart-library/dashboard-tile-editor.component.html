@@ -153,8 +153,8 @@
             </mat-form-field>
 
             <div class="chart-editor-full-width chart-editor-activity-filter">
-              <app-activity-types-multi-select [selectedActivityTypes]="configuration.customEventActivityTypes"
-                (selectedActivityTypesChange)="configuration.onCustomEventActivityTypesChange($event); changed.emit()">
+              <app-activity-types-multi-select [disabled]="disabled" [selectedActivityTypes]="configuration.customEventActivityTypes"
+                (selectedActivityTypesChange)="changeSports('custom', $event)">
               </app-activity-types-multi-select>
             </div>
           </div>
@@ -205,8 +205,8 @@
               </mat-select>
             </mat-form-field>
             <div class="chart-editor-full-width chart-editor-activity-filter">
-              <app-activity-types-multi-select [selectedActivityTypes]="configuration.mapEventActivityTypes"
-                (selectedActivityTypesChange)="configuration.onMapEventActivityTypesChange($event); changed.emit()">
+              <app-activity-types-multi-select [disabled]="disabled" [selectedActivityTypes]="configuration.mapEventActivityTypes"
+                (selectedActivityTypesChange)="changeSports('map', $event)">
               </app-activity-types-multi-select>
             </div>
             }

@@ -10,7 +10,7 @@ section.grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
-  padding: 8px 0;
+  padding: var(--header-stats-padding, 8px 0);
   align-items: stretch;
 }
 
@@ -260,7 +260,7 @@ section.condensed {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0;
+  padding: var(--header-stats-padding, 0);
 }
 
 /* Chip Styles */

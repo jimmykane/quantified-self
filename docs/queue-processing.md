@@ -45,3 +45,12 @@ All queue configuration is centralized in `functions/src/shared/queue-config.ts`
 ### Training load candidate preservation during ingestion and reparse
 
 The EventWriter backend adapters prepare private Training load evaluations and freeze existing leg identities before source writes, then finalize metadata after those writes and before stale activity cleanup. Keep the parsed Activity instances alive until finalization completes. Preparation and finalization failures must propagate to the queue/manual reparse caller, rather than marking an event successfully processed without refreshed candidates. The final transaction verifies source fingerprints, owner/deletion state and the latest controls, retaining the leg's dated applied policy. Reparse must not reconstruct imported provenance from a previous calculated TSS or use derived TSS to match saved controls. Ambiguous leg identity requires owner review, with no unmatched-leg fallback. See [Training load controls](training-workspace.md#file-only-tss-evaluation-and-owner-load-controls) for calculation, persistence and release rules. Library publication, deployment and a production reparse each require separate approval.
+
+### Permanent recording identity conflicts
+
+A successfully parsed provider revision can still fail safe association with its saved legs. The fixed
+`ACTIVITY_IDENTITY_CONFLICT` code uses existing guarded dead-letter handling once, without another parse attempt or
+misclassifying the file as a parsing failure. The original saved workout and controls are retained. Wahoo still
+checks its claimed revision/owner before committing a terminal result; transient Storage and source-revision races
+keep ordinary retry behavior. No retry budget, dispatcher, queue or schedule changes. See the provider guide for the
+verified provider-recording scope and the reparse runbook for terminal review handling.

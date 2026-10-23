@@ -32,6 +32,8 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
 import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
 import { BenchmarkModule } from './benchmark.module';
 import { TrainingImpactComponent } from '../components/training-impact/training-impact.component';
+import { BenchmarkRRComponent } from '../components/benchmark/benchmark-rr.component';
+import { SummaryDisclosureComponent } from '../components/shared/summary-disclosure/summary-disclosure.component';
 
 @NgModule({
     imports: [
@@ -43,6 +45,8 @@ import { TrainingImpactComponent } from '../components/training-impact/training-
         EventDurabilityCurveComponent,
         EventCadencePowerComponent,
         TrainingImpactComponent,
+        BenchmarkRRComponent,
+        SummaryDisclosureComponent,
     ],
     exports: [
         EventSummaryComponent

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal, TemplateRef } from '@angular/core';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { SelectionModel } from '@angular/cdk/collections';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -7,7 +7,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -31,6 +31,7 @@ import {
   DataDistance,
   DataHeartRate,
   DataInterface,
+  DataRRRMSSD,
   Privacy,
   User,
   UserUnitSettingsInterface,
@@ -39,6 +40,9 @@ import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { isSupportedActivityFileBaseExtension } from '@shared/activity-file-formats';
 import { firstValueFrom } from 'rxjs';
+
+import { RR_METRICS } from '../../constants/rr-metrics';
+import { buildRRStatSummary, formatBenchmarkRRValue } from '../../helpers/benchmark-rr.helper';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ActivityTypeIconComponent } from '../activity-type-icon/activity-type-icon.component';
@@ -101,6 +105,8 @@ interface ComparisonListItem {
   title: string;
   date: Date | null;
   activitySummaries: ComparisonActivitySummary[];
+  hasRRStats: boolean;
+  rrTitle: string;
   devicesLabel: string;
   activityTypesLabel: string;
   activityTypesTitle: string;
@@ -151,10 +157,23 @@ interface ComparisonActivitySummary {
   automaticDeviceColor: string;
   activityTypeLabel: string;
   activityTypeIconValue: string;
+  rrStats: DataInterface[];
+  rrLabel: string;
+  rrTitle: string;
   distanceLabel: string;
   ascentLabel: string;
   descentLabel: string;
   filterText: string;
+}
+
+interface ComparisonRRDialogData {
+  item: ComparisonListItem;
+  sources: {
+    id: string;
+    deviceLabel: string;
+    deviceColor: string;
+    metrics: { type: string; label: string; display: string }[];
+  }[];
 }
 
 interface ComparisonBenchmarkMetricCell {
@@ -214,6 +233,7 @@ const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)
     MatButtonModule,
     MatCardModule,
     MatCheckboxModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -294,6 +314,7 @@ export class ToolsComparePageComponent implements OnInit {
     'descent',
     'gnss',
     'heartRate',
+    'rr',
     'altitude',
     'description',
     'sourceFiles',
@@ -935,6 +956,33 @@ export class ToolsComparePageComponent implements OnInit {
     } finally {
       this.isCreating.set(false);
     }
+  }
+
+  openRRStats(item: ComparisonListItem, template: TemplateRef<{ $implicit: ComparisonRRDialogData }>): void {
+    if (this.bulkActionInProgress() || !item.hasRRStats) return;
+
+    const unitSettings = this.currentUser()?.settings?.unitSettings;
+    const sources = item.activitySummaries.filter(summary => summary.rrStats.length > 0).map(summary => ({
+      id: summary.id,
+      deviceLabel: summary.deviceLabel,
+      deviceColor: summary.deviceColor,
+      metrics: summary.rrStats.flatMap(stat => {
+        const display = formatBenchmarkRRValue(stat.getType(), stat.getValue(), unitSettings);
+        const metric = RR_METRICS.find(candidate => candidate.type === stat.getType());
+        return display && metric ? [{ type: metric.type, label: metric.label, display: display.text }] : [];
+      }),
+    }));
+    this.hapticsService.selection();
+    this.dialog.open(template, {
+      data: { item, sources } satisfies ComparisonRRDialogData,
+      width: '640px',
+      maxWidth: 'calc(100vw - 32px)',
+    });
+  }
+
+  closeRRStats(dialogRef: MatDialogRef<unknown>): void {
+    this.hapticsService.selection();
+    dialogRef.close();
   }
 
   async openComparison(item: ComparisonListItem, benchmark: boolean): Promise<void> {
@@ -2090,6 +2138,10 @@ export class ToolsComparePageComponent implements OnInit {
       title: comparisonEvent.comparisonTitle || event.name || 'Benchmark comparison',
       date: event.startDate instanceof Date ? event.startDate : null,
       activitySummaries,
+      hasRRStats: activitySummaries.some(summary => summary.rrStats.length > 0),
+      rrTitle: activitySummaries.length
+        ? activitySummaries.map(summary => summary.rrTitle).join('\n')
+        : 'Activity statistics have not been loaded. Open event details to check saved R–R and HRV statistics.',
       devicesLabel,
       activityTypesLabel,
       activityTypesTitle: activityTypeLabels.length > 0 ? activityTypeLabels.join('\n') : 'Types unknown',
@@ -2521,6 +2573,16 @@ export class ToolsComparePageComponent implements OnInit {
       const distanceLabel = this.formatActivityStat(distanceStat, unitSettings);
       const ascentLabel = this.formatActivityStat(ascentStat, unitSettings);
       const descentLabel = this.formatActivityStat(descentStat, unitSettings);
+      // Read saved stats only. Never inspect streams, parse originals or start analysis for a table row.
+      const rrStats = buildRRStatSummary(RR_METRICS.flatMap(metric => {
+        const stat = this.getActivityStat(activity, metric.type);
+        return stat ? [stat] : [];
+      })).stats;
+      const rmssd = rrStats.find(stat => stat.getType() === DataRRRMSSD.type);
+      const rmssdDisplay = rmssd ? formatBenchmarkRRValue(rmssd.getType(), rmssd.getValue(), unitSettings) : null;
+      const rrLabel = rmssdDisplay?.text ?? (rrStats.length ? 'Stats available' : '—');
+      const rrTitle = `${deviceLabel}: ${rmssdDisplay ? `RMSSD ${rmssdDisplay.text}`
+        : rrStats.length ? 'Saved R–R / HRV stats available; RMSSD unavailable' : 'No saved R–R / HRV stats'}`;
 
       return {
         id: `${activityID}-${index}`,
@@ -2530,6 +2592,9 @@ export class ToolsComparePageComponent implements OnInit {
         automaticDeviceColor,
         activityTypeLabel,
         activityTypeIconValue: activityTypeLabel,
+        rrStats,
+        rrLabel,
+        rrTitle,
         distanceLabel,
         ascentLabel,
         descentLabel,

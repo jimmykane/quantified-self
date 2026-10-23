@@ -2105,7 +2105,7 @@ describe('sleep queue', () => {
 
             const result = await processSleepSyncQueueItem(queueItem);
 
-            expect(result).toBe(QueueResult.Deferred);
+            expect(result).toBe(QueueResult.HealthContinuationScheduled);
             expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledTimes(32);
             expect(queueState).toMatchObject({
                 garminHealthWriteCursor: 32,
@@ -5984,7 +5984,7 @@ describe('sleep queue', () => {
         }));
     });
 
-    it.each(['success', 'enqueue_failure', 'marker_failure', 'write_failure', 'checkpoint_failure'])(
+    it.each(['success', 'enqueue_rejected', 'enqueue_failure', 'marker_deleted', 'marker_stale', 'marker_failure', 'write_failure', 'checkpoint_failure'])(
         'durably hands off Suunto windows and resumes safely after %s', async failure => {
             const start = Date.parse('2026-08-01T00:00:00Z');
             const day = 86_400_000;
@@ -6018,7 +6018,10 @@ describe('sleep queue', () => {
                 state.processingRevision = `revision:${state.queueRevision}`;
                 return 'claimed';
             });
+            if (failure === 'enqueue_rejected') hoisted.enqueueSleepSyncTask.mockResolvedValueOnce(false);
             if (failure === 'enqueue_failure') hoisted.enqueueSleepSyncTask.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'marker_deleted') hoisted.markQueueItemDispatchedIfUserActive.mockResolvedValueOnce('skipped_deleted_user');
+            if (failure === 'marker_stale') hoisted.markQueueItemDispatchedIfUserActive.mockResolvedValueOnce('not_current');
             if (failure === 'marker_failure') hoisted.markQueueItemDispatchedIfUserActive.mockRejectedValueOnce(Error('unavailable'));
             if (failure === 'write_failure') hoisted.replaceHealthSourceRecords.mockRejectedValueOnce(Error('unavailable'));
             if (failure === 'checkpoint_failure') hoisted.transactionUpdate.mockImplementationOnce(() => { throw Error('unavailable'); });
@@ -6031,7 +6034,8 @@ describe('sleep queue', () => {
                 expect(state.processed).toBe(false);
                 return;
             }
-            expect(result).toBe(QueueResult.Deferred);
+            expect(result).toBe(failure === 'success' ? QueueResult.HealthContinuationScheduled
+                : failure === 'marker_deleted' ? QueueResult.Processed : QueueResult.Deferred);
             expect(state).toMatchObject({ processed: false, retryCount: 0,
                 suuntoHealthProgress: { ...continuation, recordsWritten: 1, lastObservedAtMs: start + 3_600_000 } });
             expect(state.queueRevision).not.toBe('original');

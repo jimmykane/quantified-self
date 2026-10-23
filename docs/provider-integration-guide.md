@@ -906,23 +906,45 @@ Provider OAuth / webhook / history request
 
 This is preferred over processing partner payloads directly in a webhook or callable because provider requests can be retried, payloads may be incomplete, original files may need another download, and processing can exceed partner timeouts.
 
-Shared recorded-activity imports and manual reuploads reuse an existing event's stored activity document IDs and
-source keys rather than adding legacy event/index IDs beside source-keyed reparse results. The shared
-`functions/src/shared/import-preservation.ts` helper reads only that owner's event activities, with a field mask and
-the existing 100-leg bound, inside the existing source-write reservation transaction before marking load pending.
-Rejected identities leave the saved source, load metadata and cache untouched; matched IDs/keys are applied only
-after the reservation commits, before original-file/source writes. Unique identity matching includes verified sport
-refinements and reordered multisport legs; ambiguous or changed saved leg sets fail through the existing error/retry
-path instead of guessing, appending or deleting rows.
-The existing first-import marker still permits missing legs on an interrupted initial-write retry, subject to ID
-collision checks. New imports retain their existing ID behavior; this is not a historical duplicate cleanup.
-Guarded document transactions preserve live titles, descriptions, tags, privacy, notes, legacy feedback fields,
-canonical Feeling/RPE stats (including cleared ratings), and custom device names. Parsed measurements and source-file
-provenance keep their existing write behavior. Reparse shares the event-edit preservation policy.
-Monitoring coverage is **unchanged**: the existing #829 provider/worker retry, failure and committed-outcome metrics
-still cover these imports; no queue, schedule, lease, retry, metric label, alert, Rules or index changes are added.
-Training formulas, source-write reservation/finalization, planning and MCP contracts remain unchanged. Existing Help
-already promises retained activity names and saved load preferences; no frontend release or client refresh is needed.
+Shared recorded-activity imports and original-file reparses retain matched activity document IDs across source
+revisions. The server-owned `sourceIdentity` records the bound document ID, complete source window and last imported
+sport for interrupted-write recovery. The parsed file supplies the sport; QS has no recorded-sport editor.
+`sourceActivityKey` remains a compatible legacy key, not a promise that it hashes the newest export.
+
+`functions/src/shared/import-preservation.ts` validates associations inside the existing owner/deletion-guarded
+source-write reservation before marking load pending. The pure matcher in `shared/activity-identity.ts` serves
+imports, reparse, frontend hydration and MCP charts. A persisted match of provider account/workout identity authorizes
+a provider revision to match a unique complete source window across sport changes. COROS component identity must also
+agree. Reparse has the corresponding retained-original scope. Ordinary uploads and read-only hydration keep strict
+source/signature checks. No array-position or final-unmatched-leg fallback is used.
+
+Legacy associations are adopted during normal writes, without a separate old-original download. Ambiguous windows,
+overlapping split/merge replacements and incompatible saved corrections produce `ACTIVITY_IDENTITY_CONFLICT` before
+source reservation. Existing provider dead-letter handling commits the terminal outcome once; Wahoo retains its
+revision/lease fences. Strict elevation-correction matches must agree with the selected saved-ID pairing and the
+file's sport eligibility. No automatic reassociation or deletion is performed.
+
+Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
+overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
+live event edits and custom device names. Repeat manual uploads use the same preparation. An unmatchable upload
+returns HTTP 409 with `ACTIVITY_IDENTITY_CONFLICT` and a review explanation. Finalization still checks the reservation,
+full source fingerprints, latest controls and deletion guards. New imports keep their existing ID allocation.
+
+Interrupted reparses use their frozen active-leg snapshot, not partial duplicate copies. Pending legacy activities
+without valid provenance must match their frozen pre-write windows before ID reuse; conflicting overwritten IDs need
+review. Long reparses recheck retained-file references before reservation. Reparse checks workout existence inside
+source-write transactions, preventing parent recreation or orphan writes after deletion. First imports retain create
+behavior. No historical reparse campaign, provider refresh or duplicate cleanup is required by this change.
+
+Open Event Details refreshes streams when retained-file references, the completed reparse revision or validated source
+snapshots change, even with stable leg IDs. Ordinary metadata edits reuse streams. Detailed preservation and recovery
+rules remain in [Training workspace](training-workspace.md#stable-recording-associations-across-source-revisions).
+
+Monitoring coverage is **covered** by existing committed `dead_lettered` outcomes and fixed provider labels; native
+queue backlog and retry probes are unchanged. The new fixed context is an existing dead-letter diagnostic, not a
+metric dimension. See [recorded-import monitoring](activity-import-monitoring.md). Rules protect `sourceIdentity`
+from client creation, replacement or removal; no new index, queue, scheduler or monitoring resource is introduced.
+MCP uses the validated snapshot internally for matching/cache freshness only; public contracts and scopes stay frozen.
 Local tests do not authorize deployment, provider calls, replay or production data cleanup.
 
 Provider health/wellness data uses the separate [unified health foundation](unified-health-data.md):
@@ -1165,6 +1187,16 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 - Protect integer-shaped provider IDs before JSON parsing when the API can emit 64-bit numbers. Normalize them to bounded decimal strings and test values above JavaScript's safe-integer limit.
 
 ### History imports
+
+Derived refreshes automatically use a five-minute fixed build interval while an existing history checkpoint is active
+and recent. No per-account allowlist or environment activation is required. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
+checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,
+with owner/run-revision/deletion rechecks and retryable enqueue failure; late child/source writes still invalidate
+normally. A private per-run completion receipt prevents duplicate or superseded terminal events from advancing later
+work; enqueue recovery retains the exact original generation and retry budget. The receipt stays out of public history
+projections and uses existing run retention/cleanup. See [Training scheduling](training-workspace.md#import-specific-five-minute-batching) for the scheduling policy,
+bounded metadata reads, completion/race tests, monitoring deployment workflow and rollback. This adds no provider request,
+Function, queue, index, secret, public MCP field or new history import action.
 
 Manual Suunto/COROS/Wahoo activity imports from updated clients now reuse the existing coordinator through the additive
 `background: true` option on their current callables. Admission atomically binds the existing account and credential/
@@ -1636,7 +1668,7 @@ and are unchanged. See [Suunto queued disconnects](suunto-integration.md#queued-
 
 The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten cleanup tasks concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle for an active user, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup for an active user. Transient failures retain the intent without a finite event-retry or TTL deadline.
 
-Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the same bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.
+Cleanup intents deliberately survive recursive deletion of `users/{uid}` so provider-only queue rows do not lose their last lookup identity. `cleanupUserAccounts` invokes the existing bounded reconciler, and the scheduler owns unfinished pages or active leases. For a missing/deleting account, reconciliation waits for that provider's remaining credential children to disappear and then deletes only the captured operational data; it never recreates user descendants. Shared-account ownership and queue revision checks still apply. An intent is removed only after cleanup completes, not simply because account deletion started.
 
 The same scheduler also reclaims one expired explicit-disconnect episode per provider per execution, retaining its original operation generation. The existing ten-minute lease orders this against in-flight callables; failures renew that lease, and a cursor in the existing scheduler-cursor collection advances past roots belonging to deleted users or otherwise unable to renew. This also finalizes interrupted legacy roots that already have an operation/lease, but cannot reconstruct operational identities from credentials removed before durable intents existed. Entitlement restoration cannot clear an explicit disconnect. An explicit operation may use subscription-pending credentials only with its matching operation generation, so recovery can finish without enabling ordinary sync. Failed revocation or metadata finalization stays pending rather than reporting successful disconnect.
 
@@ -1685,7 +1717,29 @@ Account deletion is not merely token deletion. Add provider identity discovery a
 
 Existing imported events are product-policy decisions. State explicitly whether disconnect, entitlement expiry, and account deletion each retain or remove them. Wahoo retains imported events on disconnect but removes account-associated data on account deletion.
 
-Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the configured recursive extension owns account cleanup; provider adapters must not delete historical health source records during ordinary deauthorization.
+Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the native account owner prepared in this phase recursively covers them (the installed extension remains until separately approved cutover); provider adapters must not delete historical health source records during ordinary deauthorization.
+
+The existing Gen 1 `cleanupUserAccounts` owner replaces the installed extension's
+configured Firestore/Storage scope, using 1 GB memory, a 540-second timeout and
+retries. It keeps its Auth deletion trigger, runtime identity and provider secrets;
+tenant users are ignored because these UID paths belong to default-project accounts.
+Deploy the write fences and UID-bearing mail writers, update this owner, verify
+cleanup, then retire the extension under a separately approved cutover. Keep
+`cleanupUserAccounts` deployed after retirement. The source comparison found that
+extension 0.1.30 uses a bare Storage prefix, which can include a longer custom UID,
+and interprets replacement tokens in custom UIDs. Resolve both extension scope
+issues before approving overlapping deletion. See the runbook source comparison.
+
+The deletion owner checkpoints provider identities before removing credentials or UID-owned queue sources. Failed discovery/checkpoint reads preserve those sources; mandatory local failures continue independent cleanup and then fail the Auth event for retry. Pending tombstones have no expiry. Completion follows scoped Firestore/Storage/operational absence verification, including deferred original-file and disconnect intents, and only completed markers receive a seven-day TTL. Provider deauthorization/archival remain best-effort and remote copies can remain. See [Delete User Data extension replacement and recovery](delete-user-data-migration.md) for exact scope, release boundaries and the existing activated monitoring coverage (#836).
+
+Operational queue and MCP targets are checkpointed before recursive deletion so retries can remove descendants after a parent disappears from ownership queries. Replay validates the fixed collection allowlist and current ownership. Every recursive child/root delete transaction checks the selected parent revision or continued absence and the current attempt; provider-only targets retain minimal lookup attribution and recheck connected credentials transactionally even after their parent disappears. A native recursive BulkWriter bounds this at ten concurrent transactions and commits queue tombstones with root removal. Changed or unavailable ownership keeps cleanup pending; provider-only identifiers remain scoped to their own provider. Completion and checkpoint removal require the current cleanup attempt, preventing stale invocations from releasing the fence. Exact UID/provider queries are paged at 100 rows for discovery, deletion and readback; unrelated queues are not globally scanned, and canonical safe numeric legacy provider IDs are covered alongside strings. See the native-cleanup runbook for recovery and release gates.
+
+The latest native account owner also checkpoints provider attribution from `connectionHistoryImports`
+before deleting those UID-owned trees. It invokes the existing UID-scoped `activitySendUploadCleanup`
+reconciler and keeps the completion fence pending until all reservations have cleared; future upload
+reservations and active cleanup leases must survive user-root deletion. The hourly activity-send owner
+retains its role. The account owner preserves #836 telemetry and its existing Gen 1
+structured/native failure coverage; no monitoring resources or activation changes are required.
 
 ## 9. Frontend, help, public pages, and attribution
 

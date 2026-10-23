@@ -61,15 +61,15 @@ export class AppFileService {
    * Returns null if conversion fails.
    */
   public toDate(rawDate: any): Date | null {
-    if (!rawDate) return null;
+    if (!rawDate && rawDate !== 0) return null;
     if (rawDate instanceof Date) return rawDate;
     if (rawDate.toDate && typeof rawDate.toDate === 'function') {
       // Firestore Timestamp instance
       return rawDate.toDate();
     }
-    if (typeof rawDate.seconds === 'number' && typeof rawDate.nanoseconds === 'number') {
+    if (typeof rawDate.seconds === 'number' && (rawDate.nanoseconds == null || typeof rawDate.nanoseconds === 'number')) {
       // Firestore Timestamp POJO
-      return new Date(rawDate.seconds * 1000 + rawDate.nanoseconds / 1000000);
+      return new Date(rawDate.seconds * 1000 + (rawDate.nanoseconds ?? 0) / 1000000);
     }
     if (typeof rawDate === 'number') return new Date(rawDate);
     if (typeof rawDate === 'string') return new Date(rawDate);

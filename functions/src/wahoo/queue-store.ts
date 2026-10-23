@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 import { replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
 import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
 import { HistoryLifecycleChangedError } from '../connection-history/execution';
@@ -370,14 +371,14 @@ export async function failWahooWorkoutQueueRevision(
         atRetryCount: totalRetryCount,
         date: Date.now(),
       }];
-      if (retryCount >= PROVIDER_MAX_RETRY_COUNT) {
+      if (isActivityIdentityConflict(error) || retryCount >= PROVIDER_MAX_RETRY_COUNT) {
         const failedItem: Record<string, unknown> = {
           ...current,
           error: error.message,
           errors,
           failedAt: Date.now(),
           originalCollection: WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
-          context: 'MAX_RETRY_REACHED',
+          context: isActivityIdentityConflict(error) ? error.code : 'MAX_RETRY_REACHED',
           expireAt: getExpireAtTimestamp(TTL_CONFIG.FAILED_JOBS_IN_DAYS),
         };
         delete failedItem.processingOwner;

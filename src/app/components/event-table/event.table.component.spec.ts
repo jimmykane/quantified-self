@@ -1,3 +1,5 @@
+import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { AppEventSummary } from '@shared/event-summary';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
@@ -361,15 +363,30 @@ describe('EventTableComponent', () => {
         expect(settingsPayload.unitSettings).toBeUndefined();
     };
 
-    it.each([false, true])('loads streams when starting or rerunning a benchmark from the list (saved: %s)', saved => {
+    it.each([false, true])('loads streams when starting or rerunning a benchmark from the list (saved: %s)', async saved => {
         const flow = TestBed.inject(AppBenchmarkFlowService);
         const selection = vi.spyOn(flow, 'openBenchmarkSelectionDialog').mockResolvedValue(undefined);
         const report = vi.spyOn(flow, 'openBenchmarkReport').mockResolvedValue(undefined);
-        const event = { getActivities: () => [], benchmarkResults: saved ? { pair: { referenceId: 'ref', testId: 'test' } } : {} } as any;
-        component.openBenchmarkFlow({ stopPropagation: vi.fn(), preventDefault: vi.fn() } as any, event);
+        const event = { toJSON: () => ({}), getActivities: () => [], benchmarkResults: saved ? { pair: { referenceId: 'ref', testId: 'test' } } : {} } as any;
+        await component.openBenchmarkFlow({ stopPropagation: vi.fn(), preventDefault: vi.fn() } as any, event);
         expect(saved ? report : selection).toHaveBeenCalledWith(expect.objectContaining({
             event, hydrateStreamsForGeneration: true,
         }));
+    });
+
+    it.each(['owner', 'account'])('abandons a summary benchmark read after its %s changes', async changed => {
+        const source = new Subject<any>();
+        const events = TestBed.inject(AppEventService) as any;
+        events.getEventAndActivitiesOnce = vi.fn().mockReturnValue(source);
+        const flow = TestBed.inject(AppBenchmarkFlowService);
+        const open = vi.spyOn(flow, 'openBenchmarkSelectionDialog');
+        const summary = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+        const work = component.openBenchmarkFlow({ stopPropagation() {}, preventDefault() {} } as any, summary);
+        if (changed === 'owner') component.user = { ...component.user, uid: 'another-owner' } as any;
+        else (TestBed.inject(Auth) as unknown as { currentUser: { uid: string } }).currentUser = { uid: 'new-account' };
+        source.next(new MockEvent('event-1'));
+        await work;
+        expect(open).not.toHaveBeenCalled();
     });
 
     it('should create', () => {
@@ -768,26 +785,40 @@ describe('EventTableComponent', () => {
         expect(styles).toMatch(/\.table-container\s*{[\s\S]*-webkit-backdrop-filter:\s*none;/);
     });
 
-    it('should use activity language and keep the glass empty state clear of the paginator', () => {
-        const template = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
-            'utf8'
-        );
-        const styles = readFileSync(
-            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
-            'utf8'
-        );
+    it('renders a compact notice only after a successful empty read and restores pagination when rows return', async () => {
+        const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+        fixture.componentRef.setInput('events', []); fixture.componentRef.setInput('isLoading', false);
+        await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities to show');
+        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p')).toBeNull();
+        expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-loading-overlay').hasError).toBeFalsy();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        fixture.componentRef.setInput('isLoading', true); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        fixture.componentRef.setInput('isLoading', false); fixture.componentRef.setInput('hasLoadError', true); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        fixture.componentRef.setInput('hasLoadError', false); fixture.componentRef.setInput('events', undefined); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        fixture.componentRef.setInput('events', [new MockEvent('returned')]); fixture.componentRef.setInput('isLoading', false); await settle();
+        expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
+        expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(false);
+    });
 
-        expect(template).toContain('placeholder="Search activities"');
-        expect(template).toContain('[errorMessage]="emptyMessage"');
-        expect(component.emptyMessage).toBe('No activities yet');
-        expect(component.emptyHint).toBe('Import an activity or change your filters');
-        expect(template).toContain('[allowErrorPassthrough]="true"');
-        expect(template).toContain('activity-table-no-data-row--hidden');
-        expect(template).not.toContain('No events found');
-        expect(template.indexOf('</app-loading-overlay>')).toBeLessThan(template.indexOf('<mat-paginator'));
-        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-blur:\s*16px;/);
-        expect(styles).toMatch(/\.activity-table-overlay\s*{[\s\S]*--loading-shade-error-shadow:\s*var\(--qs-overlay-shadow\);/);
+    it('uses filter-specific copy for an empty local search or tag selection', () => {
+        component.emptyHint = 'Try a wider date range.';
+        component.data.data = [{ Event: component.events[0] }]; component.data.filteredData = [];
+        for (const filter of ['search', 'tag', 'untagged']) {
+            component.searchTerm = filter === 'search' ? 'missing' : '';
+            component.tagFilters = filter === 'tag' ? ['Race'] : [];
+            component.untaggedFilter = filter === 'untagged';
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities match your filters');
+            expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p').textContent).toBe('Change your dates or clear a filter.');
+        }
+        component.searchTerm = ''; component.tagFilters = []; component.untaggedFilter = false;
+        expect(component.emptyNoticeHint).toBe('Try a wider date range.');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('should clear the contextual table selection', () => {
@@ -1001,9 +1032,39 @@ describe('EventTableComponent', () => {
         ]);
     });
 
+    it('reformats cached summary cells when the user changes units without another event emission', () => {
+        component.events = [new AppEventSummary({ id: 'lazy-units', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any)];
+        (component as any).processChanges('metric_units');
+        const previous = component.data.data[0];
+        expect(previous.Distance).toBe('1.00 Km');
+        component.user.settings.unitSettings.distanceUnits = DistanceUnits.Miles;
+        component.ngOnChanges({ user: { previousValue: null, currentValue: component.user, firstChange: false, isFirstChange: () => false } });
+        expect(component.data.data[0]).not.toBe(previous);
+        expect(component.data.data[0].Distance).toBe('0.62 mi');
+    });
+
+    it('reuses summary rows before formatting and invalidates requested metrics edited in place', () => {
+        const event = new AppEventSummary({ id: 'lazy', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any);
+        component.events = [event];
+        (component as any).processChanges('lazy_initial');
+        const row = component.data.data[0];
+        expect(row.Distance).toContain('1');
+        const format = vi.spyOn(event.getDistance()!, 'getDisplayValue');
+        component.events = [event];
+        (component as any).processChanges('lazy_cached');
+        expect(component.data.data[0]).toBe(row);
+        expect(format).not.toHaveBeenCalled();
+        event.getDistance()!.setValue(2000);
+        (component as any).processChanges('lazy_mutated');
+        expect(component.data.data[0]).not.toBe(row);
+        expect(component.data.data[0]['sort.Distance']).toBe(2000);
+    });
+
     it('should reuse cached row models when the next event list contains the same event instances', () => {
         const initialRows = [...component.data.data];
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElementFromReader');
 
         component.events = [...component.events];
 
@@ -1020,7 +1081,7 @@ describe('EventTableComponent', () => {
         const initialRows = [...component.data.data];
         const updatedEvent = new MockEvent('event2') as any;
         updatedEvent.name = 'Updated Event 2';
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElementFromReader');
 
         component.events = [
             component.events[0],
@@ -1059,7 +1120,7 @@ describe('EventTableComponent', () => {
 
     it('should rebuild a cached row when the same event instance is mutated in place', () => {
         const initialRows = [...component.data.data];
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElementFromReader');
         const mutatedEvent = component.events[1] as any;
         mutatedEvent.name = 'Mutated Event 2';
         mutatedEvent.privacy = 'private';
@@ -1080,7 +1141,7 @@ describe('EventTableComponent', () => {
         'refreshes saved elevation in cached rows and preserves selection: $DataClass.type / $value', ({ DataClass, value }) => {
             const event = component.events[0];
             let elevation: DataAscent | DataDescent | null = new DataClass(100);
-            vi.spyOn(event, 'getStatsAsArray').mockImplementation(() => elevation ? [elevation] : []);
+            vi.spyOn(event, 'getStat').mockImplementation(type => type === DataClass.type ? elevation : null);
             (component as any).processChanges('elevation_initial');
             const previousRows = [...component.data.data];
             expect(previousRows[0][DataClass.type]).toBe('100 m');
@@ -1095,7 +1156,7 @@ describe('EventTableComponent', () => {
         const rows = [...component.data.data];
         const previous = component.events[0];
         component.events = [new MockEvent('event1') as any, ...component.events.slice(1)];
-        const rebuild = vi.spyOn(component, 'getStatsRowElement');
+        const rebuild = vi.spyOn(component, 'getStatsRowElementFromReader');
         component.refreshSavedAscent(previous);
         expect(rebuild).not.toHaveBeenCalled();
         expect(component.data.data).toEqual(rows);
@@ -2083,6 +2144,42 @@ describe('EventTableComponent', () => {
     });
 
     describe('downloadGPXSelection', () => {
+        it('stops a summary batch before exporting or loading another ID after an owner change', async () => {
+            const loaded = new Subject<any>();
+            mockEventService.getEventAndActivitiesOnce = vi.fn().mockReturnValue(loaded);
+            for (const id of ['event-1', 'event-2']) {
+                const event = new AppEventSummary({ id, name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+                component.selection.select({ Event: event } as any);
+            }
+            const owner = component.user;
+            const work = component.downloadGPXSelection();
+            expect(mockEventService.getEventAndActivitiesOnce).toHaveBeenCalledExactlyOnceWith(owner, 'event-1');
+            component.targetUser = { uid: 'other-owner' } as any;
+            loaded.next(new MockEvent('event-1'));
+            await work;
+            expect(mockEventService.getEventAndActivitiesOnce).toHaveBeenCalledTimes(1);
+            expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+        });
+
+        it.each(['owner', 'account'])('drops completed GPX bytes and stops the batch if the %s changes during generation', async changed => {
+            let finish!: (blob: Blob) => void;
+            mockEventService.getEventAsGPXBloB.mockReturnValueOnce(new Promise<Blob>(resolve => finish = resolve));
+            component.selection.select({ Event: new MockEvent('event-1') } as any, { Event: new MockEvent('event-2') } as any);
+            const work = component.downloadGPXSelection();
+            await vi.waitFor(() => expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledOnce());
+            if (changed === 'owner') component.user = { ...component.user, uid: 'other-viewer' } as any;
+            else (TestBed.inject(Auth) as unknown as { currentUser: { uid: string } }).currentUser = { uid: 'new-account' };
+            finish(new Blob());
+            await work;
+            expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledTimes(1);
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+        });
+
         it('should show message when no events are selected', async () => {
             component.selection.clear();
 

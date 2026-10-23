@@ -1,5 +1,16 @@
 /* Compact History Import Form Styles */
 
+.history-import-timing {
+  display: grid;
+  gap: 4px;
+  margin-block: 12px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  overflow-wrap: anywhere;
+}
+
+.history-import-timing p { margin: 0; }
+
 .status-card {
   margin-bottom: 24px;
 }

@@ -42,6 +42,7 @@ import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.he
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
+import { getBenchmarkRRIntervalSource, hasBenchmarkRRStats } from '../../helpers/benchmark-rr.helper';
 import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
@@ -53,7 +54,7 @@ import {
 } from '../../helpers/event-dive-profile.helper';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
 import { buildTrainingSessionImpactView } from '../../helpers/training-impact.helper';
-import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
+import { isBenchmarkEvent, isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 
 @Component({
   selector: 'app-event-card',
@@ -81,6 +82,7 @@ export class EventCardComponent implements OnInit {
 
   // Signal-based state
   public event = signal<AppEventInterface | null>(null);
+  public isBenchmark = computed(() => isBenchmarkEvent(this.event()));
   public currentUser = signal<User | null>(null);
   public selectedActivitiesInstant = signal<ActivityInterface[]>([]);
   public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);
@@ -93,6 +95,8 @@ export class EventCardComponent implements OnInit {
   private liveSyncSubscription: Subscription | null = null;
   private liveSyncRouteKey: string | null = null;
   private liveReloadInProgress = false;
+  // undefined means no queued update; null invalidates an in-flight read after source/access loss.
+  private pendingLiveEvent: AppEventInterface | null | undefined;
   private benchmarkAutoOpenAttemptedForEventID: string | null = null;
 
   // Computed signals for template - replaces method calls
@@ -115,6 +119,10 @@ export class EventCardComponent implements OnInit {
   public hasDiveProfileFlag = computed(() =>
     hasEventDiveProfileData(this.selectedActivitiesInstant())
   );
+
+  public hasRRDataFlag = computed(() => this.selectedActivitiesInstant().some(activity =>
+    hasBenchmarkRRStats(activity) || getBenchmarkRRIntervalSource(activity) !== null
+  ));
 
   public performanceCurveAvailability = computed(() =>
     this.performanceCurveDataService.getAvailability(this.selectedActivitiesInstant(), {
@@ -191,14 +199,17 @@ export class EventCardComponent implements OnInit {
 
   public trainingImpactState = toSignal(
     toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
-    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+    { initialValue: { status: 'updating', formPoints: null } as TrainingImpactSnapshotState },
   );
 
   public trainingImpact = computed(() => {
     const event = this.event();
-    return event && this.isOwner() && !isBenchmarkEventForTrainingMetrics(event)
-      ? buildTrainingSessionImpactView(event, this.trainingImpactState())
-      : null;
+    if (!event || !this.isOwner() || isBenchmarkEventForTrainingMetrics(event)) return null;
+    const state = this.trainingImpactState();
+    // Auth can identify the owner before the profile-backed impact stream hydrates.
+    return buildTrainingSessionImpactView(event, state.status === 'private'
+      ? { status: 'updating', formPoints: null }
+      : state);
   });
 
   public displayUser = computed(() => this.currentUser() ?? this.publicViewerUser());
@@ -328,6 +339,7 @@ export class EventCardComponent implements OnInit {
       this.liveSyncSubscription?.unsubscribe();
       this.liveSyncSubscription = null;
       this.liveSyncRouteKey = null;
+      this.pendingLiveEvent = undefined;
       this.logger.log('[EventCard] live sync not started due to missing route params');
       return;
     }
@@ -345,6 +357,7 @@ export class EventCardComponent implements OnInit {
     this.logger.log('[EventCard] starting live sync subscription', { liveSyncRouteKey });
     this.liveSyncSubscription?.unsubscribe();
     this.liveSyncRouteKey = liveSyncRouteKey;
+    this.pendingLiveEvent = undefined;
     this.liveSyncSubscription = this.eventService.getEventDetailsLive(new User(targetUserID), eventID)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -368,7 +381,13 @@ export class EventCardComponent implements OnInit {
   }
 
   private applyLiveEventUpdate(liveEvent: AppEventInterface | null): void {
+    if (this.liveReloadInProgress && liveEvent) {
+      // Reconcile the latest snapshot after loading, without discarding it or launching parallel downloads.
+      this.pendingLiveEvent = liveEvent;
+      return;
+    }
     if (!liveEvent) {
+      if (this.liveReloadInProgress) this.pendingLiveEvent = null;
       this.logger.log('[EventCard] applyLiveEventUpdate skipped because liveEvent is null');
       if (this.isPublicShare()) {
         this.clearPublicShareEvent('not_found');
@@ -408,12 +427,12 @@ export class EventCardComponent implements OnInit {
       return;
     }
 
-    const previousSelectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
+    const liveSyncRouteKey = this.liveSyncRouteKey;
     const streamTypes = this.getLiveStreamTypes();
     this.logger.log('[EventCard] reloadEventDetailsWithStreams started', {
       eventID,
       targetUserID,
-      previousSelectedIDs,
+      selectedIDs: this.selectedActivitiesInstant().map((activity) => activity.getID()),
       streamTypes,
     });
     this.liveReloadInProgress = true;
@@ -425,6 +444,7 @@ export class EventCardComponent implements OnInit {
           streamTypes,
         ),
       );
+      if (this.destroyRef.destroyed || this.liveSyncRouteKey !== liveSyncRouteKey || this.pendingLiveEvent === null) return;
       if (!refreshedEvent) {
         this.logger.log('[EventCard] reloadEventDetailsWithStreams completed with null refreshedEvent');
         if (this.isPublicShare()) {
@@ -433,6 +453,8 @@ export class EventCardComponent implements OnInit {
         return;
       }
 
+      // A user can change or clear their leg selection while source files are loading.
+      const previousSelectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
       this.event.set(refreshedEvent as AppEventInterface);
       const refreshedActivityIDs = (refreshedEvent.getActivities() || []).map((activity) => activity.getID());
       const refreshedIDSet = new Set(refreshedActivityIDs);
@@ -449,6 +471,8 @@ export class EventCardComponent implements OnInit {
       this.applySelectedActivityIDs(nextSelectedIDs, true);
       this.maybeOpenBenchmarkFromQuery();
     } catch (error) {
+      if (this.destroyRef.destroyed || this.liveSyncRouteKey !== liveSyncRouteKey) return;
+      this.pendingLiveEvent = undefined;
       this.logger.error('Could not refresh event details after live reconcile mismatch', error);
       if (this.isPublicShare()) {
         this.clearPublicShareEvent('unavailable');
@@ -458,6 +482,9 @@ export class EventCardComponent implements OnInit {
       this.router.navigate(['/dashboard']);
     } finally {
       this.liveReloadInProgress = false;
+      const pending = this.pendingLiveEvent;
+      this.pendingLiveEvent = undefined;
+      if (pending && !this.destroyRef.destroyed) this.applyLiveEventUpdate(pending);
     }
   }
 
@@ -474,6 +501,7 @@ export class EventCardComponent implements OnInit {
   }
 
   private clearPublicShareEvent(loadError: EventResolverData['loadError']): void {
+    if (this.liveReloadInProgress) this.pendingLiveEvent = null;
     this.loadError.set(loadError);
     this.event.set(null);
     this.benchmarkAutoOpenAttemptedForEventID = null;

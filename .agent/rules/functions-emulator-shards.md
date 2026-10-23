@@ -24,6 +24,9 @@ See [CI test coverage](../../docs/ci-testing.md#functions-emulator-matrix) for c
 - Derive retry-exhaustion fixtures from the applicable shared retry budget. Provider and internal/Training budgets
   differ: verify the last pending retry, committed exhaustion and transaction rollback in affected emulator specs
   when a budget changes. Keep coverage that provider retries remain pending beyond the internal budget.
+- Give real contending Firestore transaction cases an explicit bounded timeout for lock waits and SDK backoff
+  (the existing pattern is 30 seconds). Scope it to the contention case; preserve simultaneous operations and durable
+  state assertions. Do not add test retries or increase ordinary/global timeouts to hide a failure.
 - For private-field exclusion checks, validate the existing strict public output schema or inspect property names
   recursively. Do not scan the entire serialized payload for bare field names: random opaque references can contain
   substrings such as `uid`. Keep explicit private-value canaries and negative nested-field fixtures as well.

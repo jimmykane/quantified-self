@@ -16,6 +16,17 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains source updates, saved leg preferences and the retained-original boundary', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
+    expect(copy).toContain('Training load override, exclusion and saved policy stay with');
+    expect(copy).toContain('The updated file supplies the sport');
+    expect(copy).toContain('custom device name and ascent/descent corrections');
+    expect(copy).toContain('does not fetch a sport change');
+    expect(copy).toContain('does not guess how to move preferences between multisport legs');
+    expect(copy).toContain('repeat manual upload');
+    expect(copy).toContain('repeating the upload cannot resolve an ambiguous leg association');
+  });
+
   it('explains independent ascent/descent correction, reviewed reset and source preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
     for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',
@@ -50,6 +61,8 @@ describe('help.content', () => {
     expect(copy).toContain('background rebuild may wait up to two minutes');
     expect(copy).toContain('plus normal sync, queue and calculation time');
     expect(copy).toContain('All changes are retained');
+    expect(copy).toContain('updates automatically use a five-minute background interval');
+    expect(copy).toContain('late-arriving records still trigger an update');
     expect(copy).toContain('Training load edits and benchmark changes receive priority');
     expect(copy).toContain('wait for any calculation already running');
     expect(copy).toContain('Opening Training again does not speed up');
@@ -103,6 +116,9 @@ describe('help.content', () => {
   it('explains the activity explorer, full shared table, partial history and saved filters', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
+      'compact notice below their existing column headings', '**Change dates**',
+      'no filter matches suggest changing dates or clearing a filter', '**All dates** without filters uses a neutral message',
+      'offers connection setup only when no service is connected',
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
       '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
       'Searching keeps checked choices selected', '**Clear selection**',
@@ -169,6 +185,62 @@ describe('help.content', () => {
     expect(copy).toContain('A zero summary or missing sensor readings alone cannot establish zero load');
     expect(copy).toContain('Missing power readings do not count as recorded zero power');
     expect(copy).toContain('calculated power load falls back to another eligible method or stays unavailable');
+    expect(copy).toContain('calculated average power uses observed active readings, including real coasting zeros');
+    expect(copy).toContain('calculated total work can be unavailable');
+    expect(copy).toContain('efforts crossing recording gaps or pauses are excluded');
+    expect(copy).toContain('A valid summary supplied by the file keeps priority');
+    expect(copy).toContain('Partial calculated power load is labelled as an estimate');
+    expect(copy).toContain('Opening a power chart reads the retained original file without changing saved statistics');
+    expect(copy).toContain('refreshing Training alone does not reparse the file');
+  });
+  it('keeps activity beat statistics separate from overnight HRV and source-free recalculation', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('**R–R RMSSD**');
+    expect(copy).toContain('Ordinary heart-rate readings cannot supply these statistics');
+    expect(copy).toContain('separate from overnight HRV and Readiness');
+    expect(copy).toContain('Older saved summaries need an original-file reparse');
+    expect(copy).toContain('Multisport legs keep their own values');
+    expect(copy).toContain('**R–R & HRV** summary tab appears on any Event Details page');
+    expect(copy).toContain('immediately before **Device**');
+    expect(copy).toContain('without a separate action row');
+    expect(copy).toContain('**Show details**, alongside the metric tiles');
+    expect(copy).toContain('statistics present and valid in both recordings');
+    expect(copy).toContain('Ordinary events and multisport legs do not show benchmark deltas');
+    expect(copy).toContain('**Saved comparisons** table includes a compact **R–R & HRV** column');
+    expect(copy).toContain('without additional reads or analysis');
+    expect(copy).toContain('show **Not loaded** rather than claiming HRV is missing');
+    expect(copy).toContain('Choose **Poincaré** in the R–R chart view selector');
+    expect(copy).toContain('without joining the remaining neighbours');
+    expect(copy).toContain('Gaps and invalid observations always break adjacency');
+    expect(copy).toContain('Point-pair counts are separate from suspected ectopic-pair statistics');
+    expect(copy).toContain('larger centred square on desktop');
+    expect(copy).toContain('**Open Poincaré plot fullscreen**');
+    expect(copy).toContain('without repeating beat analysis');
+    expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
+    expect(copy).toContain('seven key R–R & HRV statistics side by side');
+    expect(copy).toContain('differences appear only when both recordings have a valid value');
+    expect(copy).toContain('cover each entire recording, not only the aligned overlap');
+    expect(copy).toContain('do not affect the hardware agreement grade');
+    expect(copy).toContain('On **Event Details**, **R–R & HRV** appears after the performance charts');
+    expect(copy).toContain('ordinary workouts, multisport legs and benchmarks');
+    expect(copy).toContain('Events without beat intervals or valid saved HRV statistics do not show this section');
+    expect(copy).toContain('all 20 recorded R–R metrics');
+    expect(copy).toContain('starts collapsed');
+    expect(copy).toContain('one, two or more overlaid recordings');
+    expect(copy).toContain('statistics in a top legend');
+    expect(copy).toContain('a fixed, anonymized 90-second excerpt from one real R–R recording');
+    expect(copy).toContain('not a live view of your account');
+    expect(copy).toContain('the metric legend wraps so every available value stays visible');
+    expect(copy).toContain('The full statistics table scrolls horizontally');
+    expect(copy).toContain('Original recording start offsets');
+    expect(copy).toContain('Devices without R–R intervals or saved HRV statistics are omitted');
+    expect(copy).toContain('The chart legend includes only recordings with usable beat intervals');
+    expect(copy).toContain('can still show valid saved values under **Show statistics**');
+    expect(copy).toContain('Missing values show a dash; a recorded zero stays zero');
+    expect(copy).toContain('**Reset zoom** restores both');
+    expect(copy).toContain('without repairing data or changing the full-recording summaries');
+    expect(copy).toContain('available raw intervals do not fill missing saved summaries');
+    expect(copy).toContain('without saving new statistics, reparsing the event or adding an accuracy grade');
   });
   it('explains recorded timer recovery and the original-file boundary for historical corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
@@ -254,6 +326,16 @@ describe('help.content', () => {
     expect(dashboard).toContain('withholds the readiness score and confidence');
     expect(dashboard).toContain('**Last available** with their date');
     expect(dashboard).toContain('updates at local midnight');
+  });
+  it('distinguishes account deletion acceptance from background data cleanup', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('after sign-in access is removed');
+    expect(copy).toContain('Data cleanup continues in the background');
+    expect(copy).toContain('does not confirm that every file or record has already been removed');
+    expect(copy).toContain('protected recovery storage for up to 30 days');
+    expect(copy).toContain('Some older email delivery records may remain after account deletion');
+    expect(copy).toContain('Those with a 90-day expiry are removed automatically after that date');
+    expect(copy).toContain('This action cannot be undone');
   });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
@@ -1975,6 +2057,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Power Training Stress Score');
     expect(gettingStartedSection?.content).toContain('Current TSB');
     expect(gettingStartedSection?.content).toContain('same-day readiness');
+    expect(gettingStartedSection?.content).toContain('Both Form/TSS vertical axes fit the displayed period');
+    expect(gettingStartedSection?.content).toContain('The Form pane keeps its zero baseline');
     expect(gettingStartedSection?.content).toContain('full history');
     expect(gettingStartedSection?.content).toContain('W / M / Y');
     expect(gettingStartedSection?.content).toContain('saved on that dashboard tile');

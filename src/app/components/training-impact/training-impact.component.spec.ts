@@ -54,6 +54,18 @@ describe('TrainingImpactComponent', () => {
     };
   }
 
+  it.each(['card', 'summary', 'compact', 'strip'] as const)('hides private content in the %s variant', variant => {
+    const fixture = render(session(), variant);
+    fixture.componentRef.setInput('impact', {
+      ...session(), availability: 'private', message: 'Private-state fallback must not be displayed',
+    });
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent?.trim()).toBe('');
+    expect(element.querySelector('section, span, button, [role]')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('renders exact contribution labels, values, outcome, and disclaimer', () => {
     const fixture = render(session());
     const text = fixture.nativeElement.textContent;

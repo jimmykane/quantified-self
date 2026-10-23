@@ -54,6 +54,7 @@ class EventTableStub {
   @Input() hideGeneratedNames: boolean;
   @Input() emptyMessage: string;
   @Input() emptyHint: string;
+  @Input() hasLoadError: boolean;
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
 }
 
@@ -70,7 +71,7 @@ async function setup(tag = '', realTable = false) {
   const auth = { user$, authState$, currentUser: owner };
   const params$ = new BehaviorSubject(convertToParamMap(tag ? { tag } : {}));
   const events = {
-    getEventsBy: vi.fn().mockImplementation(() => of(records.map(record => ({ ...record })))),
+    getEventSummariesBy: vi.fn().mockImplementation(() => of(records.map(record => ({ ...record })))),
     getEventsPageOnceByWithMeta: vi.fn(), getEventCountBy: vi.fn(), getEventCount: vi.fn(),
   };
   const catalog = { listAllTags: vi.fn().mockResolvedValue(['Endurance', 'Race day', 'Recovery']) };
@@ -129,8 +130,8 @@ describe('ActivitiesPageComponent', () => {
     try {
       const c = await setup();
       const data = records.map(record => ({ ...record, startDate: new Date(2026, 9, 21) }));
-      c.events.getEventsBy.mockReturnValue(of(data)); await render(c);
-      expect(c.events.getEventsBy).toHaveBeenCalledExactlyOnceWith(c.user$.value, [
+      c.events.getEventSummariesBy.mockReturnValue(of(data)); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledExactlyOnceWith(c.user$.value, [
         { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 8, 22).getTime() },
         { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 9, 22).getTime() },
       ], 'startDate', false, 0);
@@ -156,13 +157,13 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.period()).toBe('month'); expect(c.component.filteredEvents()).toHaveLength(3);
     c.component.selectTags([], true); await render(c);
     expect(c.component.filteredEvents()).toEqual([]);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
   });
 
   it('combines searchable tag and sport checkbox selections locally and removes each filter independently', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValue(of([...records, event('no-tag', [])])); await render(c);
+    c.events.getEventSummariesBy.mockReturnValue(of([...records, event('no-tag', [])])); await render(c);
     const pickers = c.fixture.debugElement.queryAll(By.directive(ActivityFilterPickerComponent))
       .map(element => element.componentInstance as ActivityFilterPickerComponent);
     const tags = pickers.find(picker => picker.label() === 'Tags')!;
@@ -183,7 +184,7 @@ describe('ActivitiesPageComponent', () => {
     expect(tags.summary()).toBe('All tags'); expect(sports.summary()).toBe('All sports');
     expect(c.component.filteredEvents()).toHaveLength(4);
     expect(c.haptics.selection).toHaveBeenCalledTimes(5);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.catalog.listAllTags).toHaveBeenCalledOnce();
     expect(c.events.getEventCount).not.toHaveBeenCalled(); expect(c.events.getEventCountBy).not.toHaveBeenCalled();
     expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
   });
@@ -200,32 +201,32 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.sports()).toContain('Rowing');
     c.component.selectSports(['Running', 'Rowing', 'Run']);
     c.component.selectTags(['recovery', 'missing saved']); await render(c);
-    expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it('applies one bounded custom range only after submitting both dates, with inclusive results', async () => {
     const c = await setup(); await render(c);
     c.component.selectPeriod('custom'); await render(c);
-    expect(c.component.period()).toBe('month'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.component.period()).toBe('month'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]')).toBeNull();
     const labels = Array.from(c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters mat-label')) as HTMLElement[];
     expect(labels.map(label => label.textContent)).toEqual(['Tags', 'Custom dates', 'Sports']);
     expect(c.fixture.nativeElement.querySelector('form')).toBeNull();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); await render(c);
-    c.component.applyCustomRange(); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.component.applyCustomRange(); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') }); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
     const data = [
       { ...event('before', []), startDate: new Date(2026, 8, 2, 23, 59, 59, 999) },
       { ...event('first', []), startDate: new Date(2026, 8, 3) },
       { ...event('last', []), startDate: new Date(2026, 8, 4, 23, 59, 59, 999) },
       { ...event('after', []), startDate: new Date(2026, 8, 5) },
     ];
-    c.events.getEventsBy.mockReturnValue(of(data));
+    c.events.getEventSummariesBy.mockReturnValue(of(data));
     c.fixture.nativeElement.querySelector('input[aria-label="End date"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(c.events.getEventsBy).toHaveBeenLastCalledWith(c.user$.value, [
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenLastCalledWith(c.user$.value, [
       { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 8, 3).getTime() },
       { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 8, 5).getTime() },
     ], 'startDate', false, 0);
@@ -235,7 +236,7 @@ describe('ActivitiesPageComponent', () => {
     }));
     expect(c.haptics.selection).toHaveBeenCalledTimes(2);
     c.component.applyCustomRange(); c.component.selectPeriod('custom'); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
     expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
     expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
   });
@@ -257,11 +258,11 @@ describe('ActivitiesPageComponent', () => {
     expect(c.fixture.nativeElement.querySelector('mat-error').textContent).toContain('Enter valid dates');
     type('End date', adapter.format(dayjs('2026-09-02'), 'L')); await render(c);
     c.component.applyCustomRange(); expect(c.component.customDateForm.hasError('dateOrder')).toBe(true);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
     c.component.cancelCustomRange(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.showCustomRange()).toBe(false);
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 30 days');
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
   });
 
   it('supports selecting both dates in the calendar without a query until Apply', async () => {
@@ -281,16 +282,16 @@ describe('ActivitiesPageComponent', () => {
     };
     clickDate('2026-09-03'); await render(c);
     expect(c.component.customDateForm.controls.start.value).toBeNull();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     clickDate('2026-09-04'); await render(c);
     expect(c.component.customDateForm.controls.end.value).toBeNull();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     const apply = overlay.querySelector('button[matDateRangePickerApply]') as HTMLButtonElement;
     expect(apply.disabled).toBe(false); apply.click(); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD')).toBe('2026-09-03');
     expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-04');
-    expect(c.events.getEventsBy.mock.lastCall[1][1].value).toBe(new Date(2026, 8, 5).getTime());
+    expect(c.events.getEventSummariesBy.mock.lastCall[1][1].value).toBe(new Date(2026, 8, 5).getTime());
     expect(c.haptics.selection).toHaveBeenCalledTimes(3);
 
     // Calendar actions keep their pending model separate from the applied field.
@@ -301,7 +302,7 @@ describe('ActivitiesPageComponent', () => {
     overlay.querySelector<HTMLButtonElement>('button[matDateRangePickerCancel]')!.click(); await render(c);
     expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-04');
     expect(c.component.showCustomRange()).toBe(true);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(c.haptics.selection).toHaveBeenCalledTimes(5);
   });
 
@@ -311,7 +312,7 @@ describe('ActivitiesPageComponent', () => {
     c.component.selectPeriod('custom'); await render(c);
     const clear = () => c.fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]').click();
     clear(); await render(c);
-    expect(c.component.period()).toBe('week'); expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.component.period()).toBe('week'); expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 7 days');
     c.component.selectPeriod('custom'); await render(c);
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') });
@@ -320,8 +321,8 @@ describe('ActivitiesPageComponent', () => {
     expect(c.fixture.nativeElement.querySelector('input[aria-label="End date"]').value).not.toBe('');
     clear(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(4);
-    expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
+    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 30 days');
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'month', start: null, end: null });
   });
@@ -340,7 +341,7 @@ describe('ActivitiesPageComponent', () => {
     const cancel = overlay.querySelector<HTMLButtonElement>('button[matDateRangePickerCancel]')!;
     cancel.focus(); cancel.click(); await render(c);
     expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]'));
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
 
     c.component.selectPeriod('custom'); await render(c);
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') });
@@ -348,7 +349,7 @@ describe('ActivitiesPageComponent', () => {
     const clear = c.fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]') as HTMLButtonElement;
     clear.focus(); clear.click(); await render(c);
     expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]'));
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
     expect(c.events.getEventCountBy).not.toHaveBeenCalled();
     expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
   });
@@ -357,23 +358,23 @@ describe('ActivitiesPageComponent', () => {
     const c = await setup('Endurance');
     const query = { tag: 'Endurance', period: 'custom', start: '2026-09-03', end: '2026-09-04' };
     c.params$.next(convertToParamMap(query)); await render(c);
-    expect(c.component.period()).toBe('custom'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
-    expect(c.events.getEventsBy.mock.lastCall[1]).toEqual([
+    expect(c.component.period()).toBe('custom'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 8, 3).getTime() },
       { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 8, 5).getTime() },
     ]);
     expect(c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD')).toBe(query.start);
-    c.params$.next(convertToParamMap(query)); await render(c); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    c.params$.next(convertToParamMap(query)); await render(c); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.params$.next(convertToParamMap({ ...query, end: '2026-09-05' })); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(c.events.getEventsBy.mock.lastCall[1][1].value).toBe(new Date(2026, 8, 6).getTime());
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy.mock.lastCall[1][1].value).toBe(new Date(2026, 8, 6).getTime());
     expect(c.haptics.selection).not.toHaveBeenCalled();
     c.component.customDateForm.controls.end.setValue(dayjs('2026-09-09')); c.component.customDateForm.markAsDirty();
     c.component.cancelCustomRange(); await render(c);
     expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-05');
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     c.component.selectTags(['Race day']); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     c.component.selectPeriod('week'); await render(c);
     expect(c.component.customDates()).toBeNull(); expect(c.component.showCustomRange()).toBe(false);
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'week', start: null, end: null });
@@ -386,7 +387,7 @@ describe('ActivitiesPageComponent', () => {
   ])('falls back to the bounded default for an invalid custom link: %j', async query => {
     const c = await setup(); c.params$.next(convertToParamMap(query)); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.customDates()).toBeNull();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
     expect(c.router.navigate.mock.lastCall[1]).toMatchObject({ replaceUrl: true, queryParams: { period: 'month', start: null, end: null } });
     expect(c.haptics.selection).not.toHaveBeenCalled();
   });
@@ -401,10 +402,10 @@ describe('ActivitiesPageComponent', () => {
       c.params$.next(convertToParamMap({ ...query, tag: 'Endurance' })); await render(c);
       expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-10-25');
       vi.setSystemTime(new Date(2026, 9, 22, 0, 1)); c.component.refreshLocalDay(); await render(c);
-      expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
       c.component.clearFilters(); await render(c);
       expect(c.component.period()).toBe('month'); expect(c.component.customDates()).toBeNull();
-      expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     } finally { vi.useRealTimers(); }
   });
 
@@ -416,7 +417,7 @@ describe('ActivitiesPageComponent', () => {
     select.value = 'all';
     select.selectionChange.emit(new MatSelectChange(select, 'all')); await render(c);
     expect(select.value).toBe('month'); expect(c.component.period()).toBe('month');
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.dialog.open).toHaveBeenCalledExactlyOnceWith(ConfirmationDialogComponent, {
       data: {
         title: 'Load all activity history?',
@@ -432,16 +433,16 @@ describe('ActivitiesPageComponent', () => {
     expect(dateField.textContent.trim()).toBe('All dates');
     // The shared dialog owns its confirmation button's feedback; do not repeat it here.
     expect(c.haptics.selection).toHaveBeenCalledOnce();
-    expect(c.events.getEventsBy).toHaveBeenLastCalledWith(c.user$.value, [], 'startDate', false, 0);
+    expect(c.events.getEventSummariesBy).toHaveBeenLastCalledWith(c.user$.value, [], 'startDate', false, 0);
     c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
-    expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     c.component.selectTags(['Endurance']); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     c.component.clearFilters(); await render(c);
     expect(c.component.period()).toBe('month');
-    expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
-    c.component.clearFilters(); expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
+    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+    c.component.clearFilters(); expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
   });
 
   it.each([false, undefined])('keeps the current range without a query when All dates is dismissed with %s', async result => {
@@ -449,8 +450,8 @@ describe('ActivitiesPageComponent', () => {
     c.component.selectPeriod('week'); await render(c);
     c.component.selectPeriod('all'); c.dialogs[0].close(result); await render(c);
     expect(c.component.period()).toBe('week');
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(c.events.getEventsBy.mock.calls.every(call => call[1].length === 2)).toBe(true);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy.mock.calls.every(call => call[1].length === 2)).toBe(true);
   });
 
   it('hydrates saved filters silently and only queries again when the date range changes', async () => {
@@ -458,20 +459,20 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.filteredEvents()).toHaveLength(2);
     c.params$.next(convertToParamMap({ tag: 'Recovery', sport: 'Run', period: 'month' })); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['c']);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.params$.next(convertToParamMap({ untagged: '1', period: 'week' })); await render(c);
     expect(c.component.untagged()).toBe(true); expect(c.component.filteredEvents()).toEqual([]);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(c.haptics.selection).not.toHaveBeenCalled();
   });
 
   it('warns for an initial All dates link before any activity query and safely falls back on cancel', async () => {
     const c = await setup(); c.params$.next(convertToParamMap({ tag: 'Endurance', period: 'all' })); await render(c);
-    expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventsBy).not.toHaveBeenCalled();
+    expect(c.dialog.open).toHaveBeenCalledOnce(); expect(c.events.getEventSummariesBy).not.toHaveBeenCalled();
     expect(c.haptics.selection).not.toHaveBeenCalled();
     c.dialogs[0].close(false); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce(); expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
     expect(c.router.navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
       queryParams: expect.objectContaining({ tag: ['Endurance'], period: 'month' }), replaceUrl: true,
     }));
@@ -481,12 +482,12 @@ describe('ActivitiesPageComponent', () => {
   it('requires confirmation for browser navigation to All dates and does not requery on cancel', async () => {
     const c = await setup(); await render(c);
     c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
-    expect(c.component.period()).toBe('month'); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.component.period()).toBe('month'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.dialogs[0].close(false); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.params$.next(convertToParamMap({ period: 'all' })); c.dialogs[1].close(true); await render(c);
     expect(c.component.period()).toBe('all');
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2); expect(c.events.getEventsBy.mock.lastCall[1]).toEqual([]);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2); expect(c.events.getEventSummariesBy.mock.lastCall[1]).toEqual([]);
     expect(c.haptics.selection).not.toHaveBeenCalled();
   });
 
@@ -501,24 +502,24 @@ describe('ActivitiesPageComponent', () => {
     expect(c.dialogs[1].close).toHaveBeenCalledExactlyOnceWith(false);
     c.component.selectPeriod('all'); c.fixture.destroy();
     expect(c.dialogs[2].close).toHaveBeenCalledExactlyOnceWith(false);
-    expect(c.events.getEventsBy.mock.calls.every(call => call[1].length === 2)).toBe(true);
+    expect(c.events.getEventSummariesBy.mock.calls.every(call => call[1].length === 2)).toBe(true);
   });
 
   it('does not reuse full-history confirmation after the signed-in session changes', async () => {
     const c = await setup(); await render(c);
     c.component.selectPeriod('all'); c.dialogs[0].close(true); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     c.auth.currentUser = { uid: 'owner' }; c.authState$.next(c.auth.currentUser); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.dialog.open).toHaveBeenCalledTimes(2);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     c.dialogs[1].close(false); await render(c);
-    expect(c.events.getEventsBy).toHaveBeenCalledTimes(3);
-    expect(c.events.getEventsBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
   });
 
   it('keeps literal tag names separate from the Untagged option', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValue(of([event('empty', []), event('named', ['__none', 'untagged'])])); await render(c);
+    c.events.getEventSummariesBy.mockReturnValue(of([event('empty', []), event('named', ['__none', 'untagged'])])); await render(c);
     c.component.selectTags([], true); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['empty']);
     c.component.selectTags(['__none']); await render(c);
@@ -527,12 +528,12 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['empty']);
     c.component.selectTagFilters(['tag:untagged']); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['named']);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it('matches canonical sport aliases and excludes generated comparisons from the table', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValue(of([
+    c.events.getEventSummariesBy.mockReturnValue(of([
       { ...event('run', []), getActivityTypesAsArray: () => ['Run'] },
       { ...event('running', []), getActivityTypesAsArray: () => ['Running'] },
       { ...event('comparison', []), isMerge: true },
@@ -542,12 +543,12 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.selectedSports()).toEqual(['Running']); expect(c.component.filteredEvents()).toHaveLength(2);
     expect(c.component.sports()).toContain('Cycling');
     c.component.selectSports(['Run']); expect(c.haptics.selection).not.toHaveBeenCalled();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it('toggles loaded merged rows locally, preserves other filters and restores URL choices silently', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValue(of([
+    c.events.getEventSummariesBy.mockReturnValue(of([
       event('run', ['Endurance']),
       { ...event('merged', ['Endurance']), isMerge: true },
       { ...event('benchmark', ['Endurance']), hasBenchmark: true },
@@ -571,40 +572,40 @@ describe('ActivitiesPageComponent', () => {
     c.params$.next(convertToParamMap({ merged: '1' })); await render(c);
     expect(c.component.includeMergedEvents()).toBe(true);
     expect(c.haptics.selection).not.toHaveBeenCalled();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.events.getEventCountBy).not.toHaveBeenCalled();
     expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
   });
 
   it('uses one live listener for subsequent activity updates without repeating the query', async () => {
     const c = await setup(); const live = new Subject<AppEventInterface[]>();
-    c.events.getEventsBy.mockReturnValue(live); c.fixture.detectChanges();
+    c.events.getEventSummariesBy.mockReturnValue(live); c.fixture.detectChanges();
     expect(c.component.loading()).toBe(true);
     live.next(records); await render(c);
     live.next([...records, event('new', [])]); await render(c);
-    expect(c.component.events()).toHaveLength(4); expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.component.events()).toHaveLength(4); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.haptics.error).not.toHaveBeenCalled();
   });
 
   it('cancels the previous listener on range changes, account changes and teardown', async () => {
     const c = await setup(); const first = new Subject<AppEventInterface[]>();
     const session = new Subject<AppEventInterface[]>();
-    c.events.getEventsBy.mockReturnValueOnce(first); c.fixture.detectChanges();
+    c.events.getEventSummariesBy.mockReturnValueOnce(first); c.fixture.detectChanges();
     expect(first.observed).toBe(true);
     c.component.selectPeriod('year'); await render(c); expect(first.observed).toBe(false);
     first.next([event('old-range', ['Private'])]); expect(c.component.events()).toEqual(records);
-    c.events.getEventsBy.mockReturnValueOnce(session); c.component.refresh();
+    c.events.getEventSummariesBy.mockReturnValueOnce(session); c.component.refresh();
     c.auth.currentUser = { uid: 'owner' }; c.authState$.next(c.auth.currentUser); await render(c);
     expect(session.observed).toBe(false);
     session.next([event('old-owner', ['Private'])]); expect(c.component.events()).toEqual(records);
-    const last = new Subject<AppEventInterface[]>(); c.events.getEventsBy.mockReturnValueOnce(last); c.component.refresh();
+    const last = new Subject<AppEventInterface[]>(); c.events.getEventSummariesBy.mockReturnValueOnce(last); c.component.refresh();
     expect(last.observed).toBe(true); c.fixture.destroy(); expect(last.observed).toBe(false);
     last.next([event('destroyed', [])]); expect(c.component.events()).toEqual([]);
   });
 
   it('retries a failed range query with one action feedback and only reports explicit failures', async () => {
     const c = await setup();
-    c.events.getEventsBy.mockReturnValueOnce(throwError(() => new Error('offline')))
+    c.events.getEventSummariesBy.mockReturnValueOnce(throwError(() => new Error('offline')))
       .mockReturnValueOnce(throwError(() => new Error('still offline')));
     await render(c); expect(c.component.historyError()).toBe(true);
     expect(c.haptics.error).not.toHaveBeenCalled();
@@ -612,8 +613,8 @@ describe('ActivitiesPageComponent', () => {
     expect(c.haptics.selection).toHaveBeenCalledOnce(); expect(c.haptics.error).toHaveBeenCalledOnce();
     c.component.retryActivities(); await render(c);
     expect(c.component.events()).toEqual(records); expect(c.component.historyError()).toBe(false);
-    const reads = c.events.getEventsBy.mock.calls.length;
-    c.component.retryActivities(); expect(c.events.getEventsBy).toHaveBeenCalledTimes(reads);
+    const reads = c.events.getEventSummariesBy.mock.calls.length;
+    c.component.retryActivities(); expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(reads);
   });
 
   it('applies confirmed edits and deletions without restarting the live query', async () => {
@@ -627,7 +628,7 @@ describe('ActivitiesPageComponent', () => {
     c.component.onEventsChange({ userID: 'owner', updatedTags: { b: [] }, deletedEventIDs: [] });
     c.component.selectTags([], true); await render(c);
     expect(c.component.filteredEvents().map(e => e.getID())).toEqual(['b']);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it('ignores detached table mutations from a previous account', async () => {
@@ -650,14 +651,14 @@ describe('ActivitiesPageComponent', () => {
     expect(c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance).toBe(table);
     expect(table.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
     expect(table.events).not.toBe(previousEvents); expect(table.events).toEqual(previousEvents);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it('retries tag catalog errors without refetching activities', async () => {
     const c = await setup(); c.catalog.listAllTags.mockRejectedValueOnce(new Error('offline')); await render(c);
     expect(c.component.catalogError()).toBe(true); c.component.retryCatalog(); await render(c);
     expect(c.catalog.listAllTags).toHaveBeenLastCalledWith('owner', true);
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it('retains an in-flight tag catalog across date range changes', async () => {
@@ -676,14 +677,88 @@ describe('ActivitiesPageComponent', () => {
       c.params$.next(convertToParamMap({ period: 'week' })); await render(c);
       const clock = vi.spyOn(c.component, 'refreshLocalDay');
       await vi.advanceTimersByTimeAsync(60_000); await render(c);
-      expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-      expect(c.events.getEventsBy.mock.lastCall[1]).toEqual([
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(c.events.getEventSummariesBy.mock.lastCall[1]).toEqual([
         { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 9, 16).getTime() },
         { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 9, 23).getTime() },
       ]);
       expect(c.haptics.selection).not.toHaveBeenCalled();
       c.fixture.destroy(); await vi.advanceTimersByTimeAsync(60_000); expect(clock).toHaveBeenCalledOnce();
     } finally { c.fixture.destroy(); vi.useRealTimers(); }
+  });
+
+  it('shows the compact notice only for ready empty results and opens existing date controls without queries or duplicate feedback', async () => {
+    const c = await setup('', true);
+    const stream = new Subject<AppEventInterface[]>();
+    c.events.getEventSummariesBy.mockReturnValue(stream);
+    const settle = async () => { c.fixture.detectChanges(); await c.fixture.whenStable(); c.fixture.detectChanges(); };
+    await settle();
+    const root = c.fixture.nativeElement as HTMLElement;
+    expect(c.component.loading()).toBe(true); expect(root.querySelector('.activity-table-empty')).toBeNull();
+    stream.next([]); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    const paginator = table.paginator, sort = table.sort, columns = [...table.selectedColumns];
+    expect(root.querySelector('.activity-table-empty-copy')?.textContent).toContain('No activities in this date range');
+    expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Try a wider date range.');
+    expect(root.querySelector('.event-table-header app-data-type-icon')).not.toBeNull();
+    expect(root.querySelector('.qs-glass-card-panel')).not.toBeNull();
+    expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(true);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
+    const presets = c.fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(presets.panelOpen).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    c.component.openDateFilter(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    presets.close(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+    c.component.selectPeriod('custom'); await settle(); c.haptics.selection.mockClear();
+    root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
+    const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
+    expect(picker.opened).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    c.component.openDateFilter(); await settle(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); picker.close(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
+    c.component.cancelCustomRange(); await settle();
+    const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(),
+      srcFileType: FileType.FIT, privacy: Privacy.Private, stats: {}, activities: [] }) as AppEventInterface;
+    record.setID('empty-notice-example'); record.addStat(new DataActivityTypes([ActivityTypes.Cycling]));
+    record.addStat(new DataDeviceNames([])); record.addStat(new DataDistance(1000));
+    stream.next([record]); await render(c);
+    expect(root.querySelector('.activity-table-empty')).toBeNull();
+    expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(false);
+    expect(table.paginator).toBe(paginator); expect(table.sort).toBe(sort); expect(table.selectedColumns).toEqual(columns);
+    table.search('not recorded'); await settle();
+    expect(root.querySelector('.activity-table-empty-copy')?.textContent).toContain('No activities match your filters');
+    expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Change your dates or clear a filter.');
+    table.clearSearch(); await settle();
+    expect(root.querySelector('.activity-table-empty')).toBeNull();
+    stream.next([]); await render(c);
+    expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Try a wider date range.');
+    c.component.refresh(); await settle();
+    expect(c.component.loading()).toBe(true); expect(root.querySelector('.activity-table-empty')).toBeNull();
+    stream.error(new Error('unavailable')); await settle();
+    expect(c.component.historyError()).toBe(true); expect(root.querySelector('.activity-table-empty')).toBeNull();
+    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+    c.fixture.destroy();
+  });
+
+  it('keeps empty-result hints specific to date ranges and filters, including All dates', async () => {
+    const c = await setup();
+    c.events.getEventSummariesBy.mockReturnValue(of([])); await render(c);
+    const table = () => c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    expect(table().emptyHint).toBe('Try a wider date range.');
+    c.component.selectPeriod('year'); await render(c);
+    expect(table().emptyHint).toBe('Try a wider date range.');
+    c.component.selectTags(['Recovery']); await render(c);
+    expect(table().emptyMessage).toBe('No activities with this tag');
+    expect(table().emptyHint).toBe('Change your dates or clear a filter.');
+    c.component.selectTags([]); c.component.selectPeriod('all');
+    c.dialogs.at(-1)!.closed$.next(true); await render(c);
+    expect(table().emptyMessage).toBe('No activities to show'); expect(table().emptyHint).toBe('');
+    c.component.selectSports(['Cycling']); await render(c);
+    expect(table().emptyMessage).toBe('No activities match these filters');
+    expect(table().emptyHint).toBe('Change your dates or clear a filter.');
+    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('uses the real shared paginator, totals, full search and metric sorting without extra queries', async () => {
@@ -700,7 +775,7 @@ describe('ActivitiesPageComponent', () => {
       record.tags = [i < 6 ? 'Endurance' : 'Recovery'];
       return record;
     });
-    c.events.getEventsBy.mockReturnValue(of(data)); await render(c);
+    c.events.getEventSummariesBy.mockReturnValue(of(data)); await render(c);
     const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
     expect(c.fixture.nativeElement.querySelectorAll('mat-paginator')).toHaveLength(1);
     expect(table.data.paginator).toBe(table.paginator); expect(table.data.sort).toBe(table.sort);
@@ -719,7 +794,7 @@ describe('ActivitiesPageComponent', () => {
     const columns = c.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
     columns.selectedDataTypesChange.emit(['Duration', 'Distance']); await render(c);
     expect(c.userService.updateUserProperties).toHaveBeenCalled();
-    expect(c.events.getEventsBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
     expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
   });
@@ -730,13 +805,13 @@ describe('ActivitiesPageComponent', () => {
       const c = await setup(); await render(c);
       vi.setSystemTime(new Date(2026, 9, 22, 0, 1));
       c.component.selectPeriod('week'); await render(c);
-      expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
-      expect(c.events.getEventsBy.mock.lastCall[1]).toEqual([
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(c.events.getEventSummariesBy.mock.lastCall[1]).toEqual([
         { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 9, 16).getTime() },
         { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 9, 23).getTime() },
       ]);
       c.params$.next(convertToParamMap({ tag: 'Endurance', period: 'week' })); await render(c);
-      expect(c.events.getEventsBy).toHaveBeenCalledTimes(2);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     } finally { vi.useRealTimers(); }
   });
 });
@@ -823,4 +898,69 @@ describe('Activity filter picker Material integration', () => {
     expect(document.activeElement).toBe(trigger);
     expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
+  it('retains locked choices on clear, family toggles and attempted removal, including while searched', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [
+      { provide: AppHapticsService, useValue: haptics },
+      { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+    ] });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Excluded sports'); fixture.componentRef.setInput('allLabel', 'None excluded');
+    fixture.componentRef.setInput('searchLabel', 'Search sports');
+    fixture.componentRef.setInput('options', [
+      { value: 'Cycling', label: 'Cycling', disabled: true, description: 'Required exclusion' },
+      { value: 'Running', label: 'Running' }, { value: 'Yoga', label: 'Yoga', disabled: true },
+    ]);
+    fixture.componentRef.setInput('selectedValues', ['Cycling', 'Running']);
+    fixture.componentRef.setInput('shortcuts', [{ label: 'Family', values: ['Cycling', 'Running', 'Yoga'] }]);
+    const selected = vi.fn((values: string[]) => fixture.componentRef.setInput('selectedValues', values));
+    fixture.componentInstance.selectionChange.subscribe(selected);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle(); fixture.componentInstance.openPicker(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelector('[aria-label="Cycling"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(overlay.textContent).toContain('Required exclusion');
+    const lockedOption = overlay.querySelector('[aria-label="Cycling"]')!;
+    const descriptionId = lockedOption.getAttribute('aria-describedby');
+    expect(descriptionId).toBeTruthy();
+    expect(document.getElementById(descriptionId!)?.textContent).toBe('Required exclusion');
+    expect(overlay.querySelector('[aria-label="Running"]')?.hasAttribute('aria-describedby')).toBe(false);
+    fixture.componentInstance.search.set('run'); await settle();
+    fixture.componentInstance.clearSelection(); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling']);
+    fixture.componentInstance.toggleShortcut({ label: 'Family', values: ['Cycling', 'Running', 'Yoga'] }, true); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling', 'Running']);
+    fixture.componentInstance.toggleShortcut({ label: 'Family', values: ['Cycling', 'Running', 'Yoga'] }, false); await settle();
+    expect(selected).toHaveBeenLastCalledWith(['Cycling']);
+    const calls = selected.mock.calls.length;
+    fixture.componentInstance.clearSelection(); expect(selected).toHaveBeenCalledTimes(calls);
+    fixture.componentInstance.search.set(''); await settle();
+    const clear = [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Clear selection');
+    expect(clear?.disabled).toBe(true);
+  });
+
+  it('uses an accessible compact trigger and ignores disabled or unchanged selections', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [{ provide: AppHapticsService, useValue: haptics }] });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Sports'); fixture.componentRef.setInput('allLabel', 'All sports');
+    fixture.componentRef.setInput('searchLabel', 'Search sports'); fixture.componentRef.setInput('options', [{ value: 'Running', label: 'Running' }]);
+    fixture.componentRef.setInput('compact', true); fixture.componentRef.setInput('triggerLabel', 'Filter tile activities');
+    fixture.componentRef.setInput('disabled', true);
+    const emit = vi.spyOn(fixture.componentInstance.selectionChange, 'emit'); fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe('Filter tile activities: All sports');
+    expect(trigger.disabled).toBe(true); trigger.click(); fixture.componentInstance.openPicker();
+    fixture.componentInstance.toggleShortcut({ label: 'Running', values: ['Running'] }, true);
+    expect(emit).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges(); trigger.focus(); trigger.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges();
+    fixture.componentInstance.clearSelection(); fixture.componentInstance.toggleShortcut({ label: 'Running', values: ['Running'] }, true);
+    expect(emit).not.toHaveBeenCalled();
+    fixture.componentInstance.closePicker(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement === trigger || trigger.disabled).toBe(true);
+  });
+
 });

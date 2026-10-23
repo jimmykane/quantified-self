@@ -402,12 +402,13 @@ describe('Suunto route sync', () => {
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(enqueueRouteSyncQueueItemMock).toHaveBeenCalledTimes(2);
-    expect(enqueueRouteSyncQueueItemMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    // Asynchronous queue-ID hashing can reorder enqueue calls between recipients.
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenCalledWith(expect.objectContaining({
       providerUserId: 'shared-suunto-user',
       providerRouteId: 'shared-route',
       firebaseUserID: 'firebase-user-1',
     }));
-    expect(enqueueRouteSyncQueueItemMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenCalledWith(expect.objectContaining({
       providerUserId: 'shared-suunto-user',
       providerRouteId: 'shared-route',
       firebaseUserID: 'firebase-user-2',
@@ -470,19 +471,35 @@ describe('Suunto route sync', () => {
       'private-signature', 'private original error', 'firebase-user-1']) expect(logs).not.toContain(privateValue);
   });
 
-  it('identifies only the failed recipient when route fan-out partially succeeds', async () => {
-    resolvedWebhookUserIDs = ['firebase-user-1', 'firebase-user-2'];
+  it.each([
+    { order: 'forward', recipients: ['firebase-user-1', 'firebase-user-2'], failedUserID: 'firebase-user-1' },
+    { order: 'forward', recipients: ['firebase-user-1', 'firebase-user-2'], failedUserID: 'firebase-user-2' },
+    { order: 'reverse', recipients: ['firebase-user-2', 'firebase-user-1'], failedUserID: 'firebase-user-1' },
+    { order: 'reverse', recipients: ['firebase-user-2', 'firebase-user-1'], failedUserID: 'firebase-user-2' },
+  ])('identifies only $failedUserID with $order recipient order after partial fan-out', async ({ recipients, failedUserID }) => {
+    resolvedWebhookUserIDs = recipients;
     enqueueRouteSyncQueueItemMock.mockReset()
-      .mockResolvedValueOnce({ enqueued: true, queueItemId: 'ignored' })
-      .mockRejectedValueOnce(Object.assign(new Error('private failure'), { code: 'private-code' }));
+      .mockImplementation(async ({ firebaseUserID }: { firebaseUserID: string }) => {
+        if (firebaseUserID === failedUserID) {
+          throw Object.assign(new Error('private failure'), { code: 'private-code' });
+        }
+        return { enqueued: true, queueItemId: 'ignored' };
+      });
     const response = createWebhookResponse();
     await insertSuuntoAppRouteToQueue({ body: { username: 'shared-user', route: { id: 'shared-route' } },
       rawBody: Buffer.from('payload'), get: vi.fn(), headers: {} } as any, response as any);
-    const failedId = await buildRouteSyncQueueItemId(ServiceNames.SuuntoApp, 'shared-user', 'shared-route', 'firebase-user-2');
+    const failedId = await buildRouteSyncQueueItemId(ServiceNames.SuuntoApp, 'shared-user', 'shared-route', failedUserID);
+    const successfulUserID = recipients[0] === failedUserID ? recipients[1] : recipients[0];
+    const successfulId = await buildRouteSyncQueueItemId(ServiceNames.SuuntoApp, 'shared-user', 'shared-route', successfulUserID);
     expect(response.status).toHaveBeenCalledWith(500);
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith('[SuuntoRouteWebhook] Notification failed', expect.objectContaining({
       failedQueueItemIds: [failedId], errorCode: 'unknown',
     }));
+    expect(logger.info).toHaveBeenCalledWith('[SuuntoRouteWebhook] Queue result', {
+      notificationId: expect.stringMatching(/^[a-f0-9]{64}$/), queueItemId: successfulId, outcome: 'enqueued',
+    });
   });
 
   it('logs safe binding-lookup failures before a queue ID can be resolved', async () => {

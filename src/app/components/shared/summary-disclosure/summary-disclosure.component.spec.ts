@@ -1,20 +1,25 @@
 import { Component, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { describe, expect, it, vi } from 'vitest';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { SummaryDisclosureComponent } from './summary-disclosure.component';
 
-@Component({ standalone: true, imports: [SummaryDisclosureComponent], template: `
+@Component({ standalone: true, imports: [SummaryDisclosureComponent, NgTemplateOutlet], template: `
+  <ng-template #overview let-detailsControl="detailsControl">
+    <div class="inline-overview"><span>Source and coverage stay visible</span><ng-container [ngTemplateOutlet]="detailsControl" /></div>
+  </ng-template>
   <app-summary-disclosure title="Before & after" summaryId="sample" [scopeKey]="scope()" headline="Recorded differences"
-    [variant]="variant()" [headingLevel]="headingLevel()" [detailsAvailable]="details()">
+    [variant]="variant()" [headingLevel]="headingLevel()" [detailsAvailable]="details()" [plainOverviewTemplate]="inline() ? overview : null">
     <p summaryOverview>Source and coverage stay visible</p>
     <p summaryDetails>Before and after readings</p>
   </app-summary-disclosure>` })
 class ProjectedSummaryHost {
   readonly scope = signal('fixture');
   readonly details = signal(true);
-  readonly variant = signal<'flat' | 'rail'>('rail');
+  readonly variant = signal<'flat' | 'rail' | 'plain'>('rail');
+  readonly inline = signal(false);
   readonly headingLevel = signal<2 | 3 | 4>(2);
 }
 
@@ -39,9 +44,12 @@ describe('shared summary disclosure shell', () => {
     expect(host.querySelector('section')?.getAttribute('data-tone')).toBe('neutral');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
-  it('uses the Material disclosure with one feedback owner', async () => {
+  it.each(['flat', 'rail'] as const)('keeps the %s Material disclosure in its heading with one feedback owner', async variant => {
     const { fixture, host, haptics } = await render();
+    fixture.componentInstance.variant.set(variant); fixture.detectChanges();
     const button = host.querySelector('button')!;
+    expect(button.closest('.summary-disclosure-heading')).not.toBeNull();
+    expect(host.querySelector('.summary-disclosure-footer')).toBeNull();
     expect(button.getAttribute('aria-controls')).toBe('sample-details');
     button.click(); fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('true');
@@ -86,5 +94,55 @@ describe('shared summary disclosure shell', () => {
     expect(host.querySelector('h2')).toBeNull();
     expect(host.querySelectorAll('h4')).toHaveLength(1);
     expect(host.querySelector('h4')?.id).toBe('sample-title');
+  });
+  it('keeps only the disclosure control and projected readings in plain mode', async () => {
+    const { fixture, host, haptics } = await render();
+    fixture.componentInstance.variant.set('plain'); fixture.detectChanges();
+    const section = host.querySelector('section')!;
+    expect(section.classList.contains('summary-disclosure-plain')).toBe(true);
+    expect(section.getAttribute('aria-label')).toBe('Before & after');
+    expect(section.hasAttribute('aria-labelledby')).toBe(false);
+    expect(host.querySelector('h2, h3, h4, [role="status"]')).toBeNull();
+    expect(host.textContent).not.toContain('Before & after');
+    expect(host.textContent).not.toContain('Recorded differences');
+    expect(host.querySelector('[summaryOverview]')?.closest('[hidden]')).toBeNull();
+    const button = host.querySelector('button')!;
+    const overview = host.querySelector('[summaryOverview]')!;
+    const details = host.querySelector('#sample-details')!;
+    expect(host.querySelectorAll('button')).toHaveLength(1);
+    expect(section.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
+    expect(overview.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(details.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button.textContent).toContain('Show details');
+    button.click(); fixture.detectChanges();
+    expect(button.textContent).toContain('Hide details');
+    expect(button.getAttribute('aria-controls')).toBe('sample-details');
+    expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(false);
+    expect(section.lastElementChild).toBe(button.closest('.summary-disclosure-footer'));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    button.click(); fixture.detectChanges();
+    expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses one accessible plain control inside the overview without a footer row', async () => {
+    const { fixture, host, haptics } = await render();
+    fixture.componentInstance.variant.set('plain'); fixture.componentInstance.inline.set(true); fixture.detectChanges();
+    expect(host.querySelector('.summary-disclosure-footer')).toBeNull();
+    expect(host.querySelectorAll('button')).toHaveLength(1);
+    const button = host.querySelector<HTMLButtonElement>('.inline-overview button')!;
+    expect(button.getAttribute('aria-controls')).toBe('sample-details');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    button.click(); fixture.detectChanges();
+    expect(button.textContent).toContain('Hide details');
+    expect(host.querySelector<HTMLElement>('#sample-details')?.hidden).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.scope.set('another-recording'); fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.details.set(false); fixture.detectChanges();
+    expect(host.querySelector('button')).toBeNull();
+    expect(host.querySelector('#sample-details')).toBeNull();
   });
 });

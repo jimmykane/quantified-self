@@ -35,6 +35,7 @@ import {
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
+import { isActivityIdentityConflict } from './shared/activity-identity-conflict';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { inspectFitPayload, normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
@@ -950,6 +951,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
   }
 
   let oneSuccess = false;
+  let sourceIdentityConflict: Error | null = null;
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
   let retryableSuuntoFITPayloadError: RetryableSuuntoFITPayloadError | null = null;
@@ -1492,6 +1494,10 @@ async function parseHistoryGuardedWorkoutQueueItem(
       oneSuccess = true;
       break;
     } catch (e: any) {
+      if (isActivityIdentityConflict(e)) {
+        sourceIdentityConflict = e;
+        continue; // A legacy shared-provider row can still have another usable token.
+      }
       // @todo should delete event  or separate catch
       logger.error(e);
       if (isEventWriteSkippedForDeletedUserError(e)) {
@@ -1585,6 +1591,10 @@ async function parseHistoryGuardedWorkoutQueueItem(
       serviceName,
       bulkWriter,
     );
+  }
+
+  if (sourceIdentityConflict && !sawRetryableFailure) {
+    return moveToDeadLetterQueue(queueItem, sourceIdentityConflict, bulkWriter, 'ACTIVITY_IDENTITY_CONFLICT');
   }
 
   if (terminalAuthError && !sawRetryableFailure) {

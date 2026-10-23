@@ -1,4 +1,4 @@
-@if (variant() === 'compact') {
+@if (impact().availability !== 'private' && variant() === 'compact') {
   <span class="training-impact-compact" [class.training-impact-compact--unavailable]="!isReady()"
     [attr.aria-label]="compactAriaLabel()"
     [attr.aria-busy]="impact().availability === 'updating'"
@@ -13,7 +13,7 @@
       </span>
     }
   </span>
-} @else {
+} @else if (impact().availability !== 'private') {
   <section class="training-impact" [class.training-impact--summary]="variant() === 'summary'"
     [class.training-impact--strip]="variant() === 'strip'"
     [class.training-impact--session]="isSessionStrip()"
