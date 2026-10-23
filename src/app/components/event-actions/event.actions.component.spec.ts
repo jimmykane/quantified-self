@@ -17,9 +17,10 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventReprocessService, ReprocessError } from '../../services/app.event-reprocess.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventSharingService, SetEventSharingResponse } from '../../services/app.event-sharing.service';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { ApplicationRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { MatMenuModule } from '@angular/material/menu';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { By } from '@angular/platform-browser';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_ICON_DEFAULT_OPTIONS, MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -239,21 +240,75 @@ describe('EventActionsComponent', () => {
         });
 
     it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
-        'abandons %s when its summary owner changes during full hydration', async action => {
-            const full = component.event, owner = component.user;
-            component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+        'runs %s from summary identity without requiring malformed stats to hydrate', async action => {
+            component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000,
+                stats: { 'Average Power': 'malformed stored value' } } as any);
             component.event.originalFile = { path: 'source.fit' } as any;
-            const loaded = new Subject<any>();
-            mockEventService.getEventAndActivities.mockReturnValue(loaded);
+            mockEventService.getEventAndActivities.mockImplementation(() => { throw new Error('Cannot restore malformed source'); });
+            await component[action]();
+            const reprocess = action === 'reGenerateStatistics' ? mockEventReprocessService.regenerateEventStatistics
+                : mockEventReprocessService.reimportEventFromOriginalFiles;
+            expect(reprocess).toHaveBeenCalledWith(component.user, component.event, expect.any(Object));
+            expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+            expect(mockProcessingService.completeJob).toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+
+    it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
+        're-enables the rendered menu after %s confirmation is cancelled', async action => {
+            (component.event as any).originalFile = { path: 'source.fit' };
+            fixture.autoDetectChanges();
+            const trigger = fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+            trigger.openMenu();
+            fixture.detectChanges();
+            const selector = action === 'reGenerateStatistics' ? '.regenerate-stat-item' : '.reimport-stat-item';
+            const button = document.getElementById(trigger.menu!.panelId)!.querySelector<HTMLButtonElement>(selector)!;
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+
             const work = component[action]();
-            await vi.waitFor(() => expect(mockEventService.getEventAndActivities).toHaveBeenCalledWith(owner, 'event-123'));
-            component.user = { uid: 'other-owner' } as any;
-            loaded.next(full);
+            (component as any).changeDetectorRef.markForCheck();
+            fixture.detectChanges();
+            TestBed.inject(ApplicationRef).tick();
+            expect(button.disabled).toBe(true);
+            closed.next(false);
             await work;
+            await fixture.whenStable();
+
+            expect(button.disabled).toBe(false);
             expect(mockEventReprocessService.regenerateEventStatistics).not.toHaveBeenCalled();
             expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
-            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
-            expect(mockHapticsService.error).not.toHaveBeenCalled();
+            trigger.closeMenu();
+        });
+
+    it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
+        're-enables the rendered menu after %s fails', async action => {
+            (component.event as any).originalFile = { path: 'source.fit' };
+            fixture.autoDetectChanges();
+            const trigger = fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+            trigger.openMenu();
+            fixture.detectChanges();
+            const selector = action === 'reGenerateStatistics' ? '.regenerate-stat-item' : '.reimport-stat-item';
+            const button = document.getElementById(trigger.menu!.panelId)!.querySelector<HTMLButtonElement>(selector)!;
+            let fail!: (reason: Error) => void;
+            const reprocess = action === 'reGenerateStatistics' ? mockEventReprocessService.regenerateEventStatistics
+                : mockEventReprocessService.reimportEventFromOriginalFiles;
+            reprocess.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+
+            const work = component[action]();
+            await vi.waitFor(() => expect(reprocess).toHaveBeenCalledOnce());
+            (component as any).changeDetectorRef.markForCheck();
+            fixture.detectChanges();
+            TestBed.inject(ApplicationRef).tick();
+            expect(button.disabled).toBe(true);
+            fail(new ReprocessError('PARSE_FAILED', 'Source parsing failed'));
+            await work;
+            await fixture.whenStable();
+
+            expect(button.disabled).toBe(false);
+            expect(mockProcessingService.failJob).toHaveBeenCalled();
+            expect(mockHapticsService.error).toHaveBeenCalledOnce();
+            trigger.closeMenu();
         });
 
     it('abandons GPX generation when its summary changes while loading details', async () => {

@@ -279,12 +279,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        const event = await this.completeEvent(source, owner);
-        if (!event || !this.isCurrentEvent(source, owner)) {
-          this.processingService.removeJob(jobId);
-          return;
-        }
-        await this.eventReprocessService.regenerateEventStatistics(owner, event, {
+        await this.eventReprocessService.regenerateEventStatistics(owner, source, {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
@@ -293,7 +288,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
           duration: 2000,
         });
         this.hapticsService.success();
-        if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
       } catch (error) {
         this.processingService.failJob(jobId, 'Re-calculation failed');
         this.logger.error('[EventActionsComponent] Failed to re-calculate activity statistics', error);
@@ -304,6 +298,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.isReprocessing = false;
+      if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -334,12 +329,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        const event = await this.completeEvent(source, owner);
-        if (!event || !this.isCurrentEvent(source, owner)) {
-          this.processingService.removeJob(jobId);
-          return;
-        }
-        await this.eventReprocessService.reimportEventFromOriginalFiles(owner, event, {
+        await this.eventReprocessService.reimportEventFromOriginalFiles(owner, source, {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
@@ -348,7 +338,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
           duration: 2000,
         });
         this.hapticsService.success();
-        if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
       } catch (error) {
         this.processingService.failJob(jobId, 'Reimport failed');
         this.logger.error('[EventActionsComponent] Failed to reimport activity from source file', error);
@@ -359,6 +348,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.isReprocessing = false;
+      if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
     }
   }
 

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventUtilities } from '@sports-alliance/sports-lib';
+import { AppEventSummary } from '@shared/event-summary';
 
 import { AppEventReprocessService, ReprocessError, ReprocessProgress } from './app.event-reprocess.service';
 import { AppEventService } from './app.event.service';
@@ -17,6 +18,7 @@ describe('AppEventReprocessService', () => {
       activities: [{ getID: () => 'activity-1' }],
     };
     return {
+      toJSON: () => ({}),
       getID: vi.fn(() => 'event-1'),
       clearActivities: vi.fn(() => { state.activities = []; }),
       addActivities: vi.fn((activities: any[]) => { state.activities = activities; }),
@@ -98,6 +100,33 @@ describe('AppEventReprocessService', () => {
     expect(result.sourceFilesCount).toBe(2);
     expect(result.wasMultiFileSource).toBe(true);
   });
+
+  it.each(['regenerateEventStatistics', 'reimportEventFromOriginalFiles'] as const)(
+    'allows %s to repair a summary before any full hydration', async method => {
+      const summary = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+        stats: { 'Average Power': 'malformed stored value' } } as any);
+      summary.originalFiles = [{ path: 'source.fit' } as any];
+      const refreshed = makeSourceEvent();
+      let repaired = false;
+      functionsServiceMock.call.mockImplementation(async () => {
+        repaired = true;
+        return { data: { status: 'completed', sourceFilesCount: 1 } };
+      });
+      eventServiceMock.getEventAndActivities.mockImplementation(() => {
+        if (!repaired) throw new Error('Cannot restore malformed source');
+        return of(refreshed);
+      });
+
+      const result = await service[method]({ uid: 'u1' } as any, summary);
+
+      expect(functionsServiceMock.call).toHaveBeenCalledExactlyOnceWith('reprocessEvent', {
+        eventId: 'event-1', mode: method === 'regenerateEventStatistics' ? 'regenerate' : 'reimport',
+      });
+      expect(result.event).toBe(refreshed);
+      expect(eventServiceMock.getEventAndActivities).toHaveBeenCalledTimes(1);
+      expect(EventUtilities.reGenerateStatsForEvent).not.toHaveBeenCalled();
+      expect(() => summary.getStat('Average Power')).toThrow();
+    });
 
   it('should map backend skip reason NO_ORIGINAL_FILES to typed error', async () => {
     const event = makeTargetEvent();

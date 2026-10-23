@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { EventUtilities, User } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '@shared/app-event.interface';
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { AppEventService } from './app.event.service';
 import { AppFunctionsService } from './app.functions.service';
 
@@ -71,7 +72,7 @@ export class AppEventReprocessService {
 
   public async regenerateEventStatistics(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
     return this.executeReprocess(user, event, 'regenerate', options);
@@ -79,7 +80,7 @@ export class AppEventReprocessService {
 
   public async reimportEventFromOriginalFiles(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
     return this.executeReprocess(user, event, 'reimport', options);
@@ -87,7 +88,7 @@ export class AppEventReprocessService {
 
   private async executeReprocess(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     mode: ReprocessMode,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
@@ -131,11 +132,14 @@ export class AppEventReprocessService {
       throw new ReprocessError('PERSIST_FAILED', 'Could not load updated event after reprocessing.');
     }
 
-    this.syncEventReference(event, refreshedEvent);
+    // The callable needs only identity. Do not require an already broken source to hydrate before repair.
+    // Complete detail views retain their mutable model; list summaries are replaced by their live reader.
+    const resultEvent = isCompleteEvent(event) ? event : refreshedEvent;
+    if (isCompleteEvent(event)) this.syncEventReference(event, refreshedEvent);
     this.notifyProgress(options, { phase: 'done', progress: 100, details: 'Done' });
 
     return {
-      event,
+      event: resultEvent,
       sourceFilesCount: functionResult.sourceFilesCount,
       wasMultiFileSource: functionResult.sourceFilesCount > 1,
       preservedIsMerge: !!(event as any).isMerge,

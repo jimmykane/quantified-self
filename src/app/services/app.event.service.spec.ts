@@ -765,6 +765,35 @@ describe('AppEventService', () => {
         expect(result!.getID()).toBe('event1');
     });
 
+    it.each([
+        { value: undefined, expected: 1000 },
+        { value: null, expected: 1000 },
+        { value: 'invalid-date', expected: 1000 },
+        { value: 0, expected: 0 },
+        { value: 2000, expected: 2000 },
+        { value: '2026-10-23T00:00:00Z', expected: Date.parse('2026-10-23T00:00:00Z') },
+        { value: { seconds: 3, nanoseconds: 500000000 }, expected: 3500 },
+        { value: { seconds: 3 }, expected: 3000 },
+        { value: { seconds: 3, nanoseconds: null }, expected: 3000 },
+        { value: { toDate: () => new Date(4000) }, expected: 4000 },
+    ])('loads full action models with legacy file date $value without mutating snapshots', async ({ value, expected }) => {
+        const sourceFile = Object.freeze({ path: 'source.fit', startDate: value });
+        const source = { name: 'Run', startDate: new Date(1000), originalFiles: [sourceFile] };
+        mocks.getEventFromJSON.mockImplementation(json => createMockEvent(json));
+        mockFileService.toDate.mockImplementation(AppFileService.prototype.toDate);
+        (docData as Mock).mockReturnValue(of(source));
+        (collectionData as Mock).mockReturnValue(of([]));
+
+        const event = await firstValueFrom(service.getEventAndActivities({ uid: 'owner' } as any, 'event-id'));
+
+        expect(event?.getID()).toBe('event-id');
+        expect(event?.originalFiles?.[0].path).toBe('source.fit');
+        expect(event?.originalFiles?.[0].startDate).toEqual(new Date(expected));
+        expect(event?.originalFiles?.[0]).not.toBe(sourceFile);
+        expect(sourceFile.startDate).toBe(value);
+        expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
     it('should emit live event details updates when event metadata changes', async () => {
         const userId = 'user1';
         const eventId = 'event1';

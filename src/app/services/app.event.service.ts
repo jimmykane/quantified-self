@@ -304,19 +304,10 @@ export class AppEventService implements OnDestroy {
 
     if (rawData.originalFiles) {
       event.originalFiles = rawData.originalFiles.map((file: any) => {
-        if (file.startDate) {
-          // Convert Firestore Timestamp to Date
-          if (file.startDate.toDate && typeof file.startDate.toDate === 'function') {
-            file.startDate = file.startDate.toDate();
-          } else if (file.startDate.seconds !== undefined) {
-            file.startDate = new Date(file.startDate.seconds * 1000 + (file.startDate.nanoseconds || 0) / 1000000);
-          } else if (typeof file.startDate === 'string') {
-            file.startDate = new Date(file.startDate);
-          }
-        } else {
-          throw new Error('Event Metadata Error: Missing startDate for file ' + file.path);
-        }
-        return file;
+        const startDate = this.fileService.toDate(file.startDate);
+        // Legacy references can contain only a path; exports already use the recording date as fallback.
+        // Do not mutate Firestore snapshots while normalizing their metadata.
+        return { ...file, startDate: startDate && Number.isFinite(+startDate) ? startDate : event.startDate };
       });
     }
     if (rawData.originalFile) {

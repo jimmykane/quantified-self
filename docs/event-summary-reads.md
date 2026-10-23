@@ -98,12 +98,14 @@ source validation alone may call `getSourceSnapshot`. The adapter captures the p
 alias resolution and sport normalization, preserving the server fingerprint even for legacy or unknown fields.
 Optional metric reads do not rewrite that source. Committed patches and subsequent in-place metric edits are reflected
 without adding implicit lazy-derived fields. Never use that whole-source operation in row construction or caching.
+Full action reads normalize source-file dates on copies and fall back to the event date for legacy path-only references;
+missing optional metadata must not prevent an otherwise valid export or repaired-event refresh.
 
 | Area | Implemented behavior |
 | --- | --- |
 | Shared event reader | Dashboard resolver/listener, Activities, range tables, summary tiles and preview queries use explicit summary APIs. Dashboard captures revisions before duplicate filtering so metric-only document changes and in-place edits remain visible. Details and tools that need full models retain their readers. |
 | Event table | Reads selected metrics and memoizes display/sort cells on first access. Cache validation uses revisions for summaries and bounded metric values for full events, without formatting. Hidden-column search/sort and CSV still request their required cells. Settings and owner changes invalidate display context. |
-| Row actions and maps | GPX, benchmark and reprocess actions load complete events explicitly. Capture the event and owner before awaiting confirmation/loading; abandon stale work when the row, owner or component changes. Source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
+| Row actions and maps | GPX and benchmark actions load complete events explicitly. Reprocess sends the stable event ID to the existing backend before restoring the repaired result; malformed source stats must not block a repair. Complete detail models retain their refresh behavior. Capture the event and owner before awaiting confirmation/loading; abandon stale work before starting an action when its row, owner or component changes. Source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
 | Chart picker examples | Private deterministic seeds are shared across cards; the 18 example events use summaries without child models. Recovery's wall-clock context is rebuilt for every preview. |
 | Dashboard aggregation | One synchronous build/request shares normalized/filter-compatible inputs, chronological ordering, activity keys and timezone/interval bucket keys. Discard `EventStatAggregationContext` after each build; never retain it across live updates or owners. Auto interval selection scans endpoints without sorting. |
 | My Tracks | Home inference projects only persisted IDs, dates and valid start positions, with no metric construction. Detailed track/source loading remains full. |
