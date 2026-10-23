@@ -324,8 +324,16 @@ describe('EventCardComponent', () => {
         expect(snapshots$.observed).toBe(false);
     });
 
-    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('does not show or load Training impact for benchmark event details %j', classification => {
+    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('keeps benchmark HRV after performance charts without loading Training impact %j', classification => {
         mockTrainingImpactService.watch.mockClear();
+        mockPerformanceCurveDataService.getAvailability.mockReturnValue({
+            hasPowerCurve: true,
+            hasDurability: false,
+            durabilityOutputUnavailable: false,
+            hasCadencePower: false,
+            hasAny: true,
+        });
+        component.selectedActivitiesInstant.set([{ ...mockActivity }]);
         component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
         fixture.detectChanges();
 
@@ -334,6 +342,12 @@ describe('EventCardComponent', () => {
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
         expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
         expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
+        expect(Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(
+            'app-event-performance-charts, app-benchmark-rr',
+        )).map(element => element.tagName.toLowerCase())).toEqual([
+            'app-event-performance-charts',
+            'app-benchmark-rr',
+        ]);
     });
 
     it('keeps Training impact available for a combined multisport workout', () => {
