@@ -6184,6 +6184,8 @@ Guarded preparation owns saved-ID reuse and applies assignments only after its r
 generation supplies provisional IDs; only new legs keep them. The writer builds benchmark associations once, after
 preparation establishes final IDs. Explicit elevation corrections must pass strict matching for the same saved-ID
 pairing and remain eligible for the file's sport. Conflicting evidence cannot transfer a correction to another leg.
+ID binding changes only IDs and source associations; it does not rebuild recorded statistics. Correction handling owns
+its stricter validation and runs the additional match only when saved elevation corrections exist.
 
 The reservation passes verified IDs in memory to Training finalization. This preserves zero overrides, exclusions and
 saved policies across sport revisions without trusting arbitrary reused IDs. Source-write IDs, full source fingerprints,

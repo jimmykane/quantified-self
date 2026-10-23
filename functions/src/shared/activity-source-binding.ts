@@ -1,4 +1,4 @@
-import { DataActivityTypes, type ActivityInterface, type EventInterface } from '@sports-alliance/sports-lib';
+import type { ActivityInterface, EventInterface } from '@sports-alliance/sports-lib';
 import { readActivitySourceIdentity, type ActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { getActivitySourceWindow, resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
 import { ActivityIdentityConflictError } from './activity-identity-conflict';
@@ -22,8 +22,7 @@ export function savedActivityIdentity(document: SavedActivitySource): ActivityId
 
 export interface ActivityBindingPlan {
   verifiedActivityIds: ReadonlySet<string>;
-  strictAssignments: ReadonlyMap<number, number>;
-  activityTypes: readonly string[];
+  assignments: ReadonlyMap<number, number>;
   apply(): void;
 }
 
@@ -65,20 +64,12 @@ export function prepareActivitySourceBindings(event: EventInterface, documents: 
     return { activity, id: ids[index]!, sourceIdentity, saved };
   });
   const verifiedActivityIds = new Set([...matches.assignments.values()].map(index => documents[index].id));
-  const strictAssignments = resolveActivityIdentityAssignments(before, activities as ActivityIdentityLike[], {
-    requireStrictMatch: true, allowSourceWindowMatch: options.allowSourceWindowMatch,
-  }).assignments;
-  // Corrections may validate the chosen ID pairing, never independently choose a different saved leg.
-  strictAssignments.forEach((existingIndex, parsedIndex) => {
-    if (matches.assignments.get(parsedIndex) !== existingIndex) strictAssignments.delete(parsedIndex);
-  });
-  return { verifiedActivityIds, strictAssignments, activityTypes: activities.map(activity => activity.type), apply: () => {
+  return { verifiedActivityIds, assignments: matches.assignments, apply: () => {
     bindings.forEach(({ activity, id, sourceIdentity, saved }) => {
       activity.setID(id);
       (activity as ActivityInterface & { sourceIdentity: ActivitySourceIdentity }).sourceIdentity = sourceIdentity;
       if (saved?.sourceActivityKey && !(activity as ActivityIdentityLike).sourceActivityKey)
         (activity as ActivityIdentityLike).sourceActivityKey = saved.sourceActivityKey;
     });
-    event.addStat(new DataActivityTypes(activities.map(activity => activity.type)));
   } };
 }

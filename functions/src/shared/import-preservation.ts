@@ -3,7 +3,7 @@ import type { EventInterface } from '@sports-alliance/sports-lib';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
-import { getActivitySourceWindow } from './activity-identity-matcher';
+import { getActivitySourceWindow, resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
 import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { prepareActivitySourceBindings, savedActivityIdentity, type SavedActivitySource, type ActivityBindingPlan } from './activity-source-binding';
 import { ActivityIdentityConflictError } from './activity-identity-conflict';
@@ -51,14 +51,18 @@ export function preserveImportedActivityEdits(incoming: admin.firestore.Document
 /** Bind corrections only to strict source identities, never the device-name fallback. */
 function prepareAscentCarryover(event: EventInterface,
   documents: Array<Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>>,
-  binding: ActivityBindingPlan): () => void {
+  binding: ActivityBindingPlan, allowSourceWindowMatch = false): () => void {
   const corrected = documents.flatMap((document, index) => ACTIVITY_ELEVATION_METRICS.map(metric => ({
     index, metric, correction: readAscentCorrection(document.data()[activityElevationMetric(metric).field]),
   }))).filter(item => item.correction !== null);
   if (!corrected.length) return () => undefined;
+  const activities = event.getActivities();
+  const strictAssignments = resolveActivityIdentityAssignments(documents.map(savedActivityIdentity),
+    activities as ActivityIdentityLike[], { requireStrictMatch: true, allowSourceWindowMatch }).assignments;
   const assignments = corrected.map(item => {
-    const match = [...binding.strictAssignments].find(([, existingIndex]) => existingIndex === item.index);
-    if (!match || !isTerrainAscentActivity(binding.activityTypes[match[0]]))
+    const match = [...strictAssignments].find(([, existingIndex]) => existingIndex === item.index);
+    // A correction can validate the chosen ID pairing, never choose a different saved leg.
+    if (!match || binding.assignments.get(match[0]) !== item.index || !isTerrainAscentActivity(activities[match[0]].type))
       throw new ActivityIdentityConflictError();
     return { parsedIndex: match[0], metric: item.metric, correction: item.correction };
   });
@@ -126,7 +130,7 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
     const plan = prepareActivitySourceBindings(event, sourceDocs, {
       allowSourceWindowMatch: true, allowNewActivities: true, allowRemovedActivities: true,
     });
-    const corrected = prepareAscentCarryover(event, sourceDocs, plan);
+    const corrected = prepareAscentCarryover(event, sourceDocs, plan, true);
     verifiedActivityIds = plan.verifiedActivityIds;
     apply = () => { plan.apply(); corrected(); };
     return verifiedActivityIds;
@@ -180,6 +184,6 @@ async function prepareImportedActivityIdentities(
   const verifiedProvider = !!providerMetadata && isSameProviderRecording(provider?.data(), providerMetadata);
   const plan = prepareActivitySourceBindings(event, documents, { allowSourceWindowMatch: verifiedProvider,
     allowNewActivities: firstImport || !documents.length });
-  const applyAscent = prepareAscentCarryover(event, documents, plan);
+  const applyAscent = prepareAscentCarryover(event, documents, plan, verifiedProvider);
   return { ...plan, apply: () => { plan.apply(); applyAscent(); } };
 }
