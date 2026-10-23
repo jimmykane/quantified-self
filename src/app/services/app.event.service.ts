@@ -2048,7 +2048,7 @@ export class AppEventService implements OnDestroy {
       }
     }
     const event: EventRead = summary
-      ? new AppEventSummary({ ...sanitizedJson, id: queryDocumentSnapshot.id })
+      ? new AppEventSummary({ ...sanitizedJson, id: queryDocumentSnapshot.id }, eventSnapshot)
       : normalizePersistedEventMetricSemantics(
         EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id),
       ) as AppEventInterface;

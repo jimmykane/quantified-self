@@ -72,6 +72,7 @@ describe('EventActionsComponent', () => {
             )),
             getEventMetaData: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
+            getEventAndActivities: vi.fn(),
         };
         mockEventReprocessService = {
             regenerateEventStatistics: vi.fn().mockResolvedValue({ event: null }),
@@ -82,6 +83,7 @@ describe('EventActionsComponent', () => {
             updateJob: vi.fn(),
             completeJob: vi.fn(),
             failJob: vi.fn(),
+            removeJob: vi.fn(),
         };
         mockFileService = {
             downloadAsZip: vi.fn(),
@@ -218,6 +220,75 @@ describe('EventActionsComponent', () => {
         await component.editAscent();
         closed.next({ activityId: 'hike', metric: 'ascent', value: 0, eventValue: 0, correction: { value: 0, sourceValue: 100 } });
         expect(component.event.getStat('Ascent')?.getValue()).toBe(0);
+    });
+
+    it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
+        'does not retarget %s when the row changes during confirmation', async action => {
+            (component.event as any).originalFile = { path: 'source.fit' };
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+            const work = component[action]();
+            component.event = { ...component.event, getID: () => 'other-event' } as any;
+            closed.next(true);
+            await work;
+            expect(mockEventService.getEventAndActivities).not.toHaveBeenCalled();
+            expect(mockEventReprocessService.regenerateEventStatistics).not.toHaveBeenCalled();
+            expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
+            expect(mockProcessingService.addJob).not.toHaveBeenCalled();
+            expect(component.isReprocessing).toBe(false);
+        });
+
+    it.each(['reGenerateStatistics', 'reImportActivityFromFile'] as const)(
+        'abandons %s when its summary owner changes during full hydration', async action => {
+            const full = component.event, owner = component.user;
+            component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+            component.event.originalFile = { path: 'source.fit' } as any;
+            const loaded = new Subject<any>();
+            mockEventService.getEventAndActivities.mockReturnValue(loaded);
+            const work = component[action]();
+            await vi.waitFor(() => expect(mockEventService.getEventAndActivities).toHaveBeenCalledWith(owner, 'event-123'));
+            component.user = { uid: 'other-owner' } as any;
+            loaded.next(full);
+            await work;
+            expect(mockEventReprocessService.regenerateEventStatistics).not.toHaveBeenCalled();
+            expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+
+    it('abandons GPX generation when its summary changes while loading details', async () => {
+        const full = component.event;
+        component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+        const loaded = new Subject<any>();
+        mockEventService.getEventAndActivities.mockReturnValue(loaded);
+        const work = component.downloadGPX();
+        component.event = full;
+        loaded.next(full);
+        await work;
+        expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
+        expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
+    });
+
+    it('does not start a GPX export if a complete event changes before the action resumes', async () => {
+        const work = component.downloadGPX();
+        component.user = { uid: 'other-owner' } as any;
+        await work;
+        expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
+        expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+    });
+
+    it('does not serve a GPX or use a new row filename after the export finishes for an old row', async () => {
+        let finish!: (blob: Blob) => void;
+        mockEventService.getEventAsGPXBloB.mockReturnValue(new Promise<Blob>(resolve => finish = resolve));
+        const work = component.downloadGPX();
+        await vi.waitFor(() => expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledOnce());
+        component.event = { ...component.event, getID: () => 'other-event' } as any;
+        finish(new Blob());
+        await work;
+        expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
     });
 
     it('opens an owned activity selection without starting provider delivery', async () => {

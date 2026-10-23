@@ -94,14 +94,16 @@ const events$ = eventService.getEventSummariesBy(user, whereClauses, 'startDate'
 collection or full-event mutators. A source revision identifies each restored snapshot, while the bounded set of
 already requested metric instances is observed for in-place value changes. `applySavedStat` reflects an already
 committed elevation patch locally, including zero and removal; it does not write to Firestore. Existing Training
-source validation alone may call `getSourceSnapshot`, which copies raw stats and excludes implicit lazy-derived
-fields. Never use that whole-source operation in row construction or caching.
+source validation alone may call `getSourceSnapshot`. The adapter captures the persisted stats before sanitization,
+alias resolution and sport normalization, preserving the server fingerprint even for legacy or unknown fields.
+Optional metric reads do not rewrite that source. Committed patches and subsequent in-place metric edits are reflected
+without adding implicit lazy-derived fields. Never use that whole-source operation in row construction or caching.
 
 | Area | Implemented behavior |
 | --- | --- |
-| Shared event reader | Dashboard resolver/listener, Activities, range tables, summary tiles and preview queries use explicit summary APIs. Details and tools that need full models retain their readers. |
+| Shared event reader | Dashboard resolver/listener, Activities, range tables, summary tiles and preview queries use explicit summary APIs. Dashboard captures revisions before duplicate filtering so metric-only document changes and in-place edits remain visible. Details and tools that need full models retain their readers. |
 | Event table | Reads selected metrics and memoizes display/sort cells on first access. Cache validation uses revisions for summaries and bounded metric values for full events, without formatting. Hidden-column search/sort and CSV still request their required cells. Settings and owner changes invalidate display context. |
-| Row actions and maps | GPX, benchmark and reprocess actions load complete events explicitly; source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
+| Row actions and maps | GPX, benchmark and reprocess actions load complete events explicitly. Capture the event and owner before awaiting confirmation/loading; abandon stale work when the row, owner or component changes. Source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
 | Chart picker examples | Private deterministic seeds are shared across cards; the 18 example events use summaries without child models. Recovery's wall-clock context is rebuilt for every preview. |
 | Dashboard aggregation | One synchronous build/request shares normalized/filter-compatible inputs, chronological ordering, activity keys and timezone/interval bucket keys. Discard `EventStatAggregationContext` after each build; never retain it across live updates or owners. Auto interval selection scans endpoints without sorting. |
 | My Tracks | Home inference projects only persisted IDs, dates and valid start positions, with no metric construction. Detailed track/source loading remains full. |

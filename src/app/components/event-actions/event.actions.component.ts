@@ -259,6 +259,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.isReprocessing) {
       return;
     }
+    const source = this.event, owner = this.user;
     try {
       this.isReprocessing = true;
       const confirmed = await this.confirmReprocessAction({
@@ -267,7 +268,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Regenerate',
         confirmColor: 'primary',
       });
-      if (!confirmed) {
+      if (!confirmed || !this.isCurrentEvent(source, owner)) {
         return;
       }
 
@@ -278,7 +279,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.regenerateEventStatistics(this.user, await this.completeEvent(), {
+        const event = await this.completeEvent(source, owner);
+        if (!event || !this.isCurrentEvent(source, owner)) {
+          this.processingService.removeJob(jobId);
+          return;
+        }
+        await this.eventReprocessService.regenerateEventStatistics(owner, event, {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
@@ -287,7 +293,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
           duration: 2000,
         });
         this.hapticsService.success();
-        this.changeDetectorRef.detectChanges();
+        if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
       } catch (error) {
         this.processingService.failJob(jobId, 'Re-calculation failed');
         this.logger.error('[EventActionsComponent] Failed to re-calculate activity statistics', error);
@@ -305,6 +311,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.isReprocessing || !this.canReimportFromOriginalFile()) {
       return;
     }
+    const source = this.event, owner = this.user;
     try {
       this.isReprocessing = true;
       const sourceFilesCount = this.getSourceFilesCount();
@@ -316,7 +323,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Reimport',
         confirmColor: 'primary',
       });
-      if (!confirmed) {
+      if (!confirmed || !this.isCurrentEvent(source, owner)) {
         return;
       }
 
@@ -327,7 +334,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, await this.completeEvent(), {
+        const event = await this.completeEvent(source, owner);
+        if (!event || !this.isCurrentEvent(source, owner)) {
+          this.processingService.removeJob(jobId);
+          return;
+        }
+        await this.eventReprocessService.reimportEventFromOriginalFiles(owner, event, {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
@@ -336,7 +348,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
           duration: 2000,
         });
         this.hapticsService.success();
-        this.changeDetectorRef.detectChanges();
+        if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
       } catch (error) {
         this.processingService.failJob(jobId, 'Reimport failed');
         this.logger.error('[EventActionsComponent] Failed to reimport activity from source file', error);
@@ -431,22 +443,30 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   //   // });
   // }
 
-  private async completeEvent() {
-    if (isCompleteEvent(this.event)) return this.event;
-    const source = this.event, owner = this.user;
+  private isCurrentEvent(source: EventRead, owner: User): boolean {
+    return !this.destroyRef.destroyed && this.event === source && this.user?.uid === owner?.uid;
+  }
+
+  private async completeEvent(source: EventRead, owner: User) {
+    if (!this.isCurrentEvent(source, owner)) return null;
+    if (isCompleteEvent(source)) return source;
     const event = await firstValueFrom(this.eventService.getEventAndActivities(owner, source.getID()));
-    if (this.destroyRef.destroyed || this.event !== source || this.user?.uid !== owner.uid) throw new Error('Activity selection changed');
+    if (!this.isCurrentEvent(source, owner)) return null;
     if (!event) throw new Error('Activity no longer exists');
     return event;
   }
 
   async downloadGPX() {
+    const source = this.event, owner = this.user;
     this.hapticsService.selection();
     try {
-      const blob = await this.eventService.getEventAsGPXBloB(this.user, await this.completeEvent());
+      const event = await this.completeEvent(source, owner);
+      if (!event || !this.isCurrentEvent(source, owner)) return;
+      const blob = await this.eventService.getEventAsGPXBloB(owner, event);
+      if (!this.isCurrentEvent(source, owner)) return;
       this.fileService.downloadFile(
         blob,
-        this.getFileName(this.event),
+        this.getFileName(source),
         new EventExporterGPX().fileExtension,
       );
       this.analyticsService.logEvent('downloaded_gpx_file');
@@ -455,6 +475,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       });
       this.hapticsService.success();
     } catch (error) {
+      if (!this.isCurrentEvent(source, owner)) return;
       this.logger.error('[EventActionsComponent] Failed to download GPX from original files', error);
       this.snackBar.open('Could not download GPX file', undefined, {
         duration: 3000,

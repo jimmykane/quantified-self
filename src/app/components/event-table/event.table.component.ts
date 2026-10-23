@@ -438,11 +438,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     event.preventDefault();
 
     const user = this.user;
-    const ownerID = (this.targetUser || user)?.uid;
+    const owner = this.targetUser || user;
+    const ownerID = owner?.uid;
     const isCurrent = () => !this.destroyed && this.user?.uid === user?.uid && (this.targetUser || this.user)?.uid === ownerID;
     let appEvent;
     try {
-      appEvent = await this.loadCompleteEvent(eventRead);
+      appEvent = await this.loadCompleteEvent(eventRead, owner);
     } catch (error) {
       if (!isCurrent()) return;
       this.logger.error('Could not load activity for benchmark', error);
@@ -760,17 +761,20 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  private async loadCompleteEvent(event: EventRead) {
+  private async loadCompleteEvent(event: EventRead, owner: User) {
     if (isCompleteEvent(event)) {
       // Full readers can be passed through; summaries must be fetched explicitly.
       return event;
     }
-    const fullEvent = await firstValueFrom(this.eventService.getEventAndActivities(this.targetUser || this.user, event.getID()));
+    const fullEvent = await firstValueFrom(this.eventService.getEventAndActivities(owner, event.getID()));
     if (!fullEvent) throw new Error('Activity no longer exists');
     return fullEvent;
   }
 
   public async downloadGPXSelection() {
+    const viewer = this.user, owner = this.targetUser || viewer;
+    const isCurrent = () => !this.destroyed && this.user?.uid === viewer?.uid
+      && (this.targetUser || this.user)?.uid === owner?.uid;
     const jobId = this.processingService.addJob('download', 'Preparing GPX export...');
 
     try {
@@ -794,17 +798,34 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       let completed = 0;
 
       for (const event of selectedEvents) {
+        if (!isCurrent()) {
+          this.processingService.removeJob(jobId);
+          return;
+        }
         const eventDate = this.fileService.toDate(event.startDate);
         const eventId = event.getID ? event.getID() : null;
 
         try {
-          const data = await this.eventService.getEventAsGPXBloB(this.targetUser || this.user, await this.loadCompleteEvent(event));
+          const fullEvent = await this.loadCompleteEvent(event, owner);
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
+          const data = await this.eventService.getEventAsGPXBloB(owner, fullEvent);
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
           generatedFiles.push({ data, eventDate, eventId });
           if (eventDate) {
             if (!minDate || eventDate < minDate) minDate = eventDate;
             if (!maxDate || eventDate > maxDate) maxDate = eventDate;
           }
         } catch (error) {
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
           failedCount++;
           this.logger.error('Failed to export GPX for selected event:', eventId, error);
         }

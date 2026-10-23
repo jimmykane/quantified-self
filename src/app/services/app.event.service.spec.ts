@@ -485,7 +485,7 @@ describe('AppEventService', () => {
     it('seeds lazy summaries independently of complete events and preserves QS metadata', async () => {
         const user = { uid: 'summary-owner' } as any;
         const eventDoc = createQueryDoc('summary-id', { name: 'Run', startDate: 1710000000000,
-            endDate: 1710001000000, stats: { Distance: 0, 'Activity Types': ['Running'] },
+            endDate: 1710001000000, stats: { Distance: 0, 'Activity Types': ['Running'], 'Vendor Metric': 42 },
             tags: ['Easy'], originalFiles: [{ path: 'source.fit' }], mergeType: 'multi', });
         (getDocs as Mock).mockResolvedValue({ docs: [eventDoc], size: 1, metadata: { fromCache: false } });
         (onSnapshot as Mock).mockImplementation((_query, _options, next) => {
@@ -499,6 +499,7 @@ describe('AppEventService', () => {
         expect(live[0].tags).toEqual(['Easy']);
         expect(live[0].originalFiles).toEqual([{ path: 'source.fit' }]);
         expect(live[0].getDistance()?.getValue()).toBe(0);
+        expect(live[0].getSourceSnapshot?.().stats['Vendor Metric']).toBe(42);
         expect('toJSON' in live[0]).toBe(false);
         expect(mocks.getEventFromJSON).not.toHaveBeenCalled();
         const full = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));

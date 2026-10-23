@@ -3,6 +3,7 @@ import { DataDistance, DataSpeedAvg, DataPaceAvg, DynamicDataLoader } from '@spo
 import { FileType, Privacy } from '@sports-alliance/sports-lib';
 import { AppEventSummary } from '@shared/event-summary';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { serializeTrainingLoadSource } from '@shared/training-load-source';
 
 const read = () => new AppEventSummary({ id: 'summary', name: 'Run', startDate: 0, endDate: 1000,
   srcFileType: FileType.FIT, privacy: Privacy.Private, description: null, isMerge: false,
@@ -56,6 +57,36 @@ describe('QS event summary reader', () => {
     event.applySavedStat('Ascent', null);
     expect(event.getStat('Ascent')).toBeUndefined();
     expect(event.getSourceSnapshot().stats).not.toHaveProperty('Ascent');
+  });
+
+  it.each([
+    { 'Activity Types': ['Swimming'], 'Average Cadence': 30 },
+    { 'Activity Types': ['Diving'], Ascent: 12, Descent: 15 },
+    { 'Activity Types': ['Running'], 'Stance Time': 200 },
+  ])('preserves persisted fingerprint fields through semantic normalization: %j', stats => {
+    const source = { name: 'Source', startDate: 1000, endDate: 2000, stats };
+    const event = new AppEventSummary(source as any);
+    expect(serializeTrainingLoadSource(event.getSourceSnapshot())).toBe(serializeTrainingLoadSource(source));
+    event.getStat('Average Stroke Rate');
+    event.getStat('Average Pace');
+    event.getStat('Ground Contact Time');
+    expect(serializeTrainingLoadSource(event.getSourceSnapshot())).toBe(serializeTrainingLoadSource(source));
+  });
+
+  it('captures unsanitized source fields separately without exposing them as metrics or sharing mutable snapshots', () => {
+    const source = { type: 'recording', stats: { Distance: 1000, 'Vendor Metric': { samples: [1, 2] } } };
+    const event = new AppEventSummary({ name: 'Source', startDate: 1000, endDate: 2000,
+      stats: { Distance: 1000 } } as any, source);
+    source.stats['Vendor Metric'].samples[0] = 9;
+    const snapshot = event.getSourceSnapshot();
+    expect(snapshot).toEqual({ startDate: 1000, endDate: 2000, type: 'recording',
+      stats: { Distance: 1000, 'Vendor Metric': { samples: [1, 2] } } });
+    (snapshot.stats['Vendor Metric'] as { samples: number[] }).samples[0] = 7;
+    expect(event.getSourceSnapshot().stats['Vendor Metric']).toEqual({ samples: [1, 2] });
+    expect(event.getDistance()?.getValue()).toBe(1000);
+    event.getDistance()!.setValue(2000);
+    event.getReadRevision([]);
+    expect(event.getSourceSnapshot().stats.Distance).toBe(2000);
   });
 
 });

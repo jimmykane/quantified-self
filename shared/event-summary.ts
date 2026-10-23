@@ -25,11 +25,17 @@ export class AppEventSummary implements EventRead {
   srcFileType: EventSummary['srcFileType'];
   private readonly sourceRevision = ++nextRevision;
   private metricRevision = 0;
-  private readonly observed = new Map<string, { stat: DataInterface<unknown>; value: string | undefined }>();
+  private readonly observed = new Map<string, { stat: DataInterface<unknown>; value: string | undefined; initialValue: string | undefined }>();
   private readonly summary: EventSummary;
   private readonly savedStats = new Map<string, DataInterface | undefined>();
+  private readonly sourceStatsJSON: string;
+  private readonly sourceType: unknown;
 
-  constructor(json: EventSummaryJSONInterface) {
+  constructor(json: EventSummaryJSONInterface, source: { stats?: unknown; type?: unknown } = json) {
+    // Fingerprints describe persisted input, including aliases and fields excluded by display semantics.
+    // Capture it once, before Sports Lib normalizes the read model; never serialize it per row render.
+    this.sourceStatsJSON = JSON.stringify(source.stats ?? {});
+    this.sourceType = source.type ?? null;
     this.summary = EventSummary.fromJSON(json);
     this.name = this.summary.name;
     this.description = this.summary.description;
@@ -45,7 +51,8 @@ export class AppEventSummary implements EventRead {
   getStat<TValue = DefaultDataValue>(type: string): DataInterface<TValue> | undefined {
     const stat = this.savedStats.has(type) ? this.savedStats.get(type) as DataInterface<TValue> | undefined : this.summary.getStat<TValue>(type);
     if (stat && !this.observed.has(stat.getType())) {
-      this.observed.set(stat.getType(), { stat, value: JSON.stringify(stat.getValue()) });
+      const value = JSON.stringify(stat.getValue());
+      this.observed.set(stat.getType(), { stat, value, initialValue: value });
     }
     return stat;
   }
@@ -71,16 +78,18 @@ export class AppEventSummary implements EventRead {
   }
 
   getSourceSnapshot() {
-    const stats = this.summary.getRawStats();
-    this.observed.forEach(({ stat }, type) => {
-      // Optional derived reads must never add a new field to the recorded source fingerprint.
-      if (Object.prototype.hasOwnProperty.call(stats, type)) stats[type] = stat.getValue() as typeof stats[string];
+    const stats: EventSummaryJSONInterface['stats'] = JSON.parse(this.sourceStatsJSON);
+    this.observed.forEach(({ stat, initialValue }, type) => {
+      // Reading/normalizing a metric is not a source edit, and derived reads cannot add source fields.
+      if (Object.prototype.hasOwnProperty.call(stats, type) && JSON.stringify(stat.getValue()) !== initialValue) {
+        stats[type] = stat.getValue() as typeof stats[string];
+      }
     });
     this.savedStats.forEach((stat, type) => {
       if (stat) stats[type] = stat.getValue();
       else delete stats[type];
     });
-    return { startDate: +this.startDate, endDate: +this.endDate, stats };
+    return { startDate: +this.startDate, endDate: +this.endDate, type: this.sourceType, stats };
   }
 
   getReadRevision(_types: readonly string[]): string {

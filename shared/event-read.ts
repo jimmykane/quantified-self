@@ -16,7 +16,7 @@ export interface EventRead extends Pick<EventInterface,
   /** Reflect an already committed scalar patch in the local summary. Never persists it. */
   applySavedStat?(type: string, value: number | null): void;
   /** Only for existing whole-source fingerprint validation, never row caching or display. */
-  getSourceSnapshot?(): Pick<EventJSONInterface, 'startDate' | 'endDate' | 'stats'>;
+  getSourceSnapshot?(): Pick<EventJSONInterface, 'startDate' | 'endDate' | 'stats'> & { type?: unknown };
   /** Summary revision also observes mutations of metrics already requested by the consumer. */
   getReadRevision?(types: readonly string[]): string;
 }

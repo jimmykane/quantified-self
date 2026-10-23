@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DashboardComponent } from './dashboard.component';
+import { AppEventSummary } from '@shared/event-summary';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -1561,6 +1562,47 @@ describe('DashboardComponent', () => {
         } as any;
 
         expect((component as any).areEventsEquivalentByIdentity([previous], [current])).toBe(false);
+    });
+
+    it('applies metric-only source updates and in-place summary revisions while reusing unchanged emissions', async () => {
+        const json = { id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any;
+        const original = new AppEventSummary(json);
+        const resolved = [original];
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = resolved;
+        const live = new BehaviorSubject([original]);
+        mockEventService.getEventSummariesBy.mockReturnValue(live);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.events).toBe(resolved);
+
+        const changed = new AppEventSummary({ ...json, stats: { ...json.stats, Distance: 2000 } });
+        live.next([changed]);
+        expect(component.events[0]).toBe(changed);
+        expect(component.events[0].getDistance()?.getValue()).toBe(2000);
+        const beforeEdit = component.events;
+
+        changed.getDistance()!.setValue(3000);
+        live.next([changed]);
+        expect(component.events).not.toBe(beforeEdit);
+        expect(component.events[0].getDistance()?.getValue()).toBe(3000);
+        const afterEdit = component.events;
+        live.next([changed]);
+        expect(component.events).toBe(afterEdit);
+    });
+
+    it('reconciles resolver data when the first live snapshot changes only metrics', async () => {
+        const json = { id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any;
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [new AppEventSummary(json)];
+        const current = new AppEventSummary({ ...json, stats: { ...json.stats, Distance: 2000 } });
+        mockEventService.getEventSummariesBy.mockReturnValue(of([current]));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.events[0]).toBe(current);
+        expect(component.events[0].getDistance()?.getValue()).toBe(2000);
     });
 
     it('should restore previous state when persisting dashboard search fails', async () => {

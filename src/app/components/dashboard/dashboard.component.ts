@@ -296,7 +296,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return this.eventService
         .getEventSummariesBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          distinctUntilChanged((p: EventRead[], c: EventRead[]) => this.areEventsEquivalentByIdentity(p, c)),
+          // Capture revisions at emission time: a later in-place edit also mutates the prior object.
+          map((events: EventRead[]) => ({ events, revisions: events.map(event => event.getReadRevision?.([])) })),
+          distinctUntilChanged((previous, current) => this.areEventsEquivalentByIdentity(previous.events, current.events)
+            && previous.revisions.every((revision, index) => revision === current.revisions[index])),
+          map(({ events }) => events),
           map((eventsArray: EventRead[]) => {
             if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
               this.initialLiveReconcilePending = false;
@@ -1393,6 +1397,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return previousEvents.every((previousEvent, index) => {
       const currentEvent = currentEvents[index];
       return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
+        && previousEvent?.getReadRevision?.([]) === currentEvent?.getReadRevision?.([])
         && previousEvent?.name === currentEvent?.name
         && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent)
         && JSON.stringify(getEventTags(previousEvent as EventRead))

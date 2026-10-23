@@ -2129,6 +2129,41 @@ describe('EventTableComponent', () => {
     });
 
     describe('downloadGPXSelection', () => {
+        it('stops a summary batch before exporting or loading another ID after an owner change', async () => {
+            const loaded = new Subject<any>();
+            mockEventService.getEventAndActivities = vi.fn().mockReturnValue(loaded);
+            for (const id of ['event-1', 'event-2']) {
+                const event = new AppEventSummary({ id, name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+                component.selection.select({ Event: event } as any);
+            }
+            const owner = component.user;
+            const work = component.downloadGPXSelection();
+            expect(mockEventService.getEventAndActivities).toHaveBeenCalledExactlyOnceWith(owner, 'event-1');
+            component.targetUser = { uid: 'other-owner' } as any;
+            loaded.next(new MockEvent('event-1'));
+            await work;
+            expect(mockEventService.getEventAndActivities).toHaveBeenCalledTimes(1);
+            expect(mockEventService.getEventAsGPXBloB).not.toHaveBeenCalled();
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+        });
+
+        it('drops completed GPX bytes and stops the batch if the viewer changes during generation', async () => {
+            let finish!: (blob: Blob) => void;
+            mockEventService.getEventAsGPXBloB.mockReturnValueOnce(new Promise<Blob>(resolve => finish = resolve));
+            component.selection.select({ Event: new MockEvent('event-1') } as any, { Event: new MockEvent('event-2') } as any);
+            const work = component.downloadGPXSelection();
+            await vi.waitFor(() => expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledOnce());
+            component.user = { ...component.user, uid: 'other-viewer' } as any;
+            finish(new Blob());
+            await work;
+            expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledTimes(1);
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+        });
+
         it('should show message when no events are selected', async () => {
             component.selection.clear();
 
