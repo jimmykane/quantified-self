@@ -113,7 +113,7 @@ followed by a failed read is a completed mutation requiring refresh, not a faile
 | Event table | Reads selected metrics and memoizes display/sort cells on first access. Cache validation uses revisions for summaries and bounded metric values for full events, without formatting. Hidden-column search/sort and CSV still request their required cells. Settings and owner changes invalidate display context. |
 | Row actions and maps | GPX and benchmark actions load complete events explicitly. Reprocess sends the stable event ID to the existing backend before restoring the repaired result; malformed source stats must not block a repair. Complete detail models retain their refresh behavior. Capture the event and owner before awaiting confirmation/loading; abandon stale work before starting an action when its row, owner or component changes. Source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
 | Chart picker examples | Private deterministic seeds are shared across cards; the 18 example events use summaries without child models. Recovery's wall-clock context is rebuilt for every preview. |
-| Dashboard aggregation | One synchronous build/request shares normalized/filter-compatible inputs, chronological ordering, activity keys and timezone/interval bucket keys. Discard `EventStatAggregationContext` after each build; never retain it across live updates or owners. Auto interval selection scans endpoints without sorting. |
+| Dashboard aggregation | Map and chart tiles use one input preparation path. Each source array is normalized only when needed, once per build; sport filters reuse that ordering. Route-only maps skip event preparation. One synchronous build/request shares activity keys and timezone/interval bucket keys. Discard `EventStatAggregationContext` after each build; never retain it across live updates or owners. Auto interval selection scans endpoints without sorting. |
 | My Tracks | Home inference projects only persisted IDs, dates and valid start positions, with no metric construction. Detailed track/source loading remains full. |
 | MCP metric aggregation | Reuses validated selected metric instances directly, with canonical compatibility renames where needed. It does not derive missing persisted metrics or hydrate unrelated stats. Existing masks and cumulative budgets remain in force. |
 
@@ -187,3 +187,11 @@ Both versions made 3,066 metric factory calls, and displayed values and aggregat
 timing differences are noise, not evidence of a regression or a speedup in those paths. Capture immutable comparison
 keys at the emission boundary; avoid re-reading mutable previous objects in a duplicate comparator or serializing
 numeric metrics on every cache check. Preserve structural mutation detection for array/object metrics.
+
+The benchmark also checks input preparation for 12 map/intensity-zone tiles sharing three source arrays with
+different sport filters. Comparing with `983844da4`, removing the separate map path and repeated normalization
+reduced event-array sorts from 10 to 3. One warmed run measured 0.609 vs 0.513 ms, with matching tile event IDs,
+displayed values and aggregation output. This is a small saving in this fixture; the sort count is the stable check.
+Keep input reuse local to one build, isolate source arrays and filter variants, and normalize each source before
+filtering rather than sorting again for each variant. The helper's source and filter tests also cover new builds
+after in-place edits and immutable input arrays. These internal changes introduce no new Help workflow.

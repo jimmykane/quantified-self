@@ -241,20 +241,6 @@ function normalizeDashboardTileEvents(
   return normalizedEvents;
 }
 
-function resolveEventsForTile(
-  input: BuildDashboardTileViewModelsInput,
-  tile: TileSettingsInterface,
-  fallbackEvents: EventRead[],
-): EventRead[] {
-  const rawTileEvents = input.tileEventsByOrder?.[tile.order] || fallbackEvents;
-  const normalizedTileEvents = normalizeDashboardTileEvents(rawTileEvents);
-  const tileWithFilters = tile as TileSettingsInterface & {
-    eventFilters?: unknown;
-  };
-  const filters = normalizeDashboardTileEventFilters(tileWithFilters.eventFilters);
-  return filterDashboardTileEventsByActivityTypes(normalizedTileEvents, filters.activityTypes);
-}
-
 function resolveDashboardPowerCurveLatestSeriesLabel(
   tile: AppDashboardChartTileSettingsInterface,
 ): string {
@@ -298,18 +284,22 @@ function resolveDashboardCustomChartRequestedTimeInterval(
 export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
-  const normalizedEvents = normalizeDashboardTileEvents(input.events);
+  const fallbackEvents = input.events || [];
   const aggregationContext = new EventStatAggregationContext();
-  const tileInputs = new WeakMap<EventRead[], Map<string, EventRead[]>>();
+  const tileInputs = new Map<EventRead[], { events: EventRead[]; variants: Map<string, EventRead[]> }>();
   const resolveTileEvents = (tile: TileSettingsInterface) => {
-    const source = input.tileEventsByOrder?.[tile.order] || normalizedEvents;
-    let variants = tileInputs.get(source);
-    if (!variants) tileInputs.set(source, variants = new Map());
-    const key = JSON.stringify(normalizeDashboardTileEventFilters(tile['eventFilters']).activityTypes);
-    let events = variants.get(key);
+    const source = input.tileEventsByOrder?.[tile.order] || fallbackEvents;
+    let cached = tileInputs.get(source);
+    if (!cached) {
+      cached = { events: normalizeDashboardTileEvents(source), variants: new Map() };
+      tileInputs.set(source, cached);
+    }
+    const { activityTypes } = normalizeDashboardTileEventFilters(tile['eventFilters']);
+    const key = JSON.stringify(activityTypes);
+    let events = cached.variants.get(key);
     if (!events) {
-      events = resolveEventsForTile(input, tile, normalizedEvents);
-      variants.set(key, events);
+      events = filterDashboardTileEventsByActivityTypes(cached.events, activityTypes);
+      cached.variants.set(key, events);
     }
     return events;
   };
@@ -344,7 +334,7 @@ export function buildDashboardTileViewModels(
       const mapTile = tile as DashboardMapTileSettings;
       const mapSource = mapTile.mapSource === 'routes' ? 'routes' : 'events';
       const tileEvents = mapSource === 'events'
-        ? resolveEventsForTile(input, mapTile, normalizedEvents)
+        ? resolveTileEvents(mapTile)
         : [];
       viewModels.push({
         ...mapTile,
