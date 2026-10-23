@@ -54,3 +54,18 @@
   .rr-chart { height: 270px; }
   .rr-dfa-chart { height: 220px; }
 }
+
+.rr-view-toggle { min-height: 44px; height: auto; @include mat.button-toggle-overrides((height: 44px)); }
+.rr-view-toggle mat-button-toggle { min-height: 44px; }
+.rr-device-symbol { width: 14px; height: 14px; font-size: 14px; flex: 0 0 auto; }
+.rr-poincare-chart { height: 460px; }
+.rr-poincare-legend { justify-content: center; margin-bottom: 8px; }
+.rr-poincare-legend mat-icon { width: 14px; height: 14px; font-size: 14px; }
+.rr-unflagged-key { background: var(--mat-sys-on-surface-variant); }
+.rr-poincare-legend .rr-equal-key { width: 16px; height: 0; border-top: 1px dashed var(--mat-sys-on-surface-variant); border-radius: 0; }
+.rr-poincare-inspector { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.rr-poincare-inspector button { min-height: 44px; }
+@media (max-width: 600px) {
+  .rr-poincare-chart { height: 330px; }
+  .rr-poincare-inspector .rr-note { overflow-wrap: anywhere; }
+}

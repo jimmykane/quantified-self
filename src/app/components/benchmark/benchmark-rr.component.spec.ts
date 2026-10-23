@@ -103,6 +103,120 @@ describe('benchmark R–R panel', () => {
     return { fixture, panel, host, activities, analysis, worker, haptics, loader, core, charts, logger, openCharts };
   }
 
+  async function openPoincare(context: Awaited<ReturnType<typeof render>>) {
+    const { host, fixture, charts } = context;
+    host.querySelector<HTMLButtonElement>('mat-button-toggle[value="poincare"] button')!.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await vi.waitFor(() => {
+      const active=charts.filter(chart=>!chart.isDisposed());
+      expect(active).toHaveLength(1);expect(active[0].setOption).toHaveBeenCalled();
+    });
+    return charts.filter(chart=>!chart.isDisposed())[0];
+  }
+
+  it.each(['ordinary','multi','benchmark'])('adds a lazy Poincaré view with isolated device overlays on %s events', async kind => {
+    const context=await render(kind,[recording('No HRV'),recording('Strap',true),recording('Watch',true)]);
+    const {panel,host,worker,haptics,core,charts,openCharts}=context;
+    expect(panel.chartView()).toBe('time');expect(worker.analyze).not.toHaveBeenCalled();
+    await openCharts();
+    const summary=panel.summaryRows();
+    const chart=await openPoincare(context);
+    expect(panel.chartView()).toBe('poincare');expect(panel.poincarePairCount()).toBe(2);
+    expect(host.querySelector('.rr-poincare-chart')).not.toBeNull();expect(host.querySelector('.rr-dfa-chart')).toBeNull();
+    expect(host.querySelector('.rr-source-legends')?.textContent).not.toContain('No HRV');
+    expect(host.querySelectorAll('.rr-device-symbol')).toHaveLength(2);
+    expect(chart.getOption().series).toHaveLength(7);
+    expect(chart.getOption().series.filter(series=>series.type==='scatter').map(series=>series.symbol))
+      .toEqual(['rect',expect.any(String),'emptyCircle','triangle',expect.any(String),'emptyCircle']);
+    expect(charts.slice(0,2).every(chart=>chart.isDisposed())).toBe(true);
+    expect(core.disconnect).toHaveBeenCalledWith('test-rr-group');expect(core.connect).toHaveBeenCalledTimes(1);
+    expect(worker.analyze).toHaveBeenCalledTimes(2);expect(panel.summaryRows()).toBe(summary);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    panel.onChartViewChange('poincare');expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves timeline zoom across view switches without recalculating beats', async () => {
+    const context=await render();await context.openCharts();
+    context.charts[0].dispatchAction({type:'dataZoom',start:20,end:80});
+    const scatter=await openPoincare(context);
+    context.panel.resetZoom();expect(scatter.dispatchAction).not.toHaveBeenCalled();
+    context.host.querySelector<HTMLButtonElement>('mat-button-toggle[value="time"] button')!.click();
+    context.fixture.detectChanges();await context.fixture.whenStable();context.fixture.detectChanges();
+    await vi.waitFor(()=>{
+      const active=context.charts.filter(chart=>!chart.isDisposed());expect(active).toHaveLength(2);
+      expect(active[0].getOption()?.dataZoom[0]).toMatchObject({start:20,end:80});
+    });
+    expect(scatter.isDisposed()).toBe(true);expect(context.worker.analyze).toHaveBeenCalledOnce();
+    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('inspects flagged points with canonical values, clears filtered selections and leaves pointer haptics to the shared host', async () => {
+    const context=await render('ordinary',[recording('Strap',true)]);
+    context.analysis.beats[0].classification='short';await context.openCharts();
+    const summary=context.panel.summaryRows(),chart=await openPoincare(context);
+    context.panel.nextPoincareFlag();context.fixture.detectChanges();
+    expect(context.panel.poincareDetail()).toMatchObject({current:'800.0 ms',next:'800.0 ms',classification:'Artifact flagged',label:'Strap'});
+    expect(chart.dispatchAction).toHaveBeenLastCalledWith({type:'showTip',seriesIndex:2,dataIndex:0});
+    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+    context.panel.nextPoincareFlag();expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+    chart.listeners.get('click')?.({seriesId:'activity:Strap:poincare:artifact',dataIndex:0});
+    chart.listeners.get('click')?.({seriesId:'unknown',dataIndex:0});
+    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+    expect(context.loader.attachMobileSeriesTapFeedback).toHaveBeenCalledTimes(3);
+    context.panel.onExcludeFlagged(true);context.fixture.detectChanges();await context.fixture.whenStable();context.fixture.detectChanges();
+    expect(context.panel.poincareSelection()).toBeNull();expect(context.panel.poincarePairCount()).toBe(0);
+    expect(context.host.textContent).toContain('No consecutive interval pairs');
+    expect(context.panel.summaryRows()).toBe(summary);expect(context.worker.analyze).toHaveBeenCalledOnce();
+    context.panel.nextPoincareFlag();expect(context.haptics.selection).toHaveBeenCalledTimes(4);
+  });
+
+  it('rebuilds the Poincaré theme with source identity intact and disposes it on collapse', async () => {
+    const context=await render();await context.openCharts();
+    const first=await openPoincare(context);
+    context.fixture.componentRef.setInput('darkTheme',true);context.fixture.detectChanges();await context.fixture.whenStable();
+    await vi.waitFor(()=>expect(context.charts.at(-1)?.setOption).toHaveBeenCalled());
+    expect(first.isDisposed()).toBe(true);expect(context.worker.analyze).toHaveBeenCalledOnce();
+    expect(context.charts.at(-1)?.getOption().series[1].id).toBe('activity:Strap:poincare:accepted');
+    context.host.querySelector<HTMLButtonElement>('.rr-disclosure')!.click();context.fixture.detectChanges();
+    expect(context.charts.every(chart=>chart.isDisposed())).toBe(true);
+    context.panel.nextPoincareFlag();expect(context.panel.poincareSelection()).toBeNull();
+    expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('recovers from a Poincaré initialization failure using the existing retry and cached analysis', async () => {
+    const context=await render();await context.openCharts();
+    context.loader.init.mockResolvedValueOnce(null);
+    context.panel.onChartViewChange('poincare');context.fixture.detectChanges();await context.fixture.whenStable();context.fixture.detectChanges();
+    await vi.waitFor(()=>expect(context.panel.status()).toBe('error'));context.fixture.detectChanges();
+    expect(context.charts.every(chart=>chart.isDisposed())).toBe(true);
+    context.host.querySelector<HTMLButtonElement>('.rr-error button')!.click();context.fixture.detectChanges();await context.fixture.whenStable();context.fixture.detectChanges();
+    await vi.waitFor(()=>expect(context.charts.at(-1)?.setOption).toHaveBeenCalled());
+    expect(context.panel.status()).toBe('ready');expect(context.worker.analyze).toHaveBeenCalledOnce();
+    expect(context.panel.chartView()).toBe('poincare');expect(context.haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports and cleans up a time-series initialization failure when leaving Poincaré', async () => {
+    const context=await render();await context.openCharts();await openPoincare(context);
+    context.loader.init.mockResolvedValueOnce(null);
+    context.panel.onChartViewChange('time');context.fixture.detectChanges();await context.fixture.whenStable();
+    await vi.waitFor(()=>expect(context.panel.status()).toBe('error'));
+    expect(context.charts.every(chart=>chart.isDisposed())).toBe(true);
+    expect(context.worker.analyze).toHaveBeenCalledOnce();
+  });
+
+  it('disposes a late Poincaré initialization after switching back to time series', async () => {
+    const context=await render();await context.openCharts();
+    let resolve!: (chart: ReturnType<typeof chartStub>)=>void;
+    context.loader.init.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+    context.panel.onChartViewChange('poincare');context.fixture.detectChanges();
+    await vi.waitFor(()=>expect(resolve).toBeDefined());
+    context.panel.onChartViewChange('time');context.fixture.detectChanges();
+    const late=chartStub();resolve(late);await context.fixture.whenStable();context.fixture.detectChanges();
+    await vi.waitFor(()=>expect(context.charts.filter(chart=>!chart.isDisposed())).toHaveLength(2));
+    expect(late.dispose).toHaveBeenCalledOnce();expect(late.setOption).not.toHaveBeenCalled();
+    expect(context.panel.chartView()).toBe('time');expect(context.panel.status()).toBe('ready');
+  });
+
   it('starts collapsed without large summary content, beat materialization, workers or haptics', async () => {
     const strap = recording('Strap', true);
     const readBeats = vi.spyOn(strap.getStream('IBI'), 'getStreamDataByDuration');

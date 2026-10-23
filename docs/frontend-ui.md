@@ -512,7 +512,29 @@ fences for both calculation and chart initialization. Worker failures keep saved
 Chart rendering failures dispose both hosts, including a partially initialized partner, before offering Retry.
 This panel introduces no Firestore query, write, index, reparse, original-file fetch or server endpoint.
 
-The two ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
+The local **Time series / Poincaré** Material toggle defaults to Time series. Poincaré lazily replaces the two time hosts
+with one unconnected scatter host using the same cached source analyses, source selection, unit preferences, theme and
+shared mobile tooltip/haptic handling. Switching views preserves timeline zoom; changing source/event or closing the
+panel retains the existing disposal/cancellation policy. Failed or stale scatter initialization is fenced and disposed,
+and the existing Retry path reuses successful analyses. Saved-only sources stay in statistics, outside the plots.
+
+`benchmark-rr-poincare.helper.ts` pairs original adjacent analyzed observations within a source segment before applying
+quality filters. Invalid/nonpositive intervals, invalid time and non-increasing time break pairing. A point is artifact-flagged
+when either member has an artifact classification; otherwise either suspected-ectopic classification gives a ring.
+Removing flagged points never creates a new neighbouring pair. Each source preserves its full-event symbol assignment
+(circle, square, triangle, diamond) and device color. A two-pass scan bounds allocations/rendering to 4,000 points per
+category per recording, sampling ranks across the complete domain with first/last retention. Counts include all eligible
+pairs; axis extents include all pairs before filtering/sampling so rare extremes remain within the plot. Axes use equal
+canonical interval bounds and a square plot region. This is interval-pair geometry, not another classifier, an SD1/SD2
+implementation or a new persisted metric. Native ECharts point tooltips escape source labels. The keyboard/touch **Next
+flagged pair** action inspects displayed flagged points; its interval/time values use the shared canonical formatter.
+The adjacent-pair count is deliberately distinct from Sports Lib's suspected ectopic-pair count.
+
+MCP impact: this browser-only plot exposes no new MCP field, numeric class, parser/persistence change, grant or query.
+Raw beats/classifications remain outside the existing MCP surface. No original-file fetch, Firestore read/write/index,
+backend computation, reparse or Training change is introduced.
+
+The two time-series ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
 Reset uses the shared sync-source suppression so the button owns its single haptic response. Chart gestures use the
 shared ECharts feedback helper. Shared host lifecycle, theme/contrast, tooltip and resize helpers remain authoritative.
 Flag exclusion masks plot values only; null windows and recording segment boundaries stay gaps. Native LTTB is disabled

@@ -195,6 +195,10 @@ describe('help.content', () => {
     expect(copy).toContain('**Saved comparisons** table includes a compact **R–R & HRV** column');
     expect(copy).toContain('without additional reads or analysis');
     expect(copy).toContain('show **Not loaded** rather than claiming HRV is missing');
+    expect(copy).toContain('Choose **Poincaré** in the R–R chart view selector');
+    expect(copy).toContain('without joining the remaining neighbours');
+    expect(copy).toContain('Gaps and invalid observations always break adjacency');
+    expect(copy).toContain('Point-pair counts are separate from suspected ectopic-pair statistics');
     expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
     expect(copy).toContain('seven key R–R & HRV statistics side by side');
     expect(copy).toContain('differences appear only when both recordings have a valid value');
