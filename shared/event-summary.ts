@@ -6,6 +6,11 @@ import type { AppEventMetadata, EventRead } from './event-read';
 
 let nextRevision = 0;
 
+// Numeric metrics are immutable scalars; only structured/string values need serialization.
+function metricValueSnapshot(value: unknown): number | string | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : JSON.stringify(value);
+}
+
 function multipliedNames(values: readonly string[]): string {
   const counts = new Map<string, number>();
   values.forEach(value => counts.set(value, (counts.get(value) || 0) + 1));
@@ -25,7 +30,7 @@ export class AppEventSummary implements EventRead {
   srcFileType: EventSummary['srcFileType'];
   private readonly sourceRevision = ++nextRevision;
   private metricRevision = 0;
-  private readonly observed = new Map<string, { stat: DataInterface<unknown>; value: string | undefined; initialValue: string | undefined }>();
+  private readonly observed = new Map<string, { stat: DataInterface<unknown>; value: number | string | undefined; initialValue: number | string | undefined }>();
   private readonly summary: EventSummary;
   private readonly savedStats = new Map<string, DataInterface | undefined>();
   private readonly sourceStatsJSON: string;
@@ -51,7 +56,7 @@ export class AppEventSummary implements EventRead {
   getStat<TValue = DefaultDataValue>(type: string): DataInterface<TValue> | undefined {
     const stat = this.savedStats.has(type) ? this.savedStats.get(type) as DataInterface<TValue> | undefined : this.summary.getStat<TValue>(type);
     if (stat && !this.observed.has(stat.getType())) {
-      const value = JSON.stringify(stat.getValue());
+      const value = metricValueSnapshot(stat.getValue());
       this.observed.set(stat.getType(), { stat, value, initialValue: value });
     }
     return stat;
@@ -81,8 +86,9 @@ export class AppEventSummary implements EventRead {
     const stats: EventSummaryJSONInterface['stats'] = JSON.parse(this.sourceStatsJSON);
     this.observed.forEach(({ stat, initialValue }, type) => {
       // Reading/normalizing a metric is not a source edit, and derived reads cannot add source fields.
-      if (Object.prototype.hasOwnProperty.call(stats, type) && JSON.stringify(stat.getValue()) !== initialValue) {
-        stats[type] = stat.getValue() as typeof stats[string];
+      const value = metricValueSnapshot(stat.getValue());
+      if (Object.prototype.hasOwnProperty.call(stats, type) && value !== initialValue) {
+        stats[type] = (typeof value === 'string' ? JSON.parse(value) : value) as typeof stats[string];
       }
     });
     this.savedStats.forEach((stat, type) => {
@@ -92,9 +98,9 @@ export class AppEventSummary implements EventRead {
     return { startDate: +this.startDate, endDate: +this.endDate, type: this.sourceType, stats };
   }
 
-  getReadRevision(_types: readonly string[]): string {
+  getReadRevision(): string {
     for (const entry of this.observed.values()) {
-      const value = JSON.stringify(entry.stat.getValue());
+      const value = metricValueSnapshot(entry.stat.getValue());
       if (value !== entry.value) {
         entry.value = value;
         this.metricRevision++;

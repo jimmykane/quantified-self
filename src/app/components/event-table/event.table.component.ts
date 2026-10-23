@@ -1747,7 +1747,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private readStatsForCacheKey(event: EventRead): unknown[] {
-    if (event.getReadRevision) return [event.getReadRevision([])];
+    if (event.getReadRevision) return [event.getReadRevision()];
     const types = [
       ...EVENT_TABLE_STAT_TYPES,
       ...event.getActivityTypesAsArray().flatMap(type => ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(

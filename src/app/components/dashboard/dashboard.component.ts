@@ -127,6 +127,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private manualSearchRefreshToken = 0;
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventRead[] = [];
+  private initialResolvedEventsKeyForReconcile = '';
   private initialResolvedUserIDForReconcile: string | null = null;
   private eventTableFiltersCacheSignature: string | null = null;
   private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
@@ -175,6 +176,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Reconcile is only needed when resolver and first live emission may duplicate the same payload.
       this.initialLiveReconcilePending = !!resolvedData.user && !isEventsPrefetchSkipped;
       this.initialResolvedEventsForReconcile = this.events || [];
+      this.initialResolvedEventsKeyForReconcile = this.buildEventsIdentityKey(this.initialResolvedEventsForReconcile);
       this.initialResolvedUserIDForReconcile = isEventsPrefetchSkipped ? null : (resolvedData.user?.uid || null);
       this.targetUser = resolvedData.targetUser;
       this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
@@ -296,12 +298,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return this.eventService
         .getEventSummariesBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          // Capture revisions at emission time: a later in-place edit also mutates the prior object.
-          map((events: EventRead[]) => ({ events, revisions: events.map(event => event.getReadRevision?.([])) })),
-          distinctUntilChanged((previous, current) => this.areEventsEquivalentByIdentity(previous.events, current.events)
-            && previous.revisions.every((revision, index) => revision === current.revisions[index])),
-          map(({ events }) => events),
-          map((eventsArray: EventRead[]) => {
+          // Snapshot once: later edits also mutate the objects retained by the previous emission.
+          map((events: EventRead[]) => ({ events, key: this.buildEventsIdentityKey(events) })),
+          distinctUntilChanged((previous, current) => previous.key === current.key),
+          map(({ events: eventsArray, key }) => {
             if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
               this.initialLiveReconcilePending = false;
             }
@@ -312,7 +312,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
             if (shouldAttemptInitialReconcile) {
               this.initialLiveReconcilePending = false;
-              const isDuplicateOfResolvedData = this.areEventsEquivalentByIdentity(this.initialResolvedEventsForReconcile, eventsArray);
+              const isDuplicateOfResolvedData = this.initialResolvedEventsKeyForReconcile === key;
               if (isDuplicateOfResolvedData) {
                 this.logger.info('[perf] dashboard_skip_initial_live_duplicate', {
                   events: eventsArray?.length || 0,
@@ -1390,19 +1390,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     await this.router.navigate(['/subscriptions']);
   }
 
-  private areEventsEquivalentByIdentity(previousEvents: EventRead[] = [], currentEvents: EventRead[] = []): boolean {
-    if (previousEvents?.length !== currentEvents?.length) {
-      return false;
-    }
-    return previousEvents.every((previousEvent, index) => {
-      const currentEvent = currentEvents[index];
-      return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
-        && previousEvent?.getReadRevision?.([]) === currentEvent?.getReadRevision?.([])
-        && previousEvent?.name === currentEvent?.name
-        && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent)
-        && JSON.stringify(getEventTags(previousEvent as EventRead))
-          === JSON.stringify(getEventTags(currentEvent as EventRead));
-    });
+  private buildEventsIdentityKey(events: EventRead[] = []): string {
+    return JSON.stringify(events.map(event => [
+      this.getEventStableID(event),
+      event?.getReadRevision?.(),
+      event?.name,
+      this.getEventStableStartDate(event),
+      getEventTags(event),
+    ]));
   }
 
   private buildEventsIdentityMismatchSummary(

@@ -18,7 +18,7 @@ export interface EventRead extends Pick<EventInterface,
   /** Only for existing whole-source fingerprint validation, never row caching or display. */
   getSourceSnapshot?(): Pick<EventJSONInterface, 'startDate' | 'endDate' | 'stats'> & { type?: unknown };
   /** Summary revision also observes mutations of metrics already requested by the consumer. */
-  getReadRevision?(types: readonly string[]): string;
+  getReadRevision?(): string;
 }
 
 export function isCompleteEvent(event: EventRead): event is AppEventInterface {

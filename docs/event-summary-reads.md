@@ -109,7 +109,7 @@ followed by a failed read is a completed mutation requiring refresh, not a faile
 
 | Area | Implemented behavior |
 | --- | --- |
-| Shared event reader | Dashboard resolver/listener, Activities, range tables, summary tiles and preview queries use explicit summary APIs. Dashboard captures revisions before duplicate filtering so metric-only document changes and in-place edits remain visible. Details and tools that need full models retain their readers. |
+| Shared event reader | Dashboard resolver/listener, Activities, range tables, summary tiles and preview queries use explicit summary APIs. Dashboard captures one comparison snapshot per emission and compares it with the captured resolver/previous state. Metric-only changes and in-place edits remain visible without rescanning previous objects. Summary revisions compare selected numeric values directly and serialize structured values to detect nested edits. Details and tools that need full models retain their readers. |
 | Event table | Reads selected metrics and memoizes display/sort cells on first access. Cache validation uses revisions for summaries and bounded metric values for full events, without formatting. Hidden-column search/sort and CSV still request their required cells. Settings and owner changes invalidate display context. |
 | Row actions and maps | GPX and benchmark actions load complete events explicitly. Reprocess sends the stable event ID to the existing backend before restoring the repaired result; malformed source stats must not block a repair. Complete detail models retain their refresh behavior. Capture the event and owner before awaiting confirmation/loading; abandon stale work before starting an action when its row, owner or component changes. Source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
 | Chart picker examples | Private deterministic seeds are shared across cards; the 18 example events use summaries without child models. Recovery's wall-clock context is rebuilt for every preview. |
@@ -148,14 +148,16 @@ part of the repository workflow.
 
 ## Reproducible consumer benchmark
 
-Run with Node 22 and a pre-migration baseline ref:
+Run with Node 22 and a baseline ref:
 
 ```sh
 node tools/benchmarks/event-summary-read.mjs 6e0974c88
 ```
 
-The script extracts each version's actual table cache methods and uses its real metric row builder and shared
-aggregator. It includes QS sanitization, restored readers, cache-key work and six displayed cells for 438 synthetic
+The script extracts each version's actual table cache methods and dashboard duplicate-filter operators and uses its
+real metric row builder, summary wrapper and shared aggregator. It resolves the baseline to a commit and selects
+full or summary readers according to that version's cache path, so a baseline after the migration also works. It
+includes QS sanitization, restored readers, cache-key work and six displayed cells for 438 synthetic
 events containing 80 numeric stats plus activity types, device names and start position. It verifies displayed-value
 and eight-selector aggregation parity before reporting three warmups and eleven median samples. No user data is used;
 temporary generated modules are removed automatically. A parity mismatch exits unsuccessfully. Module startup,
@@ -173,3 +175,15 @@ A verified local Node 22.23.3 run on 23 October 2026 measured:
 All displayed values and aggregation outputs matched. Timings vary with machine load; factory-call counts and parity
 are the stable work checks. Factory counts instrument `DynamicDataLoader.getDataInstanceFromDataType`, not all JavaScript allocations. This is a consumer CPU comparison, not a measured production dashboard speedup.
 The Help content was reviewed: no new user option or workflow is introduced by these performance changes.
+
+For the subsequent simplification pass, use `6f224a53b` as the baseline. In a Node 22.23.3 run, unchanged dashboard
+emission handling fell from 1.020 ms to 0.278 ms for the same 438 events. Each emission now scans selected metrics
+438 times instead of 1,314; JSON serialization calls fell from 11,388 to 439. Repeated table cache-key serialization
+calls fell from 3,942 to 876. The script counts these operations separately from timing and asserts that unchanged
+emissions are suppressed and changed emissions still pass through.
+
+Fresh row work (17.433 vs 17.547 ms) and eight-selector aggregation (25.767 vs 26.006 ms) were effectively unchanged.
+Both versions made 3,066 metric factory calls, and displayed values and aggregation outputs agreed. These small
+timing differences are noise, not evidence of a regression or a speedup in those paths. Capture immutable comparison
+keys at the emission boundary; avoid re-reading mutable previous objects in a duplicate comparator or serializing
+numeric metrics on every cache check. Preserve structural mutation detection for array/object metrics.

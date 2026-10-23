@@ -215,7 +215,7 @@ describe('DashboardComponent', () => {
     ])('uses contextual table copy for $range with sports $sports', async ({ range, sports, message, hint }) => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockUser.settings.dashboardSettings.eventTableFilters = {
             dateRange: range, activityTypes: sports, searchTerm: null, startDate: null, endDate: null, includeMergedEvents: true,
         };
@@ -1583,7 +1583,7 @@ describe('DashboardComponent', () => {
             getID: () => 'event-1', name: 'Run', startDate: new Date(1000), tags: ['Recovery'],
         } as any;
 
-        expect((component as any).areEventsEquivalentByIdentity([previous], [current])).toBe(false);
+        expect((component as any).buildEventsIdentityKey([previous])).not.toBe((component as any).buildEventsIdentityKey([current]));
     });
 
     it('applies metric-only source updates and in-place summary revisions while reusing unchanged emissions', async () => {
@@ -1600,7 +1600,9 @@ describe('DashboardComponent', () => {
         expect(component.events).toBe(resolved);
 
         const changed = new AppEventSummary({ ...json, stats: { ...json.stats, Distance: 2000 } });
+        const readRevision = vi.spyOn(changed, 'getReadRevision');
         live.next([changed]);
+        expect(readRevision).toHaveBeenCalledTimes(1);
         expect(component.events[0]).toBe(changed);
         expect(component.events[0].getDistance()?.getValue()).toBe(2000);
         const beforeEdit = component.events;
@@ -1612,6 +1614,36 @@ describe('DashboardComponent', () => {
         const afterEdit = component.events;
         live.next([changed]);
         expect(component.events).toBe(afterEdit);
+        expect(readRevision).toHaveBeenCalledTimes(3);
+
+        changed.name = 'Updated in place';
+        live.next([changed]);
+        expect(component.events).not.toBe(afterEdit);
+        const afterRename = component.events;
+        changed.tags = ['Race'];
+        live.next([changed]);
+        expect(component.events).not.toBe(afterRename);
+        const afterTags = component.events;
+        live.next([changed]);
+        expect(component.events).toBe(afterTags);
+    });
+
+    it('captures resolver state before the same summary is edited by the first live emission', async () => {
+        const event = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any);
+        const resolved = [event];
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = resolved;
+        const live = new Subject<AppEventSummary[]>();
+        mockEventService.getEventSummariesBy.mockReturnValue(live);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.events).toBe(resolved);
+
+        event.getDistance()!.setValue(2000);
+        live.next([event]);
+        expect(component.events).not.toBe(resolved);
+        expect(component.events[0].getDistance()?.getValue()).toBe(2000);
     });
 
     it('reconciles resolver data when the first live snapshot changes only metrics', async () => {
