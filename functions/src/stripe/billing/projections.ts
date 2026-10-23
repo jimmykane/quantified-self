@@ -21,7 +21,8 @@ export function priceProjections(price: Stripe.Price): Projection[] {
     currency: price.currency, unit_amount: price.unit_amount, description: price.nickname,
     type: price.type, billing_scheme: price.billing_scheme, recurring: price.recurring,
     interval: price.recurring?.interval ?? null, interval_count: price.recurring?.interval_count ?? null,
-    trial_period_days: trialDays || null, tiers_mode: price.tiers_mode, tiers: price.tiers ?? null,
+    // Decimal values use Stripe's lossless JSON string representation, not SDK prototypes.
+    trial_period_days: trialDays || null, tiers_mode: price.tiers_mode, tiers: price.tiers ? JSON.parse(JSON.stringify(price.tiers)) : null,
     tax_behavior: price.tax_behavior, metadata: price.metadata, ...metadataFields(price.metadata) } },
   { path: `stripeBillingPrices/${price.id}`, data: { active: price.active, product,
     mode: price.type === 'recurring' ? 'subscription' : 'payment', trialDays } }];

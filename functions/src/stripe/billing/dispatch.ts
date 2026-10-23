@@ -1,9 +1,9 @@
 import { getFunctions } from 'firebase-admin/functions';
 import { FieldValue, Timestamp, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
-import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
+import { getCloudTaskRetryBackoffSeconds, PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, BILLING_REGION, BILLING_TASK, BILLING_LEASE_MS,
-  assertLocalBillingEnvironment, billingControl, type BillingJob } from './model';
+  BillingError, assertLocalBillingEnvironment, billingControl, safeBillingError, type BillingJob } from './model';
 import { finishBillingJob, observeBilling } from './queue';
 
 export interface BillingTransport {
@@ -55,40 +55,54 @@ async function unavailable(db: Firestore, job: BillingJob, tx?: Transaction): Pr
   return guard.shouldSkip || account.get('deleting') === true;
 }
 
+async function writeTerminalDispatchFailure(db: Firestore, tx: Transaction, id: string, job: BillingJob, time: number): Promise<void> {
+  if (job.kind === 'checkout') {
+    const request = db.doc(`customers/${job.uid}/checkout_sessions/${job.requestId}`);
+    const snapshot = await tx.get(request);
+    if (snapshot.exists && !snapshot.get('sessionId')) tx.update(request, { error: safeBillingError(new BillingError('retry_exhausted')) });
+  }
+  tx.set(db.collection('failed_jobs').doc(`stripe_billing_${id}`), {
+    serviceName: 'Stripe Billing', uid: job.uid, billingJobId: id, generation: job.generation,
+    error: 'retry_exhausted', failedAt: Timestamp.fromMillis(time), expireAt: Timestamp.fromMillis(time + 30 * 86_400_000),
+  });
+}
+
 export async function dispatchBillingJob(db: Firestore, id: string, transport: BillingTransport, recovering = false): Promise<void> {
   if (billingControl((await db.doc(BILLING_CONTROL).get()).data()).owner !== 'native') return;
   const ref = db.collection(BILLING_JOBS).doc(id);
   const job = (await ref.get()).data() as BillingJob | undefined;
-  if (!job || job.state !== 'pending' || (job.leaseUntil?.toMillis() ?? 0) > Date.now()) return;
+  if (!job || job.state !== 'pending' || (job.leaseUntil?.toMillis() ?? 0) > Date.now()
+    || (job.dispatchRetryAt?.toMillis() ?? 0) > Date.now()) return;
   if (await unavailable(db, job)) {
     await finishBillingJob(db, id, job.generation, 'skipped'); return;
   }
-  let missingReservedTask = false;
-  if (recovering && job.dispatchedAt) missingReservedTask = !await transport.exists(id, job.generation);
-  if (missingReservedTask) {
-    const terminalCommitted = await db.runTransaction(async tx => {
-      const current = await tx.get(ref);
-      if (current.get('generation') !== job.generation || current.get('state') !== 'pending'
-        || (current.get('leaseUntil')?.toMillis() ?? 0) > Date.now()) return false;
-      if (await unavailable(db, job, tx)) return false;
-      if (job.attempts >= PROVIDER_MAX_RETRY_COUNT || (job.recoveries ?? 0) >= PROVIDER_MAX_RETRY_COUNT) {
-        tx.update(ref, { state: 'failed', error: 'retry_exhausted' });
-        tx.set(db.collection('failed_jobs').doc(`stripe_billing_${id}`), {
-          serviceName: 'Stripe Billing', uid: job.uid, billingJobId: id, generation: job.generation,
-          error: 'retry_exhausted', failedAt: Timestamp.now(), expireAt: Timestamp.fromMillis(Date.now() + 30 * 86_400_000),
-        });
-        return true;
-      } else {
-        // Absence was verified before rotating the task generation. Application
-        // attempts and dueAt survive; a scheduler never resets provider backoff.
-        tx.update(ref, { generation: job.generation + 1, recoveries: (job.recoveries ?? 0) + 1, dispatchedAt: FieldValue.delete(), recoverAt: Timestamp.now() });
-        return false;
-      }
-    });
-    if (terminalCommitted) observeBilling('terminal_failure');
-    return; // The generation-change trigger immediately dispatches the successor.
-  }
   try {
+    let missingReservedTask = false;
+    if (recovering && job.dispatchedAt) missingReservedTask = !await transport.exists(id, job.generation);
+    if (missingReservedTask) {
+      const terminalCommitted = await db.runTransaction(async tx => {
+        const current = await tx.get(ref);
+        if (current.get('generation') !== job.generation || current.get('state') !== 'pending'
+          || (current.get('leaseUntil')?.toMillis() ?? 0) > Date.now()) return false;
+        if (await unavailable(db, job, tx)) return false;
+        if (current.get('attempts') >= PROVIDER_MAX_RETRY_COUNT || (current.get('recoveries') ?? 0) >= PROVIDER_MAX_RETRY_COUNT) {
+          await writeTerminalDispatchFailure(db, tx, id, job, Date.now());
+          tx.update(ref, { state: 'failed', error: 'retry_exhausted' });
+          return true;
+        } else {
+          // Absence was verified before rotating the task generation. Application
+          // attempts and dueAt survive; a scheduler never resets provider backoff.
+          tx.update(ref, { generation: job.generation + 1, recoveries: (current.get('recoveries') ?? 0) + 1,
+            dispatchedAt: FieldValue.delete(), dispatchRetryAt: FieldValue.delete(), recoverAt: Timestamp.now() });
+          return false;
+        }
+      });
+      if (terminalCommitted) {
+        observeBilling('terminal_failure');
+        if (job.kind === 'checkout') observeBilling('checkout_failure');
+      }
+      return; // The generation-change trigger immediately dispatches the successor.
+    }
     if (!job.dispatchedAt || !recovering) {
       if (await unavailable(db, job) || billingControl((await db.doc(BILLING_CONTROL).get()).data()).owner !== 'native') return;
       try { await transport.enqueue(id, job.generation, job.dueAt.toDate()); }
@@ -111,9 +125,37 @@ export async function dispatchBillingJob(db: Firestore, id: string, transport: B
       const current = await tx.get(ref);
       if (!current.exists || current.get('generation') !== job.generation || current.get('state') !== 'pending') return;
       if (await unavailable(db, job, tx)) return;
-      tx.update(ref, { dispatchedAt: Timestamp.now(), recoverAt: Timestamp.fromMillis(Math.max(Date.now(), job.dueAt.toMillis()) + BILLING_LEASE_MS) });
+      tx.update(ref, { dispatchedAt: Timestamp.now(), dispatchRetryAt: FieldValue.delete(),
+        recoverAt: Timestamp.fromMillis(Math.max(Date.now(), current.get('dueAt').toMillis()) + BILLING_LEASE_MS) });
     });
-  } catch { observeBilling('dispatch_failure'); throw new Error('billing_dispatch_failed'); }
+  } catch {
+    // Enqueue/getTask failures need the same durable, bounded recovery as lost
+    // reservations. A persisted backoff owns the next attempt; only failure to
+    // save that recovery state should ask Eventarc to redeliver immediately.
+    const result = await db.runTransaction(async tx => {
+      const [current, control] = await tx.getAll(ref, db.doc(BILLING_CONTROL));
+      const time = Date.now();
+      if (current.get('generation') !== job.generation || current.get('state') !== 'pending'
+        || billingControl(control.data()).owner !== 'native'
+        || (current.get('leaseUntil')?.toMillis() ?? 0) > time
+        || (current.get('dispatchRetryAt')?.toMillis() ?? 0) > time
+        || await unavailable(db, job, tx)) return null;
+      const recoveries = (current.get('recoveries') ?? 0) + 1;
+      if (recoveries >= PROVIDER_MAX_RETRY_COUNT) {
+        await writeTerminalDispatchFailure(db, tx, id, job, time);
+        tx.update(ref, { recoveries, state: 'failed', error: 'retry_exhausted' });
+        return 'terminal';
+      }
+      const dispatchRetryAt = Timestamp.fromMillis(time + getCloudTaskRetryBackoffSeconds(recoveries) * 1000);
+      tx.update(ref, { recoveries, dispatchRetryAt, recoverAt: dispatchRetryAt });
+      return 'retry';
+    });
+    if (result) observeBilling('dispatch_failure');
+    if (result === 'terminal') {
+      observeBilling('terminal_failure');
+      if (job.kind === 'checkout') observeBilling('checkout_failure');
+    }
+  }
 }
 
 export async function recoverBillingJobs(db: Firestore, transport: BillingTransport): Promise<void> {
@@ -125,8 +167,9 @@ export async function recoverBillingJobs(db: Firestore, transport: BillingTransp
     for (const row of due.docs) {
       const job = row.data() as BillingJob;
       const deleting = await unavailable(db, job);
-      if (!deleting && job.dueAt.toMillis() <= Date.now() && (job.leaseUntil?.toMillis() ?? 0) <= Date.now())
-        oldest = Math.max(oldest, (Date.now() - Math.max(job.createdAt.toMillis(), job.dueAt.toMillis(), job.leaseUntil?.toMillis() ?? 0)) / 1000);
+      if (!deleting && job.dueAt.toMillis() <= Date.now() && (job.leaseUntil?.toMillis() ?? 0) <= Date.now()
+        && (job.dispatchRetryAt?.toMillis() ?? 0) <= Date.now())
+        oldest = Math.max(oldest, (Date.now() - Math.max(job.createdAt.toMillis(), job.dueAt.toMillis(), job.leaseUntil?.toMillis() ?? 0, job.dispatchRetryAt?.toMillis() ?? 0)) / 1000);
       await dispatchBillingJob(db, row.id, transport, true);
     }
     observeBilling('heartbeat');

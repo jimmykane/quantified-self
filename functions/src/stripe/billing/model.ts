@@ -127,7 +127,7 @@ export interface BillingJob {
   event?: BillingEvent; requestId?: string; request?: CheckoutRequest;
   state: 'pending' | 'done' | 'failed' | 'skipped'; createdAt: Timestamp;
   dueAt: Timestamp; recoverAt: Timestamp; attempts: number; generation: number;
-  recoveries?: number; dispatchedAt?: Timestamp; lease?: string; leaseUntil?: Timestamp;
+  recoveries?: number; dispatchedAt?: Timestamp; dispatchRetryAt?: Timestamp; lease?: string; leaseUntil?: Timestamp;
   expireAt?: Timestamp; error?: BillingErrorCode;
 }
 

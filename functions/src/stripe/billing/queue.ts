@@ -123,7 +123,7 @@ async function failBillingJob(db: Firestore, id: string, job: BillingJob, error:
   if (changed && !terminal) throw new BillingError('provider_unavailable', true);
 }
 
-export async function processBillingJob(ctx: BillingDependencies, id: string, generation: number, transportRetries = 0): Promise<void> {
+export async function processBillingJob(ctx: BillingDependencies, id: string, generation: number): Promise<void> {
   if (!/^[a-f0-9]{64}$/.test(id) || !Number.isSafeInteger(generation) || generation < 0) throw new BillingError('invalid_request');
   const ref = ctx.db.collection(BILLING_JOBS).doc(id);
   const initial = (await ref.get()).data() as BillingJob | undefined;
@@ -148,7 +148,9 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
           return null;
         }
       }
-      const claimed = { ...current, attempts: Math.max(current.attempts, transportRetries) + 1,
+      // Only durable claims consume provider attempts. Transport retries also
+      // include lease contention and future work that made no provider call.
+      const claimed = { ...current, attempts: current.attempts + 1,
         lease: lease.token, leaseUntil: Timestamp.fromMillis(time + BILLING_LEASE_MS) };
       tx.update(ref, claimed);
       return claimed;

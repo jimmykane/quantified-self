@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Stripe from 'stripe';
 import type { Auth } from 'firebase-admin/auth';
-import { FieldValue, Timestamp, type DocumentData, type DocumentReference, type Firestore, type Transaction } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp, type DocumentData, type DocumentReference, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, BILLING_LOCKS, BILLING_LEASE_MS,
   BillingContention, BillingError, billingControl, billingId, IDEMPOTENCY_WINDOW_MS,
@@ -307,9 +307,11 @@ export async function fetchBillingProjections(ctx: BillingDependencies, event: B
   const stripe = ctx.stripe;
   if (event.kind === 'product') {
     try { return [productProjection(await stripe.products.retrieve(event.objectId))]; }
-    catch (e) { if ((e as { code?: string }).code === 'resource_missing' && event.type === 'product.deleted') return [{ path: `products/${event.objectId}`, data: { active: false, deleted: true } }]; throw e; }
+    // A delayed product.updated can arrive after deletion. Current provider
+    // state wins regardless of the event type or order.
+    catch (e) { if ((e as { code?: string }).code === 'resource_missing') return [{ path: `products/${event.objectId}`, data: { active: false, deleted: true } }]; throw e; }
   }
-  if (event.kind === 'price') return priceProjections(await stripe.prices.retrieve(event.objectId));
+  if (event.kind === 'price') return priceProjections(await stripe.prices.retrieve(event.objectId, { expand: ['tiers'] }));
   if (event.kind === 'tax_rate') return [taxProjection(await stripe.taxRates.retrieve(event.objectId))];
   if (!uid || !event.customerId) return [];
   const checkCustomer = (value: unknown) => { if (stripeId(value) !== event.customerId) throw new BillingError('customer_conflict'); };
@@ -374,9 +376,12 @@ export async function commitBillingProjections(ctx: BillingDependencies, lease: 
     projections.forEach((p, i) => {
       const existing = snapshots[i].data();
       const removedMetadata = Object.keys(existing ?? {}).filter(key => key.startsWith('stripe_metadata_') && !(key in p.data));
-      if (removedMetadata.length || !projectionUnchanged(existing, p.data)) tx.set(refs[i], {
-        ...p.data, ...Object.fromEntries(removedMetadata.map(key => [key, FieldValue.delete()])),
-      }, { merge: true });
+      if (removedMetadata.length || !projectionUnchanged(existing, p.data)) {
+        const patch = { ...p.data, ...Object.fromEntries(removedMetadata.map(key => [key, FieldValue.delete()])) };
+        // Replace each provider-owned field completely, including maps whose
+        // keys Stripe removed. Preserve unrelated application-owned fields.
+        tx.set(refs[i], patch, { mergeFields: Object.keys(patch).map(key => new FieldPath(key)) });
+      }
     });
     if (finish) tx.update(finish.ref, { state: 'done', expireAt: Timestamp.fromMillis(now(ctx) + 30 * 86_400_000), lease: FieldValue.delete(), leaseUntil: FieldValue.delete() });
     return true;

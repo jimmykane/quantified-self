@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { assertLocalBillingEnvironment, billingControl, billingEvent, checkoutRequest, projectionUnchanged, returnUrl, safeBillingError } from './model';
 import { invoiceProjection, priceProjections, subscriptionProjection } from './projections';
 import type Stripe from 'stripe';
+import { Decimal } from 'stripe';
 
 const request = { price: 'price_test', mode: 'subscription', success_url: 'https://quantified-self.io/subscriptions?success=true',
   cancel_url: 'https://beta.quantified-self.io/subscriptions', allow_promotion_codes: true,
@@ -56,6 +57,14 @@ describe('billing trust boundaries', () => {
   });
 });
 describe('current Stripe API to existing Firestore contract', () => {
+  it('normalizes tier amounts from the Stripe SDK without losing decimal precision', () => {
+    const price = { id: 'price_tiered', product: 'prod_test', metadata: {}, tiers: [
+      { up_to: 100, unit_amount: null, unit_amount_decimal: Decimal.from('0.123456789012'), flat_amount: 0, flat_amount_decimal: Decimal.from('0') },
+    ] } as unknown as Stripe.Price;
+    expect(priceProjections(price)[0].data.tiers).toEqual([
+      { up_to: 100, unit_amount: null, unit_amount_decimal: '0.123456789012', flat_amount: 0, flat_amount_decimal: '0' },
+    ]);
+  });
   it('uses item periods and trusted product roles while preserving references and dates', () => {
     const db = { doc: (path: string) => ({ path }) };
     const sub = { id: 'sub_test', status: 'trialing', livemode: false, metadata: { role: 'admin' }, created: 1,

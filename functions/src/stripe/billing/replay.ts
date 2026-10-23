@@ -16,7 +16,7 @@ export async function replayBillingJob(db: Firestore, id: string, execute = fals
     }
     if (!execute) return 'eligible';
     tx.update(ref, { state: 'pending', generation: row.get('generation') + 1, recoveries: 0, attempts: 0,
-      dueAt: Timestamp.now(), recoverAt: Timestamp.now(), dispatchedAt: FieldValue.delete(),
+      dueAt: Timestamp.now(), recoverAt: Timestamp.now(), dispatchedAt: FieldValue.delete(), dispatchRetryAt: FieldValue.delete(),
       lease: FieldValue.delete(), leaseUntil: FieldValue.delete(), error: FieldValue.delete(), expireAt: FieldValue.delete() });
     return 'requeued';
   });

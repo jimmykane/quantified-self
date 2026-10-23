@@ -4,13 +4,17 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import type Stripe from 'stripe';
+import { Decimal } from 'stripe';
 import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, billingId, type BillingEvent } from './model';
 import { admitBillingCheckout, admitBillingEvent, processBillingJob } from './queue';
-import { acquireBillingLease, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
+import { acquireBillingLease, commitBillingProjections, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
 import { dispatchBillingJob } from './dispatch';
 import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
+import { getBillingStripe } from '../client';
+import { processStripeBillingTask } from './handlers';
 
 vi.unmock('firebase-admin');
+vi.mock('../client', () => ({ getBillingStripe: vi.fn() }));
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST && !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const unique = () => randomUUID().replaceAll('-', '');
 describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_000 }, () => {
@@ -204,6 +208,40 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect((await subRef.get()).get('appOwned')).toBe(true);
     expect((await db.doc(`users/${f.uid}`).get()).data()).toEqual({ synthetic: true });
   });
+  it('replaces Stripe-owned maps while preserving application fields and literal metadata keys', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const ref = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await ref.set({ metadata: { retained: 'old', removed: 'stale' }, appOwned: { retained: true }, 'stripe_metadata_old.key': 'stale' });
+    const projection = { path: ref.path, data: { metadata: { retained: 'new' }, 'stripe_metadata_new.key': 'new' } };
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      await commitBillingProjections(f.ctx, lease, f.uid, f.customerId, [projection]);
+      const first = await ref.get();
+      expect(first.data()).toEqual({ metadata: { retained: 'new' }, appOwned: { retained: true }, 'stripe_metadata_new.key': 'new' });
+      await commitBillingProjections(f.ctx, lease, f.uid, f.customerId, [projection]);
+      expect((await ref.get()).updateTime?.isEqual(first.updateTime!)).toBe(true);
+    } finally { await releaseBillingLease(db, lease); }
+  });
+  it('deactivates a deleted product when an earlier update arrives after deletion', async () => {
+    const f = await fixture();
+    f.stripe.products.retrieve.mockRejectedValue({ code: 'resource_missing' });
+    const event = { ...f.event(), kind: 'product' as const, type: 'product.updated', objectId: f.product.id, customerId: null };
+    const id = (await admitBillingEvent(db, event))!;
+    await f.run(id);
+    expect((await db.doc(`products/${f.product.id}`).get()).get('active')).toBe(false);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+  });
+  it('fetches expanded price tiers and commits SDK decimals as lossless strings', async () => {
+    const f = await fixture();
+    Object.assign(f.price, { nickname: null, billing_scheme: 'tiered', tiers_mode: 'graduated', tax_behavior: 'exclusive',
+      tiers: [{ up_to: 100, unit_amount: null, unit_amount_decimal: Decimal.from('0.123456789012'), flat_amount: 0, flat_amount_decimal: Decimal.from('0') }] });
+    const event = { ...f.event(), kind: 'price' as const, type: 'price.updated', objectId: f.price.id, customerId: null };
+    const id = (await admitBillingEvent(db, event))!; await f.run(id);
+    expect(f.stripe.prices.retrieve).toHaveBeenCalledWith(f.price.id, { expand: ['tiers'] });
+    const stored = await db.doc(`products/${f.product.id}/prices/${f.price.id}`).get();
+    expect(stored.get('tiers')[0].unit_amount_decimal).toBe('0.123456789012');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+  });
   it('does not recreate public documents after deletion during customer creation; cleanup removes the accepted customer', async () => {
     const f = await fixture(); const create = f.stripe.customers.create.getMockImplementation()!;
     f.stripe.customers.create.mockImplementationOnce(async (...args) => {
@@ -290,11 +328,76 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     await ref.update({ state: 'failed' });
     expect(await replayBillingJob(db, id, true)).toBe('ineligible');
   });
+  it('does not charge earlier transport contention against the first provider attempt', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const id = (await admitBillingEvent(db, f.event()))!;
+    vi.mocked(getBillingStripe).mockResolvedValue(f.ctx.stripe);
+    f.stripe.subscriptions.retrieve.mockRejectedValueOnce(new Error('temporary provider outage'));
+    const request = { data: { id, generation: 0 }, retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+      executionCount: PROVIDER_MAX_RETRY_COUNT, queueName: 'processStripeBillingTask', id: 'synthetic-task', scheduledTime: new Date().toISOString(), retryReason: 'UNAVAILABLE' };
+    await expect(processStripeBillingTask.run(request as any)).rejects.toThrow();
+    const job = await db.doc(`${BILLING_JOBS}/${id}`).get();
+    expect(job.get('state')).toBe('pending');
+    expect(job.get('attempts')).toBe(1);
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    await f.readyRetry(id); await processStripeBillingTask.run({ ...request, retryCount: PROVIDER_MAX_RETRY_COUNT } as any);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+    expect(f.stripe.subscriptions.retrieve).toHaveBeenCalledTimes(2);
+  });
+  it('bounds repeated enqueue failures with durable backoff, terminal records and explicit replay', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const transport = { enqueue: vi.fn().mockRejectedValue(new Error('PRIVATE dispatch response')), exists: vi.fn() };
+    await ref.update({ recoveries: PROVIDER_MAX_RETRY_COUNT - 2 });
+    await dispatchBillingJob(db, id, transport);
+    let job = await ref.get();
+    expect(job.get('state')).toBe('pending');
+    expect(job.get('recoveries')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
+    expect(job.get('dispatchRetryAt').toMillis()).toBeGreaterThan(Date.now());
+    await dispatchBillingJob(db, id, transport); // Duplicate creation delivery respects saved backoff.
+    expect(transport.enqueue).toHaveBeenCalledTimes(1);
+    await ref.update({ dispatchRetryAt: Timestamp.fromMillis(0), recoverAt: Timestamp.fromMillis(0) });
+    await dispatchBillingJob(db, id, transport, true);
+    job = await ref.get();
+    expect(job.get('state')).toBe('failed');
+    expect(job.get('attempts')).toBe(0);
+    expect(job.get('recoveries')).toBe(PROVIDER_MAX_RETRY_COUNT);
+    const failure = (await db.doc(`failed_jobs/stripe_billing_${id}`).get()).data();
+    expect(failure?.error).toBe('retry_exhausted');
+    expect(JSON.stringify(failure)).not.toContain('PRIVATE');
+    expect((await f.ref.get()).get('error.code')).toBe('retry_exhausted');
+    expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    expect((await ref.get()).get('dispatchRetryAt')).toBeUndefined();
+    expect((await ref.get()).get('recoveries')).toBe(0);
+  });
+  it('bounds getTask failures without assuming that a reserved task is missing', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ dispatchedAt: Timestamp.now(), recoveries: PROVIDER_MAX_RETRY_COUNT - 1 });
+    const transport = { enqueue: vi.fn(), exists: vi.fn().mockRejectedValue(new Error('permission denied')) };
+    await dispatchBillingJob(db, id, transport, true);
+    expect(transport.enqueue).not.toHaveBeenCalled();
+    expect((await ref.get()).get('generation')).toBe(0);
+    expect((await ref.get()).get('state')).toBe('failed');
+    expect((await f.ref.get()).get('error.code')).toBe('retry_exhausted');
+  });
+  it('does not write retry failures or recreate checkout during deletion in a failed enqueue', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ recoveries: PROVIDER_MAX_RETRY_COUNT - 1 });
+    const transport = { exists: vi.fn(), enqueue: vi.fn(async () => {
+      await requestBillingDeletion(db, f.uid);
+      await db.recursiveDelete(db.doc(`customers/${f.uid}`));
+      throw new Error('ambiguous dispatch reply');
+    }) };
+    await dispatchBillingJob(db, id, transport);
+    expect((await ref.get()).get('recoveries')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    expect((await f.ref.get()).exists).toBe(false);
+  });
   it('recovers dispatch failure with the same task identity and rotates only a verified missing reservation', async () => {
     const f = await fixture(); const id = (await f.admit())!;
     const transport = { enqueue: vi.fn().mockRejectedValueOnce(new Error('outage')).mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) };
-    await expect(dispatchBillingJob(db, id, transport)).rejects.toThrow();
+    await dispatchBillingJob(db, id, transport);
     expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('dispatchedAt')).toBeUndefined();
+    await db.doc(`${BILLING_JOBS}/${id}`).update({ dispatchRetryAt: Timestamp.fromMillis(0) });
     await dispatchBillingJob(db, id, transport);
     expect(transport.enqueue.mock.calls.map(c => c.slice(0, 2))).toEqual([[id, 0], [id, 0]]);
     await dispatchBillingJob(db, id, transport, true);

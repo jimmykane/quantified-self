@@ -51,7 +51,7 @@ export async function main(args) {
     const Stripe = require('stripe'); const stripe = new Stripe(key, { apiVersion: '2026-07-29.dahlia', timeout: 20000 });
     if (options.catalog) {
       const { priceProjections, productProjection } = require('./lib/functions/src/stripe/billing/projections');
-      const prices = await stripe.prices.list({ limit: 100, expand: ['data.product'] });
+      const prices = await stripe.prices.list({ limit: 100, expand: ['data.product', 'data.tiers'] });
       if (prices.has_more) throw new Error('Catalog exceeds bounded page; do not apply a partial seed.');
       const projections = prices.data.flatMap(price => [productProjection(price.product), ...priceProjections(price)]);
       if (options.execute) {

@@ -77,7 +77,7 @@ export const processStripeBillingTask = onTaskDispatched<{ id: string; generatio
   rateLimits: { maxConcurrentDispatches: 10, maxDispatchesPerSecond: 10 }, concurrency: 1,
   secrets: FUNCTION_SECRET_BINDINGS.processStripeBillingTask }, async request => {
   await processBillingJob({ db: admin.firestore(), stripe: await getBillingStripe(), auth: admin.auth() },
-    request.data?.id, request.data?.generation, request.retryCount);
+    request.data?.id, request.data?.generation);
 });
 export const deleteStripeCustomerOnDocumentDeleted = onDocumentDeleted({ ...base, retry: true,
   document: 'customers/{uid}' }, async event => {
