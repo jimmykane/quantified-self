@@ -295,7 +295,7 @@
 .event-table-header {
   // App container tokens are translucent; sticky content needs a solid surface.
   background: var(--mat-sys-surface-bright);
-  background: rgb(from var(--mat-sys-background) r g b);
+  background: rgb(from var(--mat-sys-background) r g b / 1);
 }
 
 .event-table-header > th {

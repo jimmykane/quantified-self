@@ -2436,7 +2436,7 @@ describe('Event table open presentation styles', () => {
         expect(styles).not.toContain('box-shadow:');
         expect(styles).not.toContain('--loading-shade-error');
         expect(styles).toContain('background: transparent;');
-        expect(styles).toContain('background: rgb(from var(--mat-sys-background) r g b);');
+        expect(styles).toContain('background: rgb(from var(--mat-sys-background) r g b / 1);');
         expect(styles).toMatch(/\.activity-row\s*\{[^}]*height: auto;/);
     });
 });
