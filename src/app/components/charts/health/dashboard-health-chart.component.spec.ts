@@ -525,6 +525,50 @@ describe('dashboard chart source interactions', () => {
     expect(watch).toHaveBeenCalledTimes(watchCount);
     fixture.destroy(); expect(readings.observed).toBe(false);
   });
+  it('uses a styled range menu with full labels, checked state, stable focus and one haptic per accepted action', async () => {
+    const fixture = create('heart_rate'), component = fixture.componentInstance;
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    const trigger = fixture.nativeElement.querySelector('.health-range-trigger') as HTMLButtonElement;
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const watchCount = watch.mock.calls.length;
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(trigger.textContent).toContain('30d'); expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.focus(); trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(overlay.querySelector('.qs-menu-panel')).not.toBeNull();
+    const options = [...overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
+    expect(options.map(option => option.querySelector('span')?.textContent)).toEqual(['1 day', '14 days', '30 days', '90 days', '1 year']);
+    expect(options.map(option => option.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true', 'false', 'false']);
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(changed).not.toHaveBeenCalled();
+    expect(watch).toHaveBeenCalledTimes(watchCount);
+    expect(options[2].disabled).toBe(true); options[2].click();
+    expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).toHaveBeenCalledOnce();
+    options[1].click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(changed).toHaveBeenCalledExactlyOnceWith({ settings: { ...component.effectiveSettings(), range: '14d' }, initial: false });
+    expect(haptics.selection).toHaveBeenCalledTimes(2); expect(watch).toHaveBeenCalledTimes(watchCount);
+    expect(document.activeElement).toBe(trigger);
+    fixture.destroy();
+  });
+  it('supports keyboard dismissal and keeps disabled range choices silent', async () => {
+    const fixture = create(), component = fixture.componentInstance;
+    const trigger = fixture.nativeElement.querySelector('.health-range-trigger') as HTMLButtonElement;
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement(), changed = vi.fn();
+    component.settingsChange.subscribe(changed);
+    component.context.update(context => ({ ...context!, sampleRangeLimited: true })); fixture.detectChanges();
+    trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true })); trigger.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const options = [...overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
+    expect(options).toHaveLength(5); expect(options[4].disabled).toBe(true);
+    options[4].click(); expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).toHaveBeenCalledOnce();
+    overlay.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+    expect(document.activeElement).toBe(options[3]);
+    overlay.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); expect(document.activeElement).toBe(trigger);
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges(); haptics.selection.mockClear();
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(overlay.querySelector('[role="menu"]')).toBeNull(); expect(haptics.selection).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled(); fixture.destroy();
+  });
+
   it('uses plain attribution for one source and keeps an unavailable saved source replaceable', () => {
     const single = create('sleep_duration', undefined, false);
     expect(single.nativeElement.querySelector('.chart-source-trigger')).toBeNull();

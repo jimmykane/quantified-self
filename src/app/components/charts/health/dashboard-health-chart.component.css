@@ -6,8 +6,9 @@
 .health-tile-controls { position:relative; display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
 .health-tile-window { font-size:0.65rem; color:var(--mat-sys-on-surface-variant); }
 .health-range-controls { display:flex; align-items:center; flex-shrink:0; }
-.health-range { width:58px; font-size:0.75rem; }
-.health-range-controls button { --mdc-icon-button-state-layer-size:32px; padding:4px; width:32px; height:32px; }
+.health-range-trigger { --mat-button-text-label-text-color:var(--mat-sys-on-surface); min-width:58px; height:32px; padding:0 8px; font-size:0.82rem; }
+.health-range-trigger > mat-icon { width:18px; height:18px; font-size:18px; margin:0; }
+.health-range-controls > button[mat-icon-button] { --mdc-icon-button-state-layer-size:32px; padding:4px; width:32px; height:32px; }
 .health-sleep-source { flex:1; min-width:0; }
 .health-source-empty { display:flex; justify-content:flex-end; min-width:0; }
 /* Progress shares the toolbar edge, so idle and loading states reserve no extra row. */
@@ -46,7 +47,7 @@ app-health-metric-series-chart, app-sleep-trend-chart { flex:1; min-height:120px
 .health-preview { padding:0; gap:8px; }
 .health-preview-source { display:flex; flex-direction:column; gap:4px; font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }
 .health-preview-source strong { color:var(--mat-sys-on-surface); font:var(--mat-sys-label-large); }
-.health-preview .health-tile-window, .health-preview .health-range { font-size:0.8rem; }
+.health-preview .health-tile-window, .health-preview .health-range-trigger { font-size:0.8rem; }
 .health-preview .health-tile-summary { font-size:0.8rem; }
 .health-preview .health-tile-summary strong { font-size:1.65rem; }
 .health-preview .health-notice { font-size:0.8rem; }

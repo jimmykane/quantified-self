@@ -113,6 +113,11 @@ describe('help.content', () => {
     expect(content).toContain('**Import existing routes** remains available separately');
     expect(content).not.toContain('Saved-route libraries remain separate manual actions');
   });
+  it('explains the full-label Dashboard Health range menu', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('Tap the range button to open a menu with full labels and a checked selection.');
+  });
+
   it('explains the activity explorer, full shared table, partial history and saved filters', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
