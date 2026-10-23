@@ -357,3 +357,8 @@ mat-button-toggle:active {
 
 :host(.table-toolbar-layout) { width: auto; flex: 1 1 380px; }
 :host(.table-toolbar-layout) .toolbar-controls { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; min-width: 0; width: 100%; }
+
+@include bp.xsmall {
+  // The table stacks filters vertically here; a desktop flex basis becomes height.
+  :host(.table-toolbar-layout) { width: 100%; flex: 0 0 auto; }
+}

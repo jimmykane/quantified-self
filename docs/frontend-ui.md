@@ -1362,6 +1362,11 @@ The shared Health projection includes recorded Sleep duration/score, average/min
 
 ## Empty activity tables
 
+The Dashboard table's projected date/sport toolbar uses a content-sized flex basis at the same small-screen breakpoint
+where the table stacks its filters. Its desktop width hint must not reserve vertical space above the column headings.
+The shared table defaults to Start Date descending using numeric timestamps, including across month/year boundaries
+and live arrivals; an explicitly saved sort remains respected.
+
 The shared event table keeps its existing surface, filter controls, icon headings, data rows and saved table preferences.
 A completed query with no displayed activities renders a compact, surface-free notice below the table's scroll owner;
 it does not use the loading shade's error card. Empty date ranges suggest a wider range; sport, text and tag no-matches
