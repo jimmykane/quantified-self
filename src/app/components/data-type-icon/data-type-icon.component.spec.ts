@@ -99,12 +99,13 @@ import {
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import * as SportsLib from '@sports-alliance/sports-lib';
+import * as RRMetrics from '@sports-alliance/sports-lib/metrics';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatTooltip } from '@angular/material/tooltip';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
-import { BENCHMARK_RR_METRICS } from '../../helpers/benchmark-rr.helper';
+import { RR_METRICS } from '../../constants/rr-metrics';
 import { HeaderStatsComponent } from '../header-stats/header-stats.component';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 
@@ -185,8 +186,35 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderSVGIcon(SportsLib.DataPeakEPOC.type)).toBe('epoc');
   });
 
-  it.each(BENCHMARK_RR_METRICS.map(metric => metric.type))('uses a heart-interval icon for %s', type => {
-    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe('ecg_heart');
+  const rrIconCases = [
+    [RRMetrics.DataRRCoverage.type, 'data_usage'],
+    [RRMetrics.DataRRArtifactPercentage.type, 'filter_alt'],
+    [RRMetrics.DataRRSuspectedEctopicPairCount.type, 'join_inner'],
+    [RRMetrics.DataRRRMSSD.type, 'ssid_chart'],
+    [RRMetrics.DataRRSDNN.type, 'scatter_plot'],
+    [RRMetrics.DataRRPNN50.type, 'percent'],
+    [RRMetrics.DataRRDFAAlpha1Median.type, 'timeline'],
+    [RRMetrics.DataRRArtifactCount.type, 'filter_alt'],
+    [RRMetrics.DataRRSuspectedEctopicPairRate.type, 'join_inner'],
+    [RRMetrics.DataRRIntervalCount.type, 'format_list_numbered'],
+    [RRMetrics.DataRRInvalidIntervalCount.type, 'rule'],
+    [RRMetrics.DataRRGapCount.type, 'pause_circle'],
+    [RRMetrics.DataRRLongestGap.type, 'timer_off'],
+    [RRMetrics.DataRRMeanInterval.type, 'straighten'],
+    [RRMetrics.DataRRHeartRateAvg.type, 'ecg_heart'],
+    [RRMetrics.DataRRHeartRateMin.type, 'ecg_heart'],
+    [RRMetrics.DataRRHeartRateMax.type, 'ecg_heart'],
+    [RRMetrics.DataRRDFAAlpha1Min.type, 'timeline'],
+    [RRMetrics.DataRRDFAAlpha1Max.type, 'timeline'],
+    [RRMetrics.DataRRDFAWindowCount.type, 'view_module'],
+  ] as const;
+
+  it.each(rrIconCases)('uses the metric-specific R–R icon for %s', (type, icon) => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe(icon);
+  });
+
+  it('covers every primary and extra R–R statistic with an icon', () => {
+    expect(rrIconCases.map(([type]) => type)).toEqual(RR_METRICS.map(metric => metric.type));
   });
   const verticalSpeedTypes = Object.entries(SportsLib).flatMap(([name, candidate]) =>
     name.startsWith('DataVerticalSpeed') && typeof candidate === 'function'

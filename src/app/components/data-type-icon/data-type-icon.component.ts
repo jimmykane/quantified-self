@@ -136,7 +136,7 @@ const METRIC_FAMILY_ICONS = new Map<string, string>([
   DynamicDataLoader.dataTypeMinDataType[type], DynamicDataLoader.dataTypeMaxDataType[type]]
   .filter((variant): variant is string => typeof variant === 'string')
   .map(variant => [variant, icon] as const)));
-const RR_ICON_TYPES = new Set<string>(RR_METRICS.map(metric => metric.type));
+const RR_METRIC_ICONS = new Map<string, string>(RR_METRICS.map(metric => [metric.type, metric.icon]));
 
 @Component({
   selector: 'app-data-type-icon',
@@ -182,7 +182,8 @@ export class DataTypeIconComponent {
   }
 
   getColumnHeaderIcon(statName): string {
-    if (RR_ICON_TYPES.has(statName)) return 'ecg_heart';
+    const rrIcon = RR_METRIC_ICONS.get(statName);
+    if (rrIcon) return rrIcon;
     const summaryIcon = this.getSummaryMetricIcon(statName);
     if (summaryIcon) {
       return summaryIcon;

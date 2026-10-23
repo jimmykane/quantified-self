@@ -302,7 +302,8 @@ describe('EventCardStatsGridComponent', () => {
         expect(summary.textContent).not.toContain('Suspected ectopic pairs are algorithm flags');
         expect(summary.querySelector('.summary-disclosure-plain')).not.toBeNull();
         expect(!!summary.querySelector('mat-select')).toBe(benchmark);
-        expect(host.querySelector('.stat-avatar mat-icon')?.textContent?.trim()).toBe('ecg_heart');
+        expect(host.querySelector('[role="tab"] mat-icon')?.textContent?.trim()).toBe('ecg_heart');
+        expect(host.querySelector('.stat-avatar mat-icon')?.textContent?.trim()).toBe('ssid_chart');
         expect(host.querySelector('.stat-label')?.textContent?.trim()).toBe('RMSSD');
         expect(readStreams).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
         const button = host.querySelector<HTMLButtonElement>('app-summary-disclosure button')!;
@@ -310,6 +311,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(button.closest('.grid')?.lastElementChild).toBe(button.closest('.rr-summary-details-action'));
         expect(button.getAttribute('aria-expanded')).toBe('false'); button.click(); fixture.detectChanges();
         expect(button.getAttribute('aria-expanded')).toBe('true'); expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(summary.querySelector('[summaryDetails] .stat-avatar mat-icon')?.textContent?.trim()).toBe('filter_alt');
         expect(summary.querySelectorAll('.rr-summary-details-action button')).toHaveLength(1);
         expect(fixture.debugElement.queryAll(By.directive(HeaderStatsComponent)).every(node => node.componentInstance.showDiff === benchmark)).toBe(true);
         if (benchmark) {
@@ -325,6 +327,8 @@ describe('EventCardStatsGridComponent', () => {
         }
 
         fixture.componentRef.setInput('layout', 'condensed'); fixture.detectChanges();
+        expect(summary.querySelector('[summaryOverview] mat-chip mat-icon')?.textContent?.trim()).toBe('ssid_chart');
+        expect(summary.querySelector('[summaryDetails] mat-chip mat-icon')?.textContent?.trim()).toBe('filter_alt');
         expect(summary.querySelectorAll('.condensed .rr-summary-details-action button')).toHaveLength(1);
         expect(summary.querySelector('.summary-disclosure-footer')).toBeNull();
         fixture.componentRef.setInput('layout', 'grid'); fixture.detectChanges();
