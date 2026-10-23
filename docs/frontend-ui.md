@@ -1355,12 +1355,19 @@ At phone widths (up to 767px), dashboard boards containing Health charts treat t
 
 Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.
 
+Dashboard Health range controls use a compact Material button and the shared `qs-menu-panel` menu, matching the source and measurement menus. Menu options spell out the duration and mark the selected range; their width follows the app menu styling rather than the trigger width. Opening owns one selection haptic and makes no data request. A changed range retains the chart handler as its sole feedback/settings owner. Current, unavailable sample-only year and disabled choices remain inert; Material owns keyboard navigation and focus return. This changes presentation only, without Health/MCP reads, metric contracts, consent or stored settings changes on opening.
+
 Health thumbnails reuse completed browser evidence for the same owner, metric, range and source while their visible subscription hydrates. Their latest value uses the existing canonical display string. The inert ECharts sparkline fits the span of recorded points, preserving values, gaps and colors; single readings and zero-valued bars remain visible. Full charts retain their selected date axis. Source options require drawable points in the selected window (or renderable Sleep sessions). A saved missing source retains its identity and displays `Source unavailable` with an explanation. The menu offers available replacements without silently substituting one; with no replacements it remains plain attribution.
 
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
 
 
 ## Empty activity tables
+
+The Dashboard table's projected date/sport toolbar uses a content-sized flex basis at the same small-screen breakpoint
+where the table stacks its filters. Its desktop width hint must not reserve vertical space above the column headings.
+The shared table defaults to Start Date descending using numeric timestamps, including across month/year boundaries
+and live arrivals; an explicitly saved sort remains respected.
 
 The shared event table keeps its existing surface, filter controls, icon headings, data rows and saved table preferences.
 A completed query with no displayed activities renders a compact, surface-free notice below the table's scroll owner;

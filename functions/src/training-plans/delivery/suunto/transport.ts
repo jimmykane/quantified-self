@@ -138,7 +138,7 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
         try { await guard(true); } catch (error) {
           await this.save(operation, checkpoint, operation.artifact, step, 'rejected'); throw error;
         }
-      });
+      }, () => this.save(operation, checkpoint, operation.artifact, step, 'rejected'));
     } catch (error) {
       if (error instanceof SuuntoGuideHttpError && error.rejected) await this.save(operation, checkpoint, operation.artifact, step, 'rejected');
       throw error;

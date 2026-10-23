@@ -5,6 +5,7 @@ import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
+import { isSuuntoSubscriptionKeyRejection } from './authorization-recovery';
 import {
   getUserDeletionGuardState,
   UserDeletionGuardReadError,
@@ -432,6 +433,17 @@ function toSuuntoProviderOperationError(
       code: 'failed-precondition',
       message: 'Suunto rejected the saved activity upload continuation.',
       dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_CONTINUATION_REJECTED',
+    });
+  }
+
+  if (isSuuntoSubscriptionKeyRejection(statusCode, (error as { error?: unknown } | null)?.error)) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permanent',
+      code: 'failed-precondition',
+      message: 'Suunto application subscription access is unavailable.',
+      providerCode: 'subscription_key_rejected',
+      dlqContext: 'SUUNTO_APPLICATION_ACCESS_REQUIRED',
     });
   }
 

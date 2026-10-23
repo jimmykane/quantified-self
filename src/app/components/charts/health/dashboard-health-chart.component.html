@@ -13,9 +13,18 @@
       } @else { <span class="health-tile-window">{{ window().label }}</span> }
       @if (!overview()) { <div class="health-range-controls">
         <button mat-icon-button aria-label="Show older period" [disabled]="disabled()" (click)="navigate('older')"><mat-icon>chevron_left</mat-icon></button>
-        <mat-select class="health-range" [aria-label]="title() + ' date range'" [value]="settings().range" [disabled]="disabled()" (selectionChange)="selectRange($event.value)">
-          @for (range of ranges; track range.value) { <mat-option [value]="range.value" [disabled]="isRangeDisabled(range.value)">{{ range.label }}</mat-option> }
-        </mat-select>
+        <button mat-button type="button" class="health-range-trigger" [matMenuTriggerFor]="healthRangeMenu"
+          [attr.aria-label]="title() + ' date range: ' + rangeLabel()" [disabled]="disabled()" (menuOpened)="onRangeMenuOpened()">
+          <span>{{ rangeLabel() }}</span><mat-icon aria-hidden="true" iconPositionEnd>keyboard_arrow_down</mat-icon>
+        </button>
+        <mat-menu #healthRangeMenu="matMenu" class="qs-menu-panel" xPosition="before">
+          @for (range of ranges; track range.value) {
+            <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="settings().range === range.value"
+              [disabled]="disabled() || isRangeDisabled(range.value) || settings().range === range.value" (click)="selectRange(range.value)">
+              <mat-icon aria-hidden="true">{{ settings().range === range.value ? 'check' : 'calendar_today' }}</mat-icon><span>{{ range.menuLabel }}</span>
+            </button>
+          }
+        </mat-menu>
         <button mat-icon-button aria-label="Show newer period" [disabled]="disabled() || !window().canNavigateNewer" (click)="navigate('newer')"><mat-icon>chevron_right</mat-icon></button>
       </div> }
       <div class="health-loading-slot"><mat-progress-bar mode="indeterminate" [style.visibility]="loading() ? 'visible' : 'hidden'" [attr.aria-label]="'Loading ' + title()" /></div>

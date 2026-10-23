@@ -6,7 +6,8 @@ import { readTrainingDeliveryAuthority } from '../connection';
 import { TrainingDeliveryTransportError, type DeliveryOperation } from '../contracts';
 
 export async function authorizeSuuntoGuideRequest(db: Firestore, uid: string,
-  operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>): Promise<{ accessToken: string; account: string }> {
+  operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>,
+  forceRefresh = false): Promise<{ accessToken: string; account: string }> {
   const read = () => db.runTransaction(async tx => {
     if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) throw new TrainingDeliveryTransportError('auth');
     const authority = await readTrainingDeliveryAuthority(db, tx, uid, 'suunto');
@@ -17,7 +18,7 @@ export async function authorizeSuuntoGuideRequest(db: Firestore, uid: string,
   });
   const before = await read(); let refreshed;
   try {
-    refreshed = await getTokenData(before.token!, ServiceNames.SuuntoApp, false, {
+    refreshed = await getTokenData(before.token!, ServiceNames.SuuntoApp, forceRefresh, {
       opaqueTelemetry: true, expectedActiveOAuthCredentialGeneration: before.credentialGeneration,
     });
   } catch { throw new TrainingDeliveryTransportError('retryable'); }

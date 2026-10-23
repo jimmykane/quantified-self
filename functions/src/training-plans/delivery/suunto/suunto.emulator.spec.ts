@@ -237,13 +237,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       expect(server.calls).toHaveLength(calls);
       expect(server.guides.size).toBe(1);
     });
-  const useCreate200Http = () => {
+  const useCreate200Http = (rejectOnce?: 401 | 403, afterRefresh?: () => Promise<void>) => {
     server.createStatus = 200;
     // Exercise the real HTTP envelope decoder, never the real provider: the
     // injected fetcher is an in-memory fixture with synthetic credentials.
-    const client = createSuuntoGuideClient(async () => ({ accessToken: 'fixture-token', account: 'fixture-account' }),
+    const authorize = vi.fn(async (forceRefresh?: boolean) => {
+      if (forceRefresh) await afterRefresh?.();
+      return { accessToken: forceRefresh ? 'refreshed-fixture-token' : 'fixture-token', account: 'fixture-account' };
+    });
+    let rejected = false;
+    const client = createSuuntoGuideClient(authorize,
       () => 'fixture-key', async (url, init) => {
         const parsed = new URL(String(url));
+        if (rejectOnce && !rejected && init?.method === 'POST') {
+          rejected = true;
+          return new Response(null, { status: rejectOnce });
+        }
         const response = await server.request({ method: init!.method as 'GET' | 'POST' | 'PUT' | 'DELETE',
           path: `${parsed.pathname}${parsed.search}`, ...(init?.body ? { body: Buffer.from(init.body as Uint8Array) } : {}) }, async () => {});
         return new Response(Buffer.isBuffer(response.body) ? new Uint8Array(response.body)
@@ -251,7 +260,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       });
     const transport = new SuuntoGuideTransport(client, 'Quantified Self', () => now);
     runtime.transport = provider => provider === 'suunto' ? transport : null;
+    return authorize;
   };
+  it.each([401, 403] as const)('journals rejection before HTTP %s refresh, then delivers exactly one Guide', async status => {
+    const authorize = useCreate200Http(status, async () => {
+      expect((await ledger()).attempt?.progress).toMatchObject({ step: 'create', state: 'rejected' });
+      expect(server.guides.size).toBe(0);
+    });
+    const row = await send();
+    expect(row).toMatchObject({ status: 'delivered', attempt: null, retries: 0, actual: { ids: { guide: 'guide-1' } } });
+    expect(authorize.mock.calls.filter(([force]) => force)).toHaveLength(1);
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+  });
+  it('retains a definite create rejection when refresh fails, allowing the existing worker retry safely', async () => {
+    const authorize = useCreate200Http(403, async () => { throw new Error('fixture refresh failure'); });
+    const row = await send();
+    expect(row).toMatchObject({ status: 'retrying', actual: null, attempt: { progress: { step: 'create', state: 'rejected' } } });
+    expect(server.guides.size).toBe(0);
+    expect(authorize.mock.calls.filter(([force]) => force)).toHaveLength(1);
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.guides.size).toBe(1);
+  });
+  it('does not send after Pro access changes during recovery', async () => {
+    useCreate200Http(403, async () => { pro = false; });
+    const row = await send();
+    expect(row.status).toBe('paused_pro');
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.guides.size).toBe(0);
+  });
   it('accepts create HTTP 200 only after file readback with durable receipts for one Guide', async () => {
     useCreate200Http();
     const row = await send();

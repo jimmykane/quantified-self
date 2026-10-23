@@ -15,6 +15,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { ActivityTypes, DataActivityTypes, DataDeviceNames, DataDistance, EventImporterJSON, FileType, Privacy, DistanceUnits, User, type EventInterface } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
+import { AppEventSummary } from '@shared/event-summary';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -759,6 +760,36 @@ describe('ActivitiesPageComponent', () => {
     expect(table().emptyMessage).toBe('No activities match these filters');
     expect(table().emptyHint).toBe('Change your dates or clear a filter.');
     expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('defaults to newest-first dates across year boundaries and retains an explicit ascending choice (%s)', async (ascending) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2027, 0, 2, 12));
+    try {
+      const c = await setup('', true);
+      const settings = c.user$.value.settings.dashboardSettings.tableSettings;
+      delete settings.active; delete settings.direction;
+      if (ascending) { settings.active = 'Start Date'; settings.direction = 'asc'; }
+      const summary = (name: string, date: Date) => new AppEventSummary({
+        id: name, name, startDate: +date, endDate: +date + 60_000, srcFileType: FileType.FIT,
+        privacy: Privacy.Private, description: null, isMerge: false,
+        stats: { 'Activity Types': [ActivityTypes.Cycling], 'Device Names': [], Distance: 1000 },
+      });
+      const data = [summary('Oldest ride', new Date(2026, 11, 6)), summary('Newest ride', new Date(2027, 0, 1)), summary('Middle ride', new Date(2026, 11, 31))];
+      const updates$ = new BehaviorSubject(data);
+      c.events.getEventSummariesBy.mockReturnValue(updates$); await render(c);
+      const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+      const names = () => [...c.fixture.nativeElement.querySelectorAll('tr.activity-row .activity-custom-name')]
+        .map((node: HTMLElement) => node.textContent?.trim());
+      expect(table.sort.active).toBe('Start Date'); expect(table.sort.direction).toBe(ascending ? 'asc' : 'desc');
+      const expected = ['Newest ride', 'Middle ride', 'Oldest ride'];
+      expect(names()).toEqual(ascending ? [...expected].reverse() : expected);
+      updates$.next([...data, summary('Latest arrival', new Date(2027, 0, 2, 10))]); await render(c);
+      expect(names()).toEqual(ascending ? [...expected].reverse().concat('Latest arrival') : ['Latest arrival', ...expected]);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(c.userService.updateUserProperties).not.toHaveBeenCalled(); expect(c.haptics.selection).not.toHaveBeenCalled();
+      c.fixture.destroy();
+    } finally { vi.useRealTimers(); }
   });
 
   it('uses the real shared paginator, totals, full search and metric sorting without extra queries', async () => {

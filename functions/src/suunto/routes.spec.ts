@@ -169,6 +169,7 @@ import {
     createSuuntoRouteUploadContext,
     exportSuuntoRouteAsGPX,
     importRouteToSuuntoApp,
+    listSuuntoRoutes,
     uploadGPXRouteToSuuntoApp,
 } from './routes';
 
@@ -272,6 +273,63 @@ describe('importRouteToSuuntoApp', () => {
         }));
 
         expect(result).toEqual({ status: 'success' });
+    });
+
+    it.each([401, 403])('refreshes once for a rejected route upload (%s)', async statusCode => {
+        tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'old', userName: 'suunto-user' })
+            .mockResolvedValueOnce({ accessToken: 'new', userName: 'suunto-user' });
+        requestMocks.post.mockRejectedValueOnce(Object.assign(new Error('rejected'), { statusCode }))
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-id' }));
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', VALID_GPX_ROUTE)).resolves.toMatchObject({ successCount: 1 });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(requestMocks.post).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer new' }), body: VALID_GPX_ROUTE,
+        }));
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+    });
+
+    it.each([401, 403])('recovers a route export auth envelope returned with HTTP 200 (%s)', async code => {
+        requestMocks.get.mockResolvedValueOnce(JSON.stringify({ code, message: 'private provider message' }))
+            .mockResolvedValueOnce('<gpx>route</gpx>');
+        await expect(exportSuuntoRouteAsGPX('test-user-id', 'route')).resolves.toBe('<gpx>route</gpx>');
+        expect(requestMocks.get).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+    });
+
+    it.each([false, true])('refreshes a rejected route listing once (HTTP 200 envelope: %s)', async envelope => {
+        if (envelope) requestMocks.get.mockResolvedValueOnce({ code: 403, message: 'private provider text' });
+        else requestMocks.get.mockRejectedValueOnce(Object.assign(new Error('rejected'), { statusCode: 403 }));
+        requestMocks.get.mockResolvedValueOnce([]);
+        await expect(listSuuntoRoutes('test-user-id')).resolves.toMatchObject({ routes: [], failedProviderUserIds: [] });
+        expect(requestMocks.get).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+    });
+
+    it('stops after a persistent route export authorization envelope', async () => {
+        requestMocks.get.mockResolvedValue(JSON.stringify({ code: 403, message: 'private provider text' }));
+        await expect(exportSuuntoRouteAsGPX('test-user-id', 'route')).rejects.toMatchObject({ statusCode: 403 });
+        expect(requestMocks.get).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops after a persistent route upload 403', async () => {
+        requestMocks.post.mockRejectedValue(Object.assign(new Error('rejected'), { statusCode: 403 }));
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', VALID_GPX_ROUTE)).rejects.toMatchObject({
+            disposition: 'permission_required', retryMode: 'none', statusCode: 403,
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not refresh for a known route subscription-key rejection', async () => {
+        requestMocks.post.mockRejectedValue(Object.assign(new Error('rejected'), {
+            statusCode: 403, error: { statusCode: 403, message: 'Access denied due to missing subscription key.' },
+        }));
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', VALID_GPX_ROUTE)).rejects.toMatchObject({
+            disposition: 'permanent', providerCode: 'subscription_key_rejected',
+        });
+        expect(tokensMocks.getTokenData).toHaveBeenCalledOnce();
+        expect(requestMocks.post).toHaveBeenCalledOnce();
     });
 
     it('accepts an uncompressed GPX route from the current uploader', async () => {
@@ -669,6 +727,20 @@ describe('importRouteToSuuntoApp', () => {
             .rejects.toBe(refreshError);
 
         expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('keeps an OAuth SDK refresh 403 retryable without another route POST (forced: %s)', async forced => {
+        if (forced) {
+            tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'token' });
+            requestMocks.post.mockRejectedValueOnce(Object.assign(new Error('rejected'), { statusCode: 403 }));
+        }
+        tokensMocks.getTokenData.mockRejectedValueOnce(Object.assign(new Error('Response Error: 403 Forbidden'), {
+            isBoom: true, output: { statusCode: 403 }, data: { payload: { message: 'private provider detail' } },
+        }));
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', VALID_GPX_ROUTE)).rejects.toMatchObject({
+            statusCode: 503, message: 'Suunto token refresh was rejected; resource access was not retried.',
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(forced ? 1 : 0);
     });
 
     it('keeps an explicit Suunto rate-limit rejection retryable', async () => {
