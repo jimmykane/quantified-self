@@ -1,6 +1,7 @@
+import type { EventRead } from '@shared/event-read';
 import { DASHBOARD_HEALTH_METRIC_CHART_TYPE } from './dashboard-special-chart-types';
 import type { DashboardHrvContext } from './dashboard-hrv-context.helper';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+
 import {
   ChartDataCategoryTypes,
   ChartTypes,
@@ -11,7 +12,7 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import {
-  buildEventStatAggregation,
+  buildEventStatAggregation, EventStatAggregationContext,
 } from '@shared/event-stat-aggregation';
 import type {
   EventStatAggregationLogger,
@@ -142,7 +143,7 @@ import type {
 
 export interface DashboardChartTileViewModel extends AppDashboardChartTileSettingsInterface {
   timeInterval: TimeIntervals;
-  data: AggregatedChartRow[] | EventInterface[] | DashboardFormPoint[];
+  data: AggregatedChartRow[] | EventRead[] | DashboardFormPoint[];
   recoveryNow?: DashboardRecoveryNowContext;
   absoluteLatestFormPoint?: DashboardFormPoint | null;
   acwr?: DashboardAcwrContext | null;
@@ -170,7 +171,7 @@ export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'>
 };
 
 export interface DashboardMapTileViewModel extends DashboardMapTileSettings {
-  events: EventInterface[];
+  events: EventRead[];
   routePreviews: FirestoreRouteJSON[];
 }
 
@@ -181,8 +182,8 @@ const DASHBOARD_CUSTOM_CHART_WEEKLY_AUTO_MAX_DAYS = 120;
 
 interface BuildDashboardTileViewModelsInput {
   tiles: TileSettingsInterface[];
-  events?: EventInterface[] | null;
-  tileEventsByOrder?: Record<number, EventInterface[] | undefined> | null;
+  events?: EventRead[] | null;
+  tileEventsByOrder?: Record<number, EventRead[] | undefined> | null;
   routePreviews?: FirestoreRouteJSON[] | null;
   hrvTrend?: DashboardHrvContext | null;
   hrvPreferredSource?: string | null;
@@ -211,7 +212,7 @@ interface BuildDashboardTileViewModelsInput {
   } | null;
 }
 
-function resolveEventStartDateTimeMs(event: EventInterface): number | null {
+function resolveEventStartDateTimeMs(event: EventRead): number | null {
   const startDate = (event as { startDate?: unknown } | null)?.startDate;
   if (startDate instanceof Date) {
     const startTimeMs = startDate.getTime();
@@ -228,8 +229,8 @@ function resolveEventStartDateTimeMs(event: EventInterface): number | null {
 }
 
 function normalizeDashboardTileEvents(
-  events?: EventInterface[] | null,
-): EventInterface[] {
+  events?: EventRead[] | null,
+): EventRead[] {
   const normalizedEvents = [...(events || [])]
     .filter(event => (event as { isMerge?: boolean } | null)?.isMerge !== true)
     .sort((left, right) => {
@@ -243,8 +244,8 @@ function normalizeDashboardTileEvents(
 function resolveEventsForTile(
   input: BuildDashboardTileViewModelsInput,
   tile: TileSettingsInterface,
-  fallbackEvents: EventInterface[],
-): EventInterface[] {
+  fallbackEvents: EventRead[],
+): EventRead[] {
   const rawTileEvents = input.tileEventsByOrder?.[tile.order] || fallbackEvents;
   const normalizedTileEvents = normalizeDashboardTileEvents(rawTileEvents);
   const tileWithFilters = tile as TileSettingsInterface & {
@@ -298,6 +299,20 @@ export function buildDashboardTileViewModels(
   input: BuildDashboardTileViewModelsInput,
 ): DashboardTileViewModel[] {
   const normalizedEvents = normalizeDashboardTileEvents(input.events);
+  const aggregationContext = new EventStatAggregationContext();
+  const tileInputs = new WeakMap<EventRead[], Map<string, EventRead[]>>();
+  const resolveTileEvents = (tile: TileSettingsInterface) => {
+    const source = input.tileEventsByOrder?.[tile.order] || normalizedEvents;
+    let variants = tileInputs.get(source);
+    if (!variants) tileInputs.set(source, variants = new Map());
+    const key = JSON.stringify(normalizeDashboardTileEventFilters(tile['eventFilters']).activityTypes);
+    let events = variants.get(key);
+    if (!events) {
+      events = resolveEventsForTile(input, tile, normalizedEvents);
+      variants.set(key, events);
+    }
+    return events;
+  };
   const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
   const nowMs = Date.now();
   const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
@@ -641,7 +656,7 @@ export function buildDashboardTileViewModels(
     }
 
     if (chartTile.chartType === ChartTypes.IntensityZones) {
-      const tileEvents = resolveEventsForTile(input, chartTile, normalizedEvents);
+      const tileEvents = resolveTileEvents(chartTile);
       viewModels.push({
         ...chartTile,
         timeInterval: TimeIntervals.Auto,
@@ -669,14 +684,14 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
-    const tileEvents = resolveEventsForTile(input, chartTile, normalizedEvents);
+    const tileEvents = resolveTileEvents(chartTile);
     const aggregation = buildEventStatAggregation(tileEvents, {
       dataType: chartTile.dataType,
       valueType: chartTile.dataValueType,
       categoryType: chartTile.dataCategoryType,
       requestedTimeInterval,
       preferences: input.preferences,
-    }, input.logger);
+    }, input.logger, aggregationContext);
     const chartRowsForTile = buildAggregatedChartRows(aggregation);
 
     viewModels.push({

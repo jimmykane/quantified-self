@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, Injector, OnInit, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
@@ -8,7 +9,7 @@ import { MatSelect } from '@angular/material/select';
 import { combineLatest, Subscription, take } from 'rxjs';
 import dayjs, { type Dayjs } from 'dayjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
-import type { AppEventInterface } from '@shared/app-event.interface';
+
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
@@ -58,7 +59,7 @@ export class ActivitiesPageComponent implements OnInit {
   private allDatesDialog?: MatDialogRef<ConfirmationDialogComponent, boolean>;
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
-  readonly events = signal<AppEventInterface[]>([]);
+  readonly events = signal<EventRead[]>([]);
   readonly catalogTags = signal<string[]>([]);
   readonly selectedTags = signal<string[]>([]);
   readonly selectedSports = signal<string[]>([]);
@@ -468,7 +469,7 @@ export class ActivitiesPageComponent implements OnInit {
       { fieldPath: 'startDate', opStr: '<', value: range.end.getTime() },
     ] : [];
     let initial = true;
-    this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', false, 0)
+    this.eventsSubscription = this.eventService.getEventSummariesBy(user, where, 'startDate', false, 0)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: events => {

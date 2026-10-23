@@ -1,4 +1,5 @@
-import { ActivityTypes, DateRanges, DaysOfTheWeek, EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import { ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import {
   AppDashboardEventTableFiltersInterface,
@@ -201,9 +202,9 @@ export function navigateDashboardTileEventWindow(
 }
 
 export function filterDashboardTileEventsByActivityTypes(
-  events: EventInterface[],
+  events: EventRead[],
   activityTypes: ActivityTypes[] | null | undefined,
-): EventInterface[] {
+): EventRead[] {
   const normalizedActivityTypes = normalizeActivityTypes(activityTypes, []);
   if (!normalizedActivityTypes.length) {
     return events;
@@ -212,7 +213,7 @@ export function filterDashboardTileEventsByActivityTypes(
 }
 
 export function eventMatchesDashboardActivityTypes(
-  event: EventInterface,
+  event: EventRead,
   activityTypes: ActivityTypes[] | null | undefined,
 ): boolean {
   const normalizedActivityTypes = normalizeActivityTypes(activityTypes, []);

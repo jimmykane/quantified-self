@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { collection, collectionData, doc, docData, Firestore, runTransaction, serverTimestamp,
   query, where, limit } from 'app/firebase/firestore';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
 import { combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
 import { DEFAULT_TRAINING_LOAD_POLICY, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
@@ -32,10 +32,10 @@ export class TrainingLoadService {
     return collectionData(collection(this.firestore, `users/${uid}/trainingLoadPolicies`), { idField: 'id' }) as Observable<TrainingLoadPolicyHead[]>;
   }
 
-  watchEffective(uid: string, events: readonly EventInterface[]): Observable<Map<string, TrainingLoadView>> {
+  watchEffective(uid: string, events: readonly EventRead[]): Observable<Map<string, TrainingLoadView>> {
     if (!events.length) return of(new Map());
     return combineLatest(events.map(event => this.watch(uid, event.getID() as string).pipe(switchMap(metadata => {
-      const loaded = event.getActivities().map(activity => ({ ...activity.toJSON(), id: activity.getID() as string,
+      const loaded = (event.getActivities?.() ?? []).map(activity => ({ ...activity.toJSON(), id: activity.getID() as string,
         type: activity.type, getStat: activity.getStat.bind(activity) }));
       const legs = Object.values(metadata?.legs ?? {}).filter(leg => leg.activityId);
       const needsSources = metadata && !metadata.excluded && !metadata.sourceWritePending && !loaded.length
@@ -55,7 +55,7 @@ export class TrainingLoadService {
         let stale = activities === null;
         if (!stale && metadata && !metadata.excluded && !metadata.sourceWritePending) {
           stale = !!metadata.parentFingerprint && metadata.parentFingerprint !==
-            await browserTrainingLoadSourceFingerprint(event.toJSON?.() ?? event);
+            await browserTrainingLoadSourceFingerprint(('toJSON' in event && typeof event.toJSON === 'function' ? event.toJSON() : event.getSourceSnapshot?.() ?? event));
           if (!stale && metadata.legs) {
             const current = new Map(activities!.map(activity => [activity.id, activity]));
             const matches = await Promise.all(legs.map(async leg => {

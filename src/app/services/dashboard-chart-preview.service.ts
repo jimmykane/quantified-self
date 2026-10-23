@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import { DashboardHrvService } from './dashboard-hrv.service';
 import { inject, Injectable } from '@angular/core';
 import { Observable, catchError, defer, finalize, map, merge, of, scan, shareReplay, startWith } from 'rxjs';
@@ -92,7 +93,7 @@ export class DashboardChartPreviewService {
 
   private watchEvents(user: AppUserInterface, filters: ReturnType<typeof normalizeDashboardTileEventFilters>, now: number) {
     const window = resolveDashboardTileEventWindow(filters, user.settings.unitSettings?.startOfTheWeek, null, now);
-    return this.events.getEventsBy(user, [
+    return this.events.getEventSummariesBy(user, [
       ...(window.startMs === null ? [] : [{ fieldPath: 'startDate', opStr: '>=' as const, value: window.startMs }]),
       { fieldPath: 'startDate', opStr: '<=' as const, value: window.endMs ?? now },
     ], 'startDate', false, 0).pipe(map(events => events.filter(event => !event.isMerge)));

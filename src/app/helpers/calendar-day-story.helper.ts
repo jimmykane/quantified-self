@@ -1,6 +1,7 @@
+import type { EventRead } from '@shared/event-read';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+
 import type { DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 import type { CalendarDayHealthSummary } from './calendar-day-health.helper';
 import type { PlannedWorkoutCalendarEntry } from './planned-workout-calendar.helper';
@@ -36,7 +37,7 @@ interface CalendarDayStoryInput {
   locale?: string;
   nowMs: number;
   activityStatus: 'loading' | 'ready' | 'error';
-  events: readonly EventInterface[];
+  events: readonly EventRead[];
   notes: readonly TimelineNote[];
   planStatus: 'loading' | 'ready' | 'error';
   plans: readonly PlannedWorkoutCalendarEntry[];

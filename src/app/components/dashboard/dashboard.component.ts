@@ -1,8 +1,9 @@
+import type { EventRead } from '@shared/event-read';
 import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
 import { combineLatest, from, merge, of, Subject } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib';
+
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -67,7 +68,7 @@ import {
 } from '../../helpers/suunto-service-connection.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
-import { AppEventInterface } from '@shared/app-event.interface';
+
 import { getEventTags } from '@shared/event-tags';
 import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
 import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
@@ -83,7 +84,7 @@ import type { ConnectionHistoryStatusProjection } from '@shared/connection-histo
 export class DashboardComponent implements OnInit, OnDestroy {
   public user: AppUserInterface;
   public targetUser: AppUserInterface;
-  public events: EventInterface[];
+  public events: EventRead[];
   public searchTerm: string;
   public searchStartDate: Date | null;
   public searchEndDate: Date | null;
@@ -125,7 +126,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
   private manualSearchRefreshToken = 0;
   private initialLiveReconcilePending = false;
-  private initialResolvedEventsForReconcile: EventInterface[] = [];
+  private initialResolvedEventsForReconcile: EventRead[] = [];
   private initialResolvedUserIDForReconcile: string | null = null;
   private eventTableFiltersCacheSignature: string | null = null;
   private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
@@ -293,10 +294,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // Use the live listener but ensure we don't emit redundant data if it matches what we already have
       return this.eventService
-        .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
+        .getEventSummariesBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => this.areEventsEquivalentByIdentity(p, c)),
-          map((eventsArray: EventInterface[]) => {
+          distinctUntilChanged((p: EventRead[], c: EventRead[]) => this.areEventsEquivalentByIdentity(p, c)),
+          map((eventsArray: EventRead[]) => {
             if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
               this.initialLiveReconcilePending = false;
             }
@@ -355,7 +356,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             });
             return result;
           }),
-          filter((eventsArray: EventInterface[] | null): eventsArray is EventInterface[] => eventsArray !== null),
+          filter((eventsArray: EventRead[] | null): eventsArray is EventRead[] => eventsArray !== null),
           map((events) => {
             return { events: events, user: user }
           }))
@@ -940,7 +941,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  private trackEventsListenerEmission(eventsArray: EventInterface[]): void {
+  private trackEventsListenerEmission(eventsArray: EventRead[]): void {
     const emitStart = performance.now();
     this.hasMergedEvents = eventsArray.some(event => event.isMerge);
     this.logPerf('events_listener_emit', emitStart, { incomingEvents: eventsArray?.length || 0 });
@@ -1385,7 +1386,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     await this.router.navigate(['/subscriptions']);
   }
 
-  private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {
+  private areEventsEquivalentByIdentity(previousEvents: EventRead[] = [], currentEvents: EventRead[] = []): boolean {
     if (previousEvents?.length !== currentEvents?.length) {
       return false;
     }
@@ -1394,14 +1395,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
         && previousEvent?.name === currentEvent?.name
         && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent)
-        && JSON.stringify(getEventTags(previousEvent as AppEventInterface))
-          === JSON.stringify(getEventTags(currentEvent as AppEventInterface));
+        && JSON.stringify(getEventTags(previousEvent as EventRead))
+          === JSON.stringify(getEventTags(currentEvent as EventRead));
     });
   }
 
   private buildEventsIdentityMismatchSummary(
-    previousEvents: EventInterface[] = [],
-    currentEvents: EventInterface[] = [],
+    previousEvents: EventRead[] = [],
+    currentEvents: EventRead[] = [],
   ): Record<string, unknown> {
     const previousLength = previousEvents?.length || 0;
     const currentLength = currentEvents?.length || 0;
@@ -1459,7 +1460,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     };
   }
 
-  private getEventStableID(event: EventInterface | undefined): string | null {
+  private getEventStableID(event: EventRead | undefined): string | null {
     if (!event) {
       return null;
     }
@@ -1470,7 +1471,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return eventAny.id || null;
   }
 
-  private getEventStableStartDate(event: EventInterface | undefined): number | null {
+  private getEventStableStartDate(event: EventRead | undefined): number | null {
     if (!event) {
       return null;
     }

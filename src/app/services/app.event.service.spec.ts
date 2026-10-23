@@ -482,6 +482,30 @@ describe('AppEventService', () => {
             .not.toBe((service as any).buildEventDetailsFingerprint(current));
     });
 
+    it('seeds lazy summaries independently of complete events and preserves QS metadata', async () => {
+        const user = { uid: 'summary-owner' } as any;
+        const eventDoc = createQueryDoc('summary-id', { name: 'Run', startDate: 1710000000000,
+            endDate: 1710001000000, stats: { Distance: 0, 'Activity Types': ['Running'] },
+            tags: ['Easy'], originalFiles: [{ path: 'source.fit' }], mergeType: 'multi', });
+        (getDocs as Mock).mockResolvedValue({ docs: [eventDoc], size: 1, metadata: { fromCache: false } });
+        (onSnapshot as Mock).mockImplementation((_query, _options, next) => {
+            next(createQuerySnapshot([eventDoc], [{ type: 'added', doc: eventDoc, oldIndex: -1, newIndex: 0 }]));
+            return vi.fn();
+        });
+        const once = await firstValueFrom(service.getEventSummariesOnceByWithMeta(user, [], 'startDate', false, 0, { seedLiveQuery: true }));
+        const live = await firstValueFrom(service.getEventSummariesBy(user, [], 'startDate', false, 0));
+        expect(live[0]).toBe(once.events[0]);
+        expect(live[0].getID()).toBe('summary-id');
+        expect(live[0].tags).toEqual(['Easy']);
+        expect(live[0].originalFiles).toEqual([{ path: 'source.fit' }]);
+        expect(live[0].getDistance()?.getValue()).toBe(0);
+        expect('toJSON' in live[0]).toBe(false);
+        expect(mocks.getEventFromJSON).not.toHaveBeenCalled();
+        const full = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
+        expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(1);
+        expect(full[0]).not.toBe(live[0]);
+    });
+
     it('should reuse one-shot event parsing for an identical initial live snapshot', async () => {
         const user = { uid: 'user-seeded' } as any;
         const eventDoc = createQueryDoc('event-1', {

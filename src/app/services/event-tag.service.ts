@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '@shared/app-event.interface';
+import type { EventRead } from '@shared/event-read';
 import { sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
 import type { Transaction } from 'firebase/firestore';
 import { Firestore, deleteField, doc, runTransaction } from 'app/firebase/firestore';
@@ -27,13 +27,13 @@ export class EventTagService {
     return normalizeEventTags(value);
   }
 
-  getTags(event: AppEventInterface | null | undefined): string[] {
+  getTags(event: EventRead | null | undefined): string[] {
     return getEventTags(event);
   }
 
   async saveTags(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     value: unknown,
     expectedValue: unknown = this.getTags(event),
   ): Promise<string[]> {

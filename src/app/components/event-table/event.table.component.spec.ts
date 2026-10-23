@@ -1,3 +1,5 @@
+import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { AppEventSummary } from '@shared/event-summary';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
@@ -361,15 +363,29 @@ describe('EventTableComponent', () => {
         expect(settingsPayload.unitSettings).toBeUndefined();
     };
 
-    it.each([false, true])('loads streams when starting or rerunning a benchmark from the list (saved: %s)', saved => {
+    it.each([false, true])('loads streams when starting or rerunning a benchmark from the list (saved: %s)', async saved => {
         const flow = TestBed.inject(AppBenchmarkFlowService);
         const selection = vi.spyOn(flow, 'openBenchmarkSelectionDialog').mockResolvedValue(undefined);
         const report = vi.spyOn(flow, 'openBenchmarkReport').mockResolvedValue(undefined);
-        const event = { getActivities: () => [], benchmarkResults: saved ? { pair: { referenceId: 'ref', testId: 'test' } } : {} } as any;
-        component.openBenchmarkFlow({ stopPropagation: vi.fn(), preventDefault: vi.fn() } as any, event);
+        const event = { toJSON: () => ({}), getActivities: () => [], benchmarkResults: saved ? { pair: { referenceId: 'ref', testId: 'test' } } : {} } as any;
+        await component.openBenchmarkFlow({ stopPropagation: vi.fn(), preventDefault: vi.fn() } as any, event);
         expect(saved ? report : selection).toHaveBeenCalledWith(expect.objectContaining({
             event, hydrateStreamsForGeneration: true,
         }));
+    });
+
+    it('abandons a summary benchmark read after its owner changes', async () => {
+        const source = new Subject<any>();
+        const events = TestBed.inject(AppEventService) as any;
+        events.getEventAndActivities = vi.fn().mockReturnValue(source);
+        const flow = TestBed.inject(AppBenchmarkFlowService);
+        const open = vi.spyOn(flow, 'openBenchmarkSelectionDialog');
+        const summary = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000, stats: {} } as any);
+        const work = component.openBenchmarkFlow({ stopPropagation() {}, preventDefault() {} } as any, summary);
+        component.user = { ...component.user, uid: 'another-owner' } as any;
+        source.next(new MockEvent('event-1'));
+        await work;
+        expect(open).not.toHaveBeenCalled();
     });
 
     it('should create', () => {
@@ -1001,9 +1017,39 @@ describe('EventTableComponent', () => {
         ]);
     });
 
+    it('reformats cached summary cells when the user changes units without another event emission', () => {
+        component.events = [new AppEventSummary({ id: 'lazy-units', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any)];
+        (component as any).processChanges('metric_units');
+        const previous = component.data.data[0];
+        expect(previous.Distance).toBe('1.00 Km');
+        component.user.settings.unitSettings.distanceUnits = DistanceUnits.Miles;
+        component.ngOnChanges({ user: { previousValue: null, currentValue: component.user, firstChange: false, isFirstChange: () => false } });
+        expect(component.data.data[0]).not.toBe(previous);
+        expect(component.data.data[0].Distance).toBe('0.62 mi');
+    });
+
+    it('reuses summary rows before formatting and invalidates requested metrics edited in place', () => {
+        const event = new AppEventSummary({ id: 'lazy', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any);
+        component.events = [event];
+        (component as any).processChanges('lazy_initial');
+        const row = component.data.data[0];
+        expect(row.Distance).toContain('1');
+        const format = vi.spyOn(event.getDistance()!, 'getDisplayValue');
+        component.events = [event];
+        (component as any).processChanges('lazy_cached');
+        expect(component.data.data[0]).toBe(row);
+        expect(format).not.toHaveBeenCalled();
+        event.getDistance()!.setValue(2000);
+        (component as any).processChanges('lazy_mutated');
+        expect(component.data.data[0]).not.toBe(row);
+        expect(component.data.data[0]['sort.Distance']).toBe(2000);
+    });
+
     it('should reuse cached row models when the next event list contains the same event instances', () => {
         const initialRows = [...component.data.data];
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElementFromReader');
 
         component.events = [...component.events];
 
@@ -1020,7 +1066,7 @@ describe('EventTableComponent', () => {
         const initialRows = [...component.data.data];
         const updatedEvent = new MockEvent('event2') as any;
         updatedEvent.name = 'Updated Event 2';
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElementFromReader');
 
         component.events = [
             component.events[0],
@@ -1059,7 +1105,7 @@ describe('EventTableComponent', () => {
 
     it('should rebuild a cached row when the same event instance is mutated in place', () => {
         const initialRows = [...component.data.data];
-        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
+        const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElementFromReader');
         const mutatedEvent = component.events[1] as any;
         mutatedEvent.name = 'Mutated Event 2';
         mutatedEvent.privacy = 'private';
@@ -1080,7 +1126,7 @@ describe('EventTableComponent', () => {
         'refreshes saved elevation in cached rows and preserves selection: $DataClass.type / $value', ({ DataClass, value }) => {
             const event = component.events[0];
             let elevation: DataAscent | DataDescent | null = new DataClass(100);
-            vi.spyOn(event, 'getStatsAsArray').mockImplementation(() => elevation ? [elevation] : []);
+            vi.spyOn(event, 'getStat').mockImplementation(type => type === DataClass.type ? elevation : null);
             (component as any).processChanges('elevation_initial');
             const previousRows = [...component.data.data];
             expect(previousRows[0][DataClass.type]).toBe('100 m');
@@ -1095,7 +1141,7 @@ describe('EventTableComponent', () => {
         const rows = [...component.data.data];
         const previous = component.events[0];
         component.events = [new MockEvent('event1') as any, ...component.events.slice(1)];
-        const rebuild = vi.spyOn(component, 'getStatsRowElement');
+        const rebuild = vi.spyOn(component, 'getStatsRowElementFromReader');
         component.refreshSavedAscent(previous);
         expect(rebuild).not.toHaveBeenCalled();
         expect(component.data.data).toEqual(rows);

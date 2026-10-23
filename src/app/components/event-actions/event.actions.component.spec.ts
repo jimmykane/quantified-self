@@ -1,3 +1,4 @@
+import { AppEventSummary } from '@shared/event-summary';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Location } from '@angular/common';
 import { EventActionsComponent } from './event.actions.component';
@@ -184,6 +185,7 @@ describe('EventActionsComponent', () => {
         component.user = { uid: 'test-uid' } as any;
         // Mock event object with minimal required methods and properties
         component.event = {
+            toJSON: () => ({}),
             getID: () => 'event-123',
             startDate: new Date(),
             getActivityTypesAsString: () => 'Run',
@@ -193,6 +195,29 @@ describe('EventActionsComponent', () => {
             privacy: 'private',
         } as any;
         fixture.detectChanges();
+    });
+
+    it('loads a complete event for a summary GPX action and keeps metadata checks lazy', async () => {
+        const full = component.event;
+        component.event = new AppEventSummary({ id: 'event-123', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { 'Start Position': { latitudeDegrees: 0, longitudeDegrees: 0 } } } as any);
+        expect(component.hasPositionalData()).toBeTruthy();
+        expect(component.isHydrated()).toBe(false);
+        mockEventService.getEventAndActivities = vi.fn().mockReturnValue(of(full));
+        mockEventService.getEventAsGPXBloB.mockResolvedValue(new Blob());
+        await component.downloadGPX();
+        expect(mockEventService.getEventAndActivities).toHaveBeenCalledExactlyOnceWith(component.user, 'event-123');
+        expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledExactlyOnceWith(component.user, full);
+    });
+
+    it('applies committed elevation to a lazy summary without fetching child activities', async () => {
+        component.user = { uid: 'test-user' } as any;
+        component.event = new AppEventSummary({ id: 'event-123', name: 'Hike', startDate: 1000, endDate: 2000, stats: { Ascent: 100 } } as any);
+        const closed = new Subject<unknown>();
+        mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+        await component.editAscent();
+        closed.next({ activityId: 'hike', metric: 'ascent', value: 0, eventValue: 0, correction: { value: 0, sourceValue: 100 } });
+        expect(component.event.getStat('Ascent')?.getValue()).toBe(0);
     });
 
     it('opens an owned activity selection without starting provider delivery', async () => {
@@ -682,6 +707,7 @@ describe('EventActionsComponent', () => {
             await Promise.resolve();
 
             await component.reGenerateStatistics();
+            await vi.waitFor(() => expect(mockEventReprocessService.regenerateEventStatistics).toHaveBeenCalledTimes(1));
 
             expect(mockEventReprocessService.regenerateEventStatistics).toHaveBeenCalledTimes(1);
             expect(component.isReprocessing).toBe(true);
@@ -762,6 +788,7 @@ describe('EventActionsComponent', () => {
             await Promise.resolve();
 
             await component.reImportActivityFromFile();
+            await vi.waitFor(() => expect(mockEventReprocessService.reimportEventFromOriginalFiles).toHaveBeenCalledTimes(1));
 
             expect(mockEventReprocessService.reimportEventFromOriginalFiles).toHaveBeenCalledTimes(1);
             expect(component.isReprocessing).toBe(true);

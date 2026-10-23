@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import type { AppEventMetadata } from '@shared/event-read';
 import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { normalizeEventTags } from '@shared/event-tags';
 
@@ -6,7 +7,7 @@ import { normalizeEventTags } from '@shared/event-tags';
   providedIn: 'root'
 })
 export class BenchmarkEventAdapter {
-  applyBenchmarkFieldsFromFirestore(event: AppEventInterface, rawData: any): void {
+  applyBenchmarkFieldsFromFirestore(event: AppEventMetadata, rawData: any): void {
     if (!rawData) return;
 
     const toDate = (val: any): Date => {

@@ -1,4 +1,4 @@
-import type { EventInterface } from '@sports-alliance/sports-lib';
+
 import {
   ActivityTypes,
   ActivityTypesHelper,
@@ -11,6 +11,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import type {
   EventStatAggregationBucket,
+  EventStatAggregationEvent,
   EventStatAggregationEventInput,
   EventStatAggregationLogger,
   EventStatAggregationPreferences,
@@ -201,12 +202,12 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
-function resolveEventStatNumber(event: EventInterface, dataType: string): number | null {
+function resolveEventStatNumber(event: EventStatAggregationEvent, dataType: string): number | null {
   const stat = event?.getStat?.(dataType) as { getValue?: () => unknown } | null | undefined;
   return toFiniteNumber(stat?.getValue?.());
 }
 
-function sortEventsChronologically(events: EventStatAggregationEventInput): EventInterface[] {
+function sortEventsChronologically(events: EventStatAggregationEventInput): EventStatAggregationEvent[] {
   return [...(events || [])].sort((left, right) => {
     const leftTime = left?.startDate instanceof Date ? left.startDate.getTime() : Number.NEGATIVE_INFINITY;
     const rightTime = right?.startDate instanceof Date ? right.startDate.getTime() : Number.NEGATIVE_INFINITY;
@@ -214,7 +215,7 @@ function sortEventsChronologically(events: EventStatAggregationEventInput): Even
   });
 }
 
-function resolveEventActivityTypes(event: EventInterface): ActivityTypes[] {
+function resolveEventActivityTypes(event: EventStatAggregationEvent): ActivityTypes[] {
   return Array.isArray(event?.getActivityTypesAsArray?.())
     ? (event.getActivityTypesAsArray() as ActivityTypes[])
     : [];
@@ -229,7 +230,7 @@ function shouldExcludeDescent(activityTypes: ActivityTypes[]): boolean {
 }
 
 function shouldExcludeEventForMetric(
-  event: EventInterface,
+  event: EventStatAggregationEvent,
   dataType: string,
   preferences?: EventStatAggregationPreferences,
 ): boolean {
@@ -250,12 +251,12 @@ function shouldExcludeEventForMetric(
   return false;
 }
 
-function resolveActivityTypeStat(event: EventInterface): ActivityTypeStatLike | null {
+function resolveActivityTypeStat(event: EventStatAggregationEvent): ActivityTypeStatLike | null {
   const stat = event?.getStat?.(DataActivityTypes.type) as ActivityTypeStatLike | null | undefined;
   return stat || null;
 }
 
-function resolveActivityKey(event: EventInterface, logger?: EventStatAggregationLogger): string {
+function resolveActivityKey(event: EventStatAggregationEvent, logger?: EventStatAggregationLogger): string {
   const activityTypeStat = resolveActivityTypeStat(event);
   const activityTypes = resolveEventActivityTypes(event);
   const rawValue = activityTypeStat?.getValue?.();
@@ -526,7 +527,7 @@ export function filterEventStatsForAggregation(
   events: EventStatAggregationEventInput,
   dataType: string,
   preferences?: EventStatAggregationPreferences,
-): EventInterface[] {
+): EventStatAggregationEvent[] {
   return sortEventsChronologically(events).filter(event => !shouldExcludeEventForMetric(event, dataType, preferences));
 }
 
@@ -544,20 +545,16 @@ export function resolveAutoAggregationTimeInterval(
   ) {
     throw new Error(`Invalid IANA timezone: ${timeZone}`);
   }
-  const eventsWithValidDates = (events || []).filter(event => (
-    event?.startDate instanceof Date
-    && Number.isFinite(event.startDate.getTime())
-  ));
-  const normalizedEvents = sortEventsChronologically(eventsWithValidDates);
-  if (!normalizedEvents.length) {
-    return TimeIntervals.Daily;
+  // Only the endpoints are needed; sorting the complete input is unnecessary.
+  let startDate: Date | undefined;
+  let endDate: Date | undefined;
+  for (const event of events || []) {
+    const date = event?.startDate;
+    if (!(date instanceof Date) || !Number.isFinite(+date)) continue;
+    if (!startDate || +date < +startDate) startDate = date;
+    if (!endDate || +date > +endDate) endDate = date;
   }
-
-  const startDate = normalizedEvents[0]?.startDate;
-  const endDate = normalizedEvents[normalizedEvents.length - 1]?.startDate;
-  if (!(startDate instanceof Date) || !(endDate instanceof Date)) {
-    return TimeIntervals.Daily;
-  }
+  if (!startDate || !endDate) return TimeIntervals.Daily;
 
   const startParts = normalizedTimeZone
     ? getZonedDateTimeParts(startDate, normalizedTimeZone)
@@ -591,7 +588,7 @@ export function resolveAutoAggregationTimeInterval(
 }
 
 export function resolveAggregationCategoryKey(
-  event: EventInterface,
+  event: EventStatAggregationEvent,
   categoryType: ChartDataCategoryTypes,
   resolvedTimeInterval: TimeIntervals,
   logger?: EventStatAggregationLogger,
@@ -614,10 +611,42 @@ export function resolveAggregationCategoryKey(
   return resolveDateAggregationBucketStart(event.startDate, resolvedTimeInterval, timeZone);
 }
 
+/** One synchronous chart/request build. Discard after that build so mutable inputs never outlive it. */
+export class EventStatAggregationContext {
+  private readonly sorted = new WeakMap<readonly EventStatAggregationEvent[], EventStatAggregationEvent[]>();
+  private readonly categories = new WeakMap<EventStatAggregationEvent, Map<string, string | number>>();
+  private readonly activities = new WeakMap<EventStatAggregationEvent, string>();
+
+  sortedEvents(events: EventStatAggregationEventInput): EventStatAggregationEvent[] {
+    if (!events) return [];
+    let sorted = this.sorted.get(events);
+    if (!sorted) {
+      sorted = sortEventsChronologically(events);
+      this.sorted.set(events, sorted);
+    }
+    return sorted;
+  }
+
+  category(event: EventStatAggregationEvent, request: EventStatAggregationRequest, interval: TimeIntervals,
+    logger?: EventStatAggregationLogger, timeZone?: string): string | number {
+    let keys = this.categories.get(event);
+    if (!keys) this.categories.set(event, keys = new Map());
+    const key = JSON.stringify([request.categoryType, interval, timeZone ?? null]);
+    if (!keys.has(key)) keys.set(key, resolveAggregationCategoryKey(event, request.categoryType, interval, logger, timeZone));
+    return keys.get(key)!;
+  }
+
+  activity(event: EventStatAggregationEvent, logger?: EventStatAggregationLogger): string {
+    if (!this.activities.has(event)) this.activities.set(event, resolveActivityKey(event, logger));
+    return this.activities.get(event)!;
+  }
+}
+
 export function buildEventStatAggregation(
   events: EventStatAggregationEventInput,
   request: EventStatAggregationRequest,
   logger?: EventStatAggregationLogger,
+  context?: EventStatAggregationContext,
 ): EventStatAggregationResult {
   const requestedTimeZone = request.timeZone;
   const hasExplicitTimeZone = requestedTimeZone !== undefined;
@@ -631,7 +660,8 @@ export function buildEventStatAggregation(
     throw new Error(`Invalid IANA timezone: ${requestedTimeZone}`);
   }
 
-  const filteredEvents = filterEventStatsForAggregation(events, request.dataType, request.preferences);
+  const sortedEvents = context ? context.sortedEvents(events) : sortEventsChronologically(events);
+  const filteredEvents = sortedEvents.filter(event => !shouldExcludeEventForMetric(event, request.dataType, request.preferences));
   const resolvedTimeInterval = request.requestedTimeInterval === undefined || request.requestedTimeInterval === TimeIntervals.Auto
     ? resolveAutoAggregationTimeInterval(filteredEvents, timeZone)
     : request.requestedTimeInterval;
@@ -642,7 +672,7 @@ export function buildEventStatAggregation(
       return bucketMap;
     }
 
-    const bucketKey = resolveAggregationCategoryKey(
+    const bucketKey = context ? context.category(event, request, resolvedTimeInterval, logger, timeZone) : resolveAggregationCategoryKey(
       event,
       request.categoryType,
       resolvedTimeInterval,
@@ -653,7 +683,7 @@ export function buildEventStatAggregation(
       return bucketMap;
     }
 
-    const seriesKey = resolveActivityKey(event, logger);
+    const seriesKey = context ? context.activity(event, logger) : resolveActivityKey(event, logger);
     const existing = bucketMap.get(bucketKey) || {
       bucketKey,
       time: request.categoryType === ChartDataCategoryTypes.DateType && typeof bucketKey === 'number' ? bucketKey : undefined,

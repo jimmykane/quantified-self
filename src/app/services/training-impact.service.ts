@@ -1,4 +1,4 @@
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
 import { TrainingLoadService, type TrainingLoadView } from './training-load.service';
 import { inject, Injectable } from '@angular/core';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
@@ -31,7 +31,7 @@ export class TrainingImpactService {
   private readonly derived = inject(DashboardDerivedMetricsService);
   private readonly ownerStreams = new Map<string, Observable<TrainingImpactSnapshotState>>();
 
-  watch(uid: string, events: readonly EventInterface[] = []): Observable<TrainingImpactSnapshotState> {
+  watch(uid: string, events: readonly EventRead[] = []): Observable<TrainingImpactSnapshotState> {
     const normalizedUid = `${uid || ''}`.trim();
     if (!normalizedUid) return of(PRIVATE_STATE);
     const loadEvents = events.filter(event => !isBenchmarkEventForTrainingMetrics(event));

@@ -1,4 +1,5 @@
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from './event-read';
+
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -37,7 +38,9 @@ export interface EventStatAggregationResult {
   buckets: EventStatAggregationBucket[];
 }
 
-export type EventStatAggregationEventInput = readonly EventInterface[] | null | undefined;
+export type EventStatAggregationEvent = Pick<EventRead, 'startDate' | 'getStat' | 'getID' | 'getActivityTypesAsArray'>;
+
+export type EventStatAggregationEventInput = readonly EventStatAggregationEvent[] | null | undefined;
 
 export type EventStatAggregationLogger = {
   warn?: (...args: unknown[]) => void;

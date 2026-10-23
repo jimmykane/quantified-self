@@ -1,5 +1,6 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
-import { EventInterface, User } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { SummaryPrimaryInfoMetric } from '../summary-primary-info/summary-primary-info.component';
 
 @Component({
@@ -15,7 +16,7 @@ export class MapActivityPopupComponent {
   @Input() startDate: number | Date | null | undefined = null;
   @Input() fallbackTopMetaText = 'Activity start';
   @Input() metrics: SummaryPrimaryInfoMetric[] = [];
-  @Input() event?: EventInterface | null;
+  @Input() event?: EventRead | null;
   @Input() user?: User | null;
   @Input() actionLabel = 'Open activity';
   @Input() dismissible = false;

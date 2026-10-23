@@ -103,7 +103,7 @@ describe('DashboardComponent', () => {
         };
 
         mockEventService = {
-            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
+            getEventSummariesBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
             getEventCount: vi.fn().mockResolvedValue(1),
             hasAnyActivity: vi.fn().mockResolvedValue(true)
         };
@@ -223,7 +223,7 @@ describe('DashboardComponent', () => {
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async operations to complete
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
     });
@@ -366,7 +366,7 @@ describe('DashboardComponent', () => {
 
     it('shows the no-activity dashboard state for owner dashboards without activities', async () => {
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
         mockUser.stripeRole = 'pro';
         mockUser.settings.appSettings = {};
@@ -396,7 +396,7 @@ describe('DashboardComponent', () => {
     it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])(
         'does not offer connection setup on an empty dashboard with %s connected', async (serviceName) => {
             mockActivatedRoute.snapshot.data.dashboardData.events = [];
-            mockEventService.getEventsBy.mockReturnValue(of([]));
+            mockEventService.getEventSummariesBy.mockReturnValue(of([]));
             mockEventService.hasAnyActivity.mockResolvedValue(false);
             mockUser.stripeRole = 'pro';
             mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [serviceName]: true }));
@@ -416,7 +416,7 @@ describe('DashboardComponent', () => {
 
     it.each(['free', 'dismissed'])('checks connections for empty dashboards even when setup prompts are %s', async (state) => {
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
         mockUser.stripeRole = state === 'free' ? 'free' : 'pro';
         mockUser.settings.appSettings = {
@@ -438,7 +438,7 @@ describe('DashboardComponent', () => {
 
     it('waits for connection state before offering setup and reacts to a connection', async () => {
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
         mockUser.stripeRole = 'pro';
         const connections$ = new Subject<Record<string, boolean>>();
@@ -1184,7 +1184,7 @@ describe('DashboardComponent', () => {
         mockAuthService.user$ = authUserSubject.asObservable();
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
         mockUser.stripeRole = 'pro';
 
@@ -1323,7 +1323,7 @@ describe('DashboardComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
     });
 
@@ -1333,7 +1333,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.eventsPrefetchSkipped = true;
 
         const eventsSubject = new Subject<any[]>();
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1356,7 +1356,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.events = resolvedEvents;
 
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1378,7 +1378,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.eventsSource = 'cache';
 
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1393,7 +1393,7 @@ describe('DashboardComponent', () => {
 
     it('should update events when service emits new data', async () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }]);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1453,7 +1453,7 @@ describe('DashboardComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(1);
 
         userSubject.next({
             ...initialUser,
@@ -1472,7 +1472,7 @@ describe('DashboardComponent', () => {
 
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(1);
     });
 
     it('should not have throttle delay on data loading', async () => {
@@ -1496,7 +1496,7 @@ describe('DashboardComponent', () => {
         event1.self = event1;
 
         const eventsSubject = new BehaviorSubject([event1]);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1522,7 +1522,7 @@ describe('DashboardComponent', () => {
         const event1 = new MockEvent('e1', 'Original Name', date1) as any;
 
         const eventsSubject = new BehaviorSubject([event1]);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1666,7 +1666,7 @@ describe('DashboardComponent', () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1695,21 +1695,21 @@ describe('DashboardComponent', () => {
             includeMergedEvents: true
         };
 
-        const baselineCalls = mockEventService.getEventsBy.mock.calls.length;
+        const baselineCalls = mockEventService.getEventSummariesBy.mock.calls.length;
 
         await component.search(search);
         await fixture.whenStable();
 
         expect(component.isLoading).toBe(false);
-        expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(baselineCalls);
+        expect(mockEventService.getEventSummariesBy.mock.calls.length).toBeGreaterThan(baselineCalls);
 
-        const callsAfterFirstSearch = mockEventService.getEventsBy.mock.calls.length;
+        const callsAfterFirstSearch = mockEventService.getEventSummariesBy.mock.calls.length;
 
         await component.search(search);
         await fixture.whenStable();
 
         expect(component.isLoading).toBe(false);
-        expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
+        expect(mockEventService.getEventSummariesBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
     });
 
     it('should default bounded event table ranges to Monday when unit start of week is missing', () => {

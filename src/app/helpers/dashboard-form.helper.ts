@@ -1,4 +1,5 @@
-import { TimeIntervals, type EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   normalizeDerivedFormDailyLoads,
   normalizeDerivedFormDailyLoadsWithActivityCounts,
@@ -105,7 +106,7 @@ function buildDashboardFormPointsFromDailyLoadMap(
   return points;
 }
 
-export function resolveDashboardFormTrainingStressScore(event: EventInterface): number | null {
+export function resolveDashboardFormTrainingStressScore(event: EventRead): number | null {
   const statTypes = [
     DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
     DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
@@ -123,7 +124,7 @@ export function resolveDashboardFormTrainingStressScore(event: EventInterface): 
   return null;
 }
 
-export function buildDashboardFormPoints(events: readonly EventInterface[] | null | undefined): DashboardFormPoint[] {
+export function buildDashboardFormPoints(events: readonly EventRead[] | null | undefined): DashboardFormPoint[] {
   const normalizedEvents = Array.isArray(events) ? [...events] : [];
   if (!normalizedEvents.length) {
     return [];

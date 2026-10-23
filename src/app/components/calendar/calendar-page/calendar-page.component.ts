@@ -1,9 +1,10 @@
+import type { EventRead } from '@shared/event-read';
 import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { ViewportScroller } from '@angular/common';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, Scroll } from '@angular/router';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+
 import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap, take, type Subscription } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
@@ -64,7 +65,7 @@ import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../.
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
-  events: EventInterface[];
+  events: EventRead[];
   complete?: boolean;
 }
 

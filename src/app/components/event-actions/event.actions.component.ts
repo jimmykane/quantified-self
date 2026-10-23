@@ -1,15 +1,16 @@
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { Auth } from 'app/firebase/auth';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
-import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
-import { applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { activityElevationMetric, applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
@@ -67,7 +68,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityElevationUpdate | undefined) => {
         this.ascentEditorOpen = false;
         if (!saved || !isCurrent()) return;
-        applySavedActivityElevation(event, saved);
+        if (isCompleteEvent(event)) applySavedActivityElevation(event, saved);
+        else event.applySavedStat?.(activityElevationMetric(saved.metric).type, saved.eventValue);
         this.ascentChanged.emit(event);
         this.changeDetectorRef.markForCheck();
       });
@@ -86,12 +88,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (opened) this.hapticsService.selection();
   }
 
-  @Input() event!: EventInterface;
+  @Input() event!: EventRead;
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
   @Input() navigateAfterDelete = true;
   @Output() eventDeleted = new EventEmitter<string>();
-  @Output() ascentChanged = new EventEmitter<EventInterface>();
+  @Output() ascentChanged = new EventEmitter<EventRead>();
 
   public isReprocessing = false;
   public isSharing = false;
@@ -143,17 +145,17 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   isHydrated() {
-    const activities = this.event.getActivities();
+    const activities = this.event.getActivities?.() ?? [];
     return activities.some(activity => activity.getAllStreams().length > 0);
   }
 
   hasDistance() {
-    const activities = this.event.getActivities();
+    const activities = this.event.getActivities?.() ?? [];
     return activities.some(activity => activity.hasStreamData(DataDistance.type));
   }
 
   hasPositionalData() {
-    return this.event.getStat(DataStartPosition.type) || this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
+    return this.event.getStat(DataStartPosition.type) || (this.event.getActivities?.() ?? []).filter(activity => activity.hasPositionData()).length > 0
   }
 
   public canReimportFromOriginalFile(): boolean {
@@ -276,7 +278,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.regenerateEventStatistics(this.user, this.event as any, {
+        await this.eventReprocessService.regenerateEventStatistics(this.user, await this.completeEvent(), {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
@@ -325,7 +327,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, this.event as any, {
+        await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, await this.completeEvent(), {
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
@@ -416,7 +418,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     return confirmed === true;
   }
 
-  // downloadEventAsTCX(event: EventInterface) {
+  // downloadEventAsTCX(event: EventRead) {
   //   // EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
   //   //   FileService.downloadFile(
   //   //     blob,
@@ -429,10 +431,19 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   //   // });
   // }
 
+  private async completeEvent() {
+    if (isCompleteEvent(this.event)) return this.event;
+    const source = this.event, owner = this.user;
+    const event = await firstValueFrom(this.eventService.getEventAndActivities(owner, source.getID()));
+    if (this.destroyRef.destroyed || this.event !== source || this.user?.uid !== owner.uid) throw new Error('Activity selection changed');
+    if (!event) throw new Error('Activity no longer exists');
+    return event;
+  }
+
   async downloadGPX() {
     this.hapticsService.selection();
     try {
-      const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
+      const blob = await this.eventService.getEventAsGPXBloB(this.user, await this.completeEvent());
       this.fileService.downloadFile(
         blob,
         this.getFileName(this.event),
@@ -540,7 +551,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getFileName(event: EventInterface): string {
+  private getFileName(event: EventRead): string {
     const eventDate = this.fileService.toDate(event.startDate);
     const dateStr = eventDate ? eventDate.toISOString() : 'unknown';
     return `${dateStr}#${event.getActivityTypesAsString()}`

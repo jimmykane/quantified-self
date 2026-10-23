@@ -1,3 +1,5 @@
+import { AppEventSummary } from '@shared/event-summary';
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
@@ -79,8 +81,13 @@ export interface GetEventsPageResult {
   hasMore: boolean;
 }
 
+export interface GetEventSummariesOnceResult {
+  events: EventRead[];
+  source: EventsOnceSource;
+}
+
 interface EventQuerySeed {
-  eventsById: Map<string, AppEventInterface>;
+  eventsById: Map<string, EventRead>;
   fingerprintsById: Map<string, string>;
   expiresAt: number;
 }
@@ -668,6 +675,15 @@ export class AppEventService implements OnDestroy {
     return this._getEvents(user, where, orderBy, asc, limit);
   }
 
+  public getEventSummariesBy(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField = 'startDate', asc = false, limitCount = 10): Observable<EventRead[]> {
+    return this._getEventReads(user, whereClauses, orderByField, asc, limitCount, undefined, undefined, true);
+  }
+
+  private requireFullEvents(events: EventRead[]): AppEventInterface[] {
+    if (!events.every(isCompleteEvent)) throw new Error('A summary cannot be used as a complete event');
+    return events;
+  }
+
   /**
    * Watches persisted event fields without constructing sports-lib event objects.
    * Summary views should use this path when they do not need activities or rich event behavior.
@@ -682,6 +698,12 @@ export class AppEventService implements OnDestroy {
   ): Observable<EventDocumentData[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
     return collectionData(q, { idField: 'id', ...options }) as Observable<EventDocumentData[]>;
+  }
+
+  /** One-shot persisted projection for metadata-only consumers; uses the same owner-scoped query. */
+  public getEventDocumentsOnceBy(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField = 'startDate', asc = false, limitCount = 10): Observable<EventDocumentData[]> {
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
+    return from(getDocs(q)).pipe(map(snapshot => snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
   }
 
   public getEventsOnceBy(
@@ -702,20 +724,34 @@ export class AppEventService implements OnDestroy {
     ).pipe(map(result => result.events));
   }
 
-  public getEventsOnceByWithMeta(
+  public getEventsOnceByWithMeta(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField = 'startDate', asc = false, limitCount = 10, options: GetEventsOnceOptions = {}): Observable<GetEventsOnceResult> {
+    return this.getEventReadsOnceByWithMeta(user, whereClauses, orderByField, asc, limitCount, options)
+      .pipe(map(result => ({ ...result, events: this.requireFullEvents(result.events) })));
+  }
+
+  public getEventSummariesOnceByWithMeta(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField = 'startDate', asc = false, limitCount = 10, options: GetEventsOnceOptions = {}): Observable<GetEventSummariesOnceResult> {
+    return this.getEventReadsOnceByWithMeta(user, whereClauses, orderByField, asc, limitCount, options, true);
+  }
+
+  public getEventSummariesOnceBy(...args: Parameters<AppEventService['getEventSummariesOnceByWithMeta']>): Observable<EventRead[]> {
+    return this.getEventSummariesOnceByWithMeta(...args).pipe(map(result => result.events));
+  }
+
+  private getEventReadsOnceByWithMeta(
     user: User,
     whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
     orderByField: string = 'startDate',
     asc: boolean = false,
     limitCount: number = 10,
-    options: GetEventsOnceOptions = {}
-  ): Observable<GetEventsOnceResult> {
+    options: GetEventsOnceOptions = {},
+    summary = false,
+  ): Observable<GetEventSummariesOnceResult> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
     const queryStart = performance.now();
     const preferCache = options.preferCache === true;
     const warmServer = options.warmServer === true;
     const seedLiveQuery = options.seedLiveQuery === true;
-    const queryKey = this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount);
+    const queryKey = `${summary ? 'summary:' : ''}${this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount)}`;
     const queryKeyDigest = this.buildQueryKeyDigest(queryKey);
 
     this.logger.log('[perf] app_event_service_get_events_once_query', {
@@ -728,10 +764,10 @@ export class AppEventService implements OnDestroy {
     });
 
     if (!preferCache) {
-      return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart, queryKey, seedLiveQuery));
+      return from(this.fetchEventsOnceFromServer(q, user.uid, queryStart, queryKey, seedLiveQuery, summary));
     }
 
-    return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey, seedLiveQuery));
+    return from(this.fetchEventsOnceCacheFirst(q, user.uid, queryStart, warmServer, queryKey, seedLiveQuery, summary));
   }
 
   public getEventsPageOnceByWithMeta(
@@ -1445,12 +1481,16 @@ export class AppEventService implements OnDestroy {
     }));
   }
 
-  private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
+  private _getEvents(...args: Parameters<AppEventService['_getEventReads']>): Observable<EventInterface[]> {
+    return this._getEventReads(...args).pipe(map(events => this.requireFullEvents(events)));
+  }
+
+  private _getEventReads(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any, summary = false): Observable<EventRead[]> {
     this.logger.log('[AppEventService] _getEvents fetching. user:', user.uid, 'where:', JSON.stringify(whereClauses));
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc) as Query<DocumentData>;
     const queryStart = performance.now();
     const queryKey = (!startAfterDoc && !endBeforeDoc)
-      ? this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount)
+      ? `${summary ? 'summary:' : ''}${this.buildEventQueryKey(user.uid, whereClauses, orderByField, asc, limitCount)}`
       : null;
     const queryKeyDigest = this.buildQueryKeyDigest(queryKey);
     this.logger.log('[perf] app_event_service_get_events_live_query', {
@@ -1462,8 +1502,8 @@ export class AppEventService implements OnDestroy {
       queryKeyDigest,
     });
 
-    return this.listenToEventQueryData(q, user.uid, queryStart, queryKey).pipe(
-      tap((events: AppEventInterface[]) => {
+    return this.listenToEventQueryData(q, user.uid, queryStart, queryKey, summary).pipe(
+      tap((events: EventRead[]) => {
         this.logger.log(`[AppEventService] _getEvents emitted ${events?.length || 0} event snapshots for user: ${user.uid}`);
       })
     );
@@ -1474,15 +1514,16 @@ export class AppEventService implements OnDestroy {
     userID: string,
     queryStart: number,
     queryKey: string | null,
-  ): Observable<AppEventInterface[]> {
-    return new Observable<AppEventInterface[]>((subscriber) => {
+    summary = false,
+  ): Observable<EventRead[]> {
+    return new Observable<EventRead[]>((subscriber) => {
       let emissionCount = 0;
       let hasEmitted = false;
       const initialSeed = this.consumeEventQuerySeed(queryKey);
-      const seedEventsById = initialSeed?.eventsById ?? new Map<string, AppEventInterface>();
+      const seedEventsById = initialSeed?.eventsById ?? new Map<string, EventRead>();
       const seedFingerprintsById = initialSeed?.fingerprintsById ?? new Map<string, string>();
       const queryKeyDigest = this.buildQueryKeyDigest(queryKey);
-      const eventsById = new Map<string, AppEventInterface>();
+      const eventsById = new Map<string, EventRead>();
       let orderedIds: string[] = [];
       let seedMatchCount = 0;
       let seedMismatchCount = 0;
@@ -1498,9 +1539,9 @@ export class AppEventService implements OnDestroy {
 
       const hydrateEventForDoc = (
         doc: QueryDocumentSnapshot<DocumentData>,
-      ): { event: AppEventInterface; reusedSeed: boolean } => {
+      ): { event: EventRead; reusedSeed: boolean } => {
         const seedEvent = seedEventsById.get(doc.id);
-        const docFingerprint = this.buildEventDocFingerprint(doc.id, doc.data());
+        const docFingerprint = seedEvent ? this.buildEventDocFingerprint(doc.id, doc.data()) : null;
         if (seedEvent && seedFingerprintsById.get(doc.id) === docFingerprint) {
           seedMatchCount += 1;
           return { event: seedEvent, reusedSeed: true };
@@ -1511,7 +1552,7 @@ export class AppEventService implements OnDestroy {
           seedMissingCount += 1;
         }
         return {
-          event: this.deserializeEventFromDoc(doc, 'Unknown Data Types in _getEvents'),
+          event: this.deserializeEventReadFromDoc(doc, 'Unknown Data Types in _getEvents', summary),
           reusedSeed: false,
         };
       };
@@ -1610,7 +1651,7 @@ export class AppEventService implements OnDestroy {
 
           const events = orderedIds
             .map((id) => eventsById.get(id))
-            .filter((event): event is AppEventInterface => !!event);
+            .filter((event): event is EventRead => !!event);
 
           this.logger.log('[perf] app_event_service_get_events_deserialize', {
             durationMs: Number((performance.now() - deserializeStart).toFixed(2)),
@@ -1641,11 +1682,12 @@ export class AppEventService implements OnDestroy {
     warmServer: boolean,
     queryKey: string,
     seedLiveQuery: boolean,
-  ): Promise<GetEventsOnceResult> {
+    summary = false,
+  ): Promise<GetEventSummariesOnceResult> {
     const cacheStart = performance.now();
     try {
       const cacheSnapshot = await getDocsFromCache(q);
-      const cacheEvents = this.deserializeEventsFromQueryDocs(cacheSnapshot.docs, userID, 'app_event_service_get_events_once_cache_deserialize', cacheSnapshot.size);
+      const cacheEvents = this.deserializeEventReadsFromQueryDocs(cacheSnapshot.docs, userID, 'app_event_service_get_events_once_cache_deserialize', cacheSnapshot.size, summary);
       this.logger.info('[perf] app_event_service_get_events_once_cache_first_hit', {
         durationMs: Number((performance.now() - cacheStart).toFixed(2)),
         snapshots: cacheSnapshot?.size || 0,
@@ -1678,7 +1720,7 @@ export class AppEventService implements OnDestroy {
       });
     }
 
-    return this.fetchEventsOnceFromServer(q, userID, queryStart, queryKey, seedLiveQuery);
+    return this.fetchEventsOnceFromServer(q, userID, queryStart, queryKey, seedLiveQuery, summary);
   }
 
   private async fetchEventsOnceFromServer(
@@ -1687,7 +1729,8 @@ export class AppEventService implements OnDestroy {
     queryStart: number,
     queryKey: string,
     seedLiveQuery: boolean,
-  ): Promise<GetEventsOnceResult> {
+    summary = false,
+  ): Promise<GetEventSummariesOnceResult> {
     const querySnapshot = await getDocs(q);
     this.logger.info('[perf] app_event_service_get_events_once_get_docs', {
       durationMs: Number((performance.now() - queryStart).toFixed(2)),
@@ -1696,7 +1739,7 @@ export class AppEventService implements OnDestroy {
       hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
       userID,
     });
-    const events = this.deserializeEventsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size);
+    const events = this.deserializeEventReadsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size, summary);
     if (seedLiveQuery) {
       this.storeEventQuerySeed(queryKey, querySnapshot.docs, events);
     }
@@ -1978,10 +2021,19 @@ export class AppEventService implements OnDestroy {
     return activitiesByEvent;
   }
 
-  private deserializeEventFromDoc(
+  private deserializeEventFromDoc(doc: QueryDocumentSnapshot, message: string): AppEventInterface {
+    return this.requireFullEvents([this.deserializeEventReadFromDoc(doc, message)])[0];
+  }
+
+  private deserializeEventsFromQueryDocs(...args: Parameters<AppEventService['deserializeEventReadsFromQueryDocs']>): AppEventInterface[] {
+    return this.requireFullEvents(this.deserializeEventReadsFromQueryDocs(...args));
+  }
+
+  private deserializeEventReadFromDoc(
     queryDocumentSnapshot: QueryDocumentSnapshot,
-    unknownTypesMessage: string
-  ): AppEventInterface {
+    unknownTypesMessage: string,
+    summary = false,
+  ): EventRead {
     const eventSnapshot = queryDocumentSnapshot.data();
     const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
     if (unknownTypes.length > 0) {
@@ -1995,10 +2047,11 @@ export class AppEventService implements OnDestroy {
         this.logger.captureMessage(unknownTypesMessage, { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
       }
     }
-    const event = normalizePersistedEventMetricSemantics(
-      EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson)
-        .setID(queryDocumentSnapshot.id),
-    ) as AppEventInterface;
+    const event: EventRead = summary
+      ? new AppEventSummary({ ...sanitizedJson, id: queryDocumentSnapshot.id })
+      : normalizePersistedEventMetricSemantics(
+        EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id),
+      ) as AppEventInterface;
 
     // Hydrate with original file(s) info if present
     const rawData = eventSnapshot as any;
@@ -2013,15 +2066,16 @@ export class AppEventService implements OnDestroy {
     return event;
   }
 
-  private deserializeEventsFromQueryDocs(
+  private deserializeEventReadsFromQueryDocs(
     docs: QueryDocumentSnapshot[],
     userID: string,
     perfEventName: string,
-    snapshotsCount?: number
-  ): AppEventInterface[] {
+    snapshotsCount?: number,
+    summary = false,
+  ): EventRead[] {
     const deserializeStart = performance.now();
     const events = docs.map((queryDocumentSnapshot) => (
-      this.deserializeEventFromDoc(queryDocumentSnapshot, 'Unknown Data Types in getEventsOnceBy')
+      this.deserializeEventReadFromDoc(queryDocumentSnapshot, 'Unknown Data Types in getEventsOnceBy', summary)
     ));
     this.logger.info(`[perf] ${perfEventName}`, {
       durationMs: Number((performance.now() - deserializeStart).toFixed(2)),
@@ -2034,14 +2088,14 @@ export class AppEventService implements OnDestroy {
   private storeEventQuerySeed(
     queryKey: string,
     docs: QueryDocumentSnapshot[],
-    events: AppEventInterface[],
+    events: EventRead[],
   ): void {
     this.deleteEventQuerySeed(queryKey);
     if (!docs.length || !events.length) {
       return;
     }
 
-    const eventsById = new Map<string, AppEventInterface>();
+    const eventsById = new Map<string, EventRead>();
     const fingerprintsById = new Map<string, string>();
     let storedCount = 0;
 

@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
+import { ServiceNames, User } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
 import { ProviderPresentation } from '@shared/provider-presentation';
 import { Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -17,7 +18,7 @@ import { AppEventService } from '../../../services/app.event.service';
     imports: [MatIconModule, MatTooltipModule],
 })
 export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
-    @Input() event!: EventInterface;
+    @Input() event!: EventRead;
     @Input() user: User | null = null;
     @Input() sourceServiceName: ServiceNames | null = null;
     @Input() presentation: ProviderPresentation | null = null;

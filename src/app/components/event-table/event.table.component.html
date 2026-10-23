@@ -158,13 +158,13 @@
                 [attr.aria-label]="row['Library Activity Label']" (click)="$event.stopPropagation()" appHapticTap>
                 @if (row['Library Activity Name']) { {{ row['Library Activity Name'] }} }
                 @else {
-                  <app-activity-type-icon [activityType]="row['Activity Types']" [event]="$any(row.Event)" size="18px" vAlign="middle"></app-activity-type-icon>
+                  <app-activity-type-icon [activityType]="row['Activity Types']" [event]="row.Event" size="18px" vAlign="middle"></app-activity-type-icon>
                   <span class="activity-type-text">{{ row['Activity Types'] || 'Untitled activity' }}</span>
                 }
               </a>
               @if (row['Library Activity Name']) {
               <span class="event-activity-type activity-type-cell" [matTooltip]="row['Activity Types']">
-                <app-activity-type-icon [activityType]="row['Activity Types']" [event]="$any(row.Event)" size="18px" vAlign="middle"></app-activity-type-icon>
+                <app-activity-type-icon [activityType]="row['Activity Types']" [event]="row.Event" size="18px" vAlign="middle"></app-activity-type-icon>
                 <span class="activity-type-text">{{ row['Activity Types'] }}</span>
               </span>
               }
@@ -177,7 +177,7 @@
             @if (column === 'Actions') {
             <span>
               @if (user) {
-              <app-event-actions [user]="user" [event]="$any(row.Event)"
+              <app-event-actions [user]="user" [event]="row.Event"
                 [showDownloadOriginal]="true" [navigateAfterDelete]="false"
                 (eventDeleted)="removeDeletedEvent($event)" (ascentChanged)="refreshSavedAscent($event)"></app-event-actions>
               }
@@ -193,7 +193,7 @@
                 </span>
               }
               @if (!row['Merged Event'] && row[column]) {
-              <app-activity-type-icon [activityType]="row[column]" [event]="$any(row.Event)" size="18px" vAlign="middle"></app-activity-type-icon>
+              <app-activity-type-icon [activityType]="row[column]" [event]="row.Event" size="18px" vAlign="middle"></app-activity-type-icon>
               }
               <span class="activity-type-text">{{ row[column] }}</span>
             </span>

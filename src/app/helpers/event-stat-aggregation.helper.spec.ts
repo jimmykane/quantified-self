@@ -11,6 +11,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   buildEventStatAggregation,
+  EventStatAggregationContext,
   filterEventStatsForAggregation,
   isValidIanaTimeZone,
   resolveAggregationCategoryKey,
@@ -61,6 +62,23 @@ function makeEvent(options: MockEventOptions): any {
 }
 
 describe('event-stat-aggregation shared core', () => {
+  it('reuses grouping across selectors without changing timezone buckets, exclusions or later builds', () => {
+    const events = [makeEvent({ startDate: new Date('2026-10-25T01:30:00Z'), activityTypes: [ActivityTypes.Running], stats: { Distance: 10, Ascent: 2 } }),
+      makeEvent({ startDate: new Date('2026-10-24T23:30:00Z'), activityTypes: [ActivityTypes.Swimming], stats: { Distance: 20, Ascent: 0 } })];
+    const context = new EventStatAggregationContext();
+    for (const timeZone of ['Europe/Helsinki', 'America/New_York', undefined]) {
+      for (const dataType of [DataDistance.type, DataAscent.type]) {
+        const request = { dataType, valueType: ChartDataValueTypes.Total, categoryType: ChartDataCategoryTypes.DateType,
+          requestedTimeInterval: TimeIntervals.Hourly, ...(timeZone ? { timeZone } : {}) };
+        expect(buildEventStatAggregation(events, request, undefined, context)).toEqual(buildEventStatAggregation(events, request));
+      }
+    }
+    const first = context.sortedEvents(events);
+    expect(context.sortedEvents(events)).toBe(first);
+    events[0].startDate = new Date('2026-10-01T00:00:00Z');
+    expect(new EventStatAggregationContext().sortedEvents(events)[0]).toBe(events[0]);
+  });
+
   it('should resolve auto interval for empty, single-day, cross-month and cross-year event sets', () => {
     expect(resolveAutoAggregationTimeInterval([])).toBe(TimeIntervals.Daily);
 

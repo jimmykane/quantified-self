@@ -1570,8 +1570,13 @@ plugin sync remain explicit lifecycle actions.
 ## Sports Lib metric discovery
 
 Sports Lib 23.7.0 indexes existing constructors and aliases without changing catalog membership, canonical names/units,
-validators, persisted-only availability or sensitive-field exclusions. QS retains its full event readers; the additive
-summary reader introduces no MCP projection. This performance-only adoption changes no tool, field, schema, scope,
+validators, persisted-only availability or sensitive-field exclusions. QS's dashboard/list readers use an explicit
+summary path while full event readers remain available. MCP selected-metric queries reuse the already validated
+persisted metric instances instead of constructing them again in a complete event. A per-request aggregation context
+reuses sorting, activity keys and timezone buckets across selectors. Existing field masks, cumulative stat/document/byte
+budgets, malformed-stat skipping, per-metric exclusions and output projections stay in force. Missing persisted pace
+is not inferred from a speed stat. See [the read-path guide](event-summary-reads.md) for maintenance and benchmarks.
+This performance change requires no historical reparse or derived refresh and changes no tool, field, schema, scope,
 consent, planning/provider capability or plugin contract. No registered-contract promotion, client rescan, plugin
 rebuild, historical reparse or derived-data refresh is required.
 

@@ -6919,8 +6919,13 @@ the adoption and historical-data checklist; deployment and production reparse re
 #### Sports Lib 23.7.0 metric lookup performance adoption
 
 Root and Functions use the same published 23.7.0 artifact. Indexed constructor and alias lookup accelerates existing
-hydration without changing canonical values, units, parsing, Training load or durability calculations. QS keeps its
-current full event readers; adopting the additive lazy summary reader requires a separate read-path change.
+hydration without changing canonical values, units, parsing, Training load or durability calculations. QS now uses
+explicit `EventRead` summaries for dashboard, list, preview and marker consumers, with full models retained for detail,
+editing, reprocessing and stream hydration. Training impact inputs accept this read contract without changing any
+calculation. Existing selected-workout source validation requests an explicit raw source snapshot when required;
+optional derived pace reads do not add fields to its fingerprint. Already committed elevation patches update the local
+summary revision, including zero/removal. These local read changes do not add Training planning or provider capabilities.
+The [event reader guide](event-summary-reads.md) owns the general read-path and benchmark maintenance instructions.
 
 No historical reparse, summary regeneration, Training rebuild or derived schema bump is required. Existing source
 evidence, controls, dated policies and sanitized persistence retain their current behavior. Runtime reparse targets

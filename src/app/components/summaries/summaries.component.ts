@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
@@ -42,7 +43,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { defer, filter, firstValueFrom, map, Observable, ReplaySubject, share, Subscription, take } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib';
+
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -443,10 +444,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
   private tileEventListenerKeys = new Map<number, string>();
-  private tileEventQueries = new Map<string, Observable<EventInterface[]>>();
+  private tileEventQueries = new Map<string, Observable<EventRead[]>>();
   private tileEventUserUID: string | null = null;
   private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
-  private tileEventsByOrder: Record<number, EventInterface[]> = {};
+  private tileEventsByOrder: Record<number, EventRead[]> = {};
   public tileEventLoadingByOrder: Record<number, boolean> = {};
   private routePreviewSubscription: Subscription | null = null;
   private routePreviewListenerKey: string | null = null;
@@ -1652,10 +1653,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         const where = this.buildTileEventWhereClauses(window);
         // Matching tiles share hydration as well as the listener. Keep the first latest-window
         // anchor while it has consumers, so tiles added later can reuse the same live query.
-        events$ = defer(() => this.eventService.getEventsBy(eventUser, where, 'startDate', false, 0)).pipe(
+        events$ = defer(() => this.eventService.getEventSummariesBy(eventUser, where, 'startDate', false, 0)).pipe(
           map(events => (events || []).filter(event => !event.isMerge)),
           share({
-            connector: () => new ReplaySubject<EventInterface[]>(1),
+            connector: () => new ReplaySubject<EventRead[]>(1),
             // Replay terminal failures to all matching tiles in this synchronization.
             // The next synchronization evicts the entry once all consumers are closed.
             resetOnError: false,
@@ -1792,7 +1793,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
     });
 
-    const nextEventsByOrder: Record<number, EventInterface[]> = {};
+    const nextEventsByOrder: Record<number, EventRead[]> = {};
     Object.entries(this.tileEventsByOrder).forEach(([previousOrderKey, events]) => {
       const nextOrder = orderRemap.get(Number(previousOrderKey));
       if (nextOrder !== undefined) {

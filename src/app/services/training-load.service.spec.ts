@@ -1,3 +1,4 @@
+import { AppEventSummary } from '@shared/event-summary';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BehaviorSubject, filter, firstValueFrom, of } from 'rxjs';
@@ -56,6 +57,16 @@ describe('TrainingLoadService', () => {
       identity: { startMs: 1000, endMs: 3601000, type: 'Walking', duration: 3600, distance: null },
       evaluations: null, recordedTss: 9, policy: defaultAppliedTrainingLoadPolicy('Walking') } } });
   const summaryEvent = { getID: () => 'e', getActivities: () => [], toJSON: () => parent, stats: parent.stats } as never;
+
+  it('validates lazy summary sources after optional derived reads without loading unrelated models', async () => {
+    const source = { ...parent, stats: { ...parent.stats, 'Average Speed': 4, 'Activity Types': ['Walking'] } };
+    const event = new AppEventSummary({ ...source, id: 'e', name: 'Walk' } as any);
+    event.getStat('Average Pace');
+    vi.spyOn(service, 'watch').mockReturnValue(of({ version: 1, revision: 1, excluded: false, controls: {},
+      parentFingerprint: createHash('sha256').update(serializeTrainingLoadSource(source)).digest('hex') }));
+    expect((await firstValueFrom(service.watchEffective('u', [event]))).get('e')?.score).toBe(9);
+    expect(collectionData).not.toHaveBeenCalled();
+  });
 
   it('resolves real Calendar summaries for legacy and parsed workouts without changing recorded stats', async () => {
     watchEventDocumentsBy.mockReturnValue(of([{ ...parent, id: 'e', name: 'Recovery walk' }]));

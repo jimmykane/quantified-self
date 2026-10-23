@@ -1,8 +1,10 @@
+import { AppEventSummary } from '@shared/event-summary';
+import type { EventRead } from '@shared/event-read';
 import { dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
 import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
-import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, EventInterface, FileType, Privacy, SportsLib, TileChartSettingsInterface, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, FileType, Privacy, TileChartSettingsInterface, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { DERIVED_METRIC_KINDS as M, DerivedMetricKind } from '@shared/derived-metrics';
 import * as C from './dashboard-special-chart-types';
@@ -19,7 +21,7 @@ export type DashboardPreviewLoadState = 'loading' | 'ready' | 'error';
 export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & {
   tileEventAnchorsByOrder?: Record<number, number | null>;
   previewStates?: Record<string, DashboardPreviewLoadState>;
-  previewEventsByRange?: Record<string, EventInterface[]>;
+  previewEventsByRange?: Record<string, EventRead[]>;
   previewMetricStatuses?: Partial<Record<DerivedMetricKind, DashboardDerivedMetricStatus>>;
 };
 export function dashboardPreviewSourceKeys(tile: TileSettingsInterface): string[] {
@@ -53,7 +55,7 @@ export interface DashboardChartPreview {
   availability?: DashboardChartAvailability;
   loading: boolean;
   note: string;
-  calendarEvents: EventInterface[];
+  calendarEvents: EventRead[];
   anchorMs: number;
   startOfWeek?: number | null;
 }
@@ -127,7 +129,7 @@ export function dashboardPreviewHasData(tile: DashboardTileViewModel, input: Das
   return dashboardChartHasRecordedData(tile, input);
 }
 
-export function buildDashboardExampleEvents(anchorMs = ANCHOR): EventInterface[] {
+export function buildDashboardExampleEvents(anchorMs = ANCHOR): EventRead[] {
   return Array.from({ length: 18 }, (_, index) => {
     const start = new Date(anchorMs - index * DAY * 2);
     const seconds = 2400 + index * 180;
@@ -135,11 +137,9 @@ export function buildDashboardExampleEvents(anchorMs = ANCHOR): EventInterface[]
     const stats = { [DataActivityTypes.type]: [index % 2 ? ActivityTypes.Running : ActivityTypes.Cycling], [DataDuration.type]: seconds, [DataDistance.type]: 5000 + index * 1700, [DataAscent.type]: 80 + index * 20,
       [DataEnergy.type]: 350 + index * 30, [DataHeartRateAvg.type]: 135 + index % 15,
       [DataStartPosition.type]: { latitudeDegrees: 60.17 + index % 4 * .002, longitudeDegrees: 24.94 + index % 5 * .003 } };
-    return SportsLib.importFromJSON({ id: `example-${index}`, name: 'Example activity', startDate: +start, endDate: +end,
+    return new AppEventSummary({ id: `example-${index}`, name: 'Example activity', startDate: +start, endDate: +end,
       srcFileType: 'json' as FileType, privacy: Privacy.Private, description: null, isMerge: false, stats,
-      activities: [{ id: `example-activity-${index}`, name: 'Example activity', startDate: +start, endDate: +end,
-        type: index % 2 ? ActivityTypes.Running : ActivityTypes.Cycling, powerMeter: false, trainer: false, stats,
-        streams: [], laps: [], intensityZones: [], events: [], creator: { name: 'Example', devices: [] } }] }).setID(`example-${index}`);
+    });
   });
 }
 export function buildDashboardExampleRoutes(): FirestoreRouteJSON[] {
@@ -151,10 +151,12 @@ export function buildDashboardExampleRoutes(): FirestoreRouteJSON[] {
         encodedPolyline: encodeRoutePolyline5(points.map(([latitudeDegrees,longitudeDegrees]) => ({latitudeDegrees,longitudeDegrees}))) }] } }];
 }
 
+// Shared deterministic read-only seeds; wall-clock contexts below are rebuilt per preview.
+let exampleSeeds: { examples: ReturnType<typeof buildHomeSignalChartsPreviewData>; events: EventRead[]; routes: FirestoreRouteJSON[] } | undefined;
+
 export function buildDashboardExamplePreview(tile: TileSettingsInterface): DashboardChartPreview {
-  const examples = buildHomeSignalChartsPreviewData(ANCHOR);
-  const events = buildDashboardExampleEvents();
-  const input: DashboardPreviewInput = { tiles: [tile], events, routePreviews: buildDashboardExampleRoutes(), derivedMetrics: { formPoints: examples.formTimeline } };
+  const { examples, events, routes } = exampleSeeds ??= { examples: buildHomeSignalChartsPreviewData(ANCHOR), events: buildDashboardExampleEvents(), routes: buildDashboardExampleRoutes() };
+  const input: DashboardPreviewInput = { tiles: [tile], events, routePreviews: routes, derivedMetrics: { formPoints: examples.formTimeline } };
   const vm = buildDashboardTileViewModels(input)[0];
   const trend = (value: number) => Array.from({ length: 8 }, (_, i) => ({ time: ANCHOR - (7-i)*7*DAY, value: value * (.8+i*.03) }));
   const current = (value: number) => ({ value, latestDayMs: ANCHOR, trend8Weeks: trend(value) });

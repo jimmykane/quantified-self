@@ -1,5 +1,5 @@
 import { ChangeDetectorRef, Directive, } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
 import { DataRPE, RPEBorgCR10SCale } from '@sports-alliance/sports-lib';
 import { DataFeeling, Feelings } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -23,6 +23,11 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+
+/** Bounded dependencies for full-reader cache validation; summary revisions observe only requested metrics. */
+export const EVENT_TABLE_STAT_TYPES = [DataDistance.type, DataDuration.type, DataAscent.type, DataDescent.type,
+  DataEnergy.type, DataVO2Max.type, DataPeakEPOC.type, DataRecoveryTime.type, DataAerobicTrainingEffect.type,
+  DataSpeedAvg.type, DataPowerAvg.type, DataPowerMax.type, DataHeartRateAvg.type, DataRPE.type, DataFeeling.type];
 
 @Directive()
 export abstract class DataTableAbstractDirective extends LoadingAbstractDirective {
@@ -55,91 +60,67 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
   }
 
   getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface, isMerge: boolean = false): StatRowElement {
-    const statRowElement: StatRowElement = <StatRowElement>{};
-    const statsByType = new Map<string, DataInterface>();
-    for (const stat of stats) {
-      const type = stat.getType();
-      if (!statsByType.has(type)) {
-        statsByType.set(type, stat);
-      }
+    const byType = new Map<string, DataInterface>();
+    stats.forEach(stat => { if (!byType.has(stat.getType())) byType.set(stat.getType(), stat); });
+    return this.getStatsRowElementFromReader({ getStat: type => byType.get(type) } as Pick<EventRead, 'getStat'>, activityTypes, unitSettings, isMerge);
+  }
+
+  getStatsRowElementFromReader(reader: Pick<EventRead, 'getStat'>, activityTypes: string[], unitSettings?: UserUnitSettingsInterface, isMerge = false): StatRowElement {
+    const statRowElement = {} as StatRowElement;
+    const lazy = (key: string, read: () => unknown) => Object.defineProperty(statRowElement, key, {
+      enumerable: true, configurable: true,
+      get() {
+        const value = read();
+        Object.defineProperty(this, key, { value, enumerable: true, configurable: true, writable: true });
+        return value;
+      },
+      set(value) { Object.defineProperty(this, key, { value, enumerable: true, configurable: true, writable: true }); },
+    });
+    const getStat = (type: string) => reader.getStat(type) || undefined;
+
+    for (const type of EVENT_TABLE_STAT_TYPES) {
+      if ([DataSpeedAvg.type, DataDistance.type, DataDuration.type, DataRPE.type, DataFeeling.type].includes(type)) continue;
+      lazy(type, () => {
+        const stat = getStat(type);
+        return stat ? resolveUnitAwareDisplayStat(stat, unitSettings, { stripRepeatedUnit: true })?.text
+          ?? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '';
+      });
     }
-    const getStat = (type: string) => statsByType.get(type);
-
-    const distance = getStat(DataDistance.type);
-    const duration = getStat(DataDuration.type);
-    const ascent = getStat(DataAscent.type);
-    const descent = getStat(DataDescent.type);
-    const energy = getStat(DataEnergy.type);
-    const avgPower = getStat(DataPowerAvg.type);
-    const maxPower = getStat(DataPowerMax.type);
-    const avgSpeed = getStat(DataSpeedAvg.type);
-    const heartRateAverage = getStat(DataHeartRateAvg.type);
-    const rpe = getStat(DataRPE.type);
-    const feeling = getStat(DataFeeling.type);
-    const vO2Max = getStat(DataVO2Max.type);
-    const TTE = getStat(DataAerobicTrainingEffect.type);
-    const EPOC = getStat(DataPeakEPOC.type);
-    const recoveryTime = getStat(DataRecoveryTime.type);
-
-    statRowElement[DataDuration.type] = duration ? `${duration.getDisplayValue()}` : '';
-    statRowElement[DataDistance.type] = distance
-      ? resolveUnitAwareDisplayStat(distance, unitSettings, { stripRepeatedUnit: true })?.text ?? `${distance.getDisplayValue()} ${distance.getDisplayUnit()}`
-      : '';
-    statRowElement[DataAscent.type] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
-    statRowElement[DataDescent.type] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
-    statRowElement[DataEnergy.type] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
-    statRowElement[DataVO2Max.type] = vO2Max ? `${vO2Max.getDisplayValue()} ${vO2Max.getDisplayUnit()}` : '';
-    statRowElement[DataAerobicTrainingEffect.type] = TTE ? `${TTE.getDisplayValue()} ${TTE.getDisplayUnit()}` : '';
-    statRowElement[DataPeakEPOC.type] = EPOC ? `${EPOC.getDisplayValue()} ${EPOC.getDisplayUnit()}` : '';
-    statRowElement[DataRecoveryTime.type] = recoveryTime ? `${recoveryTime.getDisplayValue()} ${recoveryTime.getDisplayUnit()}` : '';
-    statRowElement[DataPowerAvg.type] = avgPower ? `${avgPower.getDisplayValue()} ${avgPower.getDisplayUnit()}` : '';
-    statRowElement[DataPowerMax.type] = maxPower ? `${maxPower.getDisplayValue()} ${maxPower.getDisplayUnit()}` : '';
-    statRowElement[DataHeartRateAvg.type] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
-    statRowElement[DataRPE.type] = rpe ? <RPEBorgCR10SCale>rpe.getValue() : undefined;
-    statRowElement[DataFeeling.type] = feeling ? <Feelings>feeling.getValue() : undefined;
-
-    if (isMerge && avgSpeed) {
-      statRowElement[DataSpeedAvg.type] = DynamicDataLoader.getUnitBasedDataFromDataInstance(avgSpeed, unitSettings)
-        .map(data => `${data.getDisplayValue()}${data.getDisplayUnit()}`)
-        .join(', ');
-    } else {
+    lazy(DataDuration.type, () => {
+      const stat = getStat(DataDuration.type);
+      return stat ? `${stat.getDisplayValue()}` : '';
+    });
+    lazy(DataDistance.type, () => {
+      const stat = getStat(DataDistance.type);
+      return stat ? resolveUnitAwareDisplayStat(stat, unitSettings, { stripRepeatedUnit: true })?.text
+        ?? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '';
+    });
+    for (const type of [DataRPE.type, DataFeeling.type]) lazy(type, () => getStat(type)?.getValue());
+    lazy(DataSpeedAvg.type, () => {
+      const averageSpeed = getStat(DataSpeedAvg.type);
+      if (isMerge && averageSpeed) {
+        return DynamicDataLoader.getUnitBasedDataFromDataInstance(averageSpeed, unitSettings)
+          .map(data => `${data.getDisplayValue()}${data.getDisplayUnit()}`).join(', ');
+      }
       const speedValues: string[] = [];
       for (const activityType of activityTypes) {
-        const derivedDataTypes = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(
-          ActivityTypes[activityType as keyof typeof ActivityTypes]
-        );
-        for (const dataType of derivedDataTypes) {
-          // Hide Grade Adjusted Pace from the dashboard event table
-          if ((typeof DataGradeAdjustedPace !== 'undefined' && dataType === DataGradeAdjustedPace.type) || dataType === 'GradeAdjustedPace' || dataType === 'Average Grade Adjusted Pace') {
-            continue;
-          }
-          const stat = getStat(dataType);
-          if (!stat) {
-            continue;
-          }
-          const unitBasedData = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings);
-          for (const data of unitBasedData) {
+        const types = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(
+          ActivityTypes[activityType as keyof typeof ActivityTypes]);
+        for (const type of types) {
+          if (type === DataGradeAdjustedPace.type || type === 'GradeAdjustedPace' || type === 'Average Grade Adjusted Pace') continue;
+          const stat = getStat(type);
+          if (!stat) continue;
+          for (const data of DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)) {
             speedValues.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
           }
         }
       }
-      statRowElement[DataSpeedAvg.type] = speedValues.join(', ');
+      return speedValues.join(', ');
+    });
+    for (const type of EVENT_TABLE_STAT_TYPES) {
+      if (type === DataRPE.type || type === DataFeeling.type) continue;
+      lazy(`sort.${type}`, () => getStat(type)?.getValue() ?? 0);
     }
-
-    // Add the sorts
-    statRowElement[`sort.${DataDistance.type}`] = distance ? <number>distance.getValue() : 0;
-    statRowElement[`sort.${DataDuration.type}`] = duration ? <number>duration.getValue() : 0;
-    statRowElement[`sort.${DataAscent.type}`] = ascent ? <number>ascent.getValue() : 0;
-    statRowElement[`sort.${DataDescent.type}`] = descent ? <number>descent.getValue() : 0;
-    statRowElement[`sort.${DataEnergy.type}`] = energy ? <number>energy.getValue() : 0;
-    statRowElement[`sort.${DataVO2Max.type}`] = vO2Max ? <number>vO2Max.getValue() : 0;
-    statRowElement[`sort.${DataPeakEPOC.type}`] = EPOC ? <number>EPOC.getValue() : 0;
-    statRowElement[`sort.${DataRecoveryTime.type}`] = recoveryTime ? <number>recoveryTime.getValue() : 0;
-    statRowElement[`sort.${DataAerobicTrainingEffect.type}`] = TTE ? <number>TTE.getValue() : 0;
-    statRowElement[`sort.${DataSpeedAvg.type}`] = avgSpeed ? <number>avgSpeed.getValue() : 0;
-    statRowElement[`sort.${DataPowerAvg.type}`] = avgPower ? <number>avgPower.getValue() : 0;
-    statRowElement[`sort.${DataHeartRateAvg.type}`] = heartRateAverage ? <number>heartRateAverage.getValue() : 0;
-    statRowElement[`sort.${DataPowerMax.type}`] = avgPower ? <number>avgPower.getValue() : 0;
 
     return statRowElement;
   }
@@ -150,7 +131,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
 }
 
 export interface StatRowElement {
-  Event?: EventInterface,
+  Event?: EventRead,
   Privacy?: Privacy,
   Name?: string,
   'Start Date'?: string,

@@ -78,18 +78,34 @@ unchanged at runtime; its one-time index is not a custom registration API.
 - Share deterministic preview datasets instead of constructing complete example events for every thumbnail. Keep
   wall-clock recovery/availability contexts current and avoid retaining one owner's data in another owner's cache.
 
-## Existing migration candidates
+## Implemented QS read paths
 
-The 23 October 2026 scan identified these candidates; this guide does not claim they have already been converted.
+`AppEventService.getEventSummariesBy`, `getEventSummariesOnceBy` and `getEventSummariesOnceByWithMeta` return
+`EventRead[]`. They share the existing query, sanitization, diagnostics and incremental listener machinery. Summary
+and full-event prefetch seeds are isolated by owner/query and reader kind. Full `getEventsBy` / `getEventsOnceBy`
+APIs remain available to callers that require complete models.
 
-| Area | Current work to remove |
+```ts
+const events$ = eventService.getEventSummariesBy(user, whereClauses, 'startDate', false, 0);
+// Pass EventRead to list/chart inputs; request each metric through getStat with the user's units.
+```
+
+`shared/event-summary.ts` composes Sports Lib's summary with explicit QS metadata. It has no `toJSON`, activity
+collection or full-event mutators. A source revision identifies each restored snapshot, while the bounded set of
+already requested metric instances is observed for in-place value changes. `applySavedStat` reflects an already
+committed elevation patch locally, including zero and removal; it does not write to Firestore. Existing Training
+source validation alone may call `getSourceSnapshot`, which copies raw stats and excludes implicit lazy-derived
+fields. Never use that whole-source operation in row construction or caching.
+
+| Area | Implemented behavior |
 | --- | --- |
-| [Shared event reader](../src/app/services/app.event.service.ts) | Full stat construction for dashboard, activity-list and preview queries. Add a separate summary path while preserving existing full-event callers and QS metadata. |
-| [Event table](../src/app/components/event-table/event.table.component.ts) | All-stat enumeration in row construction and cache-key generation, including before cache-hit reuse. Migrate alongside the reader. |
-| [Chart picker examples](../src/app/helpers/dashboard-chart-preview.helper.ts) | Eighteen full events with child activities per example preview. Reuse fixtures and use summaries where a preview only needs stats. |
-| [Dashboard aggregation](../shared/event-stat-aggregation.ts) | Repeated sorting and date grouping for each chart selector. Reuse compatible work without changing per-metric exclusions or time semantics. |
-| [My Tracks](../src/app/components/tracks/tracks.component.ts) | Full event hydration for home inference that needs only IDs, dates and start positions. Keep detailed track/source loading separate. |
-| [MCP metric aggregation](../functions/src/mcp/data.service.ts) | Selected metrics constructed for validation and again during import. Existing field masks already limit reads, making this a lower-priority opportunity. |
+| Shared event reader | Dashboard resolver/listener, Activities, range tables, summary tiles and preview queries use explicit summary APIs. Details and tools that need full models retain their readers. |
+| Event table | Reads selected metrics and memoizes display/sort cells on first access. Cache validation uses revisions for summaries and bounded metric values for full events, without formatting. Hidden-column search/sort and CSV still request their required cells. Settings and owner changes invalidate display context. |
+| Row actions and maps | GPX, benchmark and reprocess actions load complete events explicitly; source downloads and metadata patches use existing paths. Map markers/popups accept read models, and selecting a track retains explicit stream hydration. |
+| Chart picker examples | Private deterministic seeds are shared across cards; the 18 example events use summaries without child models. Recovery's wall-clock context is rebuilt for every preview. |
+| Dashboard aggregation | One synchronous build/request shares normalized/filter-compatible inputs, chronological ordering, activity keys and timezone/interval bucket keys. Discard `EventStatAggregationContext` after each build; never retain it across live updates or owners. Auto interval selection scans endpoints without sorting. |
+| My Tracks | Home inference projects only persisted IDs, dates and valid start positions, with no metric construction. Detailed track/source loading remains full. |
+| MCP metric aggregation | Reuses validated selected metric instances directly, with canonical compatibility renames where needed. It does not derive missing persisted metrics or hydrate unrelated stats. Existing masks and cumulative budgets remain in force. |
 
 Backend reader optimization must preserve explicit projections, persisted-only metric availability, query/work limits,
 consent and location exclusions. Lazy derivation does not authorize exposing a missing persisted stat. Follow the
@@ -119,3 +135,31 @@ whole-dashboard speedup or a production latency budget.
 See the [Sports Lib summary API and benchmark guide](https://github.com/sports-alliance/sports-lib/blob/v23.7.0/docs/guides/json-summaries.md)
 for the library contract. The [always-on summary read rule](../.agent/rules/event-summary-reads.md) makes this guidance
 part of the repository workflow.
+
+## Reproducible consumer benchmark
+
+Run with Node 22 and a pre-migration baseline ref:
+
+```sh
+node tools/benchmarks/event-summary-read.mjs 6e0974c88
+```
+
+The script extracts each version's actual table cache methods and uses its real metric row builder and shared
+aggregator. It includes QS sanitization, restored readers, cache-key work and six displayed cells for 438 synthetic
+events containing 80 numeric stats plus activity types, device names and start position. It verifies displayed-value
+and eight-selector aggregation parity before reporting three warmups and eleven median samples. No user data is used;
+temporary generated modules are removed automatically. A parity mismatch exits unsuccessfully. Module startup,
+Firestore/network, Angular change detection, DOM/ECharts/Mapbox rendering and whole-page latency are excluded.
+
+A verified local Node 22.23.3 run on 23 October 2026 measured:
+
+| Work for 438 events | Baseline | Summary consumer |
+| --- | ---: | ---: |
+| Sanitize, restore, cache key and six displayed cells | 47.722 ms | 23.351 ms |
+| Repeated row cache-key pass | 18.685 ms | 1.165 ms |
+| Eight daily selectors in Europe/Helsinki | 210.255 ms | 27.380 ms |
+| Metric factory calls for the first workload | 36,354 | 3,066 |
+
+All displayed values and aggregation outputs matched. Timings vary with machine load; factory-call counts and parity
+are the stable work checks. Factory counts instrument `DynamicDataLoader.getDataInstanceFromDataType`, not all JavaScript allocations. This is a consumer CPU comparison, not a measured production dashboard speedup.
+The Help content was reviewed: no new user option or workflow is introduced by these performance changes.

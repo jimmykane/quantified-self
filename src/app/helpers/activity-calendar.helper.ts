@@ -1,4 +1,5 @@
-import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ActivityTypeGroups,
   ActivityTypes,
@@ -64,7 +65,7 @@ export interface ActivityCalendarDayViewModel {
   families: ActivityCalendarFamilySummary[];
   visibleFamilies: ActivityCalendarFamilySummary[];
   overflowFamilyCount: number;
-  events: EventInterface[];
+  events: EventRead[];
   ariaLabel: string;
 }
 
@@ -350,7 +351,7 @@ export function resolveActivityCalendarPrimaryRange(
 }
 
 export function buildActivityCalendarViewModel(
-  events: EventInterface[] | null | undefined,
+  events: EventRead[] | null | undefined,
   options: BuildActivityCalendarViewModelOptions,
 ): ActivityCalendarViewModel {
   const view = normalizeActivityCalendarView(options.view);
@@ -418,7 +419,7 @@ export function buildActivityCalendarViewModel(
 }
 
 /** Project one exact selected date from the bounded period read, including paged context dates. */
-export function buildActivityCalendarSelectedDay(events: EventInterface[], date: Date, locale?: string, now = new Date(), activitiesComplete = true): ActivityCalendarDayViewModel {
+export function buildActivityCalendarSelectedDay(events: EventRead[], date: Date, locale?: string, now = new Date(), activitiesComplete = true): ActivityCalendarDayViewModel {
   return buildDayViewModel(startOfLocalDay(date), groupEventsByLocalDay(events), false, locale, startOfLocalDay(now), activitiesComplete);
 }
 
@@ -439,11 +440,11 @@ export function formatActivityCalendarDuration(durationSeconds: number, unknown 
   return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
-export function resolveActivityCalendarEventDurationSeconds(event: EventInterface): number | null {
+export function resolveActivityCalendarEventDurationSeconds(event: EventRead): number | null {
   return resolveActivityCalendarEventStatValue(event, DataDuration.type);
 }
 
-function resolveActivityCalendarEventStatValue(event: EventInterface, dataType: string): number | null {
+function resolveActivityCalendarEventStatValue(event: EventRead, dataType: string): number | null {
   const stat = event?.getStat?.(dataType);
   const rawValue = stat
     ? (stat as { getValue?: () => unknown }).getValue?.()
@@ -455,7 +456,7 @@ function resolveActivityCalendarEventStatValue(event: EventInterface, dataType: 
   return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : null;
 }
 
-export function resolveActivityCalendarEventLabel(event: EventInterface): string {
+export function resolveActivityCalendarEventLabel(event: EventRead): string {
   const candidateLabels = [
     event?.name,
     event?.description,
@@ -471,7 +472,7 @@ export function resolveActivityCalendarEventLabel(event: EventInterface): string
 
 function buildMonthViewModel(
   monthStart: Date,
-  eventsByDay: Map<string, EventInterface[]>,
+  eventsByDay: Map<string, EventRead[]>,
   weekdays: ActivityCalendarWeekdayViewModel[],
   startOfWeek: DaysOfTheWeek | number | null | undefined,
   locale: string | undefined,
@@ -499,7 +500,7 @@ function buildMonthViewModel(
 
 function buildDayViewModel(
   date: Date,
-  eventsByDay: Map<string, EventInterface[]>,
+  eventsByDay: Map<string, EventRead[]>,
   inPrimaryPeriod: boolean,
   locale: string | undefined,
   now: Date,
@@ -597,7 +598,7 @@ function buildActivityCalendarPeriodSummaryForMonths(
 }
 
 export function buildActivityCalendarPeriodSummary(
-  events: readonly EventInterface[],
+  events: readonly EventRead[],
   summariesSettings?: SummaryStatsSettingsLike | null,
 ): ActivityCalendarPeriodSummary {
   const periodMetrics = createActivityCalendarMetricAggregates();
@@ -685,7 +686,7 @@ function addActivityCalendarMetricValue(
 }
 
 function resolveActivityCalendarElevationEligibility(
-  event: EventInterface,
+  event: EventRead,
   exclusions: ActivityCalendarElevationExclusions,
 ): Pick<Record<ActivityCalendarVolumeMetric, boolean>, 'ascent' | 'descent'> {
   const activityTypes = resolveEventActivityTypes(event);
@@ -716,8 +717,8 @@ function resolveConfiguredActivityTypes(values: string[] | null | undefined): Re
     .filter((activityType): activityType is ActivityTypes => !!activityType));
 }
 
-function groupEventsByLocalDay(events: EventInterface[]): Map<string, EventInterface[]> {
-  const eventsByDay = new Map<string, EventInterface[]>();
+function groupEventsByLocalDay(events: EventRead[]): Map<string, EventRead[]> {
+  const eventsByDay = new Map<string, EventRead[]>();
   events.forEach((event) => {
     const startDate = resolveEventStartDate(event);
     if (!startDate) {
@@ -729,7 +730,7 @@ function groupEventsByLocalDay(events: EventInterface[]): Map<string, EventInter
   return eventsByDay;
 }
 
-export function resolveEventStartDate(event: EventInterface): Date | null {
+export function resolveEventStartDate(event: EventRead): Date | null {
   const rawStartDate = (event as { startDate?: unknown } | null)?.startDate;
   if (rawStartDate instanceof Date && isValidDate(rawStartDate)) {
     return rawStartDate;
@@ -745,7 +746,7 @@ export function resolveEventStartDate(event: EventInterface): Date | null {
   return null;
 }
 
-export function resolveEventFamilyIdentity(event: EventInterface): ActivityCalendarFamilyIdentity {
+export function resolveEventFamilyIdentity(event: EventRead): ActivityCalendarFamilyIdentity {
   const groups = new Set<ActivityTypeGroup>();
   const activityTypes = resolveEventActivityTypes(event);
   activityTypes.forEach((activityType) => {
@@ -773,7 +774,7 @@ export function resolveEventFamilyIdentity(event: EventInterface): ActivityCalen
   };
 }
 
-function resolveEventActivityTypes(event: EventInterface): ActivityTypes[] {
+function resolveEventActivityTypes(event: EventRead): ActivityTypes[] {
   const activityTypes = event?.getActivityTypesAsArray?.();
   if (!Array.isArray(activityTypes)) {
     return [];
