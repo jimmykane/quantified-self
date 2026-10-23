@@ -60,6 +60,12 @@ describe('shared import preservation', () => {
     state.activities.set(id, { ...parsed.toJSON(), ...extra });
   }
 
+  it('does not reserve a reparse after the workout was deleted', async () => {
+    state.parentExists = false;
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toMatchObject({ name: 'EventWriteSkippedForDeletedEventError' });
+    expect(state.commit).not.toHaveBeenCalled();
+  });
+
   it.each(['pending', 'finalized', 'legacy'])('recovers corrected activities from an interrupted reparse: %s', async phase => {
     const parsed = EventImporterJSON.getEventFromJSON({ name: 'Run', startDate: 1700000000000, endDate: 1700003600000,
       activities: [{ ...activity().toJSON(), streams: [], laps: [], intensityZones: [] }], stats: {} }).setID('event');
@@ -85,7 +91,14 @@ describe('shared import preservation', () => {
     store('saved-id', activity(), { eventID: recovering ? 'another-event' : 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
     store('duplicate', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
     state.metadata = recovering ? { sourceWritePending: true, legs: { original: { activityId: 'saved-id' } } } : {};
-    await expect(prepareReparsedEventWrite('owner', event())).rejects.toThrow();
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+  });
+
+  it('requires review instead of retrying a missing active leg during interrupted reparse recovery', async () => {
+    state.metadata = { sourceWritePending: true, legs: { controlled: { activityId: 'missing-leg' } },
+      controls: { controlled: { override: 0 } } };
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
     expect(state.commit).not.toHaveBeenCalled();
   });
 
@@ -141,6 +154,42 @@ describe('shared import preservation', () => {
     expect(preserveImportedActivityEdits(incoming, existing)).toMatchObject({ type: importedType });
     expect(existing.type).toBe('Stretching');
     expect(incoming.type).toBe('Pilates');
+  });
+
+  it.each([
+    { liveType: 'Pilates', expectedType: 'Pilates' },
+    { liveType: 'Stretching', expectedType: 'Yoga' },
+  ])('keeps a legacy live sport edit/reset to $liveType during its first source adoption', async ({ liveType, expectedType }) => {
+    store('stable-id', activity(0, 'Stretching'));
+    state.provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic', serviceWorkoutID: 'workout' };
+    state.parent = { originalFile: { path: 'users/owner/events/event/original.fit', generation: '1' } };
+    state.loadRetained.mockResolvedValueOnce([activity(0, 'Stretching')]);
+    const incoming = activity(0, 'Yoga');
+    const finish = await prepareImportedEventWrite('owner', event([incoming]), authorize, state.provider);
+    expect(finish.previousImportedTypes?.get('stable-id')).toBe('Stretching');
+    const saved = preserveImportedActivityEdits({ type: incoming.type, sourceIdentity: (incoming as any).sourceIdentity },
+      { ...state.activities.get('stable-id'), type: liveType }, finish.previousImportedTypes);
+    expect(saved).toMatchObject({ type: expectedType, sourceIdentity: { importedType: 'Yoga' } });
+    expect(() => preserveImportedActivityEdits({ type: incoming.type, sourceIdentity: (incoming as any).sourceIdentity },
+      null, finish.previousImportedTypes)).toThrow('Cannot safely match');
+  });
+
+  it('supplies the retained raw sport for a legacy reparse with an existing owner label', async () => {
+    store('stable-id', activity(0, 'Pilates'));
+    const incoming = activity(0, 'Walking');
+    const finish = await prepareReparsedEventWrite('owner', event([incoming]));
+    expect(finish.previousImportedTypes?.get('stable-id')).toBe('Walking');
+    expect(preserveImportedActivityEdits({ type: incoming.type, sourceIdentity: (incoming as any).sourceIdentity },
+      { ...state.activities.get('stable-id'), type: 'Walking' }, finish.previousImportedTypes)).toMatchObject({ type: 'Walking' });
+  });
+
+  it('binds both live provenance and preparation context to the current activity ID', () => {
+    const source = { version: 1, activityId: 'stable', startMs: 0, endMs: 1000, importedType: 'Yoga' };
+    const incoming = { type: 'Yoga', sourceIdentity: source };
+    const existing = { type: 'Pilates', sourceIdentity: { ...source, activityId: 'another-leg', importedType: 'Pilates' } };
+    expect(preserveImportedActivityEdits(incoming, existing).type).toBe('Yoga');
+    expect(preserveImportedActivityEdits(incoming, existing, new Map([['another-leg', 'Pilates']])).type).toBe('Yoga');
+    expect(preserveImportedActivityEdits(incoming, existing, new Map([['stable', 'Stretching']])).type).toBe('Pilates');
   });
 
   it.each([

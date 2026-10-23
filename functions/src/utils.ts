@@ -399,7 +399,8 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         docRef,
         data,
         undefined,
-        isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
+        isEventDocument ? preserveImportedEventEdits : isActivityDocument
+          ? (incoming, existing) => preserveImportedActivityEdits(incoming, existing, sourceWrite.previousImportedTypes) : undefined,
         assertSourceWrite,
       );
     },

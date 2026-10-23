@@ -427,13 +427,12 @@ export class EventCardComponent implements OnInit {
       return;
     }
 
-    const previousSelectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
     const liveSyncRouteKey = this.liveSyncRouteKey;
     const streamTypes = this.getLiveStreamTypes();
     this.logger.log('[EventCard] reloadEventDetailsWithStreams started', {
       eventID,
       targetUserID,
-      previousSelectedIDs,
+      selectedIDs: this.selectedActivitiesInstant().map((activity) => activity.getID()),
       streamTypes,
     });
     this.liveReloadInProgress = true;
@@ -454,6 +453,8 @@ export class EventCardComponent implements OnInit {
         return;
       }
 
+      // A user can change or clear their leg selection while source files are loading.
+      const previousSelectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
       this.event.set(refreshedEvent as AppEventInterface);
       const refreshedActivityIDs = (refreshedEvent.getActivities() || []).map((activity) => activity.getID());
       const refreshedIDSet = new Set(refreshedActivityIDs);

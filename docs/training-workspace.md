@@ -6193,6 +6193,10 @@ Restoring the source sport during preparation clears the earlier owner label and
 sport; the activity write must not restore that stale override.
 The activity transaction also rechecks correction eligibility against the live sport label, so a late change to a
 diving activity cannot persist a terrain elevation correction.
+For a legacy leg's first source adoption, preparation also carries the previously verified imported sport in memory,
+keyed by the final stable activity ID. The guarded activity write uses it when the live document has no valid source
+snapshot yet, preserving a late owner sport edit or reset. This context is not persisted, exposed through MCP or
+recovered from incoming JSON, and adds no import reads or writes.
 
 Legacy associations are established on demand; an unexplained provider sport change requires bounded retained-file
 proof of the old imported type, with reference revision revalidation. A source conflict uses the existing terminal
@@ -6206,6 +6210,7 @@ Stable leg IDs do not identify a stream revision. Event Details live deduplicati
 bounded source version: original paths/buckets/generations, completed reparse revision and validated leg source
 snapshots. A changed version reloads source streams while keeping selected IDs; owner metadata edits and unchanged
 multisport reorderings reuse streams. Updates arriving during a refresh are coalesced to the latest live snapshot.
+Refresh completion reads the current selection, including an empty selection, so a download cannot undo a leg toggle.
 Old reads cannot replace another account/route or restore a public share after access is lost. This is browser-only
 refresh behavior; it adds no backend trigger, stored field or account mutation.
 
@@ -6214,6 +6219,11 @@ leg's complete time window. An older writer's reused/overwritten ID cannot certi
 require review before further writes. Valid source snapshots preserve recovery of already verified source revisions.
 Pending legacy controls with no frozen identity also require valid source provenance before their activity ID can
 be trusted; a retry must not manufacture pre-write evidence from an already overwritten document.
+Reparse also checks workout existence before reserving, and inside every parent/child write transaction. A valid
+reservation must not recreate a deleted workout or append orphan children. Child preservation reads the parent and
+child together; event-body rewrites reuse their preservation read, and merge-flag writes also check the parent.
+Deletion uses the existing skipped-write handling. Missing or foreign active leg references during interrupted
+recovery require identity review, rather than being treated as transient parser failures.
 
 ### File-only TSS evaluation and owner load controls
 

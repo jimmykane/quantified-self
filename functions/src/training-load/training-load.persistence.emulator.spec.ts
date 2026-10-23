@@ -67,8 +67,9 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const setDoc = vi.fn(async (path: string[], data: unknown) => db.runTransaction(async transaction => {
       await guard.assertCurrent(db, transaction);
       const ref = db.doc(path.join('/')); const current = await transaction.get(ref);
-      const preserve = path[2] === 'events' ? preserveImportedEventEdits : preserveImportedActivityEdits;
-      transaction.set(ref, preserve(data as admin.firestore.DocumentData, current.data() ?? null));
+      transaction.set(ref, path[2] === 'events'
+        ? preserveImportedEventEdits(data as admin.firestore.DocumentData, current.data() ?? null)
+        : preserveImportedActivityEdits(data as admin.firestore.DocumentData, current.data() ?? null, guard.previousImportedTypes));
     }));
     const writer = new EventWriter({
       prepareTrainingLoad: guard.prepareTrainingLoad,
@@ -318,6 +319,83 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       sourceIdentity: { activityId: 'stable-leg', importedType: ActivityTypes.Yoga } });
     expect((await ref.get()).data()).toMatchObject({ controls: { 'stable-leg': { override: 0 } }, sourceWritePending: false });
   });
+
+  it.each([
+    { mode: 'import', reset: false }, { mode: 'reparse', reset: false }, { mode: 'reparse', reset: true },
+  ])('retains live legacy sport edits during first source adoption: $mode, reset=$reset', async ({ mode, reset }) => {
+    const uid = setup(); await importWorkout(uid, workout('stable'));
+    const parentRef = db.doc(`users/${uid}/events/workout`), childRef = db.doc(`users/${uid}/activities/stable`);
+    const metadataRef = db.doc(metadataPath(uid));
+    const before = (await metadataRef.get()).data() as TrainingLoadMetadata;
+    await metadataRef.update({ controls: { stable: { override: 0 } } });
+    if (reset) await childRef.update({ type: ActivityTypes.Pilates });
+    const [parent, child] = await db.getAll(parentRef, childRef);
+    expect(child.data()).not.toHaveProperty('sourceIdentity');
+    const paused = gate(), resume = gate(), write = EventWriter.prototype.writeAllEventData;
+    const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
+      const adapter = (this as unknown as { adapter: FirestoreAdapter }).adapter, setDoc = adapter.setDoc;
+      adapter.setDoc = async (path, data) => {
+        if (path[2] === 'activities' && path[3] === 'stable') { paused.release(); await resume.promise; }
+        return setDoc(path, data);
+      };
+      return write.apply(this, args);
+    });
+    const incoming = workout('incoming');
+    const operation = mode === 'import' ? reuploadWriter(uid).writer.writeAllEventData(uid, incoming)
+      : persistReparsedEvent(uid, 'workout', incoming, parent.data()!, [child], '23.6.0');
+    const outcome = operation.then(() => null, error => error);
+    try {
+      await Promise.race([paused.promise, outcome.then(error => { throw error ?? new Error('Write finished before the edit'); })]);
+      const type = reset ? ActivityTypes.Walking : ActivityTypes.Pilates;
+      await childRef.update({ type });
+      resume.release(); await operation;
+      expect((await childRef.get()).data()).toMatchObject({ type,
+        sourceIdentity: { activityId: 'stable', importedType: ActivityTypes.Walking } });
+      const metadata = (await metadataRef.get()).data() as TrainingLoadMetadata;
+      expect(metadata).toMatchObject({ sourceWritePending: false, controls: { stable: { override: 0 } } });
+      expect(metadata.legs!.stable.policy).toEqual(before.legs!.stable.policy);
+      expect(incoming.getFirstActivity().getID()).toBe('stable');
+    } finally { resume.release(); await outcome; spy.mockRestore(); }
+  });
+
+  it.each(['before-reservation', 'events', 'activities', 'merge-metadata'])(
+    'does not recreate a workout or append source writes after it is deleted: %s', async phase => {
+      const uid = setup(); await importWorkout(uid, workout('stable'));
+      const parentRef = db.doc(`users/${uid}/events/workout`), childRef = db.doc(`users/${uid}/activities/stable`);
+      if (phase === 'merge-metadata') await parentRef.update({ isMerge: true });
+      const [parent, child, metadata] = await db.getAll(parentRef, childRef, db.doc(metadataPath(uid)));
+      const paused = gate(), resume = gate(), write = EventWriter.prototype.writeAllEventData;
+      const spy = vi.spyOn(EventWriter.prototype, 'writeAllEventData').mockImplementationOnce(async function (...args) {
+        const adapter = (this as unknown as { adapter: FirestoreAdapter }).adapter, setDoc = adapter.setDoc;
+        adapter.setDoc = async (path, data) => {
+          if (path[2] === phase && (phase !== 'activities' || path[3] === 'stable')) { paused.release(); await resume.promise; }
+          return setDoc(path, data);
+        };
+        const result = await write.apply(this, args);
+        if (phase === 'merge-metadata') { paused.release(); await resume.promise; }
+        return result;
+      });
+      // Match the client's initial delete while asynchronous cleanup has not removed the retained reservation yet.
+      if (phase === 'before-reservation') await parentRef.delete();
+      const operation = persistReparsedEvent(uid, 'workout', workout('incoming'), parent.data()!, [child], '23.6.0');
+      const outcome = operation.then(() => null, error => error);
+      try {
+        if (phase !== 'before-reservation') {
+          await Promise.race([paused.promise, outcome.then(error => { throw error ?? new Error('Write finished before deletion'); })]);
+          await parentRef.delete();
+        }
+        const afterDelete = await childRef.get();
+        resume.release();
+        await expect(operation).rejects.toMatchObject({ name: 'EventWriteSkippedForDeletedEventError' });
+        expect((await parentRef.get()).exists).toBe(false);
+        const afterWrite = await childRef.get();
+        expect(afterWrite.data()).toEqual(afterDelete.data());
+        expect(afterWrite.updateTime?.isEqual(afterDelete.updateTime!)).toBe(true);
+        expect((await parentRef.collection('metaData').doc('processing').get()).exists).toBe(false);
+        if (phase === 'before-reservation') expect((await db.doc(metadataPath(uid)).get()).data()).toEqual(metadata.data());
+      } finally { resume.release(); await outcome; spy.mockRestore(); }
+    },
+  );
 
   it.each(['ascent', 'descent'] as const)('blocks a late diving label from carrying a %s correction and permits safe recovery', async metric => {
     const uid = setup(); const original = elevationWorkout(); await importWorkout(uid, original);

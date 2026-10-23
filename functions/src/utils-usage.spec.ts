@@ -7,7 +7,8 @@ vi.mock('./shared/import-preservation', async importOriginal => ({
     ...await importOriginal<typeof import('./shared/import-preservation')>(),
     prepareImportedEventWrite: prepareImportWrite,
 }));
-vi.mock('./training-load/training-load-source-write', () => ({
+vi.mock('./training-load/training-load-source-write', async importOriginal => ({
+  ...await importOriginal<typeof import('./training-load/training-load-source-write')>(),
     TrainingLoadSourceWrite: class {
         assertCurrent = sourceWriteGuard.assertCurrent;
         constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}

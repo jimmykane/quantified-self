@@ -33,6 +33,7 @@ describe('stable activity source bindings', () => {
     } });
     expect(parsed.getFirstActivity().getID()).toBe('stable');
     expect([...plan.verifiedActivityIds]).toEqual(['stable']);
+    expect([...plan.previousImportedTypes]).toEqual([['stable', 'Stretching']]);
   });
 
   it('preserves an owner-selected sport separately from the refreshed imported sport', () => {
@@ -43,6 +44,7 @@ describe('stable activity source bindings', () => {
     plan.apply();
     expect(parsed.getFirstActivity().type).toBe('Pilates');
     expect(parsed.getFirstActivity()).toHaveProperty('sourceIdentity.importedType', 'Yoga');
+    expect(plan.previousImportedTypes.get('stable')).toBe('Stretching');
   });
 
   it('rejects structural ambiguity before changing IDs or provenance', () => {
@@ -95,5 +97,6 @@ describe('stable activity source bindings', () => {
     expect(parsed.getActivities().map(activity => activity.getID())).toEqual(['incoming-0', 'incoming-1']);
     expect(parsed.getActivities().map(activity => (activity as any).sourceIdentity.importedType)).toEqual(['Yoga', 'Running']);
     expect(plan.verifiedActivityIds.size).toBe(0);
+    expect(plan.previousImportedTypes.size).toBe(0);
   });
 });

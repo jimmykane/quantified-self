@@ -10,7 +10,7 @@ import { ActivityIdentityConflictError, LegacyActivitySourceRequiredError } from
 import { isSameProviderRecording, providerRecordingService } from './provider-recording-identity';
 import { loadRetainedActivitySources, retainedSourceRevision } from './retained-activity-source';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
-import type { PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
+import { EventWriteSkippedForDeletedEventError, type PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, applyActivityAscentCorrection, applyCorrectedEventAscent, isTerrainAscentActivity, readAscentCorrection,
   type AscentCorrectedActivity } from '../../../shared/activity-ascent';
@@ -34,12 +34,15 @@ export function preserveImportedEventEdits(incoming: admin.firestore.DocumentDat
   return sanitizeEventFirestoreWritePayload(result);
 }
 
-export function preserveImportedActivityEdits(incoming: admin.firestore.DocumentData, existing: admin.firestore.DocumentData | null): admin.firestore.DocumentData {
-  const priorSource = readActivitySourceIdentity(existing?.sourceIdentity);
+export function preserveImportedActivityEdits(incoming: admin.firestore.DocumentData, existing: admin.firestore.DocumentData | null,
+  previousImportedTypes?: ReadonlyMap<string, string>): admin.firestore.DocumentData {
   const currentSource = readActivitySourceIdentity(incoming.sourceIdentity);
-  const boundSource = priorSource && currentSource?.activityId === priorSource.activityId;
+  const priorSource = readActivitySourceIdentity(existing?.sourceIdentity, currentSource?.activityId);
+  const previousImportedType = priorSource?.importedType ?? (currentSource && previousImportedTypes?.get(currentSource.activityId));
+  const boundSource = currentSource && previousImportedType !== undefined;
+  if (boundSource && !existing) throw new ActivityIdentityConflictError();
   // Re-read both override and reset: a prepared owner label must not undo a later reset to the source sport.
-  const type = boundSource ? existing!.type !== priorSource.importedType ? existing!.type : currentSource.importedType : incoming.type;
+  const type = boundSource ? existing!.type !== previousImportedType ? existing!.type : currentSource.importedType : incoming.type;
   for (const metric of ACTIVITY_ELEVATION_METRICS) {
     const { field } = activityElevationMetric(metric);
     if (readAscentCorrection(existing?.[field]) && !readAscentCorrection(incoming[field]))
@@ -117,10 +120,12 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
   let prepared = false;
   let apply: () => void = () => undefined;
   let verifiedActivityIds: ReadonlySet<string> = new Set();
+  let previousImportedTypes: ReadonlyMap<string, string> = new Map();
   const finish = await prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
     if (prepared) return verifiedActivityIds;
     const parentRef = db.doc(`users/${uid}/events/${event.getID()}`);
     const [parent, metadataDoc] = await transaction.getAll(parentRef, parentRef.collection('metaData').doc('trainingLoad'));
+    if (!parent.exists) throw new EventWriteSkippedForDeletedEventError(uid, event.getID()!);
     if (expectedSourceRevision !== undefined && expectedSourceRevision !== retainedSourceRevision(parent.data() ?? {}))
       throw new Error('Recording source changed while reparsing; retry from the current original files.');
     const metadata = metadataDoc.data() as TrainingLoadMetadata | undefined;
@@ -136,7 +141,7 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
       sourceDocs = children.map(child => {
         const data = child.data();
         if (!data || data.eventID !== event.getID())
-          throw new Error('Cannot find the saved source activities for elevation correction recovery.');
+          throw new ActivityIdentityConflictError();
         return { id: child.id, data: () => data };
       });
     } else {
@@ -149,12 +154,13 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
     const plan = prepareRetainedSourceBindings(event, sourceDocs);
     const corrected = prepareAscentCarryover(event, sourceDocs, plan);
     verifiedActivityIds = plan.verifiedActivityIds;
+    previousImportedTypes = plan.previousImportedTypes;
     apply = () => { plan.apply(); corrected(); };
     return verifiedActivityIds;
   });
   prepared = true;
   apply();
-  return finish;
+  return Object.assign(finish, { previousImportedTypes });
 }
 
 /** Validate identities in the reservation transaction, before it can mark saved load pending. */
@@ -166,6 +172,7 @@ export async function prepareImportedEventWrite(
   let prepared = false;
   let applyIdentities: () => void = () => undefined;
   let verifiedActivityIds: ReadonlySet<string> = new Set();
+  let previousImportedTypes: ReadonlyMap<string, string> = new Map();
   let proof: { revision: string; types: ReadonlyMap<string, string> } | undefined;
   let legacy: { parent: Record<string, any>; documents: SavedActivitySource[] } | undefined;
   const reserve = () => prepareTrainingLoadMetadata(uid, event, async (db, transaction) => {
@@ -175,6 +182,7 @@ export async function prepareImportedEventWrite(
         (parent, documents) => { legacy = { parent, documents }; });
       applyIdentities = result.apply;
       verifiedActivityIds = result.verifiedActivityIds;
+      previousImportedTypes = result.previousImportedTypes;
     }
     return verifiedActivityIds;
   });
@@ -193,7 +201,7 @@ export async function prepareImportedEventWrite(
   prepared = true;
   // Firestore can retry preparation. Only the committed attempt may change the parsed IDs/keys.
   applyIdentities();
-  return finish;
+  return Object.assign(finish, { previousImportedTypes });
 }
 
 /** Reuse persisted IDs, rather than adding legacy index IDs beside a prior reparse's source IDs. */

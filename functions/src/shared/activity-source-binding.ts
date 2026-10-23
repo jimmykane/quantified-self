@@ -22,6 +22,7 @@ export function savedActivityIdentity(document: SavedActivitySource): ActivityId
 
 export interface ActivityBindingPlan {
   verifiedActivityIds: ReadonlySet<string>;
+  previousImportedTypes: ReadonlyMap<string, string>;
   strictAssignments: ReadonlyMap<number, number>;
   activityTypes: readonly string[];
   apply(): void;
@@ -54,6 +55,7 @@ export function prepareActivitySourceBindings(event: EventInterface, documents: 
     return existing === undefined ? activity.getID() : documents[existing].id;
   });
   if (ids.some(id => !id) || new Set(ids).size !== ids.length) throw new ActivityIdentityConflictError();
+  const previousImportedTypes = new Map<string, string>();
   const bindings = activities.map((activity, index) => {
     const existingIndex = matches.assignments.get(index);
     const existing = existingIndex === undefined ? null : documents[existingIndex];
@@ -68,6 +70,7 @@ export function prepareActivitySourceBindings(event: EventInterface, documents: 
       const strict = resolveActivityIdentityAssignments([before[existingIndex!]], [activity as ActivityIdentityLike], { requireStrictMatch: true });
       if (!strict.assignments.size) throw new LegacyActivitySourceRequiredError();
     }
+    if (saved) previousImportedTypes.set(ids[index]!, oldImportedType ?? `${saved.type}`);
     const type = saved && oldImportedType && saved.type !== oldImportedType ? saved.type : importedType;
     const startMs = currentSource?.startMs ?? +activity.startDate, endMs = currentSource?.endMs ?? +activity.endDate;
     const sourceIdentity: ActivitySourceIdentity = { version: 1, activityId: ids[index]!, startMs, endMs, importedType };
@@ -82,7 +85,7 @@ export function prepareActivitySourceBindings(event: EventInterface, documents: 
   strictAssignments.forEach((existingIndex, parsedIndex) => {
     if (matches.assignments.get(parsedIndex) !== existingIndex) strictAssignments.delete(parsedIndex);
   });
-  return { verifiedActivityIds, strictAssignments, activityTypes: bindings.map(binding => binding.type), apply: () => {
+  return { verifiedActivityIds, previousImportedTypes, strictAssignments, activityTypes: bindings.map(binding => binding.type), apply: () => {
     bindings.forEach(({ activity, id, type, sourceIdentity, saved }) => {
       activity.setID(id);
       (activity as ActivityInterface & { sourceIdentity: ActivitySourceIdentity }).sourceIdentity = sourceIdentity;

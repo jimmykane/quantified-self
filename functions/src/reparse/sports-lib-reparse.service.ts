@@ -1,4 +1,4 @@
-import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
+import { TrainingLoadSourceWrite, EventWriteSkippedForDeletedEventError } from '../training-load/training-load-source-write';
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -133,13 +133,6 @@ class ReparsePersistenceSkippedForDeletedUserError extends Error {
         readonly phase: string,
     ) {
         super(`Skipping sports-lib reparse persistence for user ${uid} during ${phase} because the user is missing or deletion is in progress.`);
-    }
-}
-
-class ReparsePersistenceSkippedForDeletedEventError extends Error {
-    readonly name = 'EventWriteSkippedForDeletedEventError';
-    constructor(uid: string, eventId: string) {
-        super(`Skipping reparse status for missing event ${eventId} of user ${uid}.`);
     }
 }
 
@@ -1593,8 +1586,20 @@ async function setReparseDocIfUserActive(
         await assertSourceWrite?.(db, transaction);
         const incomingData = data as admin.firestore.DocumentData;
         let resolvedData = incomingData;
-        if (transformExistingData) {
-            const existingSnapshot = await transaction.get(docRef);
+        const path = docRef.path.split('/');
+        const isEventDocument = path.length === 4 && path[0] === 'users' && path[1] === uid && path[2] === 'events';
+        const isActivityDocument = path.length === 4 && path[0] === 'users' && path[1] === uid && path[2] === 'activities';
+        let existingSnapshot: admin.firestore.DocumentSnapshot | undefined;
+        if (isActivityDocument) {
+            // The parent read shares this transaction, so a concurrent event delete also fences child writes.
+            const [parent, child] = await transaction.getAll(db.doc(`users/${uid}/events/${incomingData.eventID}`), docRef);
+            if (!parent.exists) throw new EventWriteSkippedForDeletedEventError(uid, incomingData.eventID);
+            existingSnapshot = child;
+        } else if (isEventDocument || transformExistingData) {
+            existingSnapshot = await transaction.get(docRef);
+            if (isEventDocument && !existingSnapshot.exists) throw new EventWriteSkippedForDeletedEventError(uid, docRef.id);
+        }
+        if (transformExistingData && existingSnapshot) {
             resolvedData = transformExistingData(
                 incomingData,
                 existingSnapshot.exists ? existingSnapshot.data() || null : null,
@@ -1613,12 +1618,9 @@ async function beginBenchmarkSourceWrite(
         uid,
         'sports_lib_reparse_benchmark_begin',
         admin.firestore().doc(`users/${uid}/events/${eventId}`),
-        {},
+        sanitizeEventFirestoreWritePayload({ benchmarkSourceWritePending: true }),
         { merge: true },
-        (_incoming, existing) => {
-            if (!existing) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
-            return sanitizeEventFirestoreWritePayload({ benchmarkSourceWritePending: true });
-        },
+        undefined,
         sourceWrite.assertCurrent,
     );
 }
@@ -1636,7 +1638,7 @@ async function completeReparsedSource(
         await sourceWrite.assertCurrent(db, transaction);
         const eventRef = db.doc(`users/${uid}/events/${eventId}`);
         const snapshot = await transaction.get(eventRef);
-        if (!snapshot.exists) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+        if (!snapshot.exists) throw new EventWriteSkippedForDeletedEventError(uid, eventId);
         const patch = completeBenchmarkSourceWrite(snapshot.data() || {});
         if (Object.keys(patch).length) {
             transaction.set(eventRef, sanitizeEventFirestoreWritePayload(patch), { merge: true });
@@ -1673,7 +1675,8 @@ function getFirestoreAdapter(uid: string, sourceWrite: TrainingLoadSourceWrite,
                 data,
                 undefined,
                 isEventDocument ? (incoming, existing) => preserveReparseEventEditsOnRewrite(incoming, existing, identity)
-                    : isActivityDocument ? preserveImportedActivityEdits : undefined,
+                    : isActivityDocument ? (incoming, existing) => preserveImportedActivityEdits(
+                        incoming, existing, sourceWrite.previousImportedTypes) : undefined,
                 sourceWrite.assertCurrent,
             );
         },
@@ -1916,7 +1919,7 @@ export async function writeReparseStatus(
             // Guard every status outcome, including the failure write after a skipped
             // classification, so no handler can recreate metadata below a deleted event.
             const event = await transaction.get(admin.firestore().doc(`users/${uid}/events/${eventId}`));
-            if (!event.exists) throw new ReparsePersistenceSkippedForDeletedEventError(uid, eventId);
+            if (!event.exists) throw new EventWriteSkippedForDeletedEventError(uid, eventId);
             if (payload.nonActivitySources && 'schemaVersion' in payload.nonActivitySources
                 && sourceReferenceFingerprint(extractSourceFiles(event.data() || {})) !== payload.nonActivitySources.sourceFingerprint) {
                 throw new Error('Original source references changed before classification was saved; retry reparse.');

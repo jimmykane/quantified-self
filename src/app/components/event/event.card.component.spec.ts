@@ -489,6 +489,30 @@ describe('EventCardComponent', () => {
         expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledTimes(1);
     });
 
+    it.each([{ selectedIDs: ['act2'] }, { selectedIDs: [] }])('keeps the selection changed to $selectedIDs during a source refresh', async ({ selectedIDs }) => {
+        const activities = [createActivity('act1'), createActivity('act2')];
+        const version = (generation: string, legs: ActivityInterface[]) => ({
+            ...createEvent('evt1', legs),
+            originalFile: { path: 'original.fit', generation, startDate: new Date(0) },
+        }) as AppEventInterface;
+        component.event.set(version('1', activities));
+        component.selectedActivitiesInstant.set(activities);
+        const loading$ = new Subject<AppEventInterface>();
+        mockEventService.getEventActivitiesAndSomeStreams.mockReturnValueOnce(loading$);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(version('2', activities));
+
+        component.selectedActivitiesInstant.set(activities.filter(activity => selectedIDs.includes(activity.getID())));
+        const refreshedActivities = [createActivity('act1'), createActivity('act2')];
+        loading$.next(version('2', refreshedActivities));
+        loading$.complete();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.selectedActivitiesInstant()).toEqual(
+            refreshedActivities.filter(activity => selectedIDs.includes(activity.getID())),
+        );
+    });
+
     it('requests HR on full refresh even when HR charts are disabled', async () => {
         mockUser.settings.chartSettings.showAllData = false;
         mockUserService.getUserChartDataTypesToUse.mockReturnValue([]);

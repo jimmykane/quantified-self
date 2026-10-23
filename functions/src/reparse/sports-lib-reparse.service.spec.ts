@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
 // training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
 const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../training-load/training-load-source-write', () => ({
+vi.mock('../training-load/training-load-source-write', async importOriginal => ({
+    ...await importOriginal<typeof import('../training-load/training-load-source-write')>(),
     TrainingLoadSourceWrite: class {
         assertCurrent = sourceWriteGuard.assertCurrent;
         constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
@@ -47,6 +48,7 @@ const hoisted = vi.hoisted(() => {
         set: mockTransactionSet,
         delete: mockTransactionDelete,
         get: vi.fn(async (ref: any) => ref.get()),
+        getAll: vi.fn(async (...refs: any[]) => Promise.all(refs.map(ref => ref.get()))),
     }));
     const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
         userExists: true,
@@ -316,6 +318,7 @@ describe('sports-lib-reparse.service', () => {
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
             get: vi.fn(async (ref: any) => ref.get()),
+            getAll: vi.fn(async (...refs: any[]) => Promise.all(refs.map(ref => ref.get()))),
         }));
         hoisted.mockTransactionSet.mockImplementation(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
             if (typeof ref?.set === 'function') {
@@ -323,7 +326,8 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-        hoisted.mockDoc.mockImplementation(() => ({
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path, id: path.split('/').at(-1),
             get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
             set: vi.fn().mockResolvedValue(undefined),
         }));
@@ -885,7 +889,8 @@ describe('sports-lib-reparse.service', () => {
         const set = vi.fn().mockResolvedValue(undefined);
         const live = { comparisonTitle: 'Latest title', benchmarkResults: { original: liveReport }, hasBenchmark: true,
             benchmarkStatus: 'draft', toolSource: 'tools/compare', sourceFilesCount: 2, tags: ['review'] };
-        hoisted.mockDoc.mockImplementation(() => ({ get: vi.fn().mockResolvedValue({ exists: true, data: () => live }), set }));
+        hoisted.mockDoc.mockImplementation((path: string) => ({ path, id: path.split('/').at(-1),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => live }), set }));
         await persistReparsedEvent('u1', 'e1', parsed, { comparisonTitle: 'Outdated title' }, [{ id: 'old-ref', data: () => old }] as any, TARGET_SPORTS_LIB_VERSION);
         const adapter = hoisted.eventWriterCtorArgs[0].adapter;
         await adapter.setDoc(['users', 'u1', 'events', 'e1'], { name: 'Parsed event', activities: [], nested: { streams: [] } });
@@ -2213,7 +2218,7 @@ describe('sports-lib-reparse.service', () => {
     it.each(['changed', 'deleted', 'user-deleted', 'unchanged'])('guards classification status against %s source lifecycle', async lifecycle => {
         const set = vi.fn();
         const sources = [{ path: 'original.fit' }];
-        hoisted.mockDoc.mockImplementation(() => ({ set, get: vi.fn().mockResolvedValue({
+        hoisted.mockDoc.mockImplementation((path: string) => ({ path, id: path.split('/').at(-1), set, get: vi.fn().mockResolvedValue({
             exists: lifecycle !== 'deleted', data: () => ({ originalFiles: lifecycle === 'changed' ? [{ path: 'new.fit' }] : sources }),
         }) }));
         if (lifecycle === 'user-deleted') hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({

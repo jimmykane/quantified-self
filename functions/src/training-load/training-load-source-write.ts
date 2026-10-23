@@ -1,18 +1,31 @@
 import type * as admin from 'firebase-admin';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 
-export type PreparedTrainingLoadWrite = (() => Promise<void>) & { readonly sourceWriteId: string };
+export class EventWriteSkippedForDeletedEventError extends Error {
+  readonly name = 'EventWriteSkippedForDeletedEventError';
+  constructor(uid: string, eventId: string) {
+    super(`Skipping source rewrite because event ${eventId} of user ${uid} no longer exists.`);
+  }
+}
+
+export type PreparedTrainingLoadWrite = (() => Promise<void>) & {
+  readonly sourceWriteId: string;
+  readonly previousImportedTypes?: ReadonlyMap<string, string>;
+};
 
 /** One instance per import attempt. Check inside every source/cleanup transaction, before writes. */
 export class TrainingLoadSourceWrite {
-  private reservation?: { eventId: string; sourceWriteId: string };
+  private reservation?: { eventId: string; sourceWriteId: string; previousImportedTypes?: ReadonlyMap<string, string> };
+
+  get previousImportedTypes(): ReadonlyMap<string, string> | undefined { return this.reservation?.previousImportedTypes; }
 
   constructor(private readonly uid: string,
     private readonly prepare: (event: EventInterface) => Promise<PreparedTrainingLoadWrite>) {}
 
   prepareTrainingLoad = async (event: EventInterface): Promise<PreparedTrainingLoadWrite> => {
     const finish = await this.prepare(event);
-    this.reservation = { eventId: event.getID()!, sourceWriteId: finish.sourceWriteId };
+    this.reservation = { eventId: event.getID()!, sourceWriteId: finish.sourceWriteId,
+      previousImportedTypes: finish.previousImportedTypes };
     return finish;
   };
 

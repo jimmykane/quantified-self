@@ -932,6 +932,8 @@ are rejected before reserving a source write rather than transferring a correcti
 Verified assignments are passed only in memory from the committed reservation to Training finalization. They preserve
 zero overrides, exclusions and dated applied policy across a sport revision without making arbitrary reused IDs
 trusted. Guarded source transactions preserve live event edits, custom device names and explicit owner sport labels.
+First adoption of a legacy leg carries its verified previous imported sport in memory through the reservation, so
+the final write can distinguish a late owner label/reset without another database read or a new stored field.
 Owner labels do not reinterpret the file-calibrated load evaluation. Interrupted reparses use their existing active
 leg snapshot, not partial duplicate copies. Finalization still checks the current reservation, source fingerprints,
 latest controls and deletion guards. New imports keep their existing ID allocation. No historical reparse campaign,
@@ -940,6 +942,8 @@ Pending legacy activities without valid source provenance must match their froze
 reuse. A conflicting overwritten ID requires review rather than inheriting that ID's old load controls.
 Open Event Details also refreshes its source streams when the retained-file references, completed reparse revision
 or validated leg source snapshot changes, even when leg IDs stay stable. Ordinary owner metadata edits reuse streams.
+Reparse checks that the workout still exists in its source-write transactions; deleting it cannot let a later parent
+rewrite recreate it or a child rewrite add orphan activities. Ordinary first imports retain their create behavior.
 
 Monitoring coverage is **covered** by existing committed `dead_lettered` outcomes and fixed provider labels; native
 queue backlog and retry probes are unchanged. The new fixed context is an existing dead-letter diagnostic, not a
