@@ -1330,7 +1330,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.noActivityDashboardDescription = this.hasActivityServiceConnection === true
       ? 'You have a connected service. You can also upload an activity file.'
       : this.hasActivityServiceConnection === false
-        ? 'Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.'
+        ? 'Connect a service or upload an activity.'
         : 'Upload an activity file to get started.';
   }
 
@@ -1511,6 +1511,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   public get eventTableFilters(): AppDashboardEventTableFiltersInterface {
     return this.getEventTableFilters(this.user);
+  }
+
+  get eventTableEmptyMessage(): string {
+    const filters = this.eventTableFilters;
+    return filters.activityTypes?.length ? 'No activities match your filters'
+      : filters.dateRange === DateRanges.all ? 'No activities to show' : 'No activities in this date range';
+  }
+
+  get eventTableEmptyHint(): string {
+    const filters = this.eventTableFilters;
+    return filters.activityTypes?.length ? 'Change your dates or clear a filter.'
+      : filters.dateRange === DateRanges.all ? '' : 'Try a wider date range.';
   }
 
   private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>): Promise<void> {

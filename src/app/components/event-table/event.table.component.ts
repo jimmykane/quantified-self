@@ -118,8 +118,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() filterContext = '';
   @Input() preserveSearchOnFilterChange = false;
   @Input() hideGeneratedNames = false;
-  @Input() emptyMessage = 'No activities yet';
-  @Input() emptyHint = 'Try another date range or import an activity.';
+  @Input() emptyMessage = 'No activities to show';
+  @Input() emptyHint = '';
   @Input() hasLoadError = false;
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
@@ -151,6 +151,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   get emptyNoticeMessage(): string {
     return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
       ? 'No activities match your filters' : this.emptyMessage;
+  }
+
+  get emptyNoticeHint(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'Change your dates or clear a filter.' : this.emptyHint;
   }
 
   public show = true

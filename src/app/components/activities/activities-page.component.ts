@@ -107,9 +107,11 @@ export class ActivitiesPageComponent implements OnInit {
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
     : this.historyError() ? 'Activities couldn’t be loaded'
       : this.selectedSports().length || this.selectedTags().length > 1 || (this.untagged() && this.selectedTags().length) ? 'No activities match these filters'
-        : this.untagged() ? 'No untagged activities' : this.selectedTags().length ? 'No activities with this tag' : 'No activities in this date range');
+        : this.untagged() ? 'No untagged activities' : this.selectedTags().length ? 'No activities with this tag'
+          : this.period() === 'all' ? 'No activities to show' : 'No activities in this date range');
   readonly emptyHint = computed(() => this.loading() ? '' : this.historyError() ? 'Try again in a moment.'
-    : this.hasFilters() ? 'Try another date range or clear a filter.' : 'Try a wider date range or import an activity.');
+    : this.selectedSports().length || this.selectedTags().length || this.untagged() ? 'Change your dates or clear a filter.'
+      : this.period() === 'all' ? '' : 'Try a wider date range.');
 
   constructor() {
     afterNextRender(() => {

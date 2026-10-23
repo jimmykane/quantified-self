@@ -772,7 +772,8 @@ describe('EventTableComponent', () => {
         const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
         fixture.componentRef.setInput('events', []); fixture.componentRef.setInput('isLoading', false);
         await settle();
-        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities yet');
+        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities to show');
+        expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p')).toBeNull();
         expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('app-loading-overlay').hasError).toBeFalsy();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
@@ -788,6 +789,7 @@ describe('EventTableComponent', () => {
     });
 
     it('uses filter-specific copy for an empty local search or tag selection', () => {
+        component.emptyHint = 'Try a wider date range.';
         component.data.data = [{ Event: component.events[0] }]; component.data.filteredData = [];
         for (const filter of ['search', 'tag', 'untagged']) {
             component.searchTerm = filter === 'search' ? 'missing' : '';
@@ -795,7 +797,10 @@ describe('EventTableComponent', () => {
             component.untaggedFilter = filter === 'untagged';
             fixture.detectChanges();
             expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities match your filters');
+            expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p').textContent).toBe('Change your dates or clear a filter.');
         }
+        component.searchTerm = ''; component.tagFilters = []; component.untaggedFilter = false;
+        expect(component.emptyNoticeHint).toBe('Try a wider date range.');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 

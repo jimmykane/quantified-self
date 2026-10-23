@@ -71,7 +71,7 @@
 
       @if (user) {
       <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
-        emptyMessage="No activities in this date range" emptyHint="Try another date range or import an activity."
+        [emptyMessage]="eventTableEmptyMessage" [emptyHint]="eventTableEmptyHint"
         [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events">
         <app-event-search #eventTableSearch event-table-filters class="table-toolbar-layout compact-filter-layout"
           [isLoading]="isLoading" [compact]="true" [selectedDateRange]="eventTableFilters.dateRange"

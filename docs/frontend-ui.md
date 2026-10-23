@@ -1324,7 +1324,11 @@ The shared Health projection includes recorded Sleep duration/score, average/min
 
 The shared event table keeps its existing surface, filter controls, icon headings, data rows and saved table preferences.
 A completed query with no displayed activities renders a compact, surface-free notice below the table's scroll owner;
-it does not use the loading shade's error card. Local text/tag no-matches use filter-specific copy. Loading, absent
+it does not use the loading shade's error card. Empty date ranges suggest a wider range; sport, text and tag no-matches
+suggest changing dates or clearing a filter. All dates without filters uses a neutral message with no wider-range hint.
+Connection/upload guidance stays in Dashboard's confirmed first-activity state; connection setup is offered only when
+no service is connected. Calendar retains its period-specific empty message and uses the shared filter hint for local
+no-matches. Loading, absent
 inputs and failed activity reads do not render the notice. Empty pagination is hidden without destroying the shared
 paginator or sort instances, so populated results retain their subscriptions and preferences.
 

@@ -106,6 +106,8 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
       'compact notice below their existing column headings', '**Change dates**',
+      'no filter matches suggest changing dates or clearing a filter', '**All dates** without filters uses a neutral message',
+      'offers connection setup only when no service is connected',
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
       '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
       'Searching keeps checked choices selected', '**Clear selection**',
