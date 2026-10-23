@@ -68,7 +68,8 @@ describe('shared import preservation', () => {
     store('saved-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 }, descentCorrection: { value: 80, sourceValue: 120 } });
     store('partial-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 }, descentCorrection: { value: 80, sourceValue: 320 } });
     state.parent = { benchmarkSourceWritePending: true };
-    const legs = { original: { activityId: phase === 'finalized' ? 'partial-id' : 'saved-id' } };
+    const legs = { original: { activityId: phase === 'finalized' ? 'partial-id' : 'saved-id',
+      identity: { startMs: +parsed.getFirstActivity().startDate, endMs: +parsed.getFirstActivity().endDate } } };
     state.metadata = { sourceWritePending: phase !== 'finalized', [phase === 'legacy' ? 'legacyLegs' : 'legs']: legs };
     if (phase === 'pending') for (let index = 0; index < 101; index++)
       store(`partial-${index}`, activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 } });
@@ -88,6 +89,45 @@ describe('shared import preservation', () => {
     expect(state.commit).not.toHaveBeenCalled();
   });
 
+  it.each(['import', 'reparse'])('rejects legacy IDs overwritten by a different leg during an interrupted %s', async mode => {
+    const old = activity(), incoming = activity(1);
+    store('reused-id', incoming, { eventID: 'event' });
+    state.metadata = { sourceWritePending: true, legs: { controlled: {
+      activityId: 'reused-id', identity: { startMs: +old.startDate, endMs: +old.endDate, type: old.type },
+    } }, controls: { controlled: { override: 0 } } };
+    await expect(mode === 'import' ? prepareImportedEventWrite('owner', event([incoming]))
+      : prepareReparsedEventWrite('owner', event([incoming])))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(incoming.getID()).toBe('legacy-1');
+  });
+
+  it.each(['import', 'reparse'])('requires source evidence for a pending legacy control without a frozen identity during %s', async mode => {
+    const incoming = activity(); store('controlled-id', incoming, { eventID: 'event' });
+    state.metadata = { sourceWritePending: true, sourceFirstImport: true, controls: { 'controlled-id': { override: 0 } } };
+    await expect(mode === 'import' ? prepareImportedEventWrite('owner', event([incoming]))
+      : prepareReparsedEventWrite('owner', event([incoming])))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(incoming.getID()).toBe('legacy-0');
+  });
+
+  it.each([
+    { mode: 'import', frozen: true }, { mode: 'reparse', frozen: true },
+    { mode: 'import', frozen: false }, { mode: 'reparse', frozen: false },
+  ])('recovers valid source provenance during an interrupted $mode (frozen identity: $frozen)', async ({ mode, frozen }) => {
+    const old = activity(), incoming = activity(1);
+    store('stable-id', incoming, { eventID: 'event', sourceIdentity: { version: 1, activityId: 'stable-id',
+      startMs: +incoming.startDate, endMs: +incoming.endDate, importedType: incoming.type } });
+    state.metadata = { sourceWritePending: true, ...(frozen ? { legs: { controlled: {
+      activityId: 'stable-id', identity: { startMs: +old.startDate, endMs: +old.endDate, type: old.type },
+    } } } : { sourceFirstImport: true }), controls: { [frozen ? 'controlled' : 'stable-id']: { override: 0 } } };
+    if (mode === 'import') await prepareImportedEventWrite('owner', event([incoming]));
+    else await prepareReparsedEventWrite('owner', event([incoming]));
+    expect(state.commit).toHaveBeenCalledOnce();
+    expect(incoming.getID()).toBe('stable-id');
+  });
+
   it('rejects silently dropping a saved descent correction', () => {
     expect(() => preserveImportedActivityEdits({ stats: { Descent: 300 } }, { descentCorrection: { value: 80, sourceValue: 120 } }))
       .toThrow('descent correction was not safely matched');
@@ -101,6 +141,20 @@ describe('shared import preservation', () => {
     expect(preserveImportedActivityEdits(incoming, existing)).toMatchObject({ type: importedType });
     expect(existing.type).toBe('Stretching');
     expect(incoming.type).toBe('Pilates');
+  });
+
+  it.each([
+    { field: 'ascentCorrection', reset: false }, { field: 'descentCorrection', reset: false },
+    { field: 'ascentCorrection', reset: true }, { field: 'descentCorrection', reset: true },
+  ])('rejects an incompatible live sport edit for $field (reset: $reset)', ({ field, reset }) => {
+    const sourceIdentity = { version: 1, activityId: 'stable', startMs: 1000, endMs: 61000,
+      importedType: reset ? 'Scuba Diving' : 'Walking' };
+    const correction = { value: 75, sourceValue: 100 };
+    const existing = { type: 'Scuba Diving', sourceIdentity, [field]: correction };
+    const incoming = { type: 'Walking', sourceIdentity, [field]: correction };
+    expect(() => preserveImportedActivityEdits(incoming, existing)).toThrow('Cannot safely match');
+    expect(incoming.type).toBe('Walking');
+    expect(existing.type).toBe('Scuba Diving');
   });
 
   it.each([false, true])('adopts a verified legacy provider sport revision with retained-file proof (owner override: %s)', async ownerOverride => {

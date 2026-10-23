@@ -6191,6 +6191,8 @@ are preserved inside the document transaction. An owner sport label does not rec
 inputs or replace its cached load evaluation. The parent activity-type summary is refreshed from prepared legs.
 Restoring the source sport during preparation clears the earlier owner label and adopts the refreshed imported
 sport; the activity write must not restore that stale override.
+The activity transaction also rechecks correction eligibility against the live sport label, so a late change to a
+diving activity cannot persist a terrain elevation correction.
 
 Legacy associations are established on demand; an unexplained provider sport change requires bounded retained-file
 proof of the old imported type, with reference revision revalidation. A source conflict uses the existing terminal
@@ -6199,6 +6201,12 @@ automatically moving controls. Interrupted reparse recovery uses the existing ac
 copies. Read-only chart hydration consumes the saved source snapshot and preserves owner labels without updating
 Firestore. No mass historical reparse or provider fetch is necessary. See the [provider lifecycle](provider-integration-guide.md)
 and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
+
+Before retrying a pending legacy write, an activity without valid source provenance must still agree with the frozen
+leg's complete time window. An older writer's reused/overwritten ID cannot certify controls for another leg; conflicts
+require review before further writes. Valid source snapshots preserve recovery of already verified source revisions.
+Pending legacy controls with no frozen identity also require valid source provenance before their activity ID can
+be trusted; a retry must not manufacture pre-write evidence from an already overwritten document.
 
 ### File-only TSS evaluation and owner load controls
 

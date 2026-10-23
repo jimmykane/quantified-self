@@ -191,7 +191,8 @@ vi.mock('../shared/id-generator', () => ({
   generateActivityID: (...args: unknown[]) => hoisted.mockGenerateActivityID(...args),
 }));
 
-vi.mock('@sports-alliance/sports-lib', () => ({
+vi.mock('@sports-alliance/sports-lib', async importOriginal => ({
+  ...await importOriginal<typeof import('@sports-alliance/sports-lib')>(),
   EventImporterFIT: hoisted.mockFITImporter,
   EventImporterGPX: hoisted.mockGPXImporter,
   EventImporterTCX: hoisted.mockTCXImporter,

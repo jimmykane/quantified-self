@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
@@ -290,7 +290,10 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     const { writer, setDoc } = reuploadWriter(uid, provider);
     const firstWrite = gate(), continueWrite = gate();
     const write = setDoc.getMockImplementation()!;
-    setDoc.mockImplementationOnce(async (...args) => { firstWrite.release(); await continueWrite.promise; return write(...args); });
+    setDoc.mockImplementation(async (...args) => {
+      if (args[0][2] === 'activities' && args[0][3] === 'stable-leg') { firstWrite.release(); await continueWrite.promise; }
+      return write(...args);
+    });
     const pending = writer.writeAllEventData(uid, updated);
     await firstWrite.promise;
     // Owner edits happen after reservation but before the source activity commits.
@@ -314,6 +317,42 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect((await child.get()).data()).toMatchObject({ type: expectedType,
       sourceIdentity: { activityId: 'stable-leg', importedType: ActivityTypes.Yoga } });
     expect((await ref.get()).data()).toMatchObject({ controls: { 'stable-leg': { override: 0 } }, sourceWritePending: false });
+  });
+
+  it.each(['ascent', 'descent'] as const)('blocks a late diving label from carrying a %s correction and permits safe recovery', async metric => {
+    const uid = setup(); const original = elevationWorkout(); await importWorkout(uid, original);
+    if (metric === 'ascent') await updateActivityAscent(uid, 'workout', await ascentRequest(uid));
+    else await updateActivityElevation(uid, 'workout', await descentRequest(uid));
+    const child = db.doc(`users/${uid}/activities/leg`), metadataRef = db.doc(metadataPath(uid));
+    const activity = original.getFirstActivity();
+    await child.update({ sourceIdentity: { version: 1, activityId: 'leg', startMs: +activity.startDate,
+      endMs: +activity.endDate, importedType: activity.type } });
+    await metadataRef.update({ controls: { leg: { override: 0 } } });
+    const { writer, setDoc } = reuploadWriter(uid);
+    const firstWrite = gate(), continueWrite = gate(), write = setDoc.getMockImplementation()!;
+    setDoc.mockImplementation(async (...args) => {
+      if (args[0][2] === 'activities' && args[0][3] === 'leg') { firstWrite.release(); await continueWrite.promise; }
+      return write(...args);
+    });
+    const pending = writer.writeAllEventData(uid, elevationWorkout('incoming', 300, 250));
+    await firstWrite.promise;
+    await child.update({ type: ActivityTypes.ScubaDiving });
+    const live = await child.get();
+    continueWrite.release();
+    await expect(pending).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    const rejected = await child.get();
+    expect(rejected.data()).toEqual(live.data());
+    expect(rejected.updateTime?.isEqual(live.updateTime!)).toBe(true);
+    expect((await metadataRef.get()).data()).toMatchObject({ sourceWritePending: true, controls: { leg: { override: 0 } } });
+    await child.update({ type: ActivityTypes.Walking });
+    await reuploadWriter(uid).writer.writeAllEventData(uid, elevationWorkout('retry', 400, 350));
+    const saved = (await metadataRef.get()).data() as TrainingLoadMetadata;
+    expect(saved.sourceWritePending).toBe(false);
+    expect(saved.controls).toEqual({ leg: { override: 0 } });
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ score: 0, status: 'available' });
+    expect((await child.get()).data()).toMatchObject(metric === 'ascent'
+      ? { type: ActivityTypes.Walking, ascentCorrection: { value: 75, sourceValue: 350 } }
+      : { type: ActivityTypes.Walking, descentCorrection: { value: 80, sourceValue: 400 } });
   });
 
   it.each(['ascent', 'descent'] as const)('preserves source and load when ID and %s correction pairings conflict', async metric => {
@@ -369,6 +408,46 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
       expect(metadata).toMatchObject({ sourceWritePending: false, controls: { 'source-keyed-id': { override: 42 } } });
       expect(resolveEffectiveTrainingLoad({}, metadata)).toMatchObject({ score: 42, status: 'available' });
+    }
+  });
+
+  it.each([
+    { mode: 'import', provenance: false, frozen: true }, { mode: 'reparse', provenance: false, frozen: true },
+    { mode: 'import', provenance: true, frozen: true }, { mode: 'reparse', provenance: true, frozen: true },
+    { mode: 'import', provenance: false, frozen: false }, { mode: 'reparse', provenance: false, frozen: false },
+    { mode: 'import', provenance: true, frozen: false }, { mode: 'reparse', provenance: true, frozen: false },
+  ])('checks interrupted $mode evidence (provenance: $provenance, frozen identity: $frozen)', async ({ mode, provenance, frozen }) => {
+    const uid = setup(); await importWorkout(uid, workout('stable'));
+    const metadataRef = db.doc(metadataPath(uid)), parentRef = db.doc(`users/${uid}/events/workout`);
+    const childRef = db.doc(`users/${uid}/activities/stable`);
+    const policy = ((await metadataRef.get()).data() as TrainingLoadMetadata).legs!.stable.policy;
+    await metadataRef.update({ controls: { stable: { override: 0 } }, sourceWritePending: true,
+      ...(!frozen ? { legs: FieldValue.delete(), sourceFirstImport: true } : {}) });
+    const replacement = workout('stable', Date.UTC(2026, 0, 2, 1)).getFirstActivity();
+    // Simulate an interrupted source write that replaced the child while metadata still describes the old leg.
+    await childRef.set(sanitizeActivityFirestoreWritePayload({ ...replacement.toJSON(), eventID: 'workout',
+      ...(provenance ? { sourceIdentity: { version: 1, activityId: 'stable', startMs: +replacement.startDate,
+        endMs: +replacement.endDate, importedType: replacement.type } } : {}) }));
+    const [metadata, parent, child] = await db.getAll(metadataRef, parentRef, childRef);
+    const incoming = workout('incoming', Date.UTC(2026, 0, 2, 1));
+    const operation = mode === 'import' ? reuploadWriter(uid).writer.writeAllEventData(uid, incoming)
+      : persistReparsedEvent(uid, 'workout', incoming, parent.data()!, [child], '23.6.0');
+    if (provenance) {
+      await operation;
+      const saved = (await metadataRef.get()).data() as TrainingLoadMetadata;
+      expect(saved.sourceWritePending).toBe(false);
+      expect(saved.controls).toEqual({ stable: { override: 0 } });
+      expect(saved.legs!.stable.activityId).toBe('stable');
+      expect(saved.legs!.stable.policy).toEqual(policy);
+      expect(incoming.getFirstActivity().getID()).toBe('stable');
+    } else {
+      await expect(operation).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+      const after = await db.getAll(metadataRef, parentRef, childRef);
+      after.forEach((document, index) => {
+        expect(document.data()).toEqual([metadata, parent, child][index].data());
+        expect(document.updateTime?.isEqual([metadata, parent, child][index].updateTime!)).toBe(true);
+      });
+      expect(incoming.getFirstActivity().getID()).toBe('incoming');
     }
   });
   it.each(['ambiguous duplicates', 'changed leg set'])('keeps saved load available when a reupload rejects %s', async reason => {

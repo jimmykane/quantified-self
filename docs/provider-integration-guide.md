@@ -936,6 +936,8 @@ Owner labels do not reinterpret the file-calibrated load evaluation. Interrupted
 leg snapshot, not partial duplicate copies. Finalization still checks the current reservation, source fingerprints,
 latest controls and deletion guards. New imports keep their existing ID allocation. No historical reparse campaign,
 provider refresh, duplicate cleanup, Sports Lib release or dependency update is required by this change.
+Pending legacy activities without valid source provenance must match their frozen pre-write time windows before
+reuse. A conflicting overwritten ID requires review rather than inheriting that ID's old load controls.
 
 Monitoring coverage is **covered** by existing committed `dead_lettered` outcomes and fixed provider labels; native
 queue backlog and retry probes are unchanged. The new fixed context is an existing dead-letter diagnostic, not a

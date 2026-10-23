@@ -3,7 +3,7 @@ import type { EventInterface } from '@sports-alliance/sports-lib';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
-import { resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
+import { getActivitySourceWindow, resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
 import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { prepareActivitySourceBindings, savedActivityIdentity, type SavedActivitySource, type ActivityBindingPlan } from './activity-source-binding';
 import { ActivityIdentityConflictError, LegacyActivitySourceRequiredError } from './activity-identity-conflict';
@@ -35,18 +35,20 @@ export function preserveImportedEventEdits(incoming: admin.firestore.DocumentDat
 }
 
 export function preserveImportedActivityEdits(incoming: admin.firestore.DocumentData, existing: admin.firestore.DocumentData | null): admin.firestore.DocumentData {
+  const priorSource = readActivitySourceIdentity(existing?.sourceIdentity);
+  const currentSource = readActivitySourceIdentity(incoming.sourceIdentity);
+  const boundSource = priorSource && currentSource?.activityId === priorSource.activityId;
+  // Re-read both override and reset: a prepared owner label must not undo a later reset to the source sport.
+  const type = boundSource ? existing!.type !== priorSource.importedType ? existing!.type : currentSource.importedType : incoming.type;
   for (const metric of ACTIVITY_ELEVATION_METRICS) {
     const { field } = activityElevationMetric(metric);
     if (readAscentCorrection(existing?.[field]) && !readAscentCorrection(incoming[field]))
       throw new Error(`A saved ${metric} correction was not safely matched. Reload the recording before reimporting.`);
+    if (readAscentCorrection(incoming[field]) && !isTerrainAscentActivity(type)) throw new ActivityIdentityConflictError();
   }
   const name = getActivityCreatorNameCarryover(existing?.creator?.name, incoming.creator?.name);
-  const priorSource = readActivitySourceIdentity(existing?.sourceIdentity);
-  const currentSource = readActivitySourceIdentity(incoming.sourceIdentity);
-  const boundSource = priorSource && currentSource?.activityId === priorSource.activityId;
   return sanitizeActivityFirestoreWritePayload({ ...incoming,
-    // Re-read both override and reset: a prepared owner label must not undo a later reset to the source sport.
-    ...(boundSource ? { type: existing!.type !== priorSource.importedType ? existing!.type : currentSource.importedType } : {}),
+    ...(boundSource ? { type } : {}),
     ...(name ? { creator: { ...incoming.creator, name } } : {}),
     ...(existing?.sourceActivityKey ? { sourceActivityKey: existing.sourceActivityKey } : {}),
   });
@@ -91,6 +93,24 @@ function prepareRetainedSourceBindings(event: EventInterface, documents: SavedAc
   }
 }
 
+function assertLegacyPendingSources(metadata: TrainingLoadMetadata | undefined, documents: SavedActivitySource[]): void {
+  if (!metadata?.sourceWritePending) return;
+  const frozen = new Map(Object.values(metadata.legs ?? metadata.legacyLegs ?? {})
+    .filter(leg => leg.activityId).map(leg => [leg.activityId, leg]));
+  for (const document of documents) {
+    if (readActivitySourceIdentity(document.data().sourceIdentity, document.id)) continue;
+    const leg = frozen.get(document.id);
+    if (!leg) {
+      if (Object.prototype.hasOwnProperty.call(metadata.controls ?? {}, document.id)) throw new ActivityIdentityConflictError();
+      continue;
+    }
+    // An older interrupted writer could reuse an ID for a different leg. The live document alone cannot certify it.
+    const window = getActivitySourceWindow(savedActivityIdentity(document));
+    if (!window || window.startMs !== leg.identity?.startMs || window.endMs !== leg.identity?.endMs)
+      throw new ActivityIdentityConflictError();
+  }
+}
+
 /** Read live corrections inside the existing source reservation, including edits made during a long file parse. */
 export async function prepareReparsedEventWrite(uid: string, event: EventInterface,
   expectedSourceRevision?: string): Promise<PreparedTrainingLoadWrite> {
@@ -125,6 +145,7 @@ export async function prepareReparsedEventWrite(uid: string, event: EventInterfa
       if (children.size > 100) throw new Error('Elevation correction matching supports at most 100 activities.');
       sourceDocs = children.docs;
     }
+    assertLegacyPendingSources(metadata, sourceDocs);
     const plan = prepareRetainedSourceBindings(event, sourceDocs);
     const corrected = prepareAscentCarryover(event, sourceDocs, plan);
     verifiedActivityIds = plan.verifiedActivityIds;
@@ -190,6 +211,7 @@ async function prepareImportedActivityIdentities(
     .select('startDate', 'endDate', 'type', 'sourceActivityKey', 'sourceIdentity', 'stats.Duration', 'stats.Distance', 'ascentCorrection', 'descentCorrection').limit(101));
   if (snapshot.size > 100) throw new Error('Import supports at most 100 stored activities per event.');
   const documents = snapshot.docs;
+  assertLegacyPendingSources(metadata.data() as TrainingLoadMetadata | undefined, documents);
   const firstImport = !parent.exists || metadata.data()?.sourceFirstImport === true;
   const parentData = parent.data() ?? {};
   if (proof && proof.revision !== retainedSourceRevision(parentData))

@@ -876,6 +876,12 @@ re-reads the current event document and keeps the latest values plus event tags,
 in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
+
+- A pending legacy activity without valid `sourceIdentity` must still match the complete pre-write window in frozen
+  Training metadata. If an older interrupted writer overwrote/reused that ID for another leg, reject with
+  `ACTIVITY_IDENTITY_CONFLICT` before further writes. Do not retry by trusting the current document ID or moving its
+  old controls. Valid server-owned source snapshots continue to support interrupted source-revision recovery.
+  A legacy control without any frozen leg identity also requires valid source provenance before trusting its ID.
 - Guarded source preparation is the only owner of saved-ID reuse. Parsing/source-key generation assigns provisional deterministic IDs; matched saved IDs replace them before any write. Only genuinely new legs keep their generated IDs.
 - Keep source key generation/validation for new and legacy compatibility; a source-content hash or sport refinement must not rename an already verified leg.
 - Use the shared pure matcher and a unique complete retained-source window for mutable sport/statistics. Do not fall back to array order or the only unmatched leg.
