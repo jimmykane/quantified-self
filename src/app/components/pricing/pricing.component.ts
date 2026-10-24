@@ -579,8 +579,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error managing subscription:', error);
-            alert('Failed to redirect to subscription management. Please try again.');
+            this.haptics.error();
+            if (!(error instanceof CheckoutStartError)) {
+                this.logger.error('Error managing subscription:', error);
+            }
+            alert(error instanceof CheckoutStartError ? error.message : 'Failed to redirect to subscription management. Please try again.');
             this.setLoadingState(false);
         }
     }
@@ -615,8 +618,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error redirecting to plan/billing change flow:', error);
-            alert('Failed to open billing portal. Please try again.');
+            this.haptics.error();
+            if (!(error instanceof CheckoutStartError)) {
+                this.logger.error('Error redirecting to plan/billing change flow:', error);
+            }
+            alert(error instanceof CheckoutStartError ? error.message : 'Failed to open billing portal. Please try again.');
             this.setLoadingState(false);
         }
     }

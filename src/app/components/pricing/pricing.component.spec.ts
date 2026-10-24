@@ -3,6 +3,7 @@ import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService, CheckoutStartError, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { LoggerService } from '../../services/logger.service';
 import { Subject, of, throwError } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Analytics } from 'app/firebase/analytics';
@@ -691,6 +692,50 @@ describe('PricingComponent', () => {
         expect(cadenceButtons.length).toBe(1);
         expect(fixture.nativeElement.textContent as string).toContain('/ 3 months');
         expect(fixture.nativeElement.textContent as string).not.toContain('Choose Monthly');
+    });
+
+    describe.each([
+        ['manageSubscription', 'Failed to redirect to subscription management. Please try again.'],
+        ['changePlanAndBilling', 'Failed to open billing portal. Please try again.'],
+    ] as const)('%s failures', (action, fallbackMessage) => {
+        it.each([true, false])('handles a known maintenance error: %s', async (isMaintenance) => {
+            await fixture.whenStable();
+            component.currentRole = 'pro';
+            const maintenanceMessage = 'Billing is temporarily unavailable. Your existing subscription continues normally. Please try again later.';
+            const error = isMaintenance
+                ? new CheckoutStartError(maintenanceMessage)
+                : new Error('Internal provider details must not be displayed');
+            vi.spyOn(TestBed.inject(AppPaymentService), 'manageSubscriptions').mockRejectedValue(error);
+            const logger = vi.spyOn(TestBed.inject(LoggerService), 'error').mockImplementation(() => undefined);
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+
+            try {
+                await component[action]();
+
+                expect(alert).toHaveBeenCalledExactlyOnceWith(isMaintenance ? maintenanceMessage : fallbackMessage);
+                expect(logger).toHaveBeenCalledTimes(isMaintenance ? 0 : 1);
+                expect(component.isLoading).toBe(false);
+                expect(haptics.error).toHaveBeenCalledOnce();
+                expect(haptics.success).not.toHaveBeenCalled();
+            } finally {
+                alert.mockRestore();
+                logger.mockRestore();
+            }
+        });
+
+        it('does not report an error when the confirmation is cancelled', async () => {
+            await fixture.whenStable();
+            component.currentRole = 'pro';
+            vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({ afterClosed: () => of(false) } as ReturnType<MatDialog['open']>);
+            const portal = vi.spyOn(TestBed.inject(AppPaymentService), 'manageSubscriptions');
+
+            await component[action]();
+
+            expect(portal).not.toHaveBeenCalled();
+            expect(component.isLoading).toBe(false);
+            expect(haptics.error).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
     });
 
     it('should show downgrade warning for pro users', async () => {
