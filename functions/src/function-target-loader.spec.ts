@@ -6,8 +6,19 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
+  it('resolves the dotted Firebase compatibility runtime target', () => {
+    expect(resolveRuntimeFunctionTarget({ FUNCTION_TARGET: 'ext.firestore.stripe.payments.createPortalLink' })).toBe('ext-firestore-stripe-payments-createPortalLink');
+  });
   it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
+      'createStripeCheckoutSession',
+      'createStripePortalLink',
+      'ext-firestore-stripe-payments-createPortalLink',
+      'stripeBillingWebhook',
+      'dispatchStripeBillingJob',
+      'recoverStripeBillingJobs',
+      'processStripeBillingTask',
+      'deleteStripeCustomerOnDocumentDeleted',
       'mcpApi',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',

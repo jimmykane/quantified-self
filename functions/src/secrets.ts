@@ -17,6 +17,8 @@ export const SECRET_PARAMS = {
   MARKETING_UNSUBSCRIBE_SIGNING_KEY: defineSecret('MARKETING_UNSUBSCRIBE_SIGNING_KEY'),
   STRIPE_ADMIN_BILLING_KEY: defineSecret('STRIPE_ADMIN_BILLING_KEY'),
   STRIPE_SECRET_KEY: defineSecret('STRIPE_SECRET_KEY'),
+  STRIPE_BILLING_KEY: defineSecret('STRIPE_BILLING_KEY'),
+  STRIPE_BILLING_WEBHOOK_SECRET: defineSecret('STRIPE_BILLING_WEBHOOK_SECRET'),
   SUUNTOAPP_CLIENT_ID: defineSecret('SUUNTOAPP_CLIENT_ID'),
   SUUNTOAPP_CLIENT_SECRET: defineSecret('SUUNTOAPP_CLIENT_SECRET'),
   SUUNTOAPP_GUIDE_OWNER: defineSecret('SUUNTOAPP_GUIDE_OWNER'),
@@ -57,6 +59,10 @@ const WAHOO: SecretParam[] = [
  * zero-binding default as well as every non-empty entry below.
  */
 export const FUNCTION_SECRET_BINDINGS = {
+  createStripePortalLink: [SECRET_PARAMS.STRIPE_BILLING_KEY],
+  'ext-firestore-stripe-payments-createPortalLink': [SECRET_PARAMS.STRIPE_BILLING_KEY],
+  stripeBillingWebhook: [SECRET_PARAMS.STRIPE_BILLING_WEBHOOK_SECRET],
+  processStripeBillingTask: [SECRET_PARAMS.STRIPE_BILLING_KEY],
   addCOROSAPIHistoryToQueue: COROS,
   addSuuntoAppHistoryToQueue: SUUNTO_API,
   addSuuntoAppRoutesToQueue: SUUNTO_API,

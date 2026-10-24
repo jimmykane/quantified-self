@@ -259,3 +259,15 @@ exports[RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME] = retrySportsLibRepars
 export { activitySendCommand } from './activity-send/commands';
 export { uploadActivitySendFile } from './activity-send/upload';
 export { admitActivitySend, projectActivitySendDelivery, cleanupActivitySends, cleanupActivitySendOnDelete } from './activity-send/lifecycle';
+
+// Native billing: deploy the legacy portal alias only after extension retirement.
+export {
+  createStripeCheckoutSession,
+  createStripePortalLink,
+  'ext-firestore-stripe-payments-createPortalLink',
+  stripeBillingWebhook,
+  dispatchStripeBillingJob,
+  recoverStripeBillingJobs,
+  processStripeBillingTask,
+  deleteStripeCustomerOnDocumentDeleted,
+} from './stripe/billing/handlers';

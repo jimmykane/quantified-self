@@ -55,6 +55,7 @@ import {
 import { cleanupMcpOAuthStateForUser, MCP_OAUTH_COLLECTIONS } from '../mcp/oauth.service';
 import { USER_DELETION_TOMBSTONES_COLLECTION } from '../shared/user-deletion-guard';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { requestBillingDeletion } from '../stripe/billing/service';
 import { cleanupRejectedRouteOriginalFilesForUser, REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME } from '../routes/rejected-original-cleanup';
 import { cleanupServiceDisconnectTasksForUser, SERVICE_DISCONNECT_CLEANUP_COLLECTION } from '../service-disconnect-cleanup';
 import {
@@ -1210,7 +1211,15 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
     }
     await runCleanupStage(failures, 'operational_target_recovery', () =>
         resumeOperationalTargets(db, uid, savedIdentifiers.attemptId, providerIdentifiers, failures));
+    // Preserve the customer binding until its remote deletion is durably owned.
+    // Other cleanup stages still run if admission must be retried.
+    let billingDeletionAdmitted = false;
+    await runCleanupStage(failures, 'stripe_billing_admission', async () => {
+        await requestBillingDeletion(db, uid);
+        billingDeletionAdmitted = true;
+    });
     for (const collection of ACCOUNT_DELETION_ROOT_COLLECTIONS) {
+        if (collection === 'customers' && !billingDeletionAdmitted) continue;
         await runCleanupStage(failures, 'firestore_root', () => deleteAccountFirestoreRoot(db, uid, collection));
     }
     await runCleanupStage(failures, 'storage', () => deleteAccountStorageFiles(uid));

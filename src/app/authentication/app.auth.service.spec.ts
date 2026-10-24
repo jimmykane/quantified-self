@@ -383,6 +383,18 @@ describe('AppAuthService', () => {
     });
 
     describe('email link auth', () => {
+        it('keeps demo billing email links on the current local HTTP origin and port', async () => {
+            const previous = environment.firebase.projectId;
+            environment.firebase.projectId = 'demo-stripe-billing';
+            try {
+                const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+                await service.sendEmailLink('synthetic@example.com', '/payment/success');
+                expect(sendSignInLinkToEmail).toHaveBeenCalledWith(mockAuth, 'synthetic@example.com', expect.objectContaining({
+                    url: `${window.location.origin}/login?returnUrl=%2Fpayment%2Fsuccess`, handleCodeInApp: true,
+                }));
+            } finally { environment.firebase.projectId = previous; }
+        });
+
         it('sendEmailLink should persist email and show success snackbar', async () => {
             const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'test@example.com';

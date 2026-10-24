@@ -148,7 +148,7 @@ Operational scripts that intentionally access managed Google Cloud or Firebase r
 | Suunto Training Guides | Reuses the existing Suunto OAuth credentials and `SUUNTOAPP_SUBSCRIPTION_KEY` with Guides access; `SUUNTOAPP_GUIDE_OWNER` stores the exact existing OAuth application name through Secret Manager (or `.secret.local` for emulators). See [Training delivery](docs/training-workspace.md#suuntoplus-guide-delivery-650). |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
 | Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
@@ -262,6 +262,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Existing-user Health backfill operations](docs/health-backfill-operations.md)
 - [Garmin Health integration](docs/garmin-integration.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [Stripe billing architecture, local testing and cutover](docs/stripe-billing.md)
 - [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)

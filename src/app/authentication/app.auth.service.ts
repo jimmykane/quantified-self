@@ -284,9 +284,10 @@ export class AppAuthService {
   }
 
   private getLoginActionUrl(returnUrl?: string | null): string {
-    const baseUrl = normalizeUrlOrHost(environment.appUrl) || window.location.origin;
+    const billingDemo = environment.firebase?.projectId === 'demo-stripe-billing';
+    const baseUrl = billingDemo ? window.location.origin : normalizeUrlOrHost(environment.appUrl) || window.location.origin;
     const loginUrl = buildAppUrl(baseUrl, APP_LOGIN_PATH, {
-      preferHttpsForLocalhost: environment.localhost
+      preferHttpsForLocalhost: environment.localhost && !billingDemo
     });
     const sanitizedReturnUrl = sanitizeLocalAuthRedirectUrl(returnUrl);
     if (!sanitizedReturnUrl) {

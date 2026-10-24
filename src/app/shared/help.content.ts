@@ -1170,6 +1170,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
+- During billing maintenance, new checkout and portal requests are temporarily paused. Existing subscriptions continue billing normally. Wait for billing to reopen before trying again.
+- If a checkout result is still being confirmed, contact support before starting another payment.
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
 - Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
