@@ -77,7 +77,7 @@ describe('HomeComponent', () => {
     expect(training.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
     expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started Free');
     expect(hero.querySelector('a[mat-flat-button]')?.getAttribute('href')).toBe('/pricing');
-    expect(hero.querySelector('a[href="/pricing"]')?.textContent).toContain('See Pro plans');
+    expect(hero.querySelector('a[href="/pricing"]')?.textContent).toContain('See pricing');
     expect(hero.querySelector('a[mat-stroked-button]')?.getAttribute('href')).toBe('/login');
     expect(fixture.nativeElement.textContent).not.toMatch(/explore the demo|try the demo/i);
     expect(selection).not.toHaveBeenCalled();
@@ -108,9 +108,9 @@ describe('HomeComponent', () => {
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
     expect(integrations.textContent).toContain('you choose which services exchange activities');
-    expect(integrations.querySelector('.integration-actions a[href="/pricing"]')?.textContent).toContain('See Pro plans');
+    expect(integrations.querySelector('.integration-actions a[href="/pricing"]')?.textContent).toContain('See pricing');
     expect(integrations.querySelector('.integration-actions a[href="/integrations"]')).toBeTruthy();
-    expect(fixture.componentInstance.memberships.find(plan => plan.name === 'Pro')?.action).toBe('See Pro plans');
+    expect(fixture.componentInstance.memberships.find(plan => plan.name === 'Pro')?.action).toBe('See pricing');
   });
 
   it.each([

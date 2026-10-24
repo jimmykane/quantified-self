@@ -379,7 +379,7 @@ describe('Firebase Hosting configuration', () => {
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
-    // Homepage makes automatic imports, supported activity sync and the Pro/free starting points explicit.
+    // Homepage makes automatic imports, supported activity sync and the pricing/free starting points explicit.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
