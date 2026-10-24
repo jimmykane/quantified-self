@@ -4,7 +4,7 @@ import type { ActivityInterface, RRAnalysis, UserUnitSettingsInterface } from '@
 import type { EChartsType } from 'echarts/core';
 import type { TooltipComponentOption } from 'echarts/components';
 import type { AppEventInterface } from '@shared/app-event.interface';
-import { RR_STAT_LABELS } from '../../constants/rr-metrics';
+import { RR_STAT_LABELS, RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
 import { MaterialModule } from '../../modules/material.module';
 import { SharedModule } from '../../modules/shared.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
@@ -62,6 +62,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly visible = signal(false);
   readonly sources = signal<RRSource[]>([]);
   readonly metrics = BENCHMARK_RR_METRICS;
+  readonly statTooltips = RR_STAT_TOOLTIPS;
   private static nextId = 0;
   readonly contentId = `benchmark-rr-${BenchmarkRRComponent.nextId++}`;
   readonly expanded = signal(false);
@@ -105,7 +106,8 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
     pointIcon: RR_POINCARE_SYMBOLS[source.lineStyle].icon,
     metrics: buildBenchmarkRRRows([source.activity], BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type), this.units())
       .filter(row => row.cells[0].display !== null)
-      .map(row => ({ ...row, label: RR_STAT_LABELS[row.type] ?? row.label, cell: row.cells[0] })),
+      .map(row => ({ ...row, label: RR_STAT_LABELS[row.type] ?? row.label, cell: row.cells[0],
+        tooltip: [row.cells[0].detail, RR_STAT_TOOLTIPS[row.type]].filter(Boolean).join('. ') })),
   })));
   readonly chartRecordings = computed<BenchmarkRRChartRecording[]>(() => this.sourceLegends().flatMap(source => {
     const analysis = this.analyses().get(source.key);

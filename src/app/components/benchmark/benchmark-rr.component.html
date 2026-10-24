@@ -45,7 +45,7 @@
             @if (source.metrics.length) {
               <dl class="rr-metrics-legend">
                 @for (metric of source.metrics; track metric.type) {
-                  <div [matTooltip]="metric.cell.detail || ''"><dt>{{ metric.label }}</dt><dd class="rr-value">{{ metric.cell.display }}</dd></div>
+                  <div [matTooltip]="metric.tooltip"><dt>{{ metric.label }}</dt><dd class="rr-value">{{ metric.cell.display }}</dd></div>
                 }
               </dl>
             } @else { <span class="rr-secondary">No saved R–R statistics</span> }
@@ -132,7 +132,7 @@
               <table mat-table [dataSource]="summaryRows()" class="rr-summary-table" aria-label="R–R statistics by recording">
                 <ng-container matColumnDef="metric" [sticky]="true">
                   <th mat-header-cell *matHeaderCellDef>Metric</th>
-                  <td mat-cell *matCellDef="let row" class="rr-metric-label">{{ row.label }}</td>
+                  <td mat-cell *matCellDef="let row" class="rr-metric-label" [matTooltip]="statTooltips[row.type] || ''">{{ row.label }}</td>
                 </ng-container>
                 @for (source of selectedSources(); track source.key; let index = $index) {
                   <ng-container [matColumnDef]="source.column">

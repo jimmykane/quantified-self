@@ -21,6 +21,15 @@ import {
 } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderStatsComponent } from './header-stats.component';
+import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
+import { MatChipsModule } from '@angular/material/chips';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { By } from '@angular/platform-browser';
+import { DataRRArtifactCount, DataRRArtifactPercentage } from '@sports-alliance/sports-lib/metrics';
+import { RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { of } from 'rxjs';
 
 const createStat = (type: string, displayType: string, displayValue: string, displayUnit = '') => {
   return {
@@ -301,4 +310,25 @@ describe('HeaderStatsComponent', () => {
     );
   });
 
+});
+
+describe('condensed artifact tooltips', () => {
+  it('uses the artifact explanation on chips while retaining ordinary labels and canonical zero values', async () => {
+    await TestBed.configureTestingModule({
+      declarations: [HeaderStatsComponent], imports: [MatTooltipModule, MatChipsModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA],
+      providers: [{ provide: BreakpointObserver, useValue: { observe: () => of({ matches: false, breakpoints: {} }), isMatched: () => false } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderStatsComponent);
+    fixture.componentRef.setInput('layout', 'condensed');
+    fixture.componentRef.setInput('unitSettings', getDefaultUserUnitSettings());
+    fixture.componentRef.setInput('statsToShow', [DataRRArtifactPercentage.type, DataRRArtifactCount.type, DataHeartRateAvg.type]);
+    fixture.componentRef.setInput('stats', [new DataRRArtifactPercentage(0), new DataRRArtifactCount(0), new DataHeartRateAvg(100)]);
+    fixture.detectChanges();
+    const chips = fixture.debugElement.queryAll(By.directive(MatTooltip));
+    expect(chips.map(chip => chip.injector.get(MatTooltip).message)).toEqual([
+      RR_STAT_TOOLTIPS[DataRRArtifactPercentage.type], RR_STAT_TOOLTIPS[DataRRArtifactCount.type], 'Average Heart Rate',
+    ]);
+    expect(chips[0].nativeElement.textContent).toContain('0.0 %');
+    expect(chips[1].nativeElement.textContent).toContain('0');
+  });
 });

@@ -22,7 +22,7 @@ import { DataCadenceMin } from '@sports-alliance/sports-lib';
 import { DataStrokeRateAvg, DataStrokeRateMax, DataStrokeRateMin } from '@sports-alliance/sports-lib';
 import { DataSpeed, DataEffortPace, DataGNSSDistance, DataGNSSDistanceMiles } from '@sports-alliance/sports-lib';
 import { EVENT_SUMMARY_DIVING_STAT_TYPES } from '../../constants/event-summary-metric-groups';
-import { RR_METRICS } from '../../constants/rr-metrics';
+import { RR_METRICS, RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
 import { DataPace, DataSwimPace, DataSwimPaceAvg, DataSwimPaceMin, DataSwimPaceMax } from '@sports-alliance/sports-lib';
 import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
 import { DataTemperatureMax } from '@sports-alliance/sports-lib';
@@ -148,6 +148,7 @@ const RR_METRIC_ICONS = new Map<string, string>(RR_METRICS.map(metric => [metric
 })
 
 export class DataTypeIconComponent {
+  readonly statTooltips = RR_STAT_TOOLTIPS;
   @Input() dataType: string;
   @Input() size: string;
   @Input() vAlign: string;
