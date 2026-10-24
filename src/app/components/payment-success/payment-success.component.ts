@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -22,11 +22,13 @@ export class PaymentSuccessComponent implements OnInit {
   private logger = inject(LoggerService);
   private analyticsService = inject(AppAnalyticsService);
   private paymentService = inject(AppPaymentService);
+  private readonly destroyRef = inject(DestroyRef);
   isRefreshing = true;
-  assignedRole: string | null = null;
+  assignedRole: SubscriptionPlan | null = null;
 
   async ngOnInit(): Promise<void> {
     this.isRefreshing = true;
+    this.assignedRole = null;
     const user = this.auth.currentUser;
 
     if (!user) {
@@ -41,33 +43,37 @@ export class PaymentSuccessComponent implements OnInit {
 
     this.logger.log('PaymentSuccess: Starting claim polling...');
 
-    while (!hasPremiumClaim && attempt < maxAttempts) {
+    while (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid)) {
       attempt++;
       try {
         this.logger.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
         // Force refresh
         const tokenResult = await user.getIdTokenResult(true);
-        const role = tokenResult.claims['stripeRole'] as string;
+        if (!this.isCurrentUser(user.uid)) {
+          break;
+        }
+        const role = tokenResult.claims['stripeRole'];
 
-        this.logger.log('PaymentSuccess: Claims:', tokenResult.claims);
-
-        if (role) {
+        if (this.isPaidSubscriptionPlan(role)) {
           this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
           hasPremiumClaim = true;
           this.assignedRole = role;
-          if (this.isPaidSubscriptionPlan(role)) {
-            void this.logSubscriptionStarted(role);
-          }
+          void this.logSubscriptionStarted(role);
         } else {
-          this.logger.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
-          // Wait 2 seconds before next try
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          this.logger.warn(`PaymentSuccess: Paid-plan access not confirmed on attempt ${attempt}.`);
         }
       } catch (error) {
         this.logger.error('PaymentSuccess: Error refreshing token:', error);
-        // Wait even on error, so we don't spam
+      }
+
+      if (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid)) {
+        // Leave time for the server-owned subscription claim to arrive, including after errors.
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
+    }
+
+    if (this.destroyRef.destroyed) {
+      return;
     }
 
     if (!hasPremiumClaim) {
@@ -77,7 +83,11 @@ export class PaymentSuccessComponent implements OnInit {
     this.isRefreshing = false;
   }
 
-  private isPaidSubscriptionPlan(role: string): role is SubscriptionPlan {
+  private isCurrentUser(uid: string): boolean {
+    return !this.destroyRef.destroyed && this.auth.currentUser?.uid === uid;
+  }
+
+  private isPaidSubscriptionPlan(role: unknown): role is SubscriptionPlan {
     return role === 'basic' || role === 'pro';
   }
 

@@ -378,6 +378,7 @@ describe('Firebase Hosting configuration', () => {
     // COROS history help also explains cross-client admission, partial scans and queued-work completion.
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
+    // Checkout help covers confirmed Pro setup and membership-sync recovery before another payment.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
