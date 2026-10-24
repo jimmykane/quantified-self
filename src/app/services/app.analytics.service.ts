@@ -207,6 +207,11 @@ export class AppAnalyticsService {
         }
     }
 
+    /** A manual activity file was acknowledged as persisted; this is not a unique-user or payment event. */
+    logActivityUploadCompleted(fileType: ActivityFileBaseExtension): void {
+        this.logEvent('activity_upload_completed', { file_type: fileType });
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Subscription / Pricing Events
     // ─────────────────────────────────────────────────────────────────────────────

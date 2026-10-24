@@ -184,6 +184,13 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
             preparedUpload.extension,
             originalFilename,
           );
+          // Measure the server acknowledgement before ancillary quota refreshes.
+          // Never attach a completed upload to an account that signed in mid-request.
+          if (uploadUserID && this.authService.currentUser?.uid === uploadUserID
+            && typeof uploadResult?.eventId === 'string' && uploadResult.eventId.trim().length > 0
+            && Number.isInteger(uploadResult.activitiesCount) && uploadResult.activitiesCount > 0) {
+            this.analyticsService.logActivityUploadCompleted(extension);
+          }
           await this.calculateRemainingUploads();
 
           this.logger.log('[UploadActivitiesComponent] Uploaded event', uploadResult.eventId);

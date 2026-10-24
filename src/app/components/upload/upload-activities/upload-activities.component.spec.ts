@@ -59,6 +59,7 @@ describe('UploadActivitiesComponent', () => {
     };
     analyticsServiceMock = {
       logEvent: vi.fn(),
+      logActivityUploadCompleted: vi.fn(),
     };
     processingServiceMock = {
       addJob: vi.fn().mockReturnValue('job-id'),
@@ -270,6 +271,77 @@ describe('UploadActivitiesComponent', () => {
   it('should reject unsupported files', async () => {
     await expect(component.processAndUploadFile(makeUploadFile('activity.csv', 'csv')))
       .rejects.toThrow('Only FIT, GPX, TCX, JSON, and SML files are supported.');
+    expect(analyticsServiceMock.logActivityUploadCompleted).not.toHaveBeenCalled();
+  });
+
+  it('logs completion only after the server acknowledges a persisted workout', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new ArrayBuffer(4));
+    let acknowledge!: (result: { eventId: string; activitiesCount: number }) => void;
+    fitUploadServiceMock.uploadActivityFile.mockImplementationOnce(() => new Promise(resolve => { acknowledge = resolve; }));
+    const pending = component.processAndUploadFile(makeUploadFile('private-workout.fit', ' FIT '));
+    await vi.waitFor(() => expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledOnce());
+    expect(analyticsServiceMock.logActivityUploadCompleted).not.toHaveBeenCalled();
+
+    acknowledge({ eventId: 'private-event-id', activitiesCount: 2 });
+    await pending;
+
+    expect(analyticsServiceMock.logActivityUploadCompleted).toHaveBeenCalledExactlyOnceWith('fit');
+  });
+
+  it('keeps the successful persistence signal when a later quota refresh fails', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new ArrayBuffer(4));
+    eventServiceMock.getEventCount.mockRejectedValueOnce(new Error('Quota refresh unavailable'));
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit'))).rejects.toThrow('Quota refresh unavailable');
+
+    expect(analyticsServiceMock.logActivityUploadCompleted).toHaveBeenCalledExactlyOnceWith('fit');
+  });
+
+  it.each([null, { uid: 'another-account' }])('does not attribute an in-flight upload after the account changes to %j', async currentUser => {
+    mockFileReaderResult(new ArrayBuffer(4));
+    fitUploadServiceMock.uploadActivityFile.mockImplementationOnce(async () => {
+      authServiceMock.currentUser = currentUser;
+      return { eventId: 'saved-workout', activitiesCount: 1 };
+    });
+
+    await component.processAndUploadFile(makeUploadFile('run.fit', 'fit'));
+
+    expect(analyticsServiceMock.logActivityUploadCompleted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { eventId: '', activitiesCount: 1 },
+    { eventId: ' ', activitiesCount: 1 },
+    { eventId: 'saved-workout' },
+    { eventId: 'saved-workout', activitiesCount: 0 },
+    { eventId: 'saved-workout', activitiesCount: -1 },
+    { eventId: 'saved-workout', activitiesCount: 1.5 },
+  ])('does not emit success for an incomplete acknowledgement: %j', async response => {
+    mockFileReaderResult(new ArrayBuffer(4));
+    fitUploadServiceMock.uploadActivityFile.mockResolvedValueOnce(response);
+
+    await component.processAndUploadFile(makeUploadFile('run.fit', 'fit'));
+
+    expect(analyticsServiceMock.logActivityUploadCompleted).not.toHaveBeenCalled();
+  });
+
+  it('does not emit success for a file read failure', async () => {
+    mockFileReaderError();
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit'))).rejects.toThrow('Could not read file');
+
+    expect(analyticsServiceMock.logActivityUploadCompleted).not.toHaveBeenCalled();
+  });
+
+  it.each([400, 409, 500])('does not emit success for an HTTP %i upload failure', async status => {
+    mockFileReaderResult(new ArrayBuffer(4));
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new UploadError('Upload rejected', status, 'upload_rejected'));
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit'))).rejects.toThrow('Upload rejected');
+
+    expect(analyticsServiceMock.logActivityUploadCompleted).not.toHaveBeenCalled();
   });
 
   it('offers route upload without retrying the file or overwriting the actionable snackbar', async () => {

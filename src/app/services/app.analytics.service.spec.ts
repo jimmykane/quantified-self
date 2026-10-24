@@ -80,6 +80,22 @@ describe('AppAnalyticsService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('logs an acknowledged manual activity upload with only the bounded file type', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logActivityUploadCompleted('fit');
+
+        expect(logEvent).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'activity_upload_completed', { file_type: 'fit' });
+    });
+
+    it('does not log a completed upload without collection permission', () => {
+        userSubject.next({ acceptedTrackingPolicy: false } as User);
+
+        service.logActivityUploadCompleted('gpx');
+
+        expect(logEvent).not.toHaveBeenCalled();
+    });
+
     it('should NOT log event if user has not consented and forceAnalyticsCollection is FALSE', () => {
         (environment as any).forceAnalyticsCollection = false;
         // User with no tracking consent
