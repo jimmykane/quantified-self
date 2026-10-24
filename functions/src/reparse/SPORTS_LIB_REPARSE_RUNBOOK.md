@@ -7,6 +7,24 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.7.1 GPX timestamp compatibility adoption
+
+Root and Functions pin the same published 23.7.1 artifact. GPX activity imports accept exactly 13 decimal digits as
+Unix milliseconds alongside existing date-time text, preserving instants and sample placement. Invalid point times
+fail with a typed parsing error before stream allocation. Other numeric units are not guessed; configured duration
+limits, untimed-track rejection and saved-route parsing are unchanged.
+
+Previously rejected files can be uploaded again after the affected import functions are separately deployed. Existing
+successful imports need no historical reparse, summary regeneration, Training rebuild or persisted-data migration.
+Runtime detection and strict activity/route reparse targets follow the installed package; review already-enabled
+scanners before any separately approved deployment. This adoption does not change scanner settings, enable a campaign,
+replay uploads or deploy functions. Persistence, identity/edit preservation, retry/deletion guards and monitoring stay
+unchanged. Existing Help remains applicable to the unchanged upload workflow.
+
+MCP catalog, metric meanings/units, schemas, permissions, consent and provider actions are unchanged. On-demand source
+hydration can parse the compatible GPX timestamps through its existing bounded projections; it gains no write authority.
+No registered-contract promotion, client rescan or plugin rebuild is required.
+
 ### Sports Lib 23.7.0 metric lookup performance adoption
 
 Root and Functions pin the same published 23.7.0 artifact with matching lockfile integrity. Built-in metric constructors
