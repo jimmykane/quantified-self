@@ -64,6 +64,9 @@ function isKnownFlowReturn(location: URL, referrer: string, projectId: string): 
   if (path === '/payment/success' || path === '/payment/cancel') {
     return PAYMENT_REFERRERS.has(previous.hostname);
   }
+  if (path === '/subscriptions') {
+    return previous.hostname === 'billing.stripe.com';
+  }
   if (path === '/login') {
     return previous.hostname === `${projectId}.firebaseapp.com`;
   }

@@ -43,6 +43,7 @@ The initial Analytics config includes `ignore_referrer: true` only for these kno
 | Return page | Referring HTTPS hostname | Additional condition |
 | --- | --- | --- |
 | `/payment/success` or `/payment/cancel` | `checkout.stripe.com` or `billing.stripe.com` | None |
+| `/subscriptions` | `billing.stripe.com` | Matches `AppPaymentService.manageSubscriptions` portal return URL |
 | `/login` | `<firebase-project-id>.firebaseapp.com` | Must match the configured Firebase project |
 | `/services` | `connect.garmin.com` | `connect=1` and `serviceName=Garmin API` |
 | `/services` | `cloudapi-oauth.suunto.com` | `connect=1` and `serviceName=Suunto app` |

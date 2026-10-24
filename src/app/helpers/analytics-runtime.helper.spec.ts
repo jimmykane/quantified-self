@@ -49,6 +49,8 @@ describe('analytics runtime boundary', () => {
   it.each([
     ['/payment/success', 'https://checkout.stripe.com/c/pay/test'],
     ['/payment/cancel/', 'https://billing.stripe.com/p/session/test'],
+    ['/subscriptions', 'https://billing.stripe.com/p/session/test'],
+    ['/subscriptions/?tab=billing', 'https://billing.stripe.com/'],
     ['/login?returnUrl=%2Fdashboard', 'https://quantified-self-io.firebaseapp.com/__/auth/handler'],
     ['/services?serviceName=Garmin%20API&connect=1', 'https://connect.garmin.com/oauthConfirm'],
     ['/services?serviceName=Suunto%20app&connect=1', 'https://cloudapi-oauth.suunto.com/oauth/authorize'],
@@ -70,6 +72,9 @@ describe('analytics runtime boundary', () => {
     ['/login', 'https://different-project.firebaseapp.com/__/auth/handler'],
     ['/payment/success', 'https://www.google.com/'],
     ['/payment/success', 'https://checkout.stripe.com.evil.test/'],
+    ['/subscriptions', 'https://checkout.stripe.com/'],
+    ['/subscriptions', 'https://billing.stripe.com.evil.test/'],
+    ['/guides/sync-garmin-to-suunto', 'https://billing.stripe.com/'],
     ['/payment/success', 'not a URL'],
     ['/payment/success', ''],
   ])('preserves unrelated referrals and campaign URLs: %s %s', (path, referrer) => {
