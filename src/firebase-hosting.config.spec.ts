@@ -358,6 +358,7 @@ describe('Firebase Hosting configuration', () => {
     // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
     // File-comparison signup help also covers required account setup and the return to Compare.
+    // COROS history help also explains cross-client admission, partial scans and queued-work completion.
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');

@@ -6,6 +6,7 @@ import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
 import { startManualActivityHistory } from '../connection-history/manual-activity';
+import { HistoryLifecycleChangedError } from '../connection-history/execution';
 vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 const accountMocks = vi.hoisted(() => ({
@@ -127,10 +128,19 @@ describe('COROS History to Queue', () => {
             expect(logger.error).not.toHaveBeenCalled();
         });
 
+        it.each([
+            [new https.HttpsError('already-exists', 'Another import is running.'), 'already-exists'],
+            [new HistoryLifecycleChangedError(), 'failed-precondition'],
+        ])('preserves expected window invalidation without reporting an import failure (%s)', async (error, code) => {
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({ code });
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
         it('should add history to queue and return success', async () => {
             const result = await addCOROSAPIHistoryToQueue(data, context);
 
-            expect(history.getNextAllowedHistoryImportDate).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
+            expect(history.getNextAllowedHistoryImportDate).not.toHaveBeenCalled();
             expect(history.addHistoryToQueue).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,

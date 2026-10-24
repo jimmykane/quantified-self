@@ -186,7 +186,7 @@ describe('history', () => {
         }) => unknown) => runner({
             set: hoisted.batchSetMock,
             get: vi.fn().mockImplementation(async () => ({
-                exists: historyLeaseMetadata !== undefined,
+                exists: true,
                 data: () => historyLeaseMetadata,
             })),
             getAll: hoisted.transactionGetAllMock,
@@ -356,6 +356,44 @@ describe('history', () => {
         expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => typeof data.historyImportLeaseOwner === 'string')).toHaveLength(1);
     });
 
+    describe('manual history lease fencing', () => {
+        function useMetadata(meta: Record<string, unknown>) {
+            hoisted.runTransactionMock.mockImplementation(async runner => runner({
+                get: vi.fn(async () => ({ exists: true, data: () => ({ ...meta }) })),
+                getAll: hoisted.transactionGetAllMock,
+                set: vi.fn((ref, data) => {
+                    Object.assign(meta, data);
+                    hoisted.batchSetMock(ref, data);
+                }),
+            }));
+        }
+
+        it('preserves the cooldown code and exact next-allowed date inside atomic admission', async () => {
+            const lastImport = Date.now();
+            useMetadata({ didLastHistoryImport: lastImport, processedActivitiesFromLastHistoryImportCount: 500 });
+            const operation = vi.fn();
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, operation))
+                .rejects.toMatchObject({ code: 'permission-denied', message: `History import is not allowed until ${new Date(lastImport + 86_400_000).toISOString()}` });
+            expect(operation).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it.each(['owner', 'expiry', 'connection'] as const)('rejects a stale %s before queue or history writes', async change => {
+            const meta: Record<string, unknown> = {};
+            useMetadata(meta);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({ accessToken: 'test', openId: 'active-coros-token' } as COROSAPIAuth2ServiceTokenInterface);
+            vi.mocked(requestHelper.get).mockImplementationOnce(async () => {
+                if (change === 'owner') meta.historyImportLeaseOwner = 'replacement';
+                if (change === 'expiry') meta.historyImportLeaseExpiresAt = Date.now() - 1;
+                if (change === 'connection') meta.connectionStateGeneration = 'replacement-connection';
+                return JSON.stringify({ result: '0000', data: [{ workoutId: '1' }] });
+            });
+            await expect(history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date(), new Date()))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => 'didLastHistoryImport' in data || 'fromHistory' in data)).toHaveLength(0);
+        });
+    });
+
     describe('addHistoryToQueue', () => {
         function automaticExecution(serviceName = ServiceNames.SuuntoApp): HistoryExecution {
             return {
@@ -449,7 +487,6 @@ describe('history', () => {
         });
 
         function expectOnlyHistoryLeaseWrites() {
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
             expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
                 expect.objectContaining({
                     historyImportLeaseOwner: expect.any(String),
@@ -628,12 +665,11 @@ describe('history', () => {
         });
 
         it('releases its reservation after empty history without admitting queue items', async () => {
-            const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expectOnlyHistoryLeaseWrites();
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -651,18 +687,16 @@ describe('history', () => {
             const workouts = Array.from({ length: 451 }, (_, i) => ({ workoutKey: `w${i}` }));
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: workouts }));
 
-            // First batch commit succeeds, second fails
-            hoisted.runTransactionMock
-                .mockImplementationOnce(async runner => runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock }))
-                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock; get: ReturnType<typeof vi.fn>; getAll: typeof hoisted.transactionGetAllMock }) => unknown) => (
-                    runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock })
-                ))
-                .mockRejectedValueOnce(new Error('commit failed'));
+            // Bind failure to the one-item batch, independently of lease reads.
+            hoisted.transactionGetAllMock.mockImplementation(async (...refs: unknown[]) => {
+                if (refs.length === 1) throw new Error('commit failed');
+                return refs.map(() => ({ exists: false, data: () => undefined }));
+            });
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(4);
+            expect(hoisted.transactionGetAllMock.mock.calls.map(refs => refs.length)).toEqual([450, 1]);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({

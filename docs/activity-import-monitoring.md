@@ -148,6 +148,14 @@ failures or create/delete temporary test policies without exact separate approva
 
 ## Diagnosis and release evidence
 
+COROS manual activity-history lease hardening (#856) has **covered/unchanged** monitoring coverage. Reviewed
+`tools/import-monitoring/definitions.mjs`: its metrics select versioned `[ActivityImport]` dispatcher/worker/commit
+events, independently of callable admission. Expected `already-exists` contention, expired ownership and superseded
+connections do not emit import-failure events or ERROR contention logs. Genuine provider/queue failures remain
+observable through existing callable diagnostics; committed earlier batches retain their normal queue backlog,
+dispatch, retry and newly committed DLQ signals. No metric/filter/threshold, queue, probe, scheduler or activation
+change is needed. A lease/cooldown or successful scan is not evidence that workers completed ingestion.
+
 Suunto/COROS automatic connection-history activity batches can promptly dispatch their own bounded children using
 the same guarded workout path with a 60-second history-only spread. Scheduled recovery and manual bulk history
 retain the shared 15-minute spread. Coverage is **covered/unchanged**: native task depth/delay and
