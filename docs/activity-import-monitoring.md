@@ -151,8 +151,10 @@ failures or create/delete temporary test policies without exact separate approva
 COROS manual activity-history lease hardening (#856) has **covered/unchanged** monitoring coverage. Reviewed
 `tools/import-monitoring/definitions.mjs`: its metrics select versioned `[ActivityImport]` dispatcher/worker/commit
 events, independently of callable admission. Expected `already-exists` contention, expired ownership and superseded
-connections do not emit import-failure events or ERROR contention logs. Genuine provider/queue failures remain
-observable through existing callable diagnostics; committed earlier batches retain their normal queue backlog,
+connections do not emit import-failure events or ERROR contention logs. Only typed callable contention is suppressed;
+generic database failures carrying the same `already-exists` code remain ERROR diagnostics. Trusted admission
+refusals retain their callable codes through COROS/Suunto wrappers without ERROR logs. Genuine provider/queue
+failures remain observable through existing callable diagnostics; committed earlier batches retain their normal queue backlog,
 dispatch, retry and newly committed DLQ signals. No metric/filter/threshold, queue, probe, scheduler or activation
 change is needed. A lease/cooldown or successful scan is not evidence that workers completed ingestion.
 

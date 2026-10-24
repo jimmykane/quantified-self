@@ -378,6 +378,34 @@ describe('history', () => {
             expect(hoisted.batchSetMock).not.toHaveBeenCalled();
         });
 
+        it('rejects a missing COROS root at admission with the existing callable reconnect response', async () => {
+            hoisted.runTransactionMock.mockImplementationOnce(async runner => runner({
+                get: vi.fn(async () => ({ exists: false, data: () => undefined })),
+                set: hoisted.batchSetMock,
+            }));
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, vi.fn()))
+                .rejects.toMatchObject({ code: 'unauthenticated', httpErrorCode: { status: 401 }, message: 'Reconnect COROS before importing history.' });
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('makes deletion admission errors callable-safe instead of relying on a plain Error code', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            const operation = vi.fn();
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, operation))
+                .rejects.toMatchObject({ code: 'failed-precondition', httpErrorCode: { status: 400 } });
+            expect(operation).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('keeps generic already-exists queue errors observable as failed batches', async () => {
+            vi.mocked(requestHelper.get).mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            const error = Object.assign(new Error('Unexpected database failure'), { code: 'already-exists' });
+            hoisted.transactionGetAllMock.mockRejectedValueOnce(error);
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .resolves.toMatchObject({ successCount: 0, failureCount: 1, failedBatches: 1 });
+            expect(logger.error).toHaveBeenCalledWith(expect.any(String), error);
+        });
+
         it.each(['owner', 'expiry', 'connection'] as const)('rejects a stale %s before queue or history writes', async change => {
             const meta: Record<string, unknown> = {};
             useMetadata(meta);

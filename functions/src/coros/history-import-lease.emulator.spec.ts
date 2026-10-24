@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore';
 import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpsError } from 'firebase-functions/v2/https';
 
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({
@@ -82,13 +83,13 @@ function pauseProvider() {
   mocks.providerGet.mockImplementationOnce(() => { entered.resolve(); return result.promise; });
   return { entered: entered.promise, ...result };
 }
-function rejectQueueCommits(workoutID?: string) {
+function rejectQueueCommits(workoutID?: string, error = new Error('Synthetic queue commit failure')) {
   const original = mocks.db.runTransaction.bind(mocks.db);
   vi.spyOn(mocks.db, 'runTransaction').mockImplementation(update => original(async tx => {
     const writes = vi.spyOn(tx, 'set');
     const result = await update(tx);
     if (writes.mock.calls.some(([ref, data]) => ref.parent.id === queueName && (!workoutID || data.workoutID === workoutID))) {
-      throw new Error('Synthetic queue commit failure');
+      throw error;
     }
     return result;
   }));
@@ -105,6 +106,55 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS manual history leas
     await seed();
   });
   afterEach(async () => { vi.restoreAllMocks(); await mocks.db.terminate(); });
+
+  it.each(['missing-root', 'disconnect', 'missing-token', 'deletion', 'missing-user'] as const)(
+    'keeps %s admission refusal callable-safe without queue/history changes', async reason => {
+      const before = (await meta().get()).data();
+      if (reason === 'missing-root') await mocks.db.recursiveDelete(root());
+      if (reason === 'disconnect') await root().update({ disconnectOperationGeneration: 'disconnect' });
+      // Token documents are leaves with no descendants.
+      if (reason === 'missing-token') await root().collection('tokens').doc('account-owner').delete();
+      if (reason === 'deletion') await mocks.db.doc('userDeletionTombstones/owner').set({});
+      if (reason === 'missing-user') await mocks.db.recursiveDelete(mocks.db.doc('users/owner'));
+      const error = await call().catch(failure => failure);
+      expect(error).toBeInstanceOf(HttpsError);
+      expect(error.code).toBe(['missing-root', 'missing-token'].includes(reason) ? 'unauthenticated' : 'failed-precondition');
+      expect(mocks.providerGet).not.toHaveBeenCalled();
+      expect((await queue().get()).empty).toBe(true);
+      expect((await meta().get()).data()).toEqual(reason === 'missing-user' ? undefined : before);
+    },
+  );
+
+  it('preserves an existing legacy connection with matching absent generations', async () => {
+    const batch = mocks.db.batch();
+    batch.update(meta(), { connectionStateGeneration: FieldValue.delete() });
+    batch.update(root(), { activeOAuthCredentialGeneration: FieldValue.delete() });
+    batch.update(root().collection('tokens').doc('account-owner'), { tokenCredentialGeneration: FieldValue.delete() });
+    await batch.commit();
+    expect((await call()).stats.successCount).toBe(1);
+    expect((await queue().get()).size).toBe(1);
+    expect((await meta().get()).data()).not.toHaveProperty('historyImportLeaseOwner');
+  });
+
+  it('permits ordinary token refresh within the same credential generation', async () => {
+    const provider = pauseProvider();
+    const result = call();
+    try {
+      await provider.entered;
+      await root().collection('tokens').doc('account-owner').update({ accessToken: 'rotated-synthetic-token', dateRefreshed: Date.now() });
+    } finally { provider.resolve(response()); }
+    expect((await result).stats.successCount).toBe(1);
+    expect((await queue().get()).size).toBe(1);
+  });
+
+  it('reports a generic already-exists transaction failure instead of treating it as normal contention', async () => {
+    rejectQueueCommits(undefined, Object.assign(new Error('Synthetic database failure'), { code: 'already-exists' }));
+    await expect(call()).rejects.toMatchObject({ code: 'internal' });
+    expect(logger.error).toHaveBeenCalled();
+    expect((await queue().get()).empty).toBe(true);
+    expect((await meta().get()).data()).not.toHaveProperty('didLastHistoryImport');
+    expect((await meta().get()).data()).not.toHaveProperty('historyImportLeaseOwner');
+  });
 
   it.each([false, true])('admits one overlapping call and rejects its competitor before provider work (different ranges: %s)', async different => {
     const entered = deferred<void>(), release = deferred<string>();
@@ -230,7 +280,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS manual history leas
         // Deliberately retain descendants to reproduce the account-deletion race.
         if (change === 'missing-user') await mocks.db.doc('users/owner').delete();
       } finally { provider.resolve(response()); }
-      expect(await result).toHaveProperty('error');
+      const outcome = await result;
+      expect(outcome).toMatchObject({ error: expect.any(HttpsError) });
       expect((await queue().get()).empty).toBe(true);
       expect((await meta().get()).data()).not.toHaveProperty('didLastHistoryImport');
     },

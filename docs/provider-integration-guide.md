@@ -95,8 +95,11 @@ All four providers' manual activity-history tools honor active manual leases and
 COROS's synchronous/legacy activity-history path claims the shared per-user lease and checks cooldown in one
 Firestore transaction, before account lookup or provider work. Active contention takes precedence over cooldown;
 cooldown keeps `permission-denied` and the exact ISO next-allowed timestamp. The 30-minute lease exceeds the
-300-second callable timeout. Its owner and connection generation are checked before provider requests, in every
-queue/history-metadata transaction (including empty windows), and before returning success. COROS additionally
+300-second callable timeout. Shared COROS/Suunto wrappers preserve trusted admission errors and lifecycle retry
+responses; generic database errors with matching code strings must remain observable failures. Missing COROS
+credentials at admission retain `unauthenticated` reconnect guidance. The lease owner and connection generation
+are checked before provider requests, in every queue/history-metadata transaction (including empty windows),
+and before returning success. COROS additionally
 fences the captured token-root credential generation and pending disconnect state. Expiry or replacement cannot
 authorize an older invocation to save results or clear a replacement lease. Cleanup removes only its own lease.
 Committed windows/batches retain their cumulative count and cooldown after later failures; empty trailing windows

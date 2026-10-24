@@ -16,7 +16,7 @@ const accountMocks = vi.hoisted(() => ({
 }));
 
 // Mock dependencies
-vi.mock('firebase-functions/v1', () => ({
+vi.mock('firebase-functions/v1', async () => ({
     region: () => ({
         https: {
             onCall: (handler: any) => handler
@@ -30,12 +30,7 @@ vi.mock('firebase-functions/v1', () => ({
         })
     }),
     https: {
-        HttpsError: class HttpsError extends Error {
-            constructor(public code: string, message: string) {
-                super(message);
-                this.name = 'HttpsError';
-            }
-        }
+        HttpsError: (await import('firebase-functions/v2/https')).HttpsError
     }
 }));
 
@@ -134,6 +129,27 @@ describe('COROS History to Queue', () => {
         ])('preserves expected window invalidation without reporting an import failure (%s)', async (error, code) => {
             vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
             await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({ code });
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it.each(['already-exists', 'functions/already-exists'])('reports a generic queue failure with code %s instead of hiding it as contention', async code => {
+            const error = Object.assign(new Error('Unexpected queue failure'), { code });
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({ code: 'internal' });
+            expect(logger.error).toHaveBeenCalled();
+        });
+
+        it.each(['deletion', 'reconnect'] as const)('keeps a %s refusal after account lookup callable-safe without an ERROR log', async reason => {
+            if (reason === 'deletion') {
+                accountMocks.getUserDeletionGuardState.mockResolvedValueOnce({ shouldSkip: false }).mockResolvedValueOnce({ shouldSkip: true });
+            } else {
+                accountMocks.isServiceUnavailableForSyncForUser.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+            }
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({
+                code: 'failed-precondition', httpErrorCode: { status: 400 },
+                message: reason === 'deletion' ? 'Account is being deleted or no longer exists.' : 'Reconnect COROS before importing history.',
+            });
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
             expect(logger.error).not.toHaveBeenCalled();
         });
 

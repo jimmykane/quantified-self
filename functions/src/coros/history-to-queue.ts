@@ -7,7 +7,7 @@ import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
 import { HistoryImportResult, withActivityHistoryImportReservation } from '../history';
-import { HistoryLifecycleChangedError } from '../connection-history/execution';
+import { HistoryImportAdmissionError, HistoryLifecycleChangedError } from '../connection-history/execution';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getActiveCOROSTokenSnapshot } from './account';
@@ -38,7 +38,7 @@ function toHistoryCallableError(error: unknown): functions.https.HttpsError {
     return new functions.https.HttpsError('failed-precondition', 'History import is no longer active. Please retry.');
   }
   const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
-  if (code === 'already-exists') {
+  if (error instanceof functions.https.HttpsError && code === 'already-exists') {
     return new functions.https.HttpsError('already-exists', 'Another history import is running.');
   }
   if (code === 'unauthenticated') {
@@ -57,10 +57,10 @@ async function assertCOROSHistoryAllowed(userID: string, phase: string): Promise
   try {
     const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
     if (deletionGuard.shouldSkip) {
-      throw new functions.https.HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'Account is being deleted or no longer exists.');
     }
     if (await isServiceUnavailableForSyncForUser(userID, SERVICE_NAME)) {
-      throw new functions.https.HttpsError('failed-precondition', 'Reconnect COROS before importing history.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'Reconnect COROS before importing history.');
     }
   } catch (error) {
     if (error instanceof functions.https.HttpsError) throw error;
@@ -197,8 +197,9 @@ export const addCOROSAPIHistoryToQueue = functions
             logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
           }
         } catch (e: any) {
+          if (e instanceof HistoryImportAdmissionError) throw e;
           if (e instanceof HistoryLifecycleChangedError
-            || `${e?.code || ''}`.replace(/^functions\//, '') === 'already-exists') {
+            || (e instanceof functions.https.HttpsError && e.code === 'already-exists')) {
             throw toHistoryCallableError(e);
           }
           logger.error('[COROSHistoryImport] Failed to queue a history window.', {

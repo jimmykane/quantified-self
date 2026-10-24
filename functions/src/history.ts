@@ -2,7 +2,7 @@ import { replacesSupersededHistoryWork } from './connection-history/queue-replac
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { type HistoryExecution, HistoryLifecycleChangedError, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
+import { type HistoryExecution, HistoryImportAdmissionError, HistoryLifecycleChangedError, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -56,10 +56,18 @@ interface ManualHistoryImportLease {
   corosCredentialGeneration: unknown;
 }
 
-async function readCOROSHistoryCredentialGeneration(userID: string, transaction: admin.firestore.Transaction): Promise<unknown> {
+async function readCOROSHistoryCredentialGeneration(
+  userID: string, transaction: admin.firestore.Transaction, phase: 'admission' | 'execution' = 'execution',
+): Promise<unknown> {
   const root = await transaction.get(admin.firestore().collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(userID));
   const data = root.data();
-  if (!root.exists || data?.disconnectOperationGeneration || data?.disconnectGeneration) throw new HistoryLifecycleChangedError();
+  if (!root.exists || data?.disconnectOperationGeneration || data?.disconnectGeneration) {
+    if (phase === 'admission') {
+      if (!root.exists) throw new HistoryImportAdmissionError('unauthenticated', 'Reconnect COROS before importing history.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'COROS disconnect is pending.');
+    }
+    throw new HistoryLifecycleChangedError();
+  }
   return data?.activeOAuthCredentialGeneration;
 }
 
@@ -124,12 +132,11 @@ interface COROSHistoryResponse {
   data?: unknown;
 }
 
-export class HistoryImportSkippedForDeletedUserError extends Error {
+export class HistoryImportSkippedForDeletedUserError extends HistoryImportAdmissionError {
   readonly name = 'HistoryImportSkippedForDeletedUserError';
-  readonly code = 'failed-precondition';
 
   constructor(public readonly userID: string, public readonly phase: string) {
-    super('Account is being deleted or no longer exists.');
+    super('failed-precondition', 'Account is being deleted or no longer exists.');
   }
 }
 
@@ -262,10 +269,10 @@ export async function withActivityHistoryImportReservation<T>(
     assertHistoryReservation(meta);
     if (Number(meta?.historyImportLeaseExpiresAt) > Date.now()) throw new HttpsError('already-exists', 'Another history import is running.');
     const next = activityHistoryNextAllowedAt(Number(meta?.didLastHistoryImport), Number(meta?.processedActivitiesFromLastHistoryImportCount));
-    if (next > Date.now()) throw new HttpsError('permission-denied', `History import is not allowed until ${new Date(next).toISOString()}`);
-    if (isServiceUnavailableForSyncConnection(meta)) throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
+    if (next > Date.now()) throw new HistoryImportAdmissionError('permission-denied', `History import is not allowed until ${new Date(next).toISOString()}`);
+    if (isServiceUnavailableForSyncConnection(meta)) throw new HistoryImportAdmissionError('failed-precondition', 'Reconnect before importing history.');
     const corosCredentialGeneration = serviceName === ServiceNames.COROSAPI
-      ? await readCOROSHistoryCredentialGeneration(userID, transaction) : undefined;
+      ? await readCOROSHistoryCredentialGeneration(userID, transaction, 'admission') : undefined;
     transaction.set(ref, { historyImportLeaseOwner: owner, historyImportLeaseExpiresAt: Date.now() + ACTIVITY_HISTORY_IMPORT_LEASE_MS,
       connectionHistoryReservation: FieldValue.delete(), connectionHistoryReservationExpiresAt: FieldValue.delete() }, { merge: true });
     return { owner, connectionStateGeneration: meta?.connectionStateGeneration, corosCredentialGeneration };
@@ -442,7 +449,7 @@ async function addHistoryToQueueOperation(
         if (e instanceof HistoryImportSkippedForDeletedUserError
           || e instanceof HistoryLifecycleChangedError
           || e instanceof UserDeletionGuardReadError
-          || `${e?.code || ''}`.replace(/^functions\//, '') === 'already-exists'
+          || (e instanceof HttpsError && e.code === 'already-exists')
           || (serviceName === ServiceNames.COROSAPI && `${e?.code || ''}`.replace(/^functions\//, '') === 'unauthenticated')) {
           throw e;
         }
