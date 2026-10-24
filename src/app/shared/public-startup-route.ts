@@ -38,6 +38,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/features/fit-gpx-route-files',
   '/guides',
   '/guides/sync-garmin-to-suunto',
+  '/guides/sync-garmin-to-wahoo',
   '/guides/sync-coros-to-suunto',
   '/guides/sync-wahoo-to-suunto',
   '/guides/import-activities-to-suunto',

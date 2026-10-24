@@ -504,6 +504,8 @@ The sync guides' **Start Setup** action opens Connections. If sign-in or onboard
 
 ## Explore before signing in
 
+- Moving recorded workouts from Garmin? The [Garmin to Wahoo guide](/guides/sync-garmin-to-wahoo) explains Pro setup, optional automatic FIT activity sync, and previewing past activities before sending.
+
 - [Membership](/pricing) shows current plans and offers. Read [Plans & Billing](/help#plans-and-billing) for plan limits and billing guidance.
 - Help topic cards are shareable links. Open a topic and copy its address, or open its link in a new tab. [Getting Started](/help#getting-started) links directly to this guide.
 - The [homepage](/) shows shared Training, Health, dashboard, workout-analysis, map, and device-comparison previews. The Training Plans section has a Calendar and workout-profile example with fictional sample data. Select a day or switch to Workout profile to inspect its prescription; nothing is saved.

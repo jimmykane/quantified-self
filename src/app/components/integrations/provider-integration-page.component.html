@@ -138,7 +138,7 @@
         Centralize Data Guide
       </a>
       @for (action of page.relatedGuideActions ?? []; track action.routerLink) {
-      <a mat-stroked-button [routerLink]="action.routerLink">
+      <a mat-stroked-button appHapticTap [routerLink]="action.routerLink">
         {{ action.label }}
       </a>
       }

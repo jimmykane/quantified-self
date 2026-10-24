@@ -10,6 +10,19 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('keeps Garmin-to-Wahoo pricing and setup actions explicit in page and search metadata', () => {
+    const page = PUBLIC_SEO_PAGES.syncGarminToWahoo;
+    expect(page.actions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
+    expect(page.actions.find(action => action.label === 'Start Setup')?.routerLink).toBe('/services');
+    expect(page.closingActions[0].routerLink).toBe('/pricing');
+    expect(page.accessNote).toContain('require Pro');
+    expect(page.howToSteps).toHaveLength(4);
+    const entities = PUBLIC_SEO_ROUTE_DATA.syncGarminToWahoo.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const application = entities.find(entity => entity['@type'] === 'SoftwareApplication');
+    expect(application?.['offers']).toMatchObject({ description: page.freeOfferDescription });
+    expect(page.freeOfferDescription).toContain('activity sync require Pro');
+    expect(PUBLIC_SEO_PAGES.guidesHub.actions.some(action => action.routerLink === `/${page.path}`)).toBe(true);
+  });
   it('shares Health copy and preview selection with home and explains signed-in availability', () => {
     const page = PUBLIC_SEO_PAGES.health;
     expect(page.h1).toBe(HEALTH_FEATURE_CONTENT.title);
@@ -103,6 +116,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_GUIDE_PATHS).toEqual({
       hub: 'guides',
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
+      syncGarminToWahoo: 'guides/sync-garmin-to-wahoo',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
       syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
       importActivitiesToSuunto: 'guides/import-activities-to-suunto',
