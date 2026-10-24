@@ -1,6 +1,7 @@
 import { TrainingBuildMetricsComponent } from '../components/shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../components/shared/training-summary/training-mix-details.component';
 import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
+import { ActiveSicknessNoteComponent } from '../components/timeline-notes/active-sickness-note.component';
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import {
@@ -35,6 +36,7 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
     TrainingDurabilityTrajectoryChartComponent,
     TrainingMetricTextComponent,
     TimelineNotesWorkspaceComponent,
+    ActiveSicknessNoteComponent,
     SharedModule,
     MaterialModule,
     AppChartsModule,

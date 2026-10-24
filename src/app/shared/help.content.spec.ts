@@ -987,6 +987,8 @@ describe('help.content', () => {
     for (const id of ['health', 'training-analysis']) {
       const content = HELP_SECTIONS.find(section => section.id === id)?.content;
       expect(content).toContain('## Timeline notes');
+      expect(content).toContain('small **Sickness noted** link');
+      expect(content).toContain('**Low training load** instead of **Ready to train**');
       expect(content).toContain('ongoing notes must already have started');
       expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
       expect(content).toContain('notes appear on the Highlights trend charts');

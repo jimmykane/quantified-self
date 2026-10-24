@@ -1,13 +1,20 @@
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { Component, signal, viewChild } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineNotesWorkspaceComponent } from './timeline-notes-workspace.component';
+import { ActiveSicknessNoteComponent } from './active-sickness-note.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+@Component({ standalone: true, imports: [TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent],
+  template: '<app-timeline-notes-workspace #notes ownerUid="owner" /><app-active-sickness-note [context]="notes.context()" />' })
+class CurrentSicknessWorkspaceHost {
+  readonly workspace = viewChild.required(TimelineNotesWorkspaceComponent);
+}
 
 describe('Timeline notes workspace ownership', () => {
   const note = { id: 'a'.repeat(64), category: 'other' as const, title: 'Private', startDate: '2026-01-02', endDate: '2026-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
@@ -117,6 +124,21 @@ describe('Timeline notes workspace ownership', () => {
     expect(service.loadRange).toHaveBeenCalledWith('owner', { startDate: '2025-12-01', endDate: '2026-01-10' }, false);
     expect(component.context().notes).toEqual([note]);
     component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
+  });
+  it('coalesces the sickness context with chart reads and leaves chart context unchanged after an identical refresh', async () => {
+    clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 2, 12));
+    const fixture = TestBed.createComponent(CurrentSicknessWorkspaceHost);
+    fixture.detectChanges();
+    const workspace = fixture.componentInstance.workspace();
+    workspace.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush(); fixture.detectChanges(); await flush();
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2026-01-01', endDate: '2026-01-10' }, false);
+    const chartContext = workspace.context();
+    service.loadRange.mockClear();
+    window.dispatchEvent(new Event('focus')); await flush(); fixture.detectChanges(); await flush();
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2026-01-01', endDate: '2026-01-10' }, false);
+    expect(workspace.context()).toBe(chartContext);
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('keeps existing chart annotations stable while a newly visible chart expands the union', async () => {
     const first = {}, second = {};

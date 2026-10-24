@@ -68,6 +68,8 @@ The manager lists all notes, including future plans, newest start date first. Yo
 
 In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.
 
+Dashboard **Today** and **Training** show a small **Sickness noted** link while a visible sickness note covers today in its saved timezone, including its end day. Select it to open the note; overlapping sickness notes are grouped with a count. Ended, future and hidden notes stay out of this context. While active, a **Fresh** training state says **Low training load** instead of **Ready to train**. This is note context only: the Training state, readiness score, metrics and forecasts do not change.
+
 ### Compare before and after a note
 
 Choose a saved note on **Note comparisons**, or choose **Compare** beside a saved note in the manager or from its editor before making draft changes. Compare main-night **Sleep duration**, **Nightly HRV** and **Daily resting heart rate** around the note's **start date**. A date-range note does not compare against its end. The default is **14 days on each side**; choose **7**, **14** or **28 days**. Back returns to **Note comparisons** when opened from navigation or a direct link; comparisons opened from the manager return to that manager and its previous page. Comparing a hidden note does not turn its chart visibility on.

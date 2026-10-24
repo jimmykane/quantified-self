@@ -357,7 +357,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
     // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -410,7 +410,7 @@ describe('Firebase Hosting configuration', () => {
     // Pool swims default to Duration and disable the Distance chart axis.
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

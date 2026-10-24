@@ -61,4 +61,17 @@ describe('TrainingSummaryCardsComponent', () => {
     expect(element.querySelector('.qs-glass-card-panel')).toBeNull();
     expect(element.querySelector('article')?.getAttribute('role')).toBe('status');
   });
+
+  it('can neutralize the state caption without changing metrics or the input model', () => {
+    const cards = [{ id: 'state', kind: 'state', label: 'State', valueText: 'Fresh', captionText: 'Ready to train' },
+      { id: 'time', label: 'Training time', valueText: '12h', captionText: '18% less than usual' }];
+    fixture.componentRef.setInput('cards', cards);
+    fixture.componentRef.setInput('stateCaptionOverride', 'Low training load'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Fresh');
+    expect(fixture.nativeElement.textContent).toContain('Low training load');
+    expect(fixture.nativeElement.textContent).toContain('18% less than usual');
+    expect(cards[0].captionText).toBe('Ready to train');
+    fixture.componentRef.setInput('stateCaptionOverride', null); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Ready to train');
+  });
 });

@@ -76,7 +76,8 @@
       <div class="dashboard-current-state-primary dashboard-training-state-primary">
         <span>Training state</span>
         <strong>{{ dashboardTodayTrainingState.label }}</strong>
-        <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
+        <small class="dashboard-training-state-caption">{{ sicknessContext.hasActiveSickness() && dashboardTodayTrainingState.label === 'Fresh' ? 'Low training load' : dashboardTodayTrainingState.caption }} · TSS only</small>
+        <app-active-sickness-note #sicknessContext [context]="isOwnerDashboard ? timelineNotes() : null" />
         <div class="dashboard-training-state-scale" role="img"
           [attr.aria-label]="'Training state: ' + dashboardTodayTrainingState.label">
           @for (segment of dashboardTodayTrainingStateScaleSegments; track segment) {
