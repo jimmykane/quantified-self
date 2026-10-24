@@ -6,13 +6,12 @@
         <p class="brand-name">Quantified Self.io</p>
       </div>
       <h1 id="home-title">Your Training Data, Connected. <span class="highlight-text">One Dashboard. Every Activity in Context.</span></h1>
-      <p class="hero-subtitle">Bring your activities, sleep, and health data together. Understand your progress,
-        build your next workout, and keep your training in context.</p>
+      <p class="hero-subtitle">Spend less time moving files. Pro imports new activities automatically and syncs supported recordings along the paths you choose.</p>
       <div class="hero-actions" data-nosnippet>
-        <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
-        <a mat-stroked-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>monitoring</mat-icon></a>
+        <a mat-flat-button class="qs-mat-primary" routerLink="/pricing">See Pro plans <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+        <a mat-stroked-button routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
       </div>
-      <p class="hero-access-note">Training analysis, plans, workouts, and manual uploads are included with free Starter.</p>
+      <p class="hero-access-note">Start with manual uploads and training analysis on free Starter. Provider connections and automatic sync require Pro.</p>
       <ul class="trust-indicators" aria-label="Your data in Quantified Self">
         <li><mat-icon aria-hidden="true">code</mat-icon> Open source</li>
         <li><mat-icon aria-hidden="true">download</mat-icon> Original-file exports</li>
@@ -35,7 +34,11 @@
       <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon>
       <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon>
     </div>
-    <p>Upload your own files, or connect providers with Pro. Bring your history together and move supported activities and routes between services.</p>
+    <p>Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.</p>
+    <div class="integration-actions" data-nosnippet>
+      <a mat-flat-button class="qs-mat-primary" routerLink="/pricing">See Pro plans <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+      <a mat-stroked-button routerLink="/integrations">Explore integrations <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </div>
     <div class="compact-row-stack integration-details">
       <app-compact-row appHomeReveal layout="stacked" icon="history" iconTone="secondary" title="Sync Your History"
         summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
@@ -48,7 +51,6 @@
       <app-compact-row appHomeReveal layout="stacked" icon="upload_file" title="Upload Your Own Files" [showDivider]="false"
         summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."></app-compact-row>
     </div>
-    <a mat-button routerLink="/integrations">See supported imports and transfers <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
   </section>
 
   <section id="home-training" class="feature-section training-section" aria-labelledby="home-training-title">

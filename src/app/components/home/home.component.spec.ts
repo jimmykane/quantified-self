@@ -1,4 +1,5 @@
 import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { Location } from '@angular/common';
@@ -12,8 +13,12 @@ import { ASSISTANT_REQUEST_LIMITS, USAGE_LIMITS, ROUTE_USAGE_LIMITS } from '@sha
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
+import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HomeComponent } from './home.component';
+
+@Component({ standalone: true, template: '<p>Destination</p>' })
+class HomeDestinationStub {}
 
 describe('HomeComponent', () => {
   let fixture: ComponentFixture<HomeComponent>;
@@ -71,7 +76,9 @@ describe('HomeComponent', () => {
     expect(training.querySelector('app-training-summary-cards')).toBeTruthy();
     expect(training.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
     expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started Free');
-    expect(hero.querySelector('a[href="/features/training-analysis"]')?.textContent).toContain('Explore Training Analysis');
+    expect(hero.querySelector('a[mat-flat-button]')?.getAttribute('href')).toBe('/pricing');
+    expect(hero.querySelector('a[href="/pricing"]')?.textContent).toContain('See Pro plans');
+    expect(hero.querySelector('a[mat-stroked-button]')?.getAttribute('href')).toBe('/login');
     expect(fixture.nativeElement.textContent).not.toMatch(/explore the demo|try the demo/i);
     expect(selection).not.toHaveBeenCalled();
   });
@@ -91,6 +98,55 @@ describe('HomeComponent', () => {
     const logos = Array.from(fixture.nativeElement.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
     expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
+  });
+
+  it('puts Pro pricing beside the automation value and keeps Starter access explicit', () => {
+    const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('Pro imports new activities automatically');
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('supported recordings along the paths you choose');
+    expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
+    expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
+    const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
+    expect(integrations.textContent).toContain('you choose which services exchange activities');
+    expect(integrations.querySelector('.integration-actions a[href="/pricing"]')?.textContent).toContain('See Pro plans');
+    expect(integrations.querySelector('.integration-actions a[href="/integrations"]')).toBeTruthy();
+    expect(fixture.componentInstance.memberships.find(plan => plan.name === 'Pro')?.action).toBe('See Pro plans');
+  });
+
+  it.each([
+    { selector: '.hero-actions a[href="/pricing"]', destination: '/pricing' },
+    { selector: '.integration-actions a[href="/pricing"]', destination: '/pricing' },
+    { selector: '.integration-actions a[href="/integrations"]', destination: '/integrations' },
+    { selector: '.membership-grid mat-card:last-child a', destination: '/pricing' },
+    { selector: '.hero-actions a[href="/login"]', destination: '/login' },
+  ])('opens $destination from $selector with one shell-owned haptic', async ({ selector, destination }) => {
+    router.resetConfig(['', 'pricing', 'integrations', 'login'].map(path => ({ path, component: HomeDestinationStub })));
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    TestBed.inject(ShellNavigationEffectsService);
+    await router.navigateByUrl('/');
+    expect(selection).not.toHaveBeenCalled();
+
+    fixture.nativeElement.querySelector(selector).click();
+    await fixture.whenStable();
+
+    expect(router.url).toBe(destination);
+    expect(selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps canceled Pro navigation silent', async () => {
+    router.resetConfig([
+      { path: '', component: HomeDestinationStub },
+      { path: 'pricing', component: HomeDestinationStub, canActivate: [() => false] },
+    ]);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    TestBed.inject(ShellNavigationEffectsService);
+    await router.navigateByUrl('/');
+
+    fixture.nativeElement.querySelector('.hero-actions a[href="/pricing"]').click();
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/');
+    expect(selection).not.toHaveBeenCalled();
   });
 
   it('retains every shared product visual and detailed feature section', () => {

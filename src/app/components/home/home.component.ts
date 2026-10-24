@@ -79,7 +79,7 @@ export class HomeComponent implements OnInit {
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.basic)} activities`,
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.basic)} Assistant requests per billing period`] },
-    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus connected provider services.', route: '/pricing', action: 'Explore Pro',
+    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus automatic activity imports and supported cross-provider sync.', route: '/pricing', action: 'See Pro plans',
       features: ['Unlimited activities and routes', 'Automatic activity imports', 'Supported cross-provider sync', 'Compatible workout delivery',
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.pro)} Assistant requests per billing period`] },
   ];
