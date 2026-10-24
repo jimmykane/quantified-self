@@ -1,18 +1,18 @@
 @if (getColumnHeaderIcon(dataType)) {
-<mat-icon matTooltip="{{dataType}}"
+<mat-icon [matTooltip]="statTooltips[dataType] || dataType"
   [ngClass]="getColumnHeaderIconClass(dataType)"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
   {{ getColumnHeaderIcon(dataType) }}
 </mat-icon>
 }
 @if (getColumnHeaderSVGIcon(dataType)) {
-<mat-icon matTooltip="{{dataType}}"
+<mat-icon [matTooltip]="statTooltips[dataType] || dataType"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}"
   [svgIcon]="getColumnHeaderSVGIcon(dataType)">
 </mat-icon>
 }
 @if (!getColumnHeaderSVGIcon(dataType) && !getColumnHeaderIcon(dataType)) {
-<section matTooltip="{{dataType}}" [attr.data-letters]="getColumnHeaderTextInitials(dataType)"
+<section [matTooltip]="statTooltips[dataType] || dataType" [attr.data-letters]="getColumnHeaderTextInitials(dataType)"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
 </section>
 }

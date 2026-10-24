@@ -1,0 +1,883 @@
+import { replayBillingJob } from './replay';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
+import * as logger from 'firebase-functions/logger';
+import { randomUUID } from 'node:crypto';
+import type Stripe from 'stripe';
+import { Decimal } from 'stripe';
+import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, billingId, type BillingEvent } from './model';
+import { admitBillingCheckout, admitBillingEvent, processBillingJob } from './queue';
+import { acquireBillingLease, commitBillingProjections, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
+import { billingTransport, dispatchBillingJob } from './dispatch';
+import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
+import { getBillingStripe } from '../client';
+import { processStripeBillingTask } from './handlers';
+import { onSubscriptionUpdated } from '../subscriptions';
+
+vi.unmock('firebase-admin');
+vi.mock('../client', () => ({ getBillingStripe: vi.fn() }));
+const enabled = !!process.env.FIRESTORE_EMULATOR_HOST && !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
+const unique = () => randomUUID().replaceAll('-', '');
+describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_000 }, () => {
+  let db: admin.firestore.Firestore;
+  beforeAll(async () => {
+    for (const host of [process.env.FIRESTORE_EMULATOR_HOST, process.env.FIREBASE_AUTH_EMULATOR_HOST])
+      if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host ?? '')) throw new Error('Loopback required');
+    admin.initializeApp({ projectId: 'demo-stripe-billing-tests' }); db = admin.firestore();
+    await db.doc(BILLING_CONTROL).set({ owner: 'native', requestsEnabled: true, webhooksEnabled: true, nativeSince: Timestamp.fromMillis(1) });
+  });
+  afterAll(async () => { await admin.app().delete(); });
+
+  async function fixture(mode: 'subscription' | 'payment' = 'subscription') {
+    const uid = unique(), requestId = unique(), customerId = `cus_${uid}`, priceId = `price_${uid}`, productId = `prod_${uid}`;
+    const customer = { id: customerId, livemode: false, metadata: { firebaseUID: uid }, email: 'synthetic@example.com' };
+    const price = { id: priceId, product: productId, type: mode === 'subscription' ? 'recurring' : 'one_time', active: true,
+      unit_amount: 1000, currency: 'eur', recurring: mode === 'subscription' ? { interval: 'month', interval_count: 1 } : null, metadata: { trial_days: '7' } };
+    const product = { id: productId, active: true, metadata: { firebaseRole: 'basic' }, name: 'Synthetic billing product',
+      description: null, images: [], tax_code: null };
+    const sub = { id: `sub_${uid}`, customer: customerId, status: 'active', created: 100,
+      livemode: false, metadata: {}, cancel_at_period_end: false, trial_start: null, trial_end: null, cancel_at: null, canceled_at: null, ended_at: null,
+      items: { data: [{ id: 'si_fixture', price, quantity: 1, current_period_start: 100, current_period_end: 200 }], has_more: false } };
+    let acceptedCustomer = false;
+    const sessions = new Map<string, any>();
+    const stripe = {
+      customers: {
+        create: vi.fn(async (_params: unknown, _opts: unknown) => { acceptedCustomer = true; return customer; }),
+        retrieve: vi.fn(async () => customer), search: vi.fn(async () => ({ data: acceptedCustomer ? [customer] : [], has_more: false })),
+        del: vi.fn(async () => ({ id: customerId, deleted: true })),
+      },
+      prices: { retrieve: vi.fn(async () => price) }, products: { retrieve: vi.fn(async () => product) },
+      subscriptions: { list: vi.fn(async () => ({ data: [] as any[], has_more: false })), retrieve: vi.fn(async () => sub) },
+      checkout: { sessions: {
+        create: vi.fn(async (params: any, opts: any) => {
+          if (!sessions.has(opts.idempotencyKey)) sessions.set(opts.idempotencyKey, { id: `cs_${opts.idempotencyKey}`, status: 'open', customer: params.customer,
+            url: 'https://checkout.stripe.com/c/pay/synthetic', metadata: params.metadata });
+          return sessions.get(opts.idempotencyKey);
+        }),
+        retrieve: vi.fn(async (id: string) => [...sessions.values()].find(s => s.id === id)),
+        list: vi.fn(async () => ({ data: [...sessions.values()], has_more: false })),
+      } },
+      billingPortal: { sessions: { create: vi.fn(async () => ({ url: 'https://billing.stripe.com/p/session/synthetic' })) } },
+    };
+    await db.doc(`users/${uid}`).set({ synthetic: true });
+    await db.doc(`products/${productId}`).set(product);
+    await db.doc(`products/${productId}/prices/${priceId}`).set(price);
+    const request = { price: priceId, mode, success_url: 'https://quantified-self.io/subscriptions', cancel_url: 'https://quantified-self.io/subscriptions',
+      automatic_tax: { enabled: true }, allow_promotion_codes: true, metadata: { firebaseUID: uid } };
+    const ref = db.doc(`customers/${uid}/checkout_sessions/${requestId}`);
+    await ref.set(request);
+    const ctx = { db, stripe: stripe as unknown as Stripe, auth: { getUser: vi.fn(async () => ({ uid, email: 'synthetic@example.com' })) } as any };
+    const admit = () => admitBillingCheckout(db, uid, requestId, request, Timestamp.now());
+    const run = (id: string, generation = 0) => processBillingJob(ctx, id, generation);
+    const readyRetry = (id: string) => db.collection(BILLING_JOBS).doc(id).update({ dueAt: Timestamp.fromMillis(0) });
+    const event = (): BillingEvent => ({ eventId: `evt_${unique()}`, type: 'customer.subscription.updated', objectId: sub.id,
+      customerId, created: 1, livemode: false, kind: 'subscription' });
+    return { uid, requestId, customerId, customer, product, price, sub, stripe, ctx, request, ref, admit, run, readyRetry, event, sessions };
+  }
+  it('creates one durable customer and checkout, retaining automatic tax, promotions and trial policy', async () => {
+    const f = await fixture();
+    const data = { ...f.request, trial_period_days: 7 };
+    await f.ref.set(data);
+    const id = await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now());
+    await f.run(id!); await f.run(id!);
+    expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect(f.stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ customer: f.customerId, allow_promotion_codes: true,
+      automatic_tax: { enabled: true }, subscription_data: { billing_mode: { type: 'classic' }, trial_period_days: 7 }, line_items: [{ price: f.price.id, quantity: 1 }] });
+    expect((await f.ref.get()).data()).toMatchObject({ sessionId: expect.stringMatching(/^cs_/), url: expect.stringContaining('checkout.stripe.com'), error: null });
+    expect((await db.doc(`customers/${f.uid}`).get()).get('stripeId')).toBe(f.customerId);
+  });
+  it('reuses a returning customer and supports one-time payment checkout', async () => {
+    const f = await fixture('payment');
+    await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    await f.run((await f.admit())!);
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+    expect(f.stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ mode: 'payment', payment_intent_data: { metadata: { firebaseUID: f.uid } } });
+  });
+  it('persists paid Checkout line items with Stripe SDK decimal values as JSON strings', async () => {
+    const f = await fixture('payment'); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    class StripeDecimal { toJSON() { return '500.00'; } }
+    const payment = { id: `pi_${unique()}`, customer: f.customerId, amount: 500, amount_received: 500,
+      status: 'succeeded', currency: 'eur', created: 123, description: null, metadata: {}, latest_charge: null };
+    Object.assign(f.stripe, { paymentIntents: { retrieve: vi.fn(async () => payment) } });
+    f.stripe.checkout.sessions.list.mockResolvedValue({ data: [{ id: 'cs_payment' }], has_more: false });
+    Object.assign(f.stripe.checkout.sessions, { listLineItems: vi.fn(async () => ({ has_more: false,
+      data: [{ id: 'li_payment', quantity: 1, amount_total: 500, price: { ...f.price, unit_amount_decimal: new StripeDecimal() } }] })) });
+    const event = { ...f.event(), kind: 'payment' as const, type: 'payment_intent.succeeded', objectId: payment.id };
+    await f.run((await admitBillingEvent(db, event))!);
+    const stored = (await db.doc(`customers/${f.uid}/payments/${payment.id}`).get()).data();
+    expect(stored?.status).toBe('succeeded');
+    expect(stored?.items[0].price.unit_amount_decimal).toBe('500.00');
+    expect(stored?.prices[0].path).toBe(`products/${f.product.id}/prices/${f.price.id}`);
+  });
+  it('serializes simultaneous customer checkouts and reuses the open session across request documents', async () => {
+    const f = await fixture(); const id = (await f.admit())!;
+    await Promise.all([f.run(id), f.run(id)]);
+    await f.readyRetry(id);
+    await f.run(id, (await db.doc(`${BILLING_JOBS}/${id}`).get()).get('generation'));
+    const other = unique(); await db.doc(`customers/${f.uid}/checkout_sessions/${other}`).set(f.request);
+    const next = await admitBillingCheckout(db, f.uid, other, f.request, Timestamp.now()); await f.run(next!);
+    expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await db.doc(`customers/${f.uid}/checkout_sessions/${other}`).get()).get('sessionId')).toBe((await f.ref.get()).get('sessionId'));
+  });
+  it.each(['cus_foreign', null])('refuses a retained checkout with mismatched customer %s', async customer => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const original = (await f.ref.get()).get('sessionId');
+    f.stripe.checkout.sessions.retrieve.mockResolvedValueOnce({
+      id: original, status: 'open', customer, url: 'https://checkout.stripe.com/c/pay/foreign',
+    });
+    const next = unique(); const ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(f.request);
+    const id = (await admitBillingCheckout(db, f.uid, next, f.request, Timestamp.now()))!;
+    await f.run(id);
+    expect((await ref.get()).get('error.code')).toBe('customer_conflict');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect((await ref.get()).get('sessionId')).toBeUndefined();
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('failed');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).exists).toBe(false);
+  });
+  it.each(['open', 'expired'])('blocks a retained %s checkout after a trusted customer binding changes', async status => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const operationRef = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const originalOperation = (await operationRef.get()).data();
+    const originalSession = [...f.sessions.values()][0]; originalSession.status = status;
+    const replacement = `cus_repaired_${f.uid}`;
+    await db.doc(`customers/${f.uid}`).update({ stripeId: replacement });
+    f.stripe.customers.retrieve.mockResolvedValue({ ...f.customer, id: replacement });
+    const next = unique(); const ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(f.request);
+    await f.run((await admitBillingCheckout(db, f.uid, next, f.request, Timestamp.now()))!);
+    expect((await ref.get()).get('error.code')).toBe('customer_conflict');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await operationRef.get()).data()).toEqual(originalOperation);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${f.requestId}`);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).exists).toBe(false);
+  });
+  it('recovers an accepted customer after a lost reply without a replacement create', async () => {
+    const f = await fixture(); const create = f.stripe.customers.create.getMockImplementation()!;
+    f.stripe.customers.create.mockImplementationOnce(async (...args) => { await create(...args); throw new Error('lost response'); });
+    const id = (await f.admit())!; await expect(f.run(id)).rejects.toThrow();
+    await f.readyRetry(id); await f.run(id);
+    expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+    expect(f.stripe.customers.search).toHaveBeenCalledTimes(1);
+    expect((await f.ref.get()).get('sessionId')).toBeTruthy();
+  });
+  it('retries an uncertain checkout with the identical frozen parameters and key', async () => {
+    const f = await fixture(); const create = f.stripe.checkout.sessions.create.getMockImplementation()!;
+    f.stripe.checkout.sessions.create.mockImplementationOnce(async (...args) => { await create(...args); throw new Error('lost response'); });
+    const id = (await f.admit())!; await expect(f.run(id)).rejects.toThrow();
+    await f.readyRetry(id); await f.run(id);
+    expect(f.stripe.checkout.sessions.create.mock.calls[0]).toEqual(f.stripe.checkout.sessions.create.mock.calls[1]);
+    expect(f.sessions.size).toBe(1);
+  });
+  it('blocks blind create after the Stripe idempotency window', async () => {
+    const f = await fixture(); f.stripe.checkout.sessions.create.mockRejectedValue(new Error('timeout'));
+    const id = (await f.admit())!; await expect(f.run(id)).rejects.toThrow();
+    await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).update({ startedAt: Timestamp.fromMillis(Date.now() - 24 * 3_600_000) });
+    await f.readyRetry(id); await f.run(id);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await f.ref.get()).get('error.code')).toBe('operation_uncertain');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('failed');
+  });
+  it('retains a confirmed rejected checkout and permits only a new browser request to try again', async () => {
+    const f = await fixture();
+    f.stripe.checkout.sessions.create.mockRejectedValueOnce({ type: 'StripeInvalidRequestError', statusCode: 400 });
+    const id = (await f.admit())!; await f.run(id);
+    const operation = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const rejected = (await operation.get()).data();
+    expect(rejected?.rejected).toBe(true);
+    expect((await f.ref.get()).get('error.code')).toBe('checkout_rejected');
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBeUndefined();
+    await replayBillingJob(db, id, true); await f.run(id, 1);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    const nextRequest = unique(); await db.doc(`customers/${f.uid}/checkout_sessions/${nextRequest}`).set(f.request);
+    await f.run((await admitBillingCheckout(db, f.uid, nextRequest, f.request, Timestamp.now()))!);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    expect((await operation.get()).data()).toEqual(rejected);
+    expect((await db.doc(`customers/${f.uid}/checkout_sessions/${nextRequest}`).get()).get('sessionId')).toBeTruthy();
+  });
+  it.each([409, 500])('does not replace a checkout after an uncertain HTTP %s outcome', async statusCode => {
+    const f = await fixture();
+    f.stripe.checkout.sessions.create.mockRejectedValue({ type: 'StripeInvalidRequestError', statusCode });
+    await expect(f.run((await f.admit())!)).rejects.toThrow();
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).get('rejected')).toBeUndefined();
+    const next = unique(); await db.doc(`customers/${f.uid}/checkout_sessions/${next}`).set(f.request);
+    await f.run((await admitBillingCheckout(db, f.uid, next, f.request, Timestamp.now()))!);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it.each(['active', 'trialing', 'past_due'])('refuses another subscription when current status is %s', async status => {
+    const f = await fixture(); f.stripe.subscriptions.list.mockResolvedValue({ data: [{ ...f.sub, status }], has_more: false });
+    await f.run((await f.admit())!);
+    expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    expect((await f.ref.get()).get('error.code')).toBe('subscription_exists');
+  });
+  it('refuses a repeated trial even when the browser requests it', async () => {
+    const f = await fixture(); f.stripe.subscriptions.list.mockResolvedValue({ data: [{ ...f.sub, status: 'canceled' }], has_more: false });
+    const data = { ...f.request, trial_period_days: 7 }; await f.ref.set(data);
+    await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    expect((await f.ref.get()).get('error.code')).toBe('trial_ineligible');
+  });
+  it('deduplicates and refetches reordered subscription events without unchanged writes', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const event = f.event(); const id = (await admitBillingEvent(db, event))!;
+    expect(await admitBillingEvent(db, event)).toBe(id); await f.run(id);
+    const subRef = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    const committed = (await subRef.get()).updateTime;
+    await f.run((await admitBillingEvent(db, { ...f.event(), created: 0 }))!);
+    expect((await subRef.get()).updateTime?.isEqual(committed!)).toBe(true);
+    f.sub.status = 'canceled'; f.sub.cancel_at_period_end = true;
+    await f.run((await admitBillingEvent(db, f.event()))!);
+    expect((await subRef.get()).get('status')).toBe('canceled');
+  });
+  it('does not accept a foreign or ambiguous customer binding', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    await db.doc(`customers/${unique()}`).set({ stripeId: f.customerId });
+    await expect(admitBillingEvent(db, f.event())).rejects.toThrow();
+    await f.run((await f.admit())!); expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+  it('does not rewrite claims, grace fields or subscription emails itself', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const subRef = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`); await subRef.set({ appOwned: true });
+    await f.run((await admitBillingEvent(db, f.event()))!);
+    expect((await subRef.get()).get('appOwned')).toBe(true);
+    expect((await db.doc(`users/${f.uid}`).get()).data()).toEqual({ synthetic: true });
+  });
+  it('replaces Stripe-owned maps while preserving application fields and literal metadata keys', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const ref = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await ref.set({ metadata: { retained: 'old', removed: 'stale' }, appOwned: { retained: true }, 'stripe_metadata_old.key': 'stale' });
+    const projection = { path: ref.path, data: { metadata: { retained: 'new' }, 'stripe_metadata_new.key': 'new' } };
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      await commitBillingProjections(f.ctx, lease, f.uid, f.customerId, [projection]);
+      const first = await ref.get();
+      expect(first.data()).toEqual({ metadata: { retained: 'new' }, appOwned: { retained: true }, 'stripe_metadata_new.key': 'new' });
+      await commitBillingProjections(f.ctx, lease, f.uid, f.customerId, [projection]);
+      expect((await ref.get()).updateTime?.isEqual(first.updateTime!)).toBe(true);
+    } finally { await releaseBillingLease(db, lease); }
+  });
+  it('deactivates a deleted product when an earlier update arrives after deletion', async () => {
+    const f = await fixture();
+    f.stripe.products.retrieve.mockRejectedValue({ code: 'resource_missing' });
+    const event = { ...f.event(), kind: 'product' as const, type: 'product.updated', objectId: f.product.id, customerId: null };
+    const id = (await admitBillingEvent(db, event))!;
+    await f.run(id);
+    expect((await db.doc(`products/${f.product.id}`).get()).get('active')).toBe(false);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+  });
+  it('fetches expanded price tiers and commits SDK decimals as lossless strings', async () => {
+    const f = await fixture();
+    Object.assign(f.price, { nickname: null, billing_scheme: 'tiered', tiers_mode: 'graduated', tax_behavior: 'exclusive',
+      tiers: [{ up_to: 100, unit_amount: null, unit_amount_decimal: Decimal.from('0.123456789012'), flat_amount: 0, flat_amount_decimal: Decimal.from('0') }] });
+    const event = { ...f.event(), kind: 'price' as const, type: 'price.updated', objectId: f.price.id, customerId: null };
+    const id = (await admitBillingEvent(db, event))!; await f.run(id);
+    expect(f.stripe.prices.retrieve).toHaveBeenCalledWith(f.price.id, { expand: ['tiers'] });
+    const stored = await db.doc(`products/${f.product.id}/prices/${f.price.id}`).get();
+    expect(stored.get('tiers')[0].unit_amount_decimal).toBe('0.123456789012');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+  });
+  it('does not recreate public documents after deletion during customer creation; cleanup removes the accepted customer', async () => {
+    const f = await fixture(); const create = f.stripe.customers.create.getMockImplementation()!;
+    f.stripe.customers.create.mockImplementationOnce(async (...args) => {
+      const result = await create(...args);
+      await db.doc(`userDeletionTombstones/${f.uid}`).set({}); await requestBillingDeletion(db, f.uid);
+      return result;
+    });
+    await f.run((await f.admit())!);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+    await f.run(billingId('delete', f.uid));
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/customer`).get()).exists).toBe(false);
+  });
+  it('cancels surviving active subscriptions after customer-document deletion without recreating the customer', async () => {
+    const f = await fixture();
+    await admin.auth().createUser({ uid: f.uid, email: `${f.uid}@example.test`, emailVerified: true });
+    await admin.auth().setCustomUserClaims(f.uid, { stripeRole: 'pro', unrelated: true });
+    const subscriptions = db.collection(`customers/${f.uid}/subscriptions`);
+    await subscriptions.doc('active').set({ status: 'active', role: 'pro', created: Timestamp.now(), appOwned: true });
+    await subscriptions.doc('trial').set({ status: 'trialing', role: 'basic' });
+    await subscriptions.doc('canceled').set({ status: 'canceled', ended_at: Timestamp.fromMillis(1) });
+    const before = await subscriptions.doc('active').get();
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await f.run(billingId('delete', f.uid));
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await subscriptions.where('status', 'in', ['active', 'trialing']).get()).empty).toBe(true);
+    expect((await subscriptions.doc('active').get()).data()).toMatchObject({ status: 'canceled', appOwned: true, ended_at: expect.any(Timestamp) });
+    expect((await subscriptions.doc('canceled').get()).get('ended_at').toMillis()).toBe(1);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+    await onSubscriptionUpdated.run({ id: `evt_cancel_${f.uid}`, params: { uid: f.uid, subscriptionId: 'active' },
+      data: { before, after: await subscriptions.doc('active').get() } } as Parameters<typeof onSubscriptionUpdated.run>[0]);
+    const claims = (await admin.auth().getUser(f.uid)).customClaims;
+    expect(claims).toMatchObject({ stripeRole: 'free', unrelated: true });
+    expect(claims?.gracePeriodUntil).toBeGreaterThan(Date.now());
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('finishes cancellation across bounded pages without resetting the deletion operation', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    const subscriptions = db.collection(`customers/${f.uid}/subscriptions`);
+    const batch = db.batch();
+    for (let i = 0; i < 101; i++) batch.set(subscriptions.doc(`sub_${i}`), { status: 'active', role: 'pro' });
+    await batch.commit();
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await expect(f.run(id)).resolves.toBeUndefined();
+    expect((await subscriptions.where('status', '==', 'active').get()).size).toBe(1);
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    expect((await job.get()).get('state')).toBe('pending');
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    await f.readyRetry(id);
+    await f.run(id, 1);
+    expect((await subscriptions.where('status', '==', 'active').get()).empty).toBe(true);
+    expect((await job.get()).get('state')).toBe('done');
+    expect((await job.get()).get('generation')).toBe(1);
+  });
+  it('does not recreate subscriptions when Auth cleanup begins during Stripe customer deletion', async () => {
+    const f = await fixture();
+    const subscription = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await subscription.set({ status: 'active', role: 'pro' });
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    f.stripe.customers.del.mockImplementationOnce(async () => {
+      await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+      await db.recursiveDelete(db.doc(`customers/${f.uid}`));
+      return { id: f.customerId, deleted: true };
+    });
+    await f.run(billingId('delete', f.uid));
+    expect((await subscription.get()).exists).toBe(false);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('does not cancel records for a replacement binding created during remote deletion', async () => {
+    const f = await fixture();
+    const subscription = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await subscription.set({ status: 'active', role: 'pro' });
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    f.stripe.customers.del.mockImplementationOnce(async () => {
+      await db.doc(`customers/${f.uid}`).set({ stripeId: 'cus_replacement' });
+      return { id: f.customerId, deleted: true };
+    });
+    const id = billingId('delete', f.uid);
+    await f.run(id);
+    expect((await subscription.get()).get('status')).toBe('active');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('error')).toBe('customer_conflict');
+  });
+  it('keeps subscriptions intact until remote customer deletion is confirmed', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    const subscription = db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`);
+    await subscription.set({ status: 'active', role: 'pro' });
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    f.stripe.customers.del.mockRejectedValueOnce(new Error('uncertain deletion reply'));
+    await expect(f.run(id)).rejects.toThrow();
+    expect((await subscription.get()).get('status')).toBe('active');
+    await f.readyRetry(id); await f.run(id);
+    expect((await subscription.get()).get('status')).toBe('canceled');
+  });
+  it('treats a delayed invoice event after one-off draft deletion as completed work', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const invoices = { retrieve: vi.fn().mockRejectedValue({ code: 'resource_missing' }) };
+    Object.assign(f.stripe, { invoices });
+    const id = (await admitBillingEvent(db, { ...f.event(), type: 'invoice.created', kind: 'invoice', objectId: `in_${f.uid}` }))!;
+    await f.run(id);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+  });
+  it('retains invoice lookup permission failures for retry instead of treating them as deleted drafts', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    Object.assign(f.stripe, { invoices: { retrieve: vi.fn().mockRejectedValue({ code: 'permission_denied' }) } });
+    const id = (await admitBillingEvent(db, { ...f.event(), type: 'invoice.created', kind: 'invoice', objectId: `in_${f.uid}` }))!;
+    await expect(f.run(id)).rejects.toThrow();
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('pending');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('attempts')).toBe(1);
+  });
+  it('stops cleanup customer recovery if billing ownership changes during the Stripe lookup', async () => {
+    const f = await fixture();
+    f.stripe.customers.create.mockRejectedValueOnce(new Error('uncertain customer creation'));
+    await expect(f.run((await f.admit())!)).rejects.toThrow();
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    await requestBillingDeletion(db, f.uid);
+    f.stripe.customers.search.mockImplementationOnce(async () => {
+      await db.doc(BILLING_CONTROL).update({ owner: 'extension' });
+      return { data: [], has_more: false };
+    });
+    try {
+      await expect(f.run(billingId('delete', f.uid))).rejects.toThrow();
+      expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+      expect(f.stripe.customers.del).not.toHaveBeenCalled();
+      expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/customer`).get()).get('result')).toBeUndefined();
+    } finally { await db.doc(BILLING_CONTROL).update({ owner: 'native' }); }
+  });
+  it.each(['auth-first', 'document-first'])('preserves deletion identity with %s ordering', async ordering => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    if (ordering === 'auth-first') await requestBillingDeletion(db, f.uid);
+    await db.recursiveDelete(db.doc(`customers/${f.uid}`));
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    if (ordering === 'document-first') await requestBillingDeletion(db, f.uid);
+    await f.run(billingId('delete', f.uid));
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('retains a late customer deletion identity when Auth cleanup is already removing the private journal', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    // Auth cleanup can see an already removed customer root before its delete
+    // event delivers the only copy of the legacy Stripe customer identity.
+    await requestBillingDeletion(db, f.uid);
+    const remove = db.recursiveDelete.bind(db);
+    let lateEventDelivered = false;
+    const spy = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+      if (!lateEventDelivered && ref.path === `${BILLING_ACCOUNTS}/${f.uid}/operations`) {
+        lateEventDelivered = true;
+        await requestBillingDeletion(db, f.uid, f.customerId);
+      }
+      return remove(ref, writer);
+    });
+    try { await expect(f.run(id)).resolves.toBeUndefined(); }
+    finally { spy.mockRestore(); }
+    expect(lateEventDelivered).toBe(true);
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    expect((await job.get()).get('deleteIds')).toContain(f.customerId);
+    expect((await job.get()).get('state')).toBe('pending');
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).exists).toBe(false);
+    await f.readyRetry(id);
+    await f.run(id, 1);
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await job.get()).exists).toBe(false);
+  });
+  it('does not reopen an exhausted deletion from duplicate lifecycle events', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    await requestBillingDeletion(db, f.uid);
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ attempts: PROVIDER_MAX_RETRY_COUNT - 1 });
+    f.stripe.customers.del.mockRejectedValueOnce(new Error('temporary deletion failure'));
+    await f.run(id);
+    expect((await ref.get()).get('state')).toBe('failed');
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await requestBillingDeletion(db, f.uid);
+    expect((await ref.get()).get('state')).toBe('failed');
+    expect((await ref.get()).get('attempts')).toBe(PROVIDER_MAX_RETRY_COUNT);
+    expect((await ref.get()).get('generation')).toBe(0);
+    expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    await f.run(id, 1);
+    expect((await ref.get()).get('state')).toBe('done');
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    expect((await ref.get()).get('state')).toBe('done');
+    expect((await ref.get()).get('generation')).toBe(1);
+  });
+  it.each(['done', 'failed'])('retains newly discovered identities after a %s deletion', async state => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    if (state === 'failed') {
+      await ref.update({ attempts: PROVIDER_MAX_RETRY_COUNT - 1 });
+      f.stripe.customers.del.mockRejectedValueOnce(new Error('temporary deletion failure'));
+    }
+    await f.run(id);
+    expect((await ref.get()).get('state')).toBe(state);
+    const lateCustomerId = `cus_late_${f.uid}`;
+    await requestBillingDeletion(db, f.uid, lateCustomerId);
+    expect((await ref.get()).get('deleteIds')).toEqual(expect.arrayContaining([f.customerId, lateCustomerId]));
+    if (state === 'failed') {
+      expect((await ref.get()).get('state')).toBe('failed');
+      expect((await ref.get()).get('attempts')).toBe(PROVIDER_MAX_RETRY_COUNT);
+      expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    } else expect((await ref.get()).get('state')).toBe('pending');
+    await f.run(id, 1);
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(lateCustomerId);
+    expect((await ref.get()).get('state')).toBe('done');
+  });
+  it('removes the retained deletion fence when Auth cleanup follows completed customer-document cleanup', async () => {
+    const f = await fixture(); const id = billingId('delete', f.uid);
+    await requestBillingDeletion(db, f.uid, f.customerId);
+    await f.run(id);
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const account = db.doc(`${BILLING_ACCOUNTS}/${f.uid}`);
+    expect((await ref.get()).get('state')).toBe('done');
+    expect((await account.get()).get('deleted')).toBe(true);
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    await requestBillingDeletion(db, f.uid);
+    expect((await ref.get()).get('state')).toBe('pending');
+    await f.run(id, 1);
+    expect((await ref.get()).exists).toBe(false);
+    expect((await account.get()).exists).toBe(false);
+  });
+  it('fences webhook projection when deletion begins during the API request', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    f.stripe.subscriptions.retrieve.mockImplementationOnce(async () => {
+      await db.doc(`userDeletionTombstones/${f.uid}`).set({}); await db.recursiveDelete(db.doc(`customers/${f.uid}`)); return f.sub;
+    });
+    await f.run((await admitBillingEvent(db, f.event()))!);
+    expect((await db.doc(`customers/${f.uid}/subscriptions/${f.sub.id}`).get()).exists).toBe(false);
+  });
+  it('fences checkout results and clears all operational descendants after deletion during checkout', async () => {
+    const f = await fixture(); const create = f.stripe.checkout.sessions.create.getMockImplementation()!;
+    f.stripe.checkout.sessions.create.mockImplementationOnce(async (...args) => {
+      const session = await create(...args);
+      await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+      await requestBillingDeletion(db, f.uid);
+      await db.recursiveDelete(db.doc(`customers/${f.uid}`));
+      return session;
+    });
+    await f.run((await f.admit())!);
+    await f.run(billingId('delete', f.uid));
+    expect((await f.ref.get()).exists).toBe(false);
+    expect((await db.collection(BILLING_JOBS).where('uid', '==', f.uid).get()).empty).toBe(true);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).listCollections()).length).toBe(0);
+  });
+  it('does not dispatch or record failures for a queued retry after customer-document deletion', async () => {
+    const f = await fixture(); const id = (await f.admit())!;
+    await requestBillingDeletion(db, f.uid);
+    const transport = { enqueue: vi.fn(), exists: vi.fn() };
+    await dispatchBillingJob(db, id, transport, true);
+    await f.run(id);
+    expect(transport.enqueue).not.toHaveBeenCalled(); expect(transport.exists).not.toHaveBeenCalled();
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+  });
+  it('does not record a terminal failure if deletion starts while Stripe fails', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    f.stripe.subscriptions.retrieve.mockImplementationOnce(async () => {
+      await requestBillingDeletion(db, f.uid); throw new Error('provider failure after deletion');
+    });
+    const id = (await admitBillingEvent(db, f.event()))!;
+    await db.doc(`${BILLING_JOBS}/${id}`).update({ attempts: PROVIDER_MAX_RETRY_COUNT - 1 });
+    await f.run(id);
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).exists).toBe(false);
+  });
+  it('covers the provider retry budget and commits a terminal failure only at exhaustion', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    f.stripe.subscriptions.retrieve.mockRejectedValue(new Error('PRIVATE provider response'));
+    const id = (await admitBillingEvent(db, f.event()))!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ attempts: PROVIDER_MAX_RETRY_COUNT - 2 });
+    await expect(f.run(id)).rejects.toThrow(); expect((await ref.get()).get('state')).toBe('pending');
+    await f.readyRetry(id); await f.run(id);
+    expect((await ref.get()).get('attempts')).toBe(PROVIDER_MAX_RETRY_COUNT);
+    expect((await ref.get()).get('state')).toBe('failed');
+    expect(JSON.stringify((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).data())).not.toContain('PRIVATE');
+    expect(await replayBillingJob(db, id)).toBe('eligible');
+    expect((await ref.get()).get('state')).toBe('failed');
+    expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    expect((await ref.get()).get('generation')).toBe(1);
+    await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    await ref.update({ state: 'failed' });
+    expect(await replayBillingJob(db, id, true)).toBe('ineligible');
+  });
+  it('does not charge earlier transport contention against the first provider attempt', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const id = (await admitBillingEvent(db, f.event()))!;
+    vi.mocked(getBillingStripe).mockResolvedValue(f.ctx.stripe);
+    f.stripe.subscriptions.retrieve.mockRejectedValueOnce(new Error('temporary provider outage'));
+    const request = { data: { id, generation: 0 }, retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+      executionCount: PROVIDER_MAX_RETRY_COUNT, queueName: 'processStripeBillingTask', id: 'synthetic-task', scheduledTime: new Date().toISOString(), retryReason: 'UNAVAILABLE' };
+    await expect(processStripeBillingTask.run(request as any)).rejects.toThrow();
+    const job = await db.doc(`${BILLING_JOBS}/${id}`).get();
+    expect(job.get('state')).toBe('pending');
+    expect(job.get('attempts')).toBe(1);
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    await f.readyRetry(id); await processStripeBillingTask.run({ ...request, retryCount: PROVIDER_MAX_RETRY_COUNT } as any);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('done');
+    expect(f.stripe.subscriptions.retrieve).toHaveBeenCalledTimes(2);
+  });
+  it('bounds repeated enqueue failures with durable backoff, terminal records and explicit replay', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const transport = { enqueue: vi.fn().mockRejectedValue(new Error('PRIVATE dispatch response')), exists: vi.fn() };
+    await ref.update({ recoveries: PROVIDER_MAX_RETRY_COUNT - 2 });
+    await dispatchBillingJob(db, id, transport);
+    let job = await ref.get();
+    expect(job.get('state')).toBe('pending');
+    expect(job.get('recoveries')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
+    expect(job.get('dispatchRetryAt').toMillis()).toBeGreaterThan(Date.now());
+    await dispatchBillingJob(db, id, transport); // Duplicate creation delivery respects saved backoff.
+    expect(transport.enqueue).toHaveBeenCalledTimes(1);
+    await ref.update({ dispatchRetryAt: Timestamp.fromMillis(0), recoverAt: Timestamp.fromMillis(0) });
+    await dispatchBillingJob(db, id, transport, true);
+    job = await ref.get();
+    expect(job.get('state')).toBe('failed');
+    expect(job.get('attempts')).toBe(0);
+    expect(job.get('recoveries')).toBe(PROVIDER_MAX_RETRY_COUNT);
+    const failure = (await db.doc(`failed_jobs/stripe_billing_${id}`).get()).data();
+    expect(failure?.error).toBe('retry_exhausted');
+    expect(JSON.stringify(failure)).not.toContain('PRIVATE');
+    expect((await f.ref.get()).get('error.code')).toBe('retry_exhausted');
+    expect(await replayBillingJob(db, id, true)).toBe('requeued');
+    expect((await ref.get()).get('dispatchRetryAt')).toBeUndefined();
+    expect((await ref.get()).get('recoveries')).toBe(0);
+  });
+  it('bounds getTask failures without assuming that a reserved task is missing', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ dispatchedAt: Timestamp.now(), recoveries: PROVIDER_MAX_RETRY_COUNT - 1 });
+    const transport = { enqueue: vi.fn(), exists: vi.fn().mockRejectedValue(new Error('permission denied')) };
+    await dispatchBillingJob(db, id, transport, true);
+    expect(transport.enqueue).not.toHaveBeenCalled();
+    expect((await ref.get()).get('generation')).toBe(0);
+    expect((await ref.get()).get('state')).toBe('failed');
+    expect((await f.ref.get()).get('error.code')).toBe('retry_exhausted');
+  });
+  it('does not write retry failures or recreate checkout during deletion in a failed enqueue', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ recoveries: PROVIDER_MAX_RETRY_COUNT - 1 });
+    const transport = { exists: vi.fn(), enqueue: vi.fn(async () => {
+      await requestBillingDeletion(db, f.uid);
+      await db.recursiveDelete(db.doc(`customers/${f.uid}`));
+      throw new Error('ambiguous dispatch reply');
+    }) };
+    await dispatchBillingJob(db, id, transport);
+    expect((await ref.get()).get('recoveries')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    expect((await f.ref.get()).exists).toBe(false);
+  });
+  it('recovers dispatch failure with the same task identity and rotates only a verified missing reservation', async () => {
+    const f = await fixture(); const id = (await f.admit())!;
+    const transport = { enqueue: vi.fn().mockRejectedValueOnce(new Error('outage')).mockResolvedValue(undefined), exists: vi.fn().mockResolvedValue(false) };
+    await dispatchBillingJob(db, id, transport);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('dispatchedAt')).toBeUndefined();
+    await db.doc(`${BILLING_JOBS}/${id}`).update({ dispatchRetryAt: Timestamp.fromMillis(0) });
+    await dispatchBillingJob(db, id, transport);
+    expect(transport.enqueue.mock.calls.map(c => c.slice(0, 2))).toEqual([[id, 0], [id, 0]]);
+    await dispatchBillingJob(db, id, transport, true);
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('generation')).toBe(1);
+  });
+  it('uses the portal contract and enforces maintenance on the server', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    expect(await createBillingPortal(f.ctx, f.uid, 'https://quantified-self.io/subscriptions')).toEqual({ url: 'https://billing.stripe.com/p/session/synthetic' });
+    await db.doc(BILLING_CONTROL).update({ requestsEnabled: false });
+    try { await expect(createBillingPortal(f.ctx, f.uid, 'https://quantified-self.io/subscriptions')).rejects.toThrow('temporarily'); }
+    finally { await db.doc(BILLING_CONTROL).update({ requestsEnabled: true }); }
+  });
+  it('leaves extension-owned requests dormant and retains queued work while paused', async () => {
+    const f = await fixture(); const id = (await f.admit())!;
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    const dispatchTime = (await job.get()).get('dueAt').toMillis() + 1;
+    Object.assign(f.ctx, { now: () => dispatchTime });
+    await db.doc(BILLING_CONTROL).update({ owner: 'extension' });
+    try { expect(await f.admit()).toBeNull(); await f.run(id); expect(f.stripe.customers.create).not.toHaveBeenCalled(); }
+    finally { await db.doc(BILLING_CONTROL).update({ owner: 'native' }); }
+    expect((await job.get()).get('attempts')).toBe(0);
+    expect((await job.get()).get('leaseUntil')).toBeUndefined();
+    await f.run(id); expect((await f.ref.get()).get('url')).toBeTruthy();
+  });
+  it('does not consume a provider attempt before the scheduled dispatch time', async () => {
+    const f = await fixture(); const id = (await f.admit())!;
+    const job = db.doc(`${BILLING_JOBS}/${id}`);
+    const scheduledTime = Date.now() + 60_000;
+    await job.update({ dueAt: Timestamp.fromMillis(scheduledTime) });
+    let dispatchTime = scheduledTime - 60_000;
+    Object.assign(f.ctx, { now: () => dispatchTime });
+    await expect(f.run(id)).resolves.toBeUndefined();
+    expect((await job.get()).get('attempts')).toBe(0);
+    expect((await job.get()).get('dueAt').toMillis()).toBe(scheduledTime);
+    expect((await job.get()).get('generation')).toBe(1);
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+    dispatchTime = scheduledTime;
+    await f.run(id, 1);
+    expect((await job.get()).get('attempts')).toBe(1);
+    expect((await job.get()).get('state')).toBe('done');
+  });
+  it.each(['customer', 'catalog'])('durably defers %s contention once, without error logs or failure budgets', async scope => {
+    const f = await fixture();
+    const id = scope === 'customer' ? (await f.admit())! : (await admitBillingEvent(db, {
+      ...f.event(), kind: 'product', type: 'product.updated', objectId: f.product.id, customerId: null,
+    }))!;
+    const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    await ref.update({ recoveries: 3, dispatchedAt: Timestamp.now() });
+    const lease = await acquireBillingLease(db, scope === 'customer' ? `customer:${f.uid}` : 'catalog');
+    vi.mocked(getBillingStripe).mockResolvedValue(f.ctx.stripe);
+    vi.mocked(logger.warn).mockClear(); vi.mocked(logger.error).mockClear();
+    const before = Date.now();
+    try {
+      // Exercise the task entrypoint as well as simultaneous duplicate delivery.
+      await Promise.all([processStripeBillingTask.run({ data: { id, generation: 0 } } as any), f.run(id)]);
+      const deferred = (await ref.get()).data()!;
+      expect(deferred).toMatchObject({ state: 'pending', generation: 1, attempts: 0, recoveries: 3 });
+      expect(deferred.dueAt.toMillis()).toBeGreaterThanOrEqual(before + 5_000);
+      expect(deferred.dueAt.toMillis()).toBeLessThanOrEqual(Date.now() + 10_000);
+      expect(deferred.recoverAt.isEqual(deferred.dueAt)).toBe(true);
+      expect(deferred.dispatchedAt).toBeUndefined();
+      expect(deferred.lease).toBeUndefined();
+      expect((await f.ref.get()).get('error')).toBeUndefined();
+      expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+      expect(f.stripe.customers.create).not.toHaveBeenCalled();
+      expect(f.stripe.products.retrieve).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled(); expect(logger.error).not.toHaveBeenCalled();
+      const transport = { enqueue: vi.fn(), exists: vi.fn() };
+      await dispatchBillingJob(db, id, transport);
+      expect(transport.enqueue).toHaveBeenCalledExactlyOnceWith(id, 1, deferred.dueAt.toDate());
+      await f.run(id); // An old task retry cannot consume the new generation.
+      expect((await ref.get()).get('attempts')).toBe(0);
+    } finally { await releaseBillingLease(db, lease); }
+    await f.readyRetry(id); await f.run(id, 1);
+    expect((await ref.get()).data()).toMatchObject({ state: 'done', generation: 1, attempts: 1, recoveries: 3 });
+  });
+  it('preserves an active writer while a different webhook for its customer is deferred', async () => {
+    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const first = (await admitBillingEvent(db, f.event()))!, second = (await admitBillingEvent(db, f.event()))!;
+    let unblock!: () => void, started!: () => void;
+    const waiting = new Promise<void>(resolve => { unblock = resolve; });
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    f.stripe.subscriptions.retrieve.mockImplementationOnce(async () => { started(); await waiting; return f.sub; });
+    const running = f.run(first);
+    try {
+      await entered;
+      const claim = (await db.doc(`${BILLING_JOBS}/${first}`).get()).data();
+      await Promise.all([f.run(first), f.run(second)]);
+      expect((await db.doc(`${BILLING_JOBS}/${first}`).get()).data()).toEqual(claim);
+      expect((await db.doc(`${BILLING_JOBS}/${second}`).get()).data()).toMatchObject({ generation: 1, attempts: 0 });
+      expect(f.stripe.subscriptions.retrieve).toHaveBeenCalledTimes(1);
+    } finally { unblock(); await running; }
+    expect((await db.doc(`${BILLING_JOBS}/${first}`).get()).get('state')).toBe('done');
+    await f.readyRetry(second); await f.run(second, 1);
+    expect((await db.doc(`${BILLING_JOBS}/${second}`).get()).get('state')).toBe('done');
+    expect(f.stripe.subscriptions.retrieve).toHaveBeenCalledTimes(2);
+  });
+  it('keeps a short local contention retry undispatched until local recovery can deliver it', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try { await f.run(id); } finally { await releaseBillingLease(db, lease); }
+    // Keep this transport check in the future even on a slow emulator host;
+    // the contention cases above verify the actual 5–10 second delay.
+    const dueAt = Timestamp.fromMillis(Date.now() + 60_000);
+    await ref.update({ dueAt, recoverAt: dueAt });
+    vi.stubEnv('QS_BILLING_LOCAL', 'true'); vi.stubEnv('STRIPE_BILLING_KEY', 'rk_test_synthetic');
+    vi.stubEnv('GCLOUD_PROJECT', 'demo-stripe-billing-tests');
+    const localFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      expect(String(url)).toBe(`http://127.0.0.1:5001/${process.env.GCLOUD_PROJECT}/europe-west3/processStripeBillingTask`);
+      const { data } = JSON.parse(init!.body as string);
+      await f.run(data.id, data.generation);
+      return new Response(null, { status: 200 });
+    });
+    vi.mocked(logger.warn).mockClear(); vi.mocked(logger.error).mockClear();
+    try {
+      const transport = billingTransport();
+      const time = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(time);
+      try {
+        // Sending even slightly early would make the worker create an
+        // unnecessary successor generation instead of honoring its due time.
+        expect(await transport.enqueue(id, 1, new Date(time + 500))).toBe('deferred');
+      } finally { clock.mockRestore(); }
+      await dispatchBillingJob(db, id, transport);
+      const deferred = (await ref.get()).data()!;
+      expect(deferred.dispatchedAt).toBeUndefined();
+      expect(deferred.recoverAt.isEqual(dueAt)).toBe(true);
+      expect(deferred.recoveries ?? 0).toBe(0);
+      expect(localFetch).not.toHaveBeenCalled();
+      // Make only this synthetic job due, then exercise the recovery path used
+      // by the local command without changing its generation or journal.
+      await ref.update({ dueAt: Timestamp.fromMillis(0), recoverAt: Timestamp.fromMillis(0) });
+      await dispatchBillingJob(db, id, transport, true);
+      expect((await ref.get()).data()).toMatchObject({ state: 'done', generation: 1, attempts: 1 });
+      expect((await ref.get()).get('recoveries') ?? 0).toBe(0);
+      expect(localFetch).toHaveBeenCalledTimes(1);
+      expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+      expect(logger.warn).not.toHaveBeenCalled(); expect(logger.error).not.toHaveBeenCalled();
+    } finally { localFetch.mockRestore(); vi.unstubAllEnvs(); }
+  });
+  it.each(['generation', 'claim'])('fences a late local deferral against a concurrent %s change', async change => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    let concurrent: admin.firestore.DocumentData | undefined;
+    const transport = { exists: vi.fn(), enqueue: vi.fn(async () => {
+      await ref.update(change === 'generation' ? { generation: 1 } : {
+        lease: 'synthetic-active-worker', leaseUntil: Timestamp.fromMillis(Date.now() + 60_000), attempts: 1,
+      });
+      concurrent = (await ref.get()).data();
+      return 'deferred' as const;
+    }) };
+    await dispatchBillingJob(db, id, transport);
+    expect((await ref.get()).data()).toEqual(concurrent);
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+  });
+  it('preserves concurrent dispatch backoff when local delivery is deferred', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const retryAt = Timestamp.fromMillis(Date.now() + 900_000);
+    await dispatchBillingJob(db, id, { exists: vi.fn(), enqueue: vi.fn(async () => {
+      await ref.update({ dispatchRetryAt: retryAt, recoverAt: retryAt, recoveries: 2 });
+      return 'deferred' as const;
+    }) });
+    const pending = (await ref.get()).data()!;
+    expect(pending).toMatchObject({ state: 'pending', generation: 0, attempts: 0, recoveries: 2 });
+    expect(pending.dispatchRetryAt.isEqual(retryAt)).toBe(true);
+    expect(pending.recoverAt.isEqual(retryAt)).toBe(true);
+    expect(pending.dispatchedAt).toBeUndefined();
+  });
+  it.each([false, true])('keeps retry durability when the deferral write fails (committed: %s)', async committed => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    const transaction = db.runTransaction.bind(db);
+    const spy = vi.spyOn(db, 'runTransaction').mockImplementationOnce(transaction).mockImplementationOnce(async (...args) => {
+      if (committed) await transaction(...args);
+      throw new Error('synthetic lost Firestore reply');
+    });
+    try { await expect(f.run(id)).rejects.toThrow('synthetic lost Firestore reply'); }
+    finally { spy.mockRestore(); await releaseBillingLease(db, lease); }
+    expect((await ref.get()).data()).toMatchObject({ state: 'pending', generation: committed ? 1 : 0, attempts: 0 });
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+    if (committed) { await f.run(id); expect(f.stripe.customers.create).not.toHaveBeenCalled(); }
+    await f.readyRetry(id); await f.run(id, committed ? 1 : 0);
+    expect((await ref.get()).get('state')).toBe('done');
+    expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+  });
+  it('preserves provider backoff and the frozen checkout operation during contention', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const create = f.stripe.checkout.sessions.create.getMockImplementation()!;
+    f.stripe.checkout.sessions.create.mockImplementationOnce(async (...args) => { await create(...args); throw new Error('lost Stripe reply'); });
+    const failureStarted = Date.now();
+    await expect(f.run(id)).rejects.toThrow();
+    const failed = (await ref.get()).data()!;
+    expect(failed.dueAt.toMillis()).toBeGreaterThanOrEqual(failureStarted + 900_000);
+    const operation = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const frozen = (await operation.get()).data();
+    const retryAt = Timestamp.fromMillis(failed.dueAt.toMillis() + 60_000);
+    await ref.update({ recoveries: 2, dispatchRetryAt: retryAt });
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    vi.mocked(logger.warn).mockClear(); vi.mocked(logger.error).mockClear();
+    try { await f.run(id); } finally { await releaseBillingLease(db, lease); }
+    expect((await ref.get()).data()).toMatchObject({ generation: 1, attempts: 1, recoveries: 2, error: failed.error });
+    expect((await ref.get()).get('dueAt').isEqual(retryAt)).toBe(true);
+    expect((await operation.get()).data()).toEqual(frozen);
+    expect(logger.warn).not.toHaveBeenCalled(); expect(logger.error).not.toHaveBeenCalled();
+    await f.readyRetry(id); await f.run(id, 1);
+    expect(f.stripe.checkout.sessions.create.mock.calls[0]).toEqual(f.stripe.checkout.sessions.create.mock.calls[1]);
+    expect(f.sessions.size).toBe(1);
+    expect((await ref.get()).get('state')).toBe('done');
+  });
+  it('does not let an earlier dispatch completion overwrite the contention successor', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      await dispatchBillingJob(db, id, { exists: vi.fn(), enqueue: vi.fn(async () => { await f.run(id); }) });
+      expect((await ref.get()).get('generation')).toBe(1);
+      expect((await ref.get()).get('dispatchedAt')).toBeUndefined();
+      expect((await ref.get()).get('recoverAt').isEqual((await ref.get()).get('dueAt'))).toBe(true);
+    } finally { await releaseBillingLease(db, lease); }
+  });
+  it.each(['tombstone', 'missing-user', 'deleting'])('guards %s accounts during contention while retaining deletion work', async guard => {
+    const f = await fixture(); const id = (await f.admit())!;
+    if (guard === 'deleting') await requestBillingDeletion(db, f.uid, f.customerId);
+    if (guard === 'tombstone') await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    if (guard === 'missing-user') await db.recursiveDelete(db.doc(`users/${f.uid}`));
+    const deletionId = billingId('delete', f.uid);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      await f.run(id);
+      expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).exists).toBe(false);
+      await requestBillingDeletion(db, f.uid, f.customerId);
+      await f.run(deletionId);
+      expect((await db.doc(`${BILLING_JOBS}/${deletionId}`).get()).data()).toMatchObject({ state: 'pending', generation: 1, attempts: 0 });
+      expect(f.stripe.customers.create).not.toHaveBeenCalled();
+      expect(f.stripe.customers.del).not.toHaveBeenCalled();
+    } finally { await releaseBillingLease(db, lease); }
+    await f.readyRetry(deletionId); await f.run(deletionId, 1);
+    expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
+    expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+  });
+  it('does not let an expired lease release the replacement owner', async () => {
+    const lease = await acquireBillingLease(db, 'test-lock', 1);
+    const replacement = await acquireBillingLease(db, 'test-lock', Date.now());
+    await releaseBillingLease(db, lease);
+    expect((await replacement.ref.get()).get('token')).toBe(replacement.token);
+    await releaseBillingLease(db, replacement);
+  });
+});

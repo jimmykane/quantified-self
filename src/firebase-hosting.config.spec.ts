@@ -383,6 +383,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
     // File-comparison signup help also covers required account setup and the return to Compare.
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
+    // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -398,6 +399,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
+    // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
@@ -411,6 +414,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
+    // Billing help also explains maintenance and pending checkout confirmation (2026-10-23).
     // Health help also covers primary Heart rate choices, nightly HRV history, same-account daily averages, automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.
@@ -430,6 +434,7 @@ describe('Firebase Hosting configuration', () => {
     // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
     // Help also documents Poincaré pairs, flagged-point inspection and preserved adjacency.
     // Poincaré help also covers the responsive square plot and browser-supported fullscreen controls.
+    // Artifact help explains QS-specific flags and why values differ across platforms.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.

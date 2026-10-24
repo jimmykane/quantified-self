@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
-import { Firestore, collection, collectionData, doc, docData, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getDocFromServer, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
@@ -307,6 +307,7 @@ export class AppPaymentService {
             throw new Error('User must be authenticated to create a checkout session.');
         }
 
+        await this.assertBillingAvailable();
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
         await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0, canRedirect);
@@ -565,6 +566,13 @@ export class AppPaymentService {
         return session;
     }
 
+    private async assertBillingAvailable(): Promise<void> {
+        const snapshot = await getDocFromServer(doc(this.firestore, 'configuration/stripeBilling'));
+        if (snapshot.data()?.requestsEnabled !== true) {
+            throw new CheckoutStartError('Billing is temporarily unavailable. Your existing subscription continues normally. Please try again later.');
+        }
+    }
+
     private async readCheckoutSessionFromServer(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData | undefined> {
         // The full SDK's getDocFromServer can reuse a stale watch/cache result. Lite reads through REST.
         const { getFirestore, doc: liteDoc, getDoc } = await import('firebase/firestore/lite');
@@ -817,6 +825,8 @@ export class AppPaymentService {
         if (!userId) {
             throw new Error('User must be authenticated to manage subscriptions.');
         }
+        this.assertCheckoutUserStillCurrent(userId);
+        await this.assertBillingAvailable();
         this.assertCheckoutUserStillCurrent(userId);
         const returnUrl = `${this.windowService.currentDomain}/subscriptions`;
 

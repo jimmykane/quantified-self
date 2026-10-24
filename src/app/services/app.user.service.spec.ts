@@ -474,6 +474,76 @@ describe('AppUserService', () => {
         }
     });
 
+    it('times out a stalled claim lookup, ignores its late result and recovers on retry', async () => {
+        vi.useFakeTimers();
+        let resolveOldClaims!: (value: { claims: object }) => void;
+        mockAuth.currentUser.getIdTokenResult
+            .mockResolvedValueOnce({ claims: {} }) // Logging context.
+            .mockReturnValueOnce(new Promise(resolve => { resolveOldClaims = resolve; }))
+            .mockResolvedValue({ claims: { stripeRole: 'basic' } });
+        let subscription: ReturnType<typeof service.user$.subscribe> | undefined;
+        try {
+            service = TestBed.inject(AppUserService);
+            const users: Array<AppUserInterface | null> = [];
+            subscription = service.user$.subscribe(value => users.push(value));
+            await vi.advanceTimersByTimeAsync(9_999);
+            expect(users).toEqual([]);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(service.profileReadState()).toMatchObject({
+                status: 'recovering', uid: 'u1', code: 'deadline-exceeded', attempt: 1,
+            });
+            expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+            resolveOldClaims({ claims: { stripeRole: 'pro' } });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(users).toEqual([]);
+            await vi.advanceTimersByTimeAsync(750);
+            expect(users).toHaveLength(1);
+            expect(users[0]?.stripeRole).toBe('basic');
+            expect(service.profileReadState().status).toBe('ready');
+            expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+            expect(setDoc).not.toHaveBeenCalled();
+        } finally {
+            subscription?.unsubscribe();
+            vi.useRealTimers();
+        }
+    });
+
+    it('exhausts stalled claim attempts and exposes recovery without signing out', async () => {
+        vi.useFakeTimers();
+        mockAuth.currentUser.getIdTokenResult
+            .mockResolvedValueOnce({ claims: {} })
+            .mockImplementation(() => new Promise(() => {}));
+        let subscription: ReturnType<typeof service.user$.subscribe> | undefined;
+        try {
+            service = TestBed.inject(AppUserService);
+            const errors = vi.spyOn(TestBed.inject(LoggerService), 'error').mockImplementation(() => {});
+            const users: Array<AppUserInterface | null> = [];
+            subscription = service.user$.subscribe(value => users.push(value));
+            await vi.advanceTimersByTimeAsync(61_250);
+            expect(users).toEqual([null]);
+            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'deadline-exceeded' });
+            expect(mockAuth.currentUser.getIdTokenResult).toHaveBeenCalledTimes(6);
+            expect(errors).toHaveBeenCalledWith(
+                '[AppUserService] User claim loading stopped after a non-recoverable error',
+                { uid: 'u1', code: 'deadline-exceeded' },
+                expect.objectContaining({ message: 'Timed out loading account token claims.' }),
+            );
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+            expect(setDoc).not.toHaveBeenCalled();
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({ claims: {} });
+            const retry = service.retryProfileRead();
+            await vi.advanceTimersByTimeAsync(0);
+            TestBed.flushEffects();
+            await vi.advanceTimersByTimeAsync(0);
+            await expect(retry).resolves.toBe(true);
+            expect(service.profileReadState().status).toBe('ready');
+        } finally {
+            subscription?.unsubscribe();
+            vi.useRealTimers();
+        }
+    });
+
     it('should contain a non-recoverable claim read error without poisoning the user stream', async () => {
         const authStateSubject = new Subject<any>();
         (authState as any).mockReturnValue(authStateSubject);

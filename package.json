@@ -55,7 +55,10 @@
     "plugin:setup": "npm run plugin:tools && node tools/quantified-self-plugin/plugin-tool.mjs setup",
     "plugin:sync": "npm run plugin:tools && node tools/quantified-self-plugin/plugin-tool.mjs sync",
     "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --org dimitrios-kanellopoulos --project quantified-self --release $(node -p 'require(\"./package.json\").version') dist/browser --url-prefix '~/'",
-    "e2e": "ng e2e"
+    "e2e": "ng e2e",
+    "test:stripe-billing-tools": "node --test tools/stripe-billing/*.test.mjs tools/stripe-billing-monitoring/*.test.mjs",
+    "billing:local": "node tools/stripe-billing/local.mjs",
+    "billing:app": "ng serve --configuration billing-test --port 4210"
   },
   "private": true,
   "overrides": {

@@ -71,6 +71,7 @@ licenses.json
 # SSL certificates (generate locally; never commit)
 /certs
 functions/.env
+functions/.secret.billing-test.local
 src/environments/mapbox-token.local.ts
 
 # Local Quantified Self plugin configuration and generated bundle files
@@ -91,3 +92,7 @@ docs/OAuth2PKCE_2.pdf
 
 docs/garmin/
 docs/coros/
+
+# Isolated billing emulator runtime (contains test secrets)
+/.local/stripe-billing/
+/.billing-test.firebase.json

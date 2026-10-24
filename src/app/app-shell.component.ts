@@ -29,6 +29,7 @@ import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
 import { AppLocaleService } from './services/app.locale.service';
+import { AppWindowService } from './services/app.window.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -46,6 +47,7 @@ import {
 export const APP_SHELL_HEADER_HEIGHT_PX = 64;
 const APP_SHELL_BANNER_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
 const APP_SHELL_HEADER_VISIBILITY_TOGGLE_DELTA_PX = 24;
+const APP_STARTUP_TIMEOUT_MS = 15_000;
 
 @Component({
   selector: 'app-shell',
@@ -86,6 +88,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly hasBannerSignal = signal(false);
   public authState: boolean | null = null;
   private readonly showInitialLoaderSignal = signal(true);
+  public readonly startupStalled = signal(false);
+  public readonly startupReloading = signal(false);
+  private startupTimeout: ReturnType<typeof setTimeout> | null = null;
+  private startupReloadTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly renderPublicShellWhileAuthPendingSignal = signal(false);
   private readonly currentUrlSignal = signal('');
   private readonly isOnboardingRouteComputed = computed(() => this.currentUrlSignal().includes('onboarding'));
@@ -128,6 +134,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private iconService = inject(AppIconService);
   private themeService = inject(AppThemeService);
   private localeService = inject(AppLocaleService);
+  private windowService = inject(AppWindowService);
   private whatsNewService = inject(AppWhatsNewService);
   public dialog = inject(MatDialog);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
@@ -282,34 +289,42 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.showInitialLoader) {
+      this.startupTimeout = setTimeout(() => this.showStartupRecovery('timeout'), APP_STARTUP_TIMEOUT_MS);
+    }
+
     this.authService.user$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(async user => {
-        this.localeService.reconcileAccountPreference(user);
-        this.authState = !!user;
-        if (this.renderPublicShellWhileAuthPendingSignal()) {
-          this.renderPublicShellWhileAuthPendingSignal.set(false);
-        }
-        this.currentUser = user;
-        this.updateOnboardingState();
-        if (!this.initialAuthResolved) {
-          this.initialAuthResolved = true;
-          this.hideInitialLoader();
-        }
-        // Check admin status when user is authenticated
-        if (user) {
-          try {
-            this.isAdminUser = await this.userService.isAdmin();
-            this.whatsNewService.setAdminMode(this.isAdminUser);
-          } catch {
+      .subscribe({
+        next: async user => {
+          this.localeService.reconcileAccountPreference(user);
+          this.authState = !!user;
+          if (this.renderPublicShellWhileAuthPendingSignal()) {
+            this.renderPublicShellWhileAuthPendingSignal.set(false);
+          }
+          this.currentUser = user;
+          this.updateOnboardingState();
+          if (!this.initialAuthResolved) {
+            this.initialAuthResolved = true;
+            this.hideInitialLoader();
+          }
+          // Check admin status when user is authenticated
+          if (user) {
+            try {
+              this.isAdminUser = await this.userService.isAdmin();
+              this.whatsNewService.setAdminMode(this.isAdminUser);
+            } catch {
+              this.isAdminUser = false;
+              this.whatsNewService.setAdminMode(false);
+            }
+          } else {
             this.isAdminUser = false;
             this.whatsNewService.setAdminMode(false);
           }
-        } else {
-          this.isAdminUser = false;
-          this.whatsNewService.setAdminMode(false);
-        }
 
+        },
+        error: () => this.showStartupRecovery('user-stream-error'),
+        complete: () => this.showStartupRecovery('user-stream-completed'),
       });
 
     this.shellNavigationEffectsService.navigationEnd$
@@ -606,11 +621,45 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   private hideInitialLoader(): void {
+    this.clearStartupTimeouts();
+    this.startupStalled.set(false);
+    this.startupReloading.set(false);
     if (!this.showInitialLoader) {
       return;
     }
 
     this.showInitialLoader = false;
+  }
+
+  private showStartupRecovery(reason: 'timeout' | 'user-stream-error' | 'user-stream-completed'): void {
+    if (this.destroyRef.destroyed || this.initialAuthResolved || !this.showInitialLoader || this.startupStalled()) return;
+    this.clearStartupTimeouts();
+    this.startupStalled.set(true);
+    try {
+      this.logger.captureMessage('App startup stalled', {
+        level: 'warning',
+        tags: { startup_failure: reason, profile_state: this.userService.profileReadState().status },
+      });
+    } catch { /* Reporting must never block the recovery controls. */ }
+  }
+
+  public reloadStartup(): void {
+    if (!this.startupStalled() || this.startupReloading()) return;
+    this.startupReloading.set(true);
+    this.hapticsService.selection();
+    // Navigation can be cancelled by the browser; allow another explicit try.
+    this.startupReloadTimeout = setTimeout(() => {
+      this.startupReloadTimeout = null;
+      this.startupReloading.set(false);
+    }, 5_000);
+    this.windowService.windowRef.location.reload();
+  }
+
+  private clearStartupTimeouts(): void {
+    if (this.startupTimeout !== null) clearTimeout(this.startupTimeout);
+    if (this.startupReloadTimeout !== null) clearTimeout(this.startupReloadTimeout);
+    this.startupTimeout = null;
+    this.startupReloadTimeout = null;
   }
 
   private shouldUsePublicStartupState(): boolean {
@@ -642,6 +691,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearStartupTimeouts();
     this.clearThemeOverlayTimeouts();
     if (this.shellScrollSubscription) {
       this.shellScrollSubscription.unsubscribe();

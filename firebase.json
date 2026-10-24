@@ -875,8 +875,7 @@
     }
   },
   "extensions": {
-    "firestore-send-email": "firebase/firestore-send-email@0.2.10",
-    "firestore-stripe-payments": "invertase/firestore-stripe-payments@0.3.12"
+    "firestore-send-email": "firebase/firestore-send-email@0.2.10"
   },
   "remoteconfig": {
     "template": "remoteconfig.json"

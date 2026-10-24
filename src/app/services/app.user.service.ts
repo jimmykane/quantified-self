@@ -543,9 +543,17 @@ export class AppUserService implements OnDestroy {
     dbUser: AppUserInterface | null,
     readGeneration: number
   ): Observable<AppUserInterface | null> {
-    return defer(() => readGeneration === this.profileReadGeneration
-      ? from(this.mergeClaims(firebaseUser, dbUser))
-      : NEVER).pipe(
+    return defer(() => {
+      if (readGeneration !== this.profileReadGeneration) return NEVER;
+      // A promise that never settles does not reach retry/catchError. Bound
+      // each attempt, including any token refresh performed while merging.
+      return from(this.mergeClaims(firebaseUser, dbUser)).pipe(timeout({
+        first: AppUserService.profileReadServerTimeoutMs,
+        with: () => throwError(() => Object.assign(new Error('Timed out loading account token claims.'), {
+          code: 'deadline-exceeded',
+        })),
+      }));
+    }).pipe(
       retry({
         count: AppUserService.transientReadRetryCount,
         delay: (error, retryCount) => {

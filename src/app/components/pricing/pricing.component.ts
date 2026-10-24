@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,9 +15,9 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
-import { BehaviorSubject, Observable, Subscription, firstValueFrom, map, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, combineLatest, firstValueFrom, map, of, shareReplay, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
@@ -28,6 +28,7 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
 import { POLICY_CONTENT } from '../../shared/policies.content';
 import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
+import { membershipPriceId, membershipPriceIdFromReturnUrl, membershipReturnUrl, prioritizeMembershipSelection } from '../../helpers/membership-selection.helper';
 
 const FREE_PRICE_ID = 'free_price';
 
@@ -66,6 +67,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     @Output() loadingStateChange = new EventEmitter<boolean>();
 
     products$: Observable<StripeProduct[]> | null = null;
+    readonly selectedPriceId = signal<string | null>(null);
+    readonly selectionUnavailable = signal(false);
     currentRole: StripeRole | null = null;
     isLoading = false;
     loadingPriceId: string | null = null;
@@ -87,6 +90,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     private readonly haptics = inject(AppHapticsService);
     private logger = inject(LoggerService);
     private router = inject(Router);
+    private readonly route = inject(ActivatedRoute, { optional: true });
 
     constructor(
         private paymentService: AppPaymentService,
@@ -130,8 +134,17 @@ export class PricingComponent implements OnInit, OnDestroy {
             }]
         };
 
-        this.products$ = this.paymentService.getProducts().pipe(
-            map((products) => [freeProduct, ...products])
+        const selectionParams$ = this.route?.queryParamMap ?? of(this.route?.snapshot?.queryParamMap);
+        this.products$ = combineLatest([this.paymentService.getProducts(), selectionParams$]).pipe(
+            map(([products, params]) => {
+                const requestedPriceId = membershipPriceId(params?.get('priceId'))
+                    ?? membershipPriceIdFromReturnUrl(params?.get('returnUrl'));
+                const selection = prioritizeMembershipSelection([freeProduct, ...products], requestedPriceId);
+                this.selectedPriceId.set(selection.selectedPriceId);
+                this.selectionUnavailable.set(selection.selectionUnavailable);
+                return selection.products;
+            }),
+            shareReplay({ bufferSize: 1, refCount: true }),
         );
 
         // Initial load
@@ -494,18 +507,18 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
+        const priceId = typeof price === 'string' ? price : price.id;
         if (!this.authService.currentUser) {
-            this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
+            this.router.navigate(['/login'], { queryParams: { returnUrl: membershipReturnUrl(priceId) } });
             return;
         }
 
-        const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
+        const userWithRequiredPolicies = await this.getUserWithRequiredPolicies(priceId);
         if (!userWithRequiredPolicies || this.isLoading || this.destroyed) {
             return;
         }
 
         // Handle both price object and legacy string ID for backward compatibility
-        const priceId = typeof price === 'string' ? price : price.id;
         this.haptics.selection();
 
         // Double-Billing Protection:
@@ -579,8 +592,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error managing subscription:', error);
-            alert('Failed to redirect to subscription management. Please try again.');
+            this.haptics.error();
+            if (!(error instanceof CheckoutStartError)) {
+                this.logger.error('Error managing subscription:', error);
+            }
+            alert(error instanceof CheckoutStartError ? error.message : 'Failed to redirect to subscription management. Please try again.');
             this.setLoadingState(false);
         }
     }
@@ -615,8 +631,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error redirecting to plan/billing change flow:', error);
-            alert('Failed to open billing portal. Please try again.');
+            this.haptics.error();
+            if (!(error instanceof CheckoutStartError)) {
+                this.logger.error('Error redirecting to plan/billing change flow:', error);
+            }
+            alert(error instanceof CheckoutStartError ? error.message : 'Failed to open billing portal. Please try again.');
             this.setLoadingState(false);
         }
     }
@@ -697,14 +716,14 @@ export class PricingComponent implements OnInit, OnDestroy {
         return url && url.startsWith('/') ? url : '/subscriptions';
     }
 
-    private async getUserWithRequiredPolicies() {
+    private async getUserWithRequiredPolicies(selectedPriceId?: string) {
         const user = await this.getCurrentAppUser();
         if (!user) {
             if (this.isOnboarding) {
                 this.logger.log('[PricingComponent] App user is unavailable during onboarding. Staying on onboarding.');
                 return null;
             }
-            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
+            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: membershipReturnUrl(selectedPriceId) } });
             return null;
         }
 
@@ -727,7 +746,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.logger.log('[PricingComponent] Required legal policies are missing. Redirecting to onboarding.');
-        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
+        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: membershipReturnUrl(selectedPriceId) } });
         return null;
     }
 

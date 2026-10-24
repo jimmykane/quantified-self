@@ -165,6 +165,14 @@
                   "with": "src/environments/mapbox-token.local.ts"
                 }
               ]
+            },
+            "billing-test": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.billing-test.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": ""
@@ -186,6 +194,11 @@
             },
             "local-prod-functions": {
               "buildTarget": "track-tools:build:local-prod-functions"
+            },
+            "billing-test": {
+              "buildTarget": "track-tools:build:billing-test",
+              "ssl": false,
+              "prebundle": false
             }
           }
         },

@@ -5,8 +5,9 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
 import { MatCheckbox } from '@angular/material/checkbox';
+import { MatTooltip } from '@angular/material/tooltip';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataRRCoverage, DataRRArtifactPercentage, DataRRSuspectedEctopicPairCount, DataRRRMSSD, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median, DistanceUnits, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataRRCoverage, DataRRArtifactCount, DataRRArtifactPercentage, DataRRSuspectedEctopicPairCount, DataRRRMSSD, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median, DistanceUnits, EventImporterJSON, IBIStream, analyzeRRIntervals, type RRAnalysis } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { MaterialModule } from '../../modules/material.module';
@@ -17,6 +18,7 @@ import { BenchmarkRRAnalysisService } from '../../services/benchmark-rr-analysis
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import { BenchmarkRRComponent } from './benchmark-rr.component';
+import { RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
 
 function recording(name: string, raw = false) {
   const activity = EventImporterJSON.getActivityFromJSON({
@@ -135,6 +137,25 @@ describe('benchmark R–R panel', () => {
     });
     return charts.filter(chart=>!chart.isDisposed())[0];
   }
+
+  it('adds artifact context to legend and summary tooltips while preserving counts and zero values', async () => {
+    const source = recording('Strap', true);
+    source.addStat(new DataRRArtifactPercentage(0)); source.addStat(new DataRRArtifactCount(0));
+    const { fixture, host, panel, openCharts } = await render('ordinary', [source]);
+    await openCharts();
+    const artifact = fixture.debugElement.queryAll(By.directive(MatTooltip)).find(element =>
+      element.nativeElement.querySelector('dt')?.textContent === 'Artifacts')!;
+    expect(artifact.injector.get(MatTooltip).message).toBe(`0 flagged intervals. ${RR_STAT_TOOLTIPS[DataRRArtifactPercentage.type]}`);
+    expect(artifact.nativeElement.querySelector('dd').textContent).toBe('0.0 %');
+    host.querySelector<HTMLButtonElement>('.rr-summary-toggle')!.click(); fixture.detectChanges();
+    const label = fixture.debugElement.queryAll(By.directive(MatTooltip)).find(element =>
+      element.nativeElement.classList.contains('rr-metric-label') && element.nativeElement.textContent.trim() === 'Strap artifacts')!;
+    expect(label.injector.get(MatTooltip).message).toBe(RR_STAT_TOOLTIPS[DataRRArtifactPercentage.type]);
+    source.removeStat(DataRRArtifactCount.type);
+    fixture.componentRef.setInput('activities', [source]); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(panel.sourceLegends()[0].metrics.find(metric => metric.type === DataRRArtifactPercentage.type)?.tooltip)
+      .toBe(RR_STAT_TOOLTIPS[DataRRArtifactPercentage.type]);
+  });
 
   it.each([false, true])('opens only the Poincaré panel fullscreen and exits without reanalysis (prefixed: %s)', async legacy => {
     const browser = fullscreenBrowser(legacy);

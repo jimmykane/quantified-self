@@ -135,7 +135,7 @@ describe('PublicPricingComponent', () => {
         expect(loadingState.attributes['aria-live']).toBe('polite');
     });
 
-    it('routes every plan choice through login without bypassing onboarding', () => {
+    it('preserves each paid price through login while Starter keeps its free onboarding destination', () => {
         fixture.detectChanges();
         const buttons = fixture.debugElement.queryAll(By.css('button[data-plan-role]'));
 
@@ -151,9 +151,9 @@ describe('PublicPricingComponent', () => {
         }
 
         expect(router.navigate).toHaveBeenCalledTimes(4);
-        expect(router.navigate).toHaveBeenCalledWith(['/login'], {
-            queryParams: { returnUrl: '/dashboard' },
-        });
+        for (const [index, returnUrl] of ['/dashboard', '/subscriptions?priceId=price_basic_monthly', '/subscriptions?priceId=price_basic_yearly', '/subscriptions?priceId=price_pro_monthly'].entries()) {
+            expect(router.navigate).toHaveBeenNthCalledWith(index + 1, ['/login'], { queryParams: { returnUrl } });
+        }
         // The shell owns feedback after a successful route change.
         expect(haptics.selection).not.toHaveBeenCalled();
     });
@@ -274,7 +274,7 @@ describe('Public pricing navigation feedback', () => {
         ...['free_price', 'price_basic_monthly', 'price_basic_yearly', 'price_pro_monthly'].map(id => ({
             name: id,
             selector: `button[data-price-id="${id}"]`,
-            destination: '/login?returnUrl=%2Fdashboard',
+            destination: id === 'free_price' ? '/login?returnUrl=%2Fdashboard' : `/login?returnUrl=${encodeURIComponent('/subscriptions?priceId=' + id)}`,
         })),
         ...PUBLIC_PRICING_SHARED_FEATURES.map(feature => ({
             name: feature.title,

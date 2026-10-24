@@ -72,7 +72,7 @@
                     [attr.data-plan-role]="plan.role"
                     [attr.data-price-id]="price.id"
                     [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
-                    (click)="continueToMembership()">
+                    (click)="continueToMembership(price.id)">
                     {{ price.ctaLabel }}
                   </button>
                 }

@@ -75,6 +75,11 @@ describe('PublicSeoPageComponent', () => {
 
     expect(text).toContain('Step-by-step workflow');
     expect(steps.length).toBe(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps?.length);
+    expect(text).toContain('connections and cross-service sync require Pro');
+    expect(text).toContain('Preview sends nothing');
+    const proLinks = Array.from(guideFixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
+    expect(proLinks.filter(link => link.textContent?.includes('See Pro Options')).map(link => link.getAttribute('href')))
+      .toEqual(['/pricing', '/pricing']);
 
     for (const step of PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps ?? []) {
       expect(text).toContain(step);

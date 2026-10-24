@@ -637,19 +637,58 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    function validBillingUrl(url) {
+      // Loopback is accepted only by the native server's demo/emulator guard.
+      return url is string && url.size() <= 2048
+        && url.matches('^https://(beta[.])?quantified-self[.]io/.*|^http://(localhost|127[.]0[.]0[.]1):[0-9]+/.*');
+    }
+    match /configuration/stripeBilling {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /stripeBillingPrices/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /stripeBillingAccounts/{document=**} { allow read, write: if false; }
+    match /stripeBillingJobs/{document=**} { allow read, write: if false; }
+    match /stripeBillingLocks/{document=**} { allow read, write: if false; }
+
     match /customers/{userID} {
       allow read: if request.auth.uid == userID;
       
       match /checkout_sessions/{id} {
         allow read: if request.auth.uid == userID;
         allow delete: if mayWriteAccount(userID);
-        // The app buys an existing price. Inline items let callers define their
-        // own product role or price, which the extension trusts for entitlements.
-        allow create, update: if mayWriteAccount(userID)
-          && !request.resource.data.keys().hasAny(['line_items']);
+        function validCheckout() {
+          let data = request.resource.data;
+          let control = get(/databases/$(database)/documents/configuration/stripeBilling).data;
+          let price = get(/databases/$(database)/documents/stripeBillingPrices/$(data.price)).data;
+          let tombstone = /databases/$(database)/documents/userDeletionTombstones/$(userID);
+          return control.requestsEnabled == true
+            && exists(/databases/$(database)/documents/users/$(userID))
+            && (!exists(tombstone) || (get(tombstone).data.get('expireAt', null) is timestamp
+              && get(tombstone).data.expireAt <= request.time))
+            && data.keys().hasOnly(['price', 'mode', 'success_url', 'cancel_url',
+              'allow_promotion_codes', 'automatic_tax', 'metadata', 'payment_method_collection', 'trial_period_days'])
+            && data.price is string && data.price.matches('^price_[a-zA-Z0-9]+$')
+            && price.active == true && data.mode == price.mode
+            && get(/databases/$(database)/documents/products/$(price.product)).data.active == true
+            && data.allow_promotion_codes == true && data.automatic_tax == {'enabled': true}
+            && data.metadata == {'firebaseUID': userID}
+            && data.get('payment_method_collection', 'if_required') == 'if_required'
+            && (!('trial_period_days' in data) || (data.mode == 'subscription'
+              && data.trial_period_days is int && data.trial_period_days > 0
+              && data.trial_period_days == price.trialDays))
+            && validBillingUrl(data.success_url) && validBillingUrl(data.cancel_url);
+        }
+        // Immutable requests: price, trial and server results cannot be replaced.
+        allow create: if request.auth != null && request.auth.uid == userID && validCheckout();
+        allow update: if false;
       }
       match /subscriptions/{id} {
         allow read: if request.auth.uid == userID;
+        match /invoices/{invoiceId} { allow read: if request.auth.uid == userID; }
       }
       match /payments/{id} {
         allow read: if request.auth.uid == userID;

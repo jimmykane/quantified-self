@@ -211,7 +211,7 @@ export class AppFunctionsService {
             connectFunctionsEmulator(
                 functions,
                 AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_HOST,
-                AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_PORT,
+                environment.firebase?.projectId === 'demo-stripe-billing' ? 5101 : AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_PORT,
             );
         }
 

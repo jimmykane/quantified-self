@@ -166,7 +166,9 @@ export function buildSubscriptionGiftInvariantVersion(subscription: Stripe.Subsc
     return hashVersion('iv1', {
         subscriptionId: subscription.id,
         cancellation: subscription.cancel_at_period_end,
-        cancelAt: requireUnixSeconds(subscription.cancel_at),
+        // Stripe populates cancel_at for ordinary end-of-period cancellation,
+        // and moves that derived date when gifted trial time extends the period.
+        cancelAt: isPeriodEndCancellation(subscription) ? null : requireUnixSeconds(subscription.cancel_at),
         schedule: objectId(subscription.schedule),
         pendingUpdate: subscription.pending_update || null,
         billingMode: subscription.billing_mode?.type || null,
@@ -283,7 +285,7 @@ export function buildCurrentSubscriptionGiftState(
             'Paused subscriptions are not eligible.',
         );
     }
-    if (subscription.cancel_at !== null && subscription.cancel_at !== undefined) {
+    if (subscription.cancel_at !== null && subscription.cancel_at !== undefined && !isPeriodEndCancellation(subscription)) {
         throw new SubscriptionGiftEligibilityError(
             'custom-cancellation',
             'Subscriptions with a custom cancellation date require manual review.',
@@ -313,6 +315,11 @@ export function buildCurrentSubscriptionGiftState(
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
         invariantVersion: buildSubscriptionGiftInvariantVersion(subscription),
     };
+}
+
+function isPeriodEndCancellation(subscription: Stripe.Subscription): boolean {
+    return subscription.cancel_at_period_end === true && subscription.items.data.length > 0
+        && requireUnixSeconds(subscription.cancel_at) === resolveCurrentPaidPeriodEnd(subscription);
 }
 
 export function buildSubscriptionGiftMetadata(
