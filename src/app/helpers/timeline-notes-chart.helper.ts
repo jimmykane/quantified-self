@@ -13,6 +13,10 @@ export interface TimelineNoteChartContext {
   /** Private workspace owner. Omitted only for explicit synthetic previews. */
   ownerUid?: string | null;
   notes: readonly TimelineNote[];
+  /** Optional bounded current-day projection, independent of a capped chart-history scan. */
+  currentNotes?: readonly TimelineNote[];
+  /** Resolve a moving calendar window at read time, before foreground revalidation starts. */
+  reportCurrentRange?: (key: object, range: (() => TimelineNoteRange) | null) => void;
   select: (notes: readonly TimelineNote[]) => void;
   reportRange: (key: object, range: TimelineNoteRange | null) => void;
 }

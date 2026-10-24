@@ -1,6 +1,7 @@
 import { MatCheckboxChange } from '@angular/material/checkbox';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFunctionsService } from '../../services/app.functions.service';
@@ -8,10 +9,14 @@ import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { McpAuthorizationComponent } from './mcp-authorization.component';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService, type AppUserProfileReadState } from '../../services/app.user.service';
 
 describe('McpAuthorizationComponent', () => {
   const assign = vi.fn();
   const haptics = { selection: vi.fn() };
+  const navigate = vi.fn().mockResolvedValue(true);
+  const profile = signal<AppUserProfileReadState>({ status: 'ready', uid: 'test-user', profileExists: true });
   const functions = {
     call: vi.fn(),
   };
@@ -22,6 +27,7 @@ describe('McpAuthorizationComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: true });
     windowRef.navigator.userAgent = 'Mozilla/5.0 (X11; Linux x86_64)';
     functions.call.mockImplementation((name: string) => {
       if (name === 'getMcpAuthorizationRequest') {
@@ -67,8 +73,98 @@ describe('McpAuthorizationComponent', () => {
         { provide: AppWindowService, useValue: { windowRef } },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: Router, useValue: { navigate } },
+        { provide: AppAuthService, useValue: { currentUser: { uid: 'test-user' } } },
+        { provide: AppUserService, useValue: { profileReadState: profile } },
       ],
     }).compileComponents();
+  });
+
+  it('requires setup for a missing profile without granting access, then preserves the pending request', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(fixture.nativeElement.textContent).toContain('Complete your account setup before allowing access');
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    await component.approve();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+
+    const setup = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Complete account setup'))!;
+    setup.click(); await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledWith(['/onboarding'], {
+      queryParams: { returnUrl: '/mcp/authorize', request_id: 'request-1' },
+    });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('allows denial without an account profile or setup', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    const component = TestBed.createComponent(McpAuthorizationComponent).componentInstance;
+    await component.ngOnInit();
+    await component.deny();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'request-1', approved: false,
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it.each<AppUserProfileReadState>([
+    { status: 'loading', uid: 'test-user' },
+    { status: 'error', uid: 'test-user', code: 'permission-denied' },
+    { status: 'ready', uid: 'another-user', profileExists: true },
+    { status: 'ready', uid: 'another-user', profileExists: false },
+  ])('never approves or offers new-account setup from an unresolved/mismatched profile: %j', async (state) => {
+    profile.set(state);
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const allow = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Allow selected access'))!;
+    expect(allow.disabled).toBe(true);
+    await component.approve();
+    await component.completeAccountSetup();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('does not automatically approve after the account profile becomes available', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    const component = TestBed.createComponent(McpAuthorizationComponent).componentInstance;
+    await component.ngOnInit();
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: true });
+    expect(component.hasAccountProfile()).toBe(true);
+    expect(component.needsAccountSetup()).toBe(false);
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    await component.completeAccountSetup();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'request-1', approved: true, grantedScopes: component.selectedScopes(),
+    });
+  });
+
+  it('does not restart or approve an expired request while an account needs setup', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    functions.call.mockRejectedValueOnce(new Error('Request expired'));
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    await component.completeAccountSetup();
+    await component.approve();
+
+    expect(fixture.nativeElement.textContent).toContain('invalid, expired, or no longer available');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
 
   it('removes all reflection descendants when their activity parent is unchecked', () => {

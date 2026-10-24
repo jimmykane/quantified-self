@@ -418,6 +418,36 @@ supported language, and unsupported or missing locales fall back to `en-GB`, nev
 patterns. Explicit UTC, provider-offset, and saved delivery-zone semantics remain unchanged. These are
 presentation-only optimizations with no Training calculation, planning, or MCP contract impact.
 
+### Active sickness context in Today and Training
+
+`ActiveSicknessNoteComponent` registers a bounded UTC-today ± one-day window with the existing owner-scoped
+Timeline notes workspace, so the context does not depend on scrolling a chart into view. That union covers today's
+calendar date in every captured note timezone. It uses only visible `sickness` category notes whose start/end dates
+include today in their original timezone; end dates are inclusive, and ongoing notes must have started. Global and
+per-note visibility remain authoritative. Ended/future notes and text that merely mentions sickness do not qualify.
+The shared component refreshes its clock each visible minute and on foreground return, pauses while hidden, and disposes its timer, listeners and
+range registration with the view. Ownerless/public contexts render nothing and register no reads.
+Same-day minute ticks do not re-register ranges; same-owner note refreshes do not restart the clock. Unchanged active
+note lists retain their identity, and date filtering resolves today only once per captured timezone. Range requests
+coalesce with chart windows through the existing workspace; no polling request, metric listener or chart rebuild is added.
+The workspace resolves the moving current-day window at read time, so an overnight foreground return does not first
+query yesterday's window. Complete chart unions satisfy current context without another read. A capped broad history
+triggers a bounded current-window validation through the same cache/query service; partial results cannot erase known
+current evidence. A complete bounded result replaces it, and explicit edits/deletions, owner or visibility changes clear
+it immediately. Retained current projections remain capped at the existing record limit and never widen chart history.
+
+Today places one surface-free, muted Material text action below the load caption; Training places it below the sport
+navigation for every destination. The link uses the app date/number formatters, includes a count for overlapping notes,
+and opens the existing note manager through the workspace's owner-fenced selection callback, which owns its one haptic.
+It introduces no banner, icon, tinted surface or new panel. While a qualifying note is visible, only the `Fresh` caption
+changes from `Ready to train` to `Low training load`. The state, readiness score, scales, metrics and forecasts are
+unchanged; removing/ending/hiding the note restores the normal caption. No note title/details are copied into metrics.
+
+This is frontend presentation over existing private note reads, not a planning feature. MCP/Assistant tools, scopes,
+strict schemas, safe projections, consent, provider actions and bundled skills are unchanged. No new callable, Rule,
+index, migration, reparse or derived-schema change is required. Verification covers dated filtering/timezones, current
+range registration without charts, owner changes, stale clicks, disposal, Material rendering and unchanged metric models.
+
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`

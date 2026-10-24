@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal, WritableSignal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { By } from '@angular/platform-browser';
@@ -16,6 +17,7 @@ import { RR_METRICS } from '../../constants/rr-metrics';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService, AppUserProfileReadState } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -138,6 +140,7 @@ describe('ToolsComparePageComponent', () => {
   let fixture: ComponentFixture<ToolsComparePageComponent>;
   let component: ToolsComparePageComponent;
   let userSubject: BehaviorSubject<User | null>;
+  let profileReadState: WritableSignal<AppUserProfileReadState>;
   let routerNavigateSpy: ReturnType<typeof vi.spyOn>;
   let eventServiceMock: {
     deleteAllEventData: ReturnType<typeof vi.fn>;
@@ -209,6 +212,7 @@ describe('ToolsComparePageComponent', () => {
 
   beforeEach(async () => {
     userSubject = new BehaviorSubject<User | null>(null);
+    profileReadState = signal<AppUserProfileReadState>({ status: 'ready', uid: 'user-1', profileExists: true });
     authServiceMock = {
       user$: userSubject.asObservable(),
       redirectUrl: null,
@@ -348,6 +352,7 @@ describe('ToolsComparePageComponent', () => {
           provide: AppAuthService,
           useValue: authServiceMock,
         },
+        { provide: AppUserService, useValue: { profileReadState } },
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
@@ -695,6 +700,63 @@ describe('ToolsComparePageComponent', () => {
     expect(component.canCreateComparison()).toBe(false);
     expect(analyticsServiceMock.logToolCompareFileSelection).not.toHaveBeenCalled();
     expect(hapticsServiceMock.warning).toHaveBeenCalled();
+  });
+
+  it('directs a newly signed-in user with no saved profile to account setup before accepting files', async () => {
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+
+    expect(component.needsAccountSetup()).toBe(true);
+    const input = fixture.nativeElement.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    const setupButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
+      .find(button => button.textContent?.includes('Complete account setup'));
+    expect(setupButton).toBeTruthy();
+    setupButton.click();
+    await fixture.whenStable();
+
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/onboarding'], {
+      queryParams: { returnUrl: '/tools/compare' },
+    });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
+  });
+
+  it('does not upload or stage files for a missing profile even if the disabled controls are bypassed', async () => {
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
+    userSubject.next(new User('user-1'));
+    const files = [new File(['a'], 'a.fit'), new File(['b'], 'b.fit')];
+    component.onFilesSelected({ target: { files, value: 'selected' } } as unknown as Event);
+    expect(component.selectedFiles()).toEqual([]);
+
+    component.selectedFiles.set(files);
+    expect(component.canCreateComparison()).toBe(false);
+    await component.createComparison();
+
+    expect(comparisonServiceMock.validateFiles).not.toHaveBeenCalled();
+    expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/onboarding'], {
+      queryParams: { returnUrl: '/tools/compare' },
+    });
+  });
+
+  it('allows comparison creation after account setup provides a saved profile', async () => {
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
+    userSubject.next(new User('user-1'));
+    expect(component.uploadControlsDisabled()).toBe(true);
+
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: true });
+    const files = [new File(['a'], 'a.fit'), new File(['b'], 'b.fit')];
+    component.onFilesSelected({ target: { files, value: 'selected' } } as unknown as Event);
+    await component.createComparison();
+
+    expect(component.needsAccountSetup()).toBe(false);
+    expect(comparisonServiceMock.createComparison).toHaveBeenCalledWith(files, '');
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-1'], {
+      queryParams: { benchmark: '1' },
+    });
   });
 
   it('logs comparison file selection summaries without filenames', () => {

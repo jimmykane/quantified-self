@@ -1,0 +1,6 @@
+@if (hasActiveSickness()) {
+  <button mat-button type="button" class="sickness-note" (click)="open()"
+    [attr.aria-label]="'View ' + label()">
+    <span>{{ label() }}</span>
+  </button>
+}

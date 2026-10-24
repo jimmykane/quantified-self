@@ -67,6 +67,10 @@
     "environment": "angular",
     "reason": "Compiles the real sentence-only Dashboard rail to verify owner-fenced bounded reads, signal bindings, note visibility, local-day rollover and listener teardown."
   },
+  "src/app/components/timeline-notes/active-sickness-note.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared owner-only sickness context with Material buttons, signal inputs, date rollover, range registration and component teardown in TestBed."
+  },
   "src/app/components/timeline-notes/timeline-note-comparison-page.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the comparison route with real Material controls and shared header/source picker to verify signal bindings, disclosure accessibility, loading and owner fences, local selection and haptic ownership."

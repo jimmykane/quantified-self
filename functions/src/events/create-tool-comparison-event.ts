@@ -415,7 +415,9 @@ async function assertComparisonWriteAllowedForUser(userID: string): Promise<void
     userExists: deletionGuard.userExists,
     deletionInProgress: deletionGuard.deletionInProgress,
   });
-  throw new HttpStatusError(409, 'Account deletion is in progress. Please sign in again.');
+  throw new HttpStatusError(409, deletionGuard.deletionInProgress
+    ? 'Account deletion is in progress. Please sign in again.'
+    : 'Complete your account setup before creating a comparison.');
 }
 
 async function resolveUploadLimitForUser(userID: string): Promise<number | null> {

@@ -913,6 +913,14 @@ Hosting routes these paths to `mcpApi`:
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
+Firebase sign-in alone does not create a QS profile. A new user must select **Complete account setup**, accept the
+required policies and finish free or paid setup before approval is available. Free setup returns to the same local
+consent route using only its opaque `request_id`; external OAuth callbacks are never onboarding destinations. Returning
+does not approve the request, issue credentials or preserve a hidden grant: the user reviews the requested permissions
+again and explicitly approves. Denial remains available without a profile. The original ten-minute request expiry and
+backend deletion/profile fences are unchanged; an expired request must be restarted from the client. This browser-only
+handoff changes no public tools, schemas, scopes, instructions or plugin metadata, so no registered-contract promotion,
+client rescan or plugin rebuild is needed.
 Each connection separates data access from optional Training changes and lists every supported permission with an explicit
 **Granted** or **Not granted** status. Missing permissions, including scopes added since authorization, remain not granted.
 This display does not expand grants. OAuth authorization must start in the MCP client so its identity, redirect URI and

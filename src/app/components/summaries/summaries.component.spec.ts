@@ -1,6 +1,7 @@
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router, RouterModule } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
+import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -188,7 +189,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
@@ -887,7 +888,7 @@ describe('SummariesComponent', () => {
       fixture.detectChanges();
 
       expect(component.todayGreeting).toBe('Good evening, Morgan');
-      expect(vi.getTimerCount()).toBe(1);
+      expect(vi.getTimerCount()).toBe(2); // Greeting boundary and visible sickness-context clock.
     } finally {
       if (visibilityDescriptor) {
         Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
@@ -931,7 +932,7 @@ describe('SummariesComponent', () => {
     } as any;
     component.showActions = true;
     fixture.detectChanges();
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2); // Both Today clocks are disposed below.
 
     fixture.destroy();
 
@@ -1044,6 +1045,9 @@ describe('SummariesComponent', () => {
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    // Actions share the heading row, leaving the date the full content width on phones.
+    expect(dashboardHeader?.querySelector('.qs-page-header__title-row .dashboard-section-actions')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
     expect(dashboardHeader?.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
     expect(dashboardHeader?.textContent).not.toContain('Dashboard manager');
@@ -2158,6 +2162,31 @@ describe('SummariesComponent', () => {
     expect(state.querySelectorAll('.dashboard-training-state-scale > span')).toHaveLength(6);
     expect(state.querySelector('.dashboard-training-state-scale > span.active')?.getAttribute('data-tone'))
       .toBe('negative');
+  });
+
+  it('keeps active sickness discreet and owner-only, without changing the state or readiness score', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 12));
+    component.user = { uid: 'owner-user' } as SummariesComponent['user'];
+    component.dashboardTodayTrainingState = { label: 'Fresh', caption: 'Ready to train', scalePosition: 1, scaleTone: 'positive', contextText: '' };
+    const readiness = component.dashboardTodayReadiness.scoreText;
+    const service = TestBed.inject(AppTimelineNotesService);
+    vi.mocked(service.loadRange).mockResolvedValue({ notes: [{ id: 'a', category: 'sickness', title: 'Sore throat',
+      startDate: '2026-10-21', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 }], incomplete: null });
+    fixture.detectChanges(); TestBed.flushEffects();
+    await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    const state = fixture.nativeElement.querySelector('.dashboard-training-state-primary') as HTMLElement;
+    expect(state.textContent).toContain('Sickness noted');
+    expect(state.textContent).toContain('Low training load');
+    expect(state.textContent).not.toContain('Ready to train');
+    expect(component.dashboardTodayTrainingState.label).toBe('Fresh');
+    expect(component.dashboardTodayReadiness.scoreText).toBe(readiness);
+    const haptics = TestBed.inject(AppHapticsService);
+    vi.mocked(haptics.selection).mockClear();
+    state.querySelector<HTMLButtonElement>('app-active-sickness-note button')!.click();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ uid: 'owner-user' }) }));
+    component.user = { uid: 'other-user' } as SummariesComponent['user']; fixture.detectChanges();
+    expect(state.querySelector('app-active-sickness-note button')).toBeNull();
   });
 
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {

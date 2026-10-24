@@ -1,13 +1,22 @@
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { Component, signal, viewChild } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineNotesWorkspaceComponent } from './timeline-notes-workspace.component';
-import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+import { ActiveSicknessNoteComponent } from './active-sickness-note.component';
+import { AppTimelineNotesService, loadTimelineNotePages } from '../../services/app.timeline-notes.service';
+import type { TimelineNote, TimelineNoteRange } from '@shared/timeline-notes';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+@Component({ standalone: true, imports: [TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent],
+  template: '<app-timeline-notes-workspace #notes ownerUid="owner" /><app-active-sickness-note [context]="notes.context()" />' })
+class CurrentSicknessWorkspaceHost {
+  readonly workspace = viewChild.required(TimelineNotesWorkspaceComponent);
+  readonly sickness = viewChild.required(ActiveSicknessNoteComponent);
+}
 
 describe('Timeline notes workspace ownership', () => {
   const note = { id: 'a'.repeat(64), category: 'other' as const, title: 'Private', startDate: '2026-01-02', endDate: '2026-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
@@ -117,6 +126,107 @@ describe('Timeline notes workspace ownership', () => {
     expect(service.loadRange).toHaveBeenCalledWith('owner', { startDate: '2025-12-01', endDate: '2026-01-10' }, false);
     expect(component.context().notes).toEqual([note]);
     component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
+  });
+  it('coalesces the sickness context with chart reads and leaves chart context unchanged after an identical refresh', async () => {
+    clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 2, 12));
+    const fixture = TestBed.createComponent(CurrentSicknessWorkspaceHost);
+    fixture.detectChanges();
+    const workspace = fixture.componentInstance.workspace();
+    workspace.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush(); fixture.detectChanges(); await flush();
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2026-01-01', endDate: '2026-01-10' }, false);
+    const chartContext = workspace.context();
+    service.loadRange.mockClear();
+    window.dispatchEvent(new Event('focus')); await flush(); fixture.detectChanges(); await flush();
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2026-01-01', endDate: '2026-01-10' }, false);
+    expect(workspace.context()).toBe(chartContext);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('resolves today before a foreground read, without first loading yesterday or repeating the new window', async () => {
+    clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 23, 59));
+    visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const fixture = TestBed.createComponent(CurrentSicknessWorkspaceHost);
+    fixture.detectChanges(); await flush(); fixture.detectChanges(); await flush();
+    expect(service.loadRange).toHaveBeenCalledOnce(); service.loadRange.mockClear();
+    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'));
+    clock.mockReturnValue(Date.UTC(2026, 9, 25, 0, 1));
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    // Reproduce browser ordering: the workspace microtask runs before the child's clock effect.
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    fixture.detectChanges(); await flush(); fixture.detectChanges(); await flush();
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2026-10-24', endDate: '2026-10-26' }, false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('keeps a current sickness link selectable when 512 older records cap the expanded chart window', async () => {
+    clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 12));
+    const current: TimelineNote = { ...note, id: 'f'.repeat(64), category: 'sickness', startDate: '2026-10-21', endDate: '2026-10-24' };
+    const historical = Array.from({ length: 512 }, (_, index) => ({ ...note, id: index.toString(16).padStart(64, '0') }));
+    service.loadRange.mockImplementation((_uid: string, range: TimelineNoteRange) => loadTimelineNotePages(range, async (ongoing, cursor, size) => {
+      if (ongoing) return { rows: [], cursor: null };
+      const rows = [...historical, current].filter(value => value.startDate <= range.endDate && value.endDate! >= range.startDate);
+      const start = typeof cursor === 'number' ? cursor + 1 : 0;
+      return { rows: rows.slice(start, start + size).map(value => ({ id: value.id, data: value })), cursor: start + size - 2 };
+    }, () => true));
+    const fixture = TestBed.createComponent(CurrentSicknessWorkspaceHost);
+    const settle = async () => {
+      await flush(); await Promise.all(service.loadRange.mock.results.map(result => result.value));
+      fixture.detectChanges(); await flush();
+    };
+    fixture.detectChanges(); await settle(); await settle();
+    const workspace = fixture.componentInstance.workspace();
+    expect(fixture.componentInstance.sickness().hasActiveSickness()).toBe(true);
+    workspace.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-10-25' });
+    await settle(); await settle();
+    expect(workspace.incomplete()).toBe('records');
+    expect(workspace.context().notes).toHaveLength(512);
+    expect(workspace.context().currentNotes).toEqual([current]);
+    expect(fixture.componentInstance.sickness().hasActiveSickness()).toBe(true);
+    fixture.nativeElement.querySelector('app-active-sickness-note button').click();
+    expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [current] } }));
+    expect(service.loadRange).toHaveBeenCalledTimes(3); // Initial union, capped history, bounded current fallback.
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-10-23', endDate: '2026-10-25' }, false);
+  });
+  it.each(['complete', 'partial', 'error'] as const)('only removes retained current context after a complete bounded read: %s', async outcome => {
+    clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 12));
+    const current = { ...note, category: 'sickness' as const, startDate: '2026-10-21', endDate: '2026-10-24' };
+    service.loadRange.mockResolvedValueOnce({ notes: [current], incomplete: null });
+    component.context().reportCurrentRange!({}, () => ({ startDate: '2026-10-23', endDate: '2026-10-25' })); await flush();
+    service.loadRange.mockResolvedValueOnce({ notes: [], incomplete: 'records' });
+    if (outcome === 'error') service.loadRange.mockRejectedValueOnce(new Error('offline'));
+    else service.loadRange.mockResolvedValueOnce({ notes: [], incomplete: outcome === 'partial' ? 'records' : null });
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-10-25' }); await flush(); await flush();
+    expect(component.context().currentNotes).toEqual(outcome === 'complete' ? [] : [current]);
+    expect(component.error()).toBe(outcome === 'error');
+  });
+  it.each(['mutation', 'owner', 'visibility', 'unregister'] as const)('clears bounded current evidence and rejects a late fallback after %s', async change => {
+    const key = {};
+    component.context().reportCurrentRange!(key, () => ({ startDate: '2026-01-01', endDate: '2026-01-10' })); await flush();
+    expect(component.context().currentNotes).toEqual([note]);
+    let finish!: (value: unknown) => void;
+    service.loadRange.mockResolvedValueOnce({ notes: [], incomplete: 'records' });
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.context().reportRange({}, { startDate: '2025-01-01', endDate: '2026-01-10' }); await flush();
+    if (change === 'mutation') service.changes$.next();
+    if (change === 'owner') service.uid.set('someone-else');
+    if (change === 'visibility') service.showOnCharts.set(false);
+    if (change === 'unregister') component.context().reportCurrentRange!(key, null);
+    service.loadRange.mockResolvedValue({ notes: [], incomplete: null }); await flush();
+    expect(component.context().currentNotes).toEqual([]);
+    finish({ notes: [note], incomplete: null }); await flush();
+    expect(component.context().currentNotes).toEqual([]);
+  });
+  it('bounds retained current context across repeated partial results while accepting updated revisions', async () => {
+    const initial = Array.from({ length: 512 }, (_, index) => ({ ...note, id: index.toString(16).padStart(64, '0') }));
+    service.loadRange.mockResolvedValueOnce({ notes: initial, incomplete: 'records' });
+    component.context().reportCurrentRange!({}, () => ({ startDate: '2026-01-01', endDate: '2026-01-10' })); await flush();
+    const updated = { ...initial[0], showOnCharts: false, revision: 2 };
+    service.loadRange.mockResolvedValueOnce({ notes: [updated, { ...note, id: 'f'.repeat(64) }], incomplete: 'records' });
+    component.refresh(); await flush();
+    // Hidden updates replace retained evidence; extra partial pages cannot grow the bounded projection.
+    expect(component.context().currentNotes).toHaveLength(511);
+    expect(component.context().currentNotes?.some(value => value.id === updated.id)).toBe(false);
+    service.changes$.next();
+    expect(component.context().currentNotes).toEqual([]);
   });
   it('keeps existing chart annotations stable while a newly visible chart expands the union', async () => {
     const first = {}, second = {};

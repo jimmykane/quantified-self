@@ -68,6 +68,8 @@ The manager lists all notes, including future plans, newest start date first. Yo
 
 In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.
 
+Dashboard **Today** and **Training** show a small **Sickness noted** link while a visible sickness note covers today in its saved timezone, including its end day. Select it to open the note; overlapping sickness notes are grouped with a count. Ended, future and hidden notes stay out of this context. While active, a **Fresh** training state says **Low training load** instead of **Ready to train**. This is note context only: the Training state, readiness score, metrics and forecasts do not change.
+
 ### Compare before and after a note
 
 Choose a saved note on **Note comparisons**, or choose **Compare** beside a saved note in the manager or from its editor before making draft changes. Compare main-night **Sleep duration**, **Nightly HRV** and **Daily resting heart rate** around the note's **start date**. A date-range note does not compare against its end. The default is **14 days on each side**; choose **7**, **14** or **28 days**. Back returns to **Note comparisons** when opened from navigation or a direct link; comparisons opened from the manager return to that manager and its previous page. Comparing a hidden note does not turn its chart visibility on.
@@ -679,6 +681,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
 - Opening the dashboard also runs a freshness check against your latest events and requeues a rebuild automatically if snapshots are behind.
+- A temporary connection or server failure during that freshness check is retried automatically up to twice, while your available values stay visible. Retries stop if you sign out or change accounts. If the connection stays unavailable, use **Retry** once it returns.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - If a stale/building state is stuck for too long, the dashboard switches to a retryable failed state so you can trigger a rebuild immediately.
 - **Preparing your dashboard…** means your charts and stats are being prepared. **Updating your dashboard…** means newer data is being added; you can keep browsing the values already shown. The **Today** title, date, and calendar stay in place, and the short loading message returns to your greeting when the update finishes. If an update fails, use **Retry** beside the dashboard options. Recovery affects this status only when an active recovery estimate appears in Today or a Recovery tile is on your dashboard.
@@ -738,7 +741,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - If recordings cannot be loaded or change during generation, the previous report is retained. Select **Retry** to reload the current recordings and choose the comparison pair again.
 - To save a benchmark while reprocessing an activity, wait until the stored recordings finish updating. If processing fails, retry it first, then choose **Retry** in the benchmark flow to reload the completed recordings.
 - Reimporting or regenerating a comparison keeps its title, tags and previous reports. Those reports show **Regeneration required** until you rerun them against the updated recordings. If the previous pair cannot be matched safely, choose the reference and test recordings again. Shared reports and copied summaries also identify retained reports as needing regeneration.
-- The [File Comparison Tool](/tools/compare) requires sign-in before file selection, then creates one saved benchmark event from multiple FIT, GPX, TCX, JSON, or SML files and opens event details with the benchmark report flow.
+- The [File Comparison Tool](/tools/compare) requires sign-in before file selection. New users select **Complete account setup** and accept the required policies before selecting files. A paid plan is not required; **Continue to Compare** finishes free account setup and returns to the tool. The tool then creates one saved benchmark event from multiple FIT, GPX, TCX, JSON, or SML files and opens event details with the benchmark report flow.
 - Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) in a sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags for labeling firmware, sensor, route, or publication workflow groups.
 - Benchmark reports show an **At a Glance** reviewer summary with the key pair, overall agreement, GNSS, heart-rate, altitude, quality, and saved tags. The report share menu can copy that summary for review notes.
 - Reviewers can assign account-level device color preferences from saved file comparisons; colors are keyed by the base device name rather than firmware/software version and carry through activity toggles, event tables, benchmark dialogs, charts, and maps.
@@ -1692,6 +1695,8 @@ The built-in Assistant is separate: open **Examples & data access** in the Assis
 optionally enable its two Training-change choices. That starts a fresh chat; it does not require MCP-app authorization.
 
 ## MCP client access
+
+New accounts must select **Complete account setup** and accept the required policies before allowing an MCP connection. Free setup returns to the same request for review and explicit approval; it does not grant access. You can still **Deny** without completing setup. If the request expires during setup, start authorization again from your MCP client.
 
 - **Deleting plans and planned workouts:** the focused deletion preview asks whether to also remove older, uncompleted copies from connected services. Upcoming eligible copies already withdraw automatically. Review the choice before approving. This needs both Training change permissions; with a cached older catalog, refresh the client's tools after release. Deletion queues best-effort service cleanup, not instant app/watch removal. Completed activities are never deleted. Without the optional cleanup, older copies stay.
 

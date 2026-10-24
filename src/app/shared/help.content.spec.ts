@@ -159,6 +159,12 @@ describe('help.content', () => {
     expect(copy).toContain('that distance is counted once');
     expect(copy).toContain('Missing or conflicting evidence is not used to guess a correction');
   });
+  it('explains bounded dashboard freshness-check recovery without promising unavailable values', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('retried automatically up to twice, while your available values stay visible');
+    expect(copy).toContain('Retries stop if you sign out or change accounts');
+    expect(copy).toContain('If the connection stays unavailable, use **Retry** once it returns');
+  });
   it('distinguishes rejected calculations from missing inputs and explains importer metadata corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('have the required file inputs but still fail to produce a valid TSS');
@@ -981,6 +987,8 @@ describe('help.content', () => {
     for (const id of ['health', 'training-analysis']) {
       const content = HELP_SECTIONS.find(section => section.id === id)?.content;
       expect(content).toContain('## Timeline notes');
+      expect(content).toContain('small **Sickness noted** link');
+      expect(content).toContain('**Low training load** instead of **Ready to train**');
       expect(content).toContain('ongoing notes must already have started');
       expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
       expect(content).toContain('notes appear on the Highlights trend charts');
@@ -1252,6 +1260,10 @@ describe('help.content', () => {
   it('should document the ChatGPT MCP setup path and production endpoint', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
+    expect(dataAndPrivacySection?.content).toContain('**Complete account setup**');
+    expect(dataAndPrivacySection?.content).toContain('same request for review and explicit approval; it does not grant access');
+    expect(dataAndPrivacySection?.content).toContain('**Deny** without completing setup');
+    expect(dataAndPrivacySection?.content).toContain('If the request expires during setup, start authorization again');
     expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
     expect(dataAndPrivacySection?.content).toContain('Developer mode');
     expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');
@@ -2015,6 +2027,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
+    expect(gettingStartedSection?.content).toContain('**Complete account setup**');
+    expect(gettingStartedSection?.content).toContain('accept the required policies before selecting files');
+    expect(gettingStartedSection?.content).toContain('**Continue to Compare** finishes free account setup');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
     expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is in **Settings -> Charts**, below **Line Width**');
     expect(gettingStartedSection?.content).toContain('It is off by default');

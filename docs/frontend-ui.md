@@ -644,6 +644,26 @@ Each failed subscription reports once; successful reads, cancelled reads and a r
 Error displays and user-triggered retries retain their existing behavior. This is app diagnostics only, with no
 change to Training planning semantics or MCP read/write contracts, scopes, projections or bundled workflows.
 
+## Callable freshness-check recovery
+
+`AppFunctionsService` retries only `ensureDerivedMetrics` after SDK `internal`, `unavailable` or
+`deadline-exceeded` failures, accepting both prefixed and unprefixed codes. A lost browser response does not prove
+the server failed; the existing freshness probe/coordinator coalesces already queued work, so replaying this check
+is safe. Other callable actions retain their existing retry behavior.
+
+There are at most two transport retries, delayed by one and two seconds. That budget is shared across the existing
+single App Check verification retry, rather than restarting after a token refresh. Authentication, permission,
+validation, quota and unclassified errors do not trigger transport retries. Capture the Firebase Auth user object
+before asynchronous work and recheck it before each dispatch, alongside the caller's existing cancellation guard.
+Sign-out, an account switch or a new sign-in to the same account stops an older request; tokens and user identifiers
+are not added to requests or telemetry. A recovered check is silent; exhausted recovery preserves the final rejection
+for existing retry notifications and redacted diagnostics. Background retries produce no haptic feedback.
+
+This is frontend callable transport recovery only. It changes no metric calculations, stored values, Firestore
+listener policies, Training planning/provider actions, backend queue lifecycle or MCP contracts. Verification covers
+backoff timing, bounded attempts, combined App Check recovery, account/view cancellation, permanent failures,
+non-replay of other actions and existing diagnostics, plus derived-metric/dashboard consumer tests.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
@@ -1351,7 +1371,10 @@ commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
-At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for the metric plot; page scrolling exposes the complete chart and date axis. Shorter cards still fill their row, including Sleep. Desktop grids retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
+At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for scalar metric plots. Sleep overview grows with its own stats and averages, reserving at least 220px for its canvas, legend and axes through the scoped `--sleep-trend-plot-min-height` variable. Its canvas uses size containment so a previous ECharts resize cannot inflate the next flex layout. Page scrolling exposes the complete chart and date axis; shorter cards still fill their row. Desktop grids, picker previews, 42px thumbnails and Health overview cards retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
+
+Sleep retains ECharts label-collision protection even when a wide 14-day view initially offers every date. A later
+resize can hide colliding labels without waiting for a data/theme update; recorded bars and values remain unchanged.
 
 Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.
 

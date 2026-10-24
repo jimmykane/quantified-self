@@ -158,6 +158,7 @@
     "src/app/helpers/suunto-service-connection.helper.spec.ts",
     "src/app/helpers/timeline-note-appearance.helper.spec.ts",
     "src/app/helpers/timeline-note-comparison.helper.spec.ts",
+    "src/app/helpers/timeline-sickness-context.helper.spec.ts",
     "src/app/helpers/training-analysis.helper.spec.ts",
     "src/app/helpers/training-body-weight.helper.spec.ts",
     "src/app/helpers/training-capacity.helper.spec.ts",

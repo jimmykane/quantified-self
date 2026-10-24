@@ -346,7 +346,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
-    // Help also describes Dashboard Health range menus, newest-first activity sorting and contextual empty notices.
+    // Help also describes bounded dashboard freshness retries, Health range menus, newest-first sorting and empty notices.
     // Help also documents the collapsed R-R chart panel, overlaid recordings and legend labels for unavailable beats.
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
@@ -357,7 +357,9 @@ describe('Firebase Hosting configuration', () => {
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
     // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    // File-comparison signup help also covers required account setup and the return to Compare.
+    // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -410,7 +412,7 @@ describe('Firebase Hosting configuration', () => {
     // Pool swims default to Duration and disable the Distance chart axis.
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

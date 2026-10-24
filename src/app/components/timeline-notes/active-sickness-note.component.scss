@@ -1,0 +1,17 @@
+:host { display: block; }
+.sickness-note {
+  --mat-button-text-label-text-color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  padding-inline: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 40px;
+  white-space: normal;
+  text-align: start;
+  justify-content: flex-start;
+}
+.sickness-note span {
+  text-decoration: underline;
+  text-decoration-color: var(--mat-sys-outline-variant);
+  text-underline-offset: 3px;
+}
