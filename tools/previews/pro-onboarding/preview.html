@@ -1,0 +1,86 @@
+<mat-toolbar class="preview-toolbar">
+  <mat-icon aria-hidden="true">menu</mat-icon>
+  <mat-icon svgIcon="logo" class="preview-brand" aria-label="Quantified Self"></mat-icon>
+  <span class="preview-toolbar-spacer"></span>
+  <span class="preview-label">Mockup · Sample Pro account</span>
+  <mat-icon aria-hidden="true">account_circle</mat-icon>
+</mat-toolbar>
+
+<div class="settings-container">
+  <main class="settings-content services-content">
+    <header class="services-page-header">
+      <h1>Connections</h1>
+      <p>MCP access is free. Provider connections, imports, and sync are available with Pro.</p>
+    </header>
+
+    <section class="activation-guide" aria-labelledby="activation-title">
+      <div class="activation-heading">
+        <div>
+          <p class="activation-eyebrow">Get started with Pro</p>
+          <h2 id="activation-title">{{ ready() ? 'Your activities are ready to explore' : connected() ? 'Your history is on its way' : 'Bring your training into one place' }}</h2>
+          <p class="activation-description">{{ ready() ? 'Open your Dashboard, choose an activity, and explore the details behind it.' : connected() ? 'Your selected history imports in the background. You can keep using the app.' : 'Connect your activity provider, choose the history to bring in, then explore your training.' }}</p>
+        </div>
+        @if (ready()) {
+          <button mat-flat-button class="qs-mat-primary" (click)="previewDashboard()">Open Dashboard <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+        }
+      </div>
+      <ol class="activation-steps" aria-label="Pro setup progress">
+        @for (step of steps; track step; let index = $index) {
+          <li [class.activation-step--current]="activeStep() === index" [class.activation-step--complete]="activeStep() > index" [attr.aria-current]="activeStep() === index ? 'step' : null">
+            <mat-icon aria-hidden="true">{{ activeStep() > index ? 'check_circle' : activeStep() === index ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+            <span>{{ step }}</span>
+          </li>
+        }
+      </ol>
+      @if (state() === 'importing') {
+        <div class="activation-import-state" role="status">
+          <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+          <p>Importing your selected history. You can close this page.</p>
+        </div>
+      }
+    </section>
+
+    <h2 class="activation-next-title">{{ ready() ? 'Your connection' : connected() ? 'Connected provider' : 'Choose your provider' }}</h2>
+    <mat-button-toggle-group class="provider-selector provider-selector--desktop" [value]="selectedProvider()" hideSingleSelectionIndicator aria-label="Connection categories" (change)="selectProvider($event.value)">
+      @for (item of providers; track item.id) {
+        <mat-button-toggle [value]="item.id" [aria-label]="item.label">
+          <span class="provider-selector__option">
+            <app-service-source-icon [sourceServiceName]="item.id" [iconWidth]="72" [iconHeight]="24" [showTooltip]="false"></app-service-source-icon>
+            <span class="provider-selector__name">{{ item.label }}</span>
+          </span>
+        </mat-button-toggle>
+      }
+      <mat-button-toggle value="mcp" disabled><span class="provider-selector__option"><mat-icon>devices</mat-icon><span class="provider-selector__name">MCP</span></span></mat-button-toggle>
+    </mat-button-toggle-group>
+    <mat-button-toggle-group class="provider-selector provider-selector--mobile" [value]="selectedProvider()" hideSingleSelectionIndicator aria-label="Connection categories" (change)="selectProvider($event.value)">
+      @for (item of providers; track item.id) {
+        <mat-button-toggle [value]="item.id">{{ item.icon === 'garmin' ? 'Garmin' : item.icon === 'suunto' ? 'Suunto' : item.label }}</mat-button-toggle>
+      }
+      <mat-button-toggle value="mcp" disabled>MCP</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <app-service-connection-status [serviceLabel]="provider().label" [providerIcon]="provider().icon" [connected]="connected()" [compact]="true"
+      [description]="connected() ? 'New activities import automatically while this service is connected.' : 'Connect your account to bring new activities into Quantified Self automatically.'">
+      <div connection-actions>
+        @if (!connected()) {
+          <button mat-flat-button class="qs-mat-primary" (click)="previewConnection()"><mat-icon>link</mat-icon>Connect {{ provider().icon === 'garmin' ? 'Garmin' : provider().label }}</button>
+        }
+      </div>
+    </app-service-connection-status>
+
+    @if (!connected()) {
+      <section class="activation-history" aria-label="History import options">
+        <app-connection-history-option [service]="selectedProvider()" [checked]="historyChecked()" [range]="historyRange()" (checkedChange)="historyChecked.set($event)" (rangeChange)="historyRange.set($event)"></app-connection-history-option>
+        <p class="activation-permission-note"><mat-icon aria-hidden="true">verified_user</mat-icon>You review permissions with your provider before the connection is created.</p>
+      </section>
+    } @else if (ready()) {
+      <div class="activation-complete"><mat-icon aria-hidden="true">check_circle</mat-icon><div><strong>Selected activity history imported</strong><p>New activities will continue to arrive automatically while connected.</p></div></div>
+      <mat-divider></mat-divider>
+      <section class="activation-optional">
+        <div><h2>Want to sync with another service?</h2><p>Connect another supported provider when you are ready. Delivery stays your choice.</p></div>
+        <button mat-stroked-button (click)="selectProvider(providers[1].id)">Add a connection <mat-icon iconPositionEnd>add_link</mat-icon></button>
+      </section>
+    }
+    @if (notice()) { <p class="activation-notice" role="status">{{ notice() }}</p> }
+  </main>
+</div>
