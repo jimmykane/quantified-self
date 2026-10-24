@@ -97,7 +97,10 @@ Firestore transaction, before account lookup or provider work. Active contention
 cooldown keeps `permission-denied` and the exact ISO next-allowed timestamp. The 30-minute lease exceeds the
 300-second callable timeout. Shared COROS/Suunto wrappers preserve trusted admission errors and lifecycle retry
 responses; generic database errors with matching code strings must remain observable failures. Missing COROS
-credentials at admission retain `unauthenticated` reconnect guidance. The lease owner and connection generation
+credentials at admission retain `unauthenticated` reconnect guidance. Manual imports also normalize typed token
+lookup/refresh and active-account deletion/disconnect refusals, including inactive credentials, before callable error handling;
+Suunto's one forced refresh follows the same rule. Automatic coordinator error handling stays separate.
+The lease owner and connection generation
 are checked before provider requests, in every queue/history-metadata transaction (including empty windows),
 and before returning success. COROS additionally
 fences the captured token-root credential generation and pending disconnect state. Expiry or replacement cannot

@@ -157,6 +157,8 @@ refusals retain their callable codes through COROS/Suunto wrappers without ERROR
 failures remain observable through existing callable diagnostics; committed earlier batches retain their normal queue backlog,
 dispatch, retry and newly committed DLQ signals. No metric/filter/threshold, queue, probe, scheduler or activation
 change is needed. A lease/cooldown or successful scan is not evidence that workers completed ingestion.
+Typed deletion/disconnect refusals raised during manual token lookup or refresh are lifecycle stops too; they return
+callable precondition responses without ERROR import logs. The automatic coordinator keeps its existing retry policy.
 
 Suunto/COROS automatic connection-history activity batches can promptly dispatch their own bounded children using
 the same guarded workout path with a 60-second history-only spread. Scheduled recovery and manual bulk history

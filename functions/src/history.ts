@@ -9,7 +9,7 @@ import * as admin from 'firebase-admin';
 import { activityHistoryNextAllowedAt } from '../../shared/history-import.constants';
 import { isServiceUnavailableForSyncConnection } from '../../shared/service-connection';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
-import { getTokenData } from './tokens';
+import { getTokenData, TokenRefreshSkippedForDeletedUserError, TokenUseSkippedForPendingDisconnectError } from './tokens';
 import * as requestPromise from './request-helper';
 import { config } from './config';
 import { generateIDFromParts } from './utils';
@@ -43,6 +43,7 @@ import {
 } from './shared/user-deletion-guard';
 import { getActiveRevisionProcessingLease } from './queue/revision-processing-lease';
 import { toSuuntoAuthorizationHeader } from './suunto/authorization-header';
+import { ProviderPendingDisconnectError } from './shared/provider-pending-disconnect-error';
 
 const BATCH_SIZE = 450;
 const SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT = 1_000_000;
@@ -278,7 +279,20 @@ export async function withActivityHistoryImportReservation<T>(
     return { owner, connectionStateGeneration: meta?.connectionStateGeneration, corosCredentialGeneration };
   });
   try {
-    const result = await operation((startDate, endDate, options = {}) => addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options, lease));
+    const result = await operation(async (startDate, endDate, options = {}) => {
+      try {
+        return await addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options, lease);
+      } catch (error) {
+        // Token lookup/refresh has its own lifecycle guards. Normalize only
+        // those trusted refusals before the manual callable handles failures.
+        if (error instanceof TokenRefreshSkippedForDeletedUserError) {
+          throw new HistoryImportSkippedForDeletedUserError(userID, 'manual_token_resolution');
+        }
+        if (error instanceof TokenUseSkippedForPendingDisconnectError
+          || error instanceof ProviderPendingDisconnectError) throw new HistoryLifecycleChangedError();
+        throw error;
+      }
+    });
     await assertManualHistoryImportCurrent(userID, serviceName, lease);
     return result;
   }

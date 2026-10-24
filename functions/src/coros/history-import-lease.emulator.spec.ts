@@ -17,7 +17,7 @@ vi.mock('firebase-functions/v1', async () => {
   return { https: { HttpsError }, runWith: () => ({ region: () => ({ https: { onCall: (handler: unknown) => handler } }) }) };
 });
 vi.mock('../request-helper', () => ({ get: mocks.providerGet }));
-vi.mock('../tokens', () => ({ getTokenData: mocks.tokenData }));
+vi.mock('../tokens', async importOriginal => ({ ...await importOriginal<typeof import('../tokens')>(), getTokenData: mocks.tokenData }));
 vi.mock('../utils', () => ({ hasProAccess: mocks.hasProAccess, PRO_REQUIRED_MESSAGE: 'Pro required.' }));
 vi.mock('../OAuth2', () => ({ getServiceConfig: () => ({ tokenCollectionName: 'COROSAPIAccessTokens' }) }));
 vi.mock('../service-connection-meta', () => ({
@@ -41,6 +41,7 @@ import * as logger from 'firebase-functions/logger';
 import { addCOROSAPIHistoryToQueue } from './history-to-queue';
 import { withActivityHistoryImportReservation } from '../history';
 import { HistoryLifecycleChangedError } from '../connection-history/execution';
+import { TokenRefreshSkippedForDeletedUserError, TokenUseSkippedForPendingDisconnectError } from '../tokens';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 
 const service = ServiceNames.COROSAPI;
@@ -145,6 +146,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS manual history leas
     } finally { provider.resolve(response()); }
     expect((await result).stats.successCount).toBe(1);
     expect((await queue().get()).size).toBe(1);
+  });
+
+  it.each(['deletion', 'disconnect', 'credential'] as const)('keeps token-resolution %s refusal callable-safe without an ERROR log', async reason => {
+    mocks.tokenData.mockImplementationOnce(async () => {
+      if (reason === 'deletion') {
+        await mocks.db.doc('userDeletionTombstones/owner').set({});
+        throw new TokenRefreshSkippedForDeletedUserError('owner', service, 'account-owner', 'before_return');
+      }
+      await root().update(reason === 'disconnect'
+        ? { disconnectOperationGeneration: 'disconnect' } : { activeOAuthCredentialGeneration: 'replacement' });
+      throw new TokenUseSkippedForPendingDisconnectError('owner', service, 'account-owner', 'before_return',
+        reason === 'disconnect' ? 'service_disconnect' : 'inactive_oauth_credential');
+    });
+    await expect(call()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(mocks.providerGet).not.toHaveBeenCalled();
+    expect((await queue().get()).empty).toBe(true);
+    expect((await meta().get()).data()).not.toHaveProperty('didLastHistoryImport');
+    if (reason !== 'deletion') expect((await meta().get()).data()).not.toHaveProperty('historyImportLeaseOwner');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the account recheck after token resolution free of ERROR logs when disconnect starts', async () => {
+    mocks.tokenData.mockImplementationOnce(async (snapshot: DocumentSnapshot) => {
+      await meta().update({ connectionState: 'disconnect_pending' });
+      return snapshot.data();
+    });
+    await expect(call()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(mocks.providerGet).not.toHaveBeenCalled();
+    expect((await queue().get()).empty).toBe(true);
+    expect((await meta().get()).data()).not.toHaveProperty('didLastHistoryImport');
+    expect((await meta().get()).data()).not.toHaveProperty('historyImportLeaseOwner');
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('reports a generic already-exists transaction failure instead of treating it as normal contention', async () => {

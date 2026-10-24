@@ -37,6 +37,9 @@ deletion returns `failed-precondition`. These trusted admission errors remain ca
 COROS/Suunto wrappers, including the exact cooldown deadline. Expired or superseded imports return
 `failed-precondition` with retry guidance. A generic database error carrying an `already-exists` code remains an
 observable failure; only typed callable contention receives normal **Import already running** treatment.
+The manual reservation also translates typed deletion/disconnect refusals from token lookup, refresh or the active-account
+recheck, including inactive credential generations, before the callable classifies failures. These refusals stop provider reads and
+queue/history writes without producing an internal-error response or an ERROR import log.
 
 The owner, finite future expiry and captured connection generation fence provider reads, every queue/metadata
 commit and successful finalization. The captured COROS token-root credential generation and pending disconnect
@@ -53,7 +56,8 @@ its separate coordinator reservations and execution fences.
 Regression coverage includes real Firestore concurrent calls for equal/different ranges, independent users,
 cooldown/lease ordering, expiry/takeover, owner-only cleanup, stale reads/writes/finalization, account/credential
 replacement, legacy absent generations, ordinary token refresh, disconnect/deletion races, callable error contracts,
-provider/queue failures and partial/empty windows. The suite is registered once in the isolated `mcp-data` emulator
+token-resolution refusals, provider/queue failures and partial/empty windows. The suite is registered once in the
+isolated `mcp-data` emulator
 group; existing frontend tests cover COROS lease reopen/removal/expiry and
 silent expected contention. Monitoring is **covered/unchanged** by the existing import bundle: contention and stale
 admission are not worker failures, while committed queued work retains normal backlog/retry/DLQ coverage.

@@ -6,6 +6,7 @@ import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
 import * as logger from 'firebase-functions/logger';
+import { ProviderPendingDisconnectError } from './shared/provider-pending-disconnect-error';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoisted mocks (Vitest requirement)
@@ -71,7 +72,8 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-vi.mock('./tokens', () => ({
+vi.mock('./tokens', async importOriginal => ({
+    ...await importOriginal<typeof import('./tokens')>(),
     getTokenData: vi.fn().mockResolvedValue({ accessToken: 'testToken', userName: 'testUser' })
 }));
 
@@ -356,6 +358,16 @@ describe('history', () => {
         expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => typeof data.historyImportLeaseOwner === 'string')).toHaveLength(1);
     });
 
+    function expectOnlyHistoryLeaseWrites() {
+        expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
+            expect.objectContaining({
+                historyImportLeaseOwner: expect.any(String),
+                historyImportLeaseExpiresAt: expect.any(Number),
+            }),
+            expect.objectContaining({ historyImportLeaseOwner: expect.anything() }),
+        ]);
+    }
+
     describe('manual history lease fencing', () => {
         function useMetadata(meta: Record<string, unknown>) {
             hoisted.runTransactionMock.mockImplementation(async runner => runner({
@@ -367,6 +379,38 @@ describe('history', () => {
                 }),
             }));
         }
+
+        it.each([
+            [ServiceNames.COROSAPI, false, 'deletion'],
+            [ServiceNames.COROSAPI, false, 'disconnect'],
+            [ServiceNames.SuuntoApp, false, 'deletion'],
+            [ServiceNames.SuuntoApp, false, 'disconnect'],
+            [ServiceNames.SuuntoApp, true, 'deletion'],
+            [ServiceNames.SuuntoApp, true, 'disconnect'],
+        ] as const)('keeps %s token lifecycle refusal callable-safe (forced refresh: %s, reason: %s)', async (service, forcedRefresh, reason) => {
+            const error = reason === 'deletion'
+                ? new tokens.TokenRefreshSkippedForDeletedUserError('uid', service, 'token1', 'before_refresh')
+                : new tokens.TokenUseSkippedForPendingDisconnectError('uid', service, 'token1', 'before_refresh');
+            if (forcedRefresh) {
+                vi.mocked(tokens.getTokenData).mockResolvedValueOnce({ accessToken: 'testToken', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+                vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            }
+            vi.mocked(tokens.getTokenData).mockRejectedValueOnce(error);
+
+            await expect(history.addHistoryToQueue('uid', service, new Date(), new Date()))
+                .rejects.toBeInstanceOf(reason === 'deletion' ? history.HistoryImportSkippedForDeletedUserError : HistoryLifecycleChangedError);
+            expect(requestHelper.get).toHaveBeenCalledTimes(forcedRefresh ? 1 : 0);
+            expectOnlyHistoryLeaseWrites();
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('keeps the active-account disconnect guard within the same manual lifecycle response', async () => {
+            hoisted.getActiveCOROSTokenSnapshot.mockRejectedValueOnce(new ProviderPendingDisconnectError('uid', ServiceNames.COROSAPI, 'active_account_lookup'));
+            await expect(history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date(), new Date()))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(requestHelper.get).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
+        });
 
         it('preserves the cooldown code and exact next-allowed date inside atomic admission', async () => {
             const lastImport = Date.now();
@@ -514,16 +558,6 @@ describe('history', () => {
             expect(hoisted.dispatchConnectionHistoryWorkoutBatch).not.toHaveBeenCalled();
         });
 
-        function expectOnlyHistoryLeaseWrites() {
-            expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
-                expect.objectContaining({
-                    historyImportLeaseOwner: expect.any(String),
-                    historyImportLeaseExpiresAt: expect.any(Number),
-                }),
-                expect.objectContaining({ historyImportLeaseOwner: expect.anything() }),
-            ]);
-        }
-
         it.each([401, 403])('refreshes the same Suunto token once after history HTTP %s', async statusCode => {
             vi.mocked(tokens.getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
@@ -619,8 +653,8 @@ describe('history', () => {
             expectOnlyHistoryLeaseWrites();
         });
 
-        it('propagates a disconnect-blocked history refresh without another provider read', async () => {
-            const error = Object.assign(new Error('disconnect pending'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+        it('preserves an untrusted refresh failure named like a disconnect refusal without another provider read', async () => {
+            const error = Object.assign(new Error('Synthetic token failure'), { name: 'TokenUseSkippedForPendingDisconnectError' });
             vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
             vi.mocked(tokens.getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
