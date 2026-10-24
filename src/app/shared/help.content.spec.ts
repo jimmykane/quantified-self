@@ -22,6 +22,8 @@ describe('help.content', () => {
     expect(copy).toContain('[Plans & Billing](/help#plans-and-billing)');
     expect(copy).toContain('[Getting Started](/help#getting-started)');
     expect(copy).toContain('Help topic cards are shareable links');
+    expect(copy).toContain('Continue to Connections');
+    expect(copy).toContain('Opening setup does not connect a provider or enable automatic sync');
   });
 
   it('explains the QS artifact definition and limits of comparisons with other apps', () => {
