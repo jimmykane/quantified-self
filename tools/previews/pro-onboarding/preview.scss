@@ -1,0 +1,36 @@
+:host { display: block; min-height: 100dvh; background: var(--mat-sys-surface); }
+.preview-toolbar { gap: 24px; border-bottom: 1px solid var(--mat-sys-outline-variant); background: var(--mat-sys-surface); }
+.preview-brand { width: 40px; height: 28px; }
+.preview-toolbar-spacer { flex: 1; }
+.preview-label { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.activation-guide { padding-block: 8px 24px; margin-bottom: 24px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.activation-heading { display: flex; align-items: center; gap: 24px; justify-content: space-between; }
+.activation-heading > div { min-width: 0; }
+.activation-heading button { flex: 0 0 auto; }
+.activation-eyebrow { margin: 0 0 8px; color: var(--mat-sys-primary); font: var(--mat-sys-label-large); }
+.activation-heading h2 { margin: 0 0 8px; font: var(--mat-sys-title-large); font-weight: 650; }
+.activation-description { margin: 0; max-width: 42rem; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.activation-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; gap: 20px; margin: 24px 0 0; padding: 0; }
+.activation-steps li { display: flex; align-items: center; gap: 8px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.activation-steps mat-icon { flex: 0 0 auto; }
+.activation-steps .activation-step--current { color: var(--mat-sys-primary); font-weight: 650; }
+.activation-steps .activation-step--complete { color: var(--qs-theme-success); }
+.activation-next-title { margin: 0 0 12px; font: var(--mat-sys-title-medium); }
+.activation-history { margin-top: 16px; }
+.activation-permission-note { display: flex; align-items: flex-start; gap: 8px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); margin: 12px 0 0; }
+.activation-permission-note mat-icon { flex: 0 0 auto; font-size: 18px; height: 18px; width: 18px; }
+.activation-import-state { margin-top: 20px; }
+.activation-import-state p, .activation-complete p, .activation-optional p { margin: 6px 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.activation-complete { display: flex; align-items: flex-start; gap: 12px; padding-block: 16px 24px; font: var(--mat-sys-body-medium); }
+.activation-complete > mat-icon { color: var(--qs-theme-success); flex: 0 0 auto; }
+.activation-optional { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 24px; }
+.activation-optional h2 { margin: 0; font: var(--mat-sys-title-medium); }
+.activation-optional button { flex: 0 0 auto; }
+.activation-notice { color: var(--mat-sys-primary); font: var(--mat-sys-body-medium); }
+@media (max-width: 640px) {
+  .preview-toolbar { gap: 16px; }
+  .preview-label { font-size: 10px; }
+  .activation-heading, .activation-optional { align-items: stretch; flex-direction: column; gap: 16px; }
+  .activation-steps { gap: 12px; grid-template-columns: minmax(0, 1fr); margin-top: 20px; }
+  .activation-guide { padding-bottom: 20px; margin-bottom: 20px; }
+}
