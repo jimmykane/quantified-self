@@ -11,6 +11,7 @@ import { AppPaymentService, StripePrice, StripeProduct } from '../../services/ap
 import { LoggerService } from '../../services/logger.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { PUBLIC_PRICING_FAQS, PUBLIC_PRICING_SHARED_FEATURES } from './public-pricing.content';
+import { membershipReturnUrl } from '../../helpers/membership-selection.helper';
 
 type PublicPlanRole = 'free' | 'basic' | 'pro';
 type RecurringInterval = 'day' | 'week' | 'month' | 'year';
@@ -103,9 +104,9 @@ export class PublicPricingComponent {
         shareReplay({ bufferSize: 1, refCount: true }),
     );
 
-    continueToMembership(): void {
+    continueToMembership(priceId?: string): void {
         void this.router.navigate(['/login'], {
-            queryParams: { returnUrl: '/dashboard' },
+            queryParams: { returnUrl: priceId ? membershipReturnUrl(priceId) : '/dashboard' },
         });
     }
 

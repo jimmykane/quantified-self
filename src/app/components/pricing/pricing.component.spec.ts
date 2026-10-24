@@ -3,11 +3,10 @@ import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService, CheckoutStartError, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { LoggerService } from '../../services/logger.service';
-import { Subject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Analytics } from 'app/firebase/analytics';
-import { Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -65,6 +64,7 @@ class MockMatDialog {
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 describe('PricingComponent', () => {
+    let routeParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
     let component: PricingComponent;
     let fixture: ComponentFixture<PricingComponent>;
     let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
@@ -81,6 +81,7 @@ describe('PricingComponent', () => {
 
 
     beforeEach(async () => {
+        routeParams = new BehaviorSubject(convertToParamMap({}));
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
         authServiceMock.currentUser = { uid: 'test-uid' };
@@ -96,6 +97,7 @@ describe('PricingComponent', () => {
                     useValue: authServiceMock
                 },
                 { provide: MatDialog, useClass: MockMatDialog },
+                { provide: ActivatedRoute, useValue: { queryParamMap: routeParams } },
                 {
                     provide: Auth,
                     useValue: {
@@ -135,6 +137,49 @@ describe('PricingComponent', () => {
         expect(haptics.selection).not.toHaveBeenCalled();
         expect(haptics.success).not.toHaveBeenCalled();
         expect(haptics.error).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { priceId: 'price_pro_yearly' },
+        { returnUrl: '/subscriptions?priceId=price_pro_yearly' },
+    ])('shows the requested billing option first for %j without starting checkout', async (params) => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const price = (id: string, interval: 'month' | 'year'): StripePrice => ({
+            id, active: true, currency: 'eur', unit_amount: interval === 'year' ? 4000 : 400,
+            description: interval, type: 'recurring', interval, interval_count: 1,
+            recurring: { interval }, trial_period_days: 14,
+        });
+        const pro: StripeProduct = {
+            id: 'prod_pro', active: true, name: 'Pro', description: 'Connected services',
+            role: 'pro', metadata: { role: 'pro' }, images: [],
+            prices: [price('price_pro_monthly', 'month'), price('price_pro_yearly', 'year')],
+        };
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([pro]));
+        const checkout = vi.spyOn(paymentService, 'appendCheckoutSession');
+        routeParams.next(convertToParamMap(params));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const cards = fixture.nativeElement.querySelectorAll('.product-card');
+        const firstPrice = cards[0].querySelector('.plan-price-section');
+        expect(cards[0].textContent).toContain('Pro');
+        expect(firstPrice.textContent).toContain('Your selection');
+        expect(firstPrice.textContent).toContain('Choose Yearly');
+        expect(fixture.nativeElement.querySelectorAll('.selected-price-note')).toHaveLength(1);
+        expect(component.selectedPriceId()).toBe('price_pro_yearly');
+        expect(checkout).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).not.toHaveBeenCalled();
+
+        routeParams.next(convertToParamMap({ priceId: 'price_retired' }));
+        fixture.detectChanges();
+
+        expect(component.selectedPriceId()).toBeNull();
+        expect(fixture.nativeElement.textContent).toContain('no longer available');
+        expect(fixture.nativeElement.querySelectorAll('.selected-price-note')).toHaveLength(0);
+        expect(checkout).not.toHaveBeenCalled();
     });
 
     it('should not attach a subscription listener after destruction during initialization', async () => {
@@ -870,7 +915,7 @@ describe('PricingComponent', () => {
 
         expect(navigateSpy).toHaveBeenCalledWith(
             ['/onboarding'],
-            { queryParams: { returnUrl: '/subscriptions' } }
+            { queryParams: { returnUrl: '/subscriptions?priceId=price_123' } }
         );
         expect(checkoutSpy).not.toHaveBeenCalled();
         expect(beginCheckoutSpy).not.toHaveBeenCalled();

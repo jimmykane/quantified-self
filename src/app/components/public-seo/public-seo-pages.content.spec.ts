@@ -383,6 +383,22 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps).toHaveLength(4);
+    const garminGuide = PUBLIC_SEO_PAGES.syncGarminToSuunto;
+    expect(garminGuide.actions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
+    expect(garminGuide.closingActions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
+    expect(garminGuide.accessNote).toContain('require Pro');
+    expect(garminGuide.accessNote).toContain('eligible trial before checkout');
+    const garminGuideCopy = JSON.stringify(garminGuide);
+    expect(garminGuideCopy).toContain('Send past activities');
+    expect(garminGuideCopy).toContain('Preview sends nothing');
+    expect(garminGuideCopy).toContain('latest rolling five years');
+    expect(garminGuideCopy).toContain('Retained FIT activities only');
+    expect(garminGuideCopy).toContain('Scheduling complete confirms queueing, not delivery');
+    expect(garminGuideCopy).toContain('Scheduled and Could not schedule');
+    expect(garminGuideCopy).toContain('check Suunto for the delivered workout');
+    expect(garminGuideCopy).not.toContain('delivery result in Services');
+    expect(garminGuideCopy).toContain('Garmin does not need to remain connected');
+    expect(garminGuideCopy).not.toContain('Sync past activities');
 
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('How to sync Wahoo activities to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.description).toContain('Wahoo FIT activities');
