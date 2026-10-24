@@ -1,6 +1,6 @@
 import { AfterViewInit, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
 import { MatButtonModule } from '@angular/material/button';
@@ -48,10 +48,15 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private router = inject(Router);
+    private route = inject(ActivatedRoute);
     private _formBuilder = inject(FormBuilder);
     private logger = inject(LoggerService);
     private analyticsService = inject(AppAnalyticsService);
     private destroyRef = inject(DestroyRef);
+    // Only the comparison signup flow opts into returning somewhere other than Dashboard.
+    readonly completionPath = this.route.snapshot.queryParamMap.get('returnUrl') === '/tools/compare'
+        ? '/tools/compare' : '/dashboard';
+    readonly completionLabel = this.completionPath === '/tools/compare' ? 'Compare' : 'Dashboard';
 
     ngOnInit() {
         // Log onboarding start
@@ -235,7 +240,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             // A recovered existing account may still be on /onboarding. Leave
             // without rewriting its profile or repeating completion analytics.
             if ((this.user as AppUserInterface).onboardingCompleted === true) {
-                await this.router.navigate(['/dashboard']);
+                await this.router.navigate([this.completionPath]);
                 return;
             }
             // Implicit Free Tier Selection:
@@ -255,9 +260,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             // Log onboarding completion
             this.analyticsService.logEvent('tutorial_complete');
 
-            // Navigate to dashboard. The OnboardingGuard will now allow this.
-            this.logger.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');
-            this.router.navigate(['/dashboard']);
+            await this.router.navigate([this.completionPath]);
         } catch (error) {
             this.logger.error('Error completing onboarding:', error);
         } finally {

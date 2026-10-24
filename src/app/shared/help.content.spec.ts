@@ -2023,6 +2023,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
+    expect(gettingStartedSection?.content).toContain('**Complete account setup**');
+    expect(gettingStartedSection?.content).toContain('accept the required policies before selecting files');
+    expect(gettingStartedSection?.content).toContain('**Continue to Compare** finishes free account setup');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
     expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is in **Settings -> Charts**, below **Line Width**');
     expect(gettingStartedSection?.content).toContain('It is off by default');

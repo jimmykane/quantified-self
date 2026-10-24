@@ -82,7 +82,7 @@
                     <div class="qs-form-actions onboarding-actions">
                         <button mat-stroked-button type="button" class="qs-mat-primary" matStepperPrevious [disabled]="isLoading || isPricingLoading">Back</button>
                         <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="isLoading || isPricingLoading" (click)="finishOnboarding()">Continue to
-                            Dashboard</button>
+                            {{ completionLabel }}</button>
                     </div>
                 </div>
             </mat-step>

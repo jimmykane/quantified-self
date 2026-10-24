@@ -45,6 +45,7 @@ import { RR_METRICS } from '../../constants/rr-metrics';
 import { buildRRStatSummary, formatBenchmarkRRValue } from '../../helpers/benchmark-rr.helper';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService } from '../../services/app.user.service';
 import { ActivityTypeIconComponent } from '../activity-type-icon/activity-type-icon.component';
 import type { ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { DataTypeIconComponent } from '../data-type-icon/data-type-icon.component';
@@ -261,6 +262,7 @@ export class ToolsComparePageComponent implements OnInit {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private authService = inject(AppAuthService);
+  private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
   private eventService = inject(AppEventService);
   private comparisonService = inject(AppToolsComparisonService);
@@ -372,7 +374,15 @@ export class ToolsComparePageComponent implements OnInit {
     this.firebaseSignedIn()
     || !!this.currentUser(),
   );
-  readonly uploadControlsDisabled = computed(() => this.isCreating() || this.isSignedInProfileLoading());
+  readonly needsAccountSetup = computed(() => {
+    const profile = this.userService.profileReadState();
+    return profile.status === 'ready'
+      && profile.uid === this.currentUser()?.uid
+      && !profile.profileExists;
+  });
+  readonly uploadControlsDisabled = computed(() =>
+    this.isCreating() || this.isSignedInProfileLoading() || this.needsAccountSetup(),
+  );
   readonly isSavedComparisonsLoading = computed(() => this.isSignedInProfileLoading() || this.isLoadingComparisons());
 
   readonly selectedFileItems = computed<SelectedFileItem[]>(() =>
@@ -397,7 +407,7 @@ export class ToolsComparePageComponent implements OnInit {
 
   readonly canCreateComparison = computed(() =>
     !!this.currentUser()
-    && !this.isCreating()
+    && !this.uploadControlsDisabled()
     && this.selectedFiles().length >= 2
     && !this.validationMessage(),
   );
@@ -912,6 +922,11 @@ export class ToolsComparePageComponent implements OnInit {
     const user = this.currentUser();
     if (!user) {
       await this.signIn('/tools/compare', 'guest_create');
+      return;
+    }
+
+    if (this.needsAccountSetup()) {
+      await this.completeAccountSetup();
       return;
     }
 
@@ -1596,6 +1611,14 @@ export class ToolsComparePageComponent implements OnInit {
     }
   }
 
+  async completeAccountSetup(): Promise<void> {
+    if (!this.needsAccountSetup()) {
+      return;
+    }
+    this.hapticsService.selection();
+    await this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/tools/compare' } });
+  }
+
   async signIn(redirectUrl = '/tools/compare', source: ToolCompareSignInSource = 'guest_cta'): Promise<void> {
     this.hapticsService.selection();
     this.analyticsService.logToolCompareSignIn(source, redirectUrl === '/tools/compare/saved' ? 'saved' : 'compare');
@@ -1943,7 +1966,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private addFiles(files: File[]): ToolCompareFileSelectionAnalytics | null {
-    if (this.isCreating() || !this.currentUser() || !files.length) {
+    if (this.uploadControlsDisabled() || !this.currentUser() || !files.length) {
       return null;
     }
 
