@@ -1045,6 +1045,9 @@ describe('SummariesComponent', () => {
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    // Actions share the heading row, leaving the date the full content width on phones.
+    expect(dashboardHeader?.querySelector('.qs-page-header__title-row .dashboard-section-actions')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
     expect(dashboardHeader?.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
     expect(dashboardHeader?.textContent).not.toContain('Dashboard manager');

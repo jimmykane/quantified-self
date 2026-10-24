@@ -10,6 +10,21 @@ let clockSpy: ReturnType<typeof vi.spyOn>;
 let visibilitySpy: ReturnType<typeof vi.spyOn>;
 afterEach(() => { TestBed.resetTestingModule(); vi.useRealTimers(); clockSpy?.mockRestore(); visibilitySpy?.mockRestore(); });
 describe('Active sickness note', () => {
+  it('uses verified bounded current notes rather than partial chart history and registers a live range resolver', () => {
+    clockSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 23, 59));
+    const reportCurrentRange = vi.fn();
+    const context: TimelineNoteChartContext = { ownerUid: 'owner', notes: [], currentNotes: [note], reportCurrentRange, reportRange: vi.fn(), select: vi.fn() };
+    const fixture = TestBed.createComponent(ActiveSicknessNoteComponent);
+    fixture.componentRef.setInput('context', context); fixture.detectChanges();
+    expect(fixture.componentInstance.hasActiveSickness()).toBe(true);
+    expect(context.reportRange).not.toHaveBeenCalled();
+    const resolve = reportCurrentRange.mock.calls[0][1];
+    expect(resolve()).toEqual({ startDate: '2026-10-23', endDate: '2026-10-25' });
+    fixture.componentInstance.open(); expect(context.select).toHaveBeenCalledExactlyOnceWith([note]);
+    clockSpy.mockReturnValue(Date.UTC(2026, 9, 25, 0, 1));
+    expect(resolve()).toEqual({ startDate: '2026-10-24', endDate: '2026-10-26' });
+    fixture.destroy(); expect(reportCurrentRange).toHaveBeenLastCalledWith(fixture.componentInstance, null);
+  });
   it('renders one quiet Material action, registers today without charts and selects only current visible sickness notes', () => {
     clockSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 12));
     const context: TimelineNoteChartContext = { ownerUid: 'owner', notes: [note, { ...note, id: 'hidden', showOnCharts: false }], reportRange: vi.fn(), select: vi.fn() };
@@ -67,18 +82,20 @@ describe('Active sickness note', () => {
     fixture.destroy(); vi.runOnlyPendingTimers();
     expect(vi.getTimerCount()).toBe(0);
   });
-  it('does not re-register reads, restart its clock or replace unchanged active notes on minute ticks or same-owner refreshes', () => {
+  it.each([false, true])('does not re-register reads, restart its clock or replace unchanged active notes on minute ticks or same-owner refreshes (live range=%s)', liveRange => {
     vi.useFakeTimers(); vi.setSystemTime(Date.UTC(2026, 9, 24, 12));
     const setInterval = vi.spyOn(window, 'setInterval');
-    const context: TimelineNoteChartContext = { ownerUid: 'owner', notes: [note], reportRange: vi.fn(), select: vi.fn() };
+    const context: TimelineNoteChartContext = { ownerUid: 'owner', notes: [note], reportRange: vi.fn(), select: vi.fn(),
+      ...(liveRange ? { currentNotes: [note], reportCurrentRange: vi.fn() } : {}) };
+    const report = liveRange ? context.reportCurrentRange : context.reportRange;
     const fixture = TestBed.createComponent(ActiveSicknessNoteComponent);
     fixture.componentRef.setInput('context', context); fixture.detectChanges(); vi.advanceTimersByTime(0);
     const active = fixture.componentInstance.activeNotes();
     vi.advanceTimersByTime(60_000); fixture.detectChanges();
     expect(fixture.componentInstance.activeNotes()).toBe(active);
-    expect(context.reportRange).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('context', { ...context, notes: [note] }); fixture.detectChanges();
-    expect(context.reportRange).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledTimes(1);
     expect(setInterval).toHaveBeenCalledTimes(1);
     expect(context.select).not.toHaveBeenCalled();
     fixture.destroy(); setInterval.mockRestore();

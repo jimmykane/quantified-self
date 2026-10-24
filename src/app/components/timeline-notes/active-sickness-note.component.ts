@@ -18,14 +18,15 @@ export class ActiveSicknessNoteComponent {
   private readonly owner = computed(() => this.context()?.ownerUid ?? null);
   private readonly registration = computed(() => {
     const context = this.context();
-    return context?.ownerUid ? { owner: context.ownerUid, report: context.reportRange } : null;
-  }, { equal: (a, b) => a?.owner === b?.owner && a?.report === b?.report });
+    return context?.ownerUid ? { owner: context.ownerUid, report: context.reportRange, current: context.reportCurrentRange } : null;
+  }, { equal: (a, b) => a?.owner === b?.owner && a?.report === b?.report && a?.current === b?.current });
+  private readonly currentRange = () => currentSicknessNoteRange(Date.now());
   private readonly range = computed(() => currentSicknessNoteRange(this.now()), {
     equal: (a, b) => a.startDate === b.startDate && a.endDate === b.endDate,
   });
   readonly activeNotes = computed(() => {
     const context = this.context();
-    return context?.ownerUid ? activeSicknessNotes(context.notes, this.now()) : [];
+    return context?.ownerUid ? activeSicknessNotes(context.currentNotes ?? context.notes, this.now()) : [];
   }, { equal: (a, b) => a.length === b.length && a.every((note, index) => note === b[index]) });
   readonly hasActiveSickness = computed(() => this.activeNotes().length > 0);
   readonly label = computed(() => sicknessNoteLabel(this.activeNotes(), this.now(), this.locale));
@@ -34,8 +35,14 @@ export class ActiveSicknessNoteComponent {
     effect(onCleanup => {
       const registration = this.registration();
       if (!registration) return;
-      registration.report(this, this.range());
-      onCleanup(() => registration.report(this, null));
+      const range = this.range(); // Revalidate on a new UTC day, never on same-day minute ticks.
+      if (registration.current) {
+        registration.current(this, this.currentRange);
+        onCleanup(() => registration.current!(this, null));
+      } else {
+        registration.report(this, range);
+        onCleanup(() => registration.report(this, null));
+      }
     });
     effect(onCleanup => {
       if (!this.owner() || typeof window === 'undefined') return;
@@ -67,7 +74,7 @@ export class ActiveSicknessNoteComponent {
   open(): void {
     const context = this.context();
     if (!context?.ownerUid) return;
-    const notes = activeSicknessNotes(context.notes, Date.now());
+    const notes = activeSicknessNotes(context.currentNotes ?? context.notes, Date.now());
     if (notes.length) context.select(notes);
   }
 }

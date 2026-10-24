@@ -430,6 +430,11 @@ range registration with the view. Ownerless/public contexts render nothing and r
 Same-day minute ticks do not re-register ranges; same-owner note refreshes do not restart the clock. Unchanged active
 note lists retain their identity, and date filtering resolves today only once per captured timezone. Range requests
 coalesce with chart windows through the existing workspace; no polling request, metric listener or chart rebuild is added.
+The workspace resolves the moving current-day window at read time, so an overnight foreground return does not first
+query yesterday's window. Complete chart unions satisfy current context without another read. A capped broad history
+triggers a bounded current-window validation through the same cache/query service; partial results cannot erase known
+current evidence. A complete bounded result replaces it, and explicit edits/deletions, owner or visibility changes clear
+it immediately. Retained current projections remain capped at the existing record limit and never widen chart history.
 
 Today places one surface-free, muted Material text action below the load caption; Training places it below the sport
 navigation for every destination. The link uses the app date/number formatters, includes a count for overlapping notes,
