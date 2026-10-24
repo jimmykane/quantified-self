@@ -444,7 +444,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           ...TRAINING_STATE_AXIS_LABEL,
           interval: xAxisLabelInterval,
           formatter: xAxisLabelFormatter,
-          hideOverlap: !showEveryDayLabel,
+          // ECharts must still cull collisions when a previously wide tile is resized.
+          hideOverlap: true,
         },
       },
       yAxis: hasVitalsSeries ? [sleepDurationAxis, vitalsAxis] : sleepDurationAxis,
