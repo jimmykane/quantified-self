@@ -7,7 +7,8 @@ import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, BILLING_REGION, BILLIN
 import { finishBillingJob, observeBilling } from './queue';
 
 export interface BillingTransport {
-  enqueue(id: string, generation: number, dueAt: Date): Promise<void>;
+  // Local future work stays in the outbox; it has no task reservation yet.
+  enqueue(id: string, generation: number, dueAt: Date): Promise<void | 'deferred'>;
   exists(id: string, generation: number): Promise<boolean>;
 }
 export function billingTransport(): BillingTransport {
@@ -19,12 +20,13 @@ export function billingTransport(): BillingTransport {
     if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback Functions required.');
     const url = `http://${host}/${process.env.GCLOUD_PROJECT}/${BILLING_REGION}/${BILLING_TASK}`;
     return { exists: async () => false, enqueue: async (id, generation, dueAt) => {
-      if (dueAt.getTime() > Date.now() + 1000) return; // The local recovery command owns later work.
+      if (dueAt.getTime() > Date.now()) return 'deferred'; // The local recovery command owns later work.
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json',
         'X-CloudTasks-TaskName': `${id}-${generation}`, 'X-CloudTasks-TaskRetryCount': '0',
         'X-CloudTasks-TaskExecutionCount': '1', 'X-CloudTasks-QueueName': BILLING_TASK },
       body: JSON.stringify({ data: { id, generation } }), signal: AbortSignal.timeout(310_000) });
       if (!response.ok) throw new Error('billing_local_task_failed');
+      return undefined;
     } };
   }
   const project = process.env.GCLOUD_PROJECT;
@@ -103,9 +105,10 @@ export async function dispatchBillingJob(db: Firestore, id: string, transport: B
       }
       return; // The generation-change trigger immediately dispatches the successor.
     }
+    let deferred = false;
     if (!job.dispatchedAt || !recovering) {
       if (await unavailable(db, job) || billingControl((await db.doc(BILLING_CONTROL).get()).data()).owner !== 'native') return;
-      try { await transport.enqueue(id, job.generation, job.dueAt.toDate()); }
+      try { deferred = await transport.enqueue(id, job.generation, job.dueAt.toDate()) === 'deferred'; }
       catch (error) {
         if (!duplicate(error)) throw error;
         if (!await transport.exists(id, job.generation)) {
@@ -125,6 +128,15 @@ export async function dispatchBillingJob(db: Firestore, id: string, transport: B
       const current = await tx.get(ref);
       if (!current.exists || current.get('generation') !== job.generation || current.get('state') !== 'pending') return;
       if (await unavailable(db, job, tx)) return;
+      if (deferred) {
+        if ((current.get('leaseUntil')?.toMillis() ?? 0) > Date.now()) return;
+        // Do not invent a reservation or add a lease-length delay for local
+        // work that was never sent. Recovery can deliver the same generation
+        // when due, without charging it as a missing Cloud Tasks reservation.
+        tx.update(ref, { dispatchedAt: FieldValue.delete(), recoverAt: Timestamp.fromMillis(
+          Math.max(current.get('dueAt').toMillis(), current.get('dispatchRetryAt')?.toMillis() ?? 0)) });
+        return;
+      }
       tx.update(ref, { dispatchedAt: Timestamp.now(), dispatchRetryAt: FieldValue.delete(),
         recoverAt: Timestamp.fromMillis(Math.max(Date.now(), current.get('dueAt').toMillis()) + BILLING_LEASE_MS) });
     });

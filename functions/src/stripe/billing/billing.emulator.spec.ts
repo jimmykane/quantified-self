@@ -9,7 +9,7 @@ import { Decimal } from 'stripe';
 import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, billingId, type BillingEvent } from './model';
 import { admitBillingCheckout, admitBillingEvent, processBillingJob } from './queue';
 import { acquireBillingLease, commitBillingProjections, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
-import { dispatchBillingJob } from './dispatch';
+import { billingTransport, dispatchBillingJob } from './dispatch';
 import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { getBillingStripe } from '../client';
 import { processStripeBillingTask } from './handlers';
@@ -731,6 +731,76 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     await f.readyRetry(second); await f.run(second, 1);
     expect((await db.doc(`${BILLING_JOBS}/${second}`).get()).get('state')).toBe('done');
     expect(f.stripe.subscriptions.retrieve).toHaveBeenCalledTimes(2);
+  });
+  it('keeps a short local contention retry undispatched until local recovery can deliver it', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try { await f.run(id); } finally { await releaseBillingLease(db, lease); }
+    // Keep this transport check in the future even on a slow emulator host;
+    // the contention cases above verify the actual 5–10 second delay.
+    const dueAt = Timestamp.fromMillis(Date.now() + 60_000);
+    await ref.update({ dueAt, recoverAt: dueAt });
+    vi.stubEnv('QS_BILLING_LOCAL', 'true'); vi.stubEnv('STRIPE_BILLING_KEY', 'rk_test_synthetic');
+    vi.stubEnv('GCLOUD_PROJECT', 'demo-stripe-billing-tests');
+    const localFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      expect(String(url)).toBe(`http://127.0.0.1:5001/${process.env.GCLOUD_PROJECT}/europe-west3/processStripeBillingTask`);
+      const { data } = JSON.parse(init!.body as string);
+      await f.run(data.id, data.generation);
+      return new Response(null, { status: 200 });
+    });
+    vi.mocked(logger.warn).mockClear(); vi.mocked(logger.error).mockClear();
+    try {
+      const transport = billingTransport();
+      const time = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(time);
+      try {
+        // Sending even slightly early would make the worker create an
+        // unnecessary successor generation instead of honoring its due time.
+        expect(await transport.enqueue(id, 1, new Date(time + 500))).toBe('deferred');
+      } finally { clock.mockRestore(); }
+      await dispatchBillingJob(db, id, transport);
+      const deferred = (await ref.get()).data()!;
+      expect(deferred.dispatchedAt).toBeUndefined();
+      expect(deferred.recoverAt.isEqual(dueAt)).toBe(true);
+      expect(deferred.recoveries ?? 0).toBe(0);
+      expect(localFetch).not.toHaveBeenCalled();
+      // Make only this synthetic job due, then exercise the recovery path used
+      // by the local command without changing its generation or journal.
+      await ref.update({ dueAt: Timestamp.fromMillis(0), recoverAt: Timestamp.fromMillis(0) });
+      await dispatchBillingJob(db, id, transport, true);
+      expect((await ref.get()).data()).toMatchObject({ state: 'done', generation: 1, attempts: 1 });
+      expect((await ref.get()).get('recoveries') ?? 0).toBe(0);
+      expect(localFetch).toHaveBeenCalledTimes(1);
+      expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
+      expect(logger.warn).not.toHaveBeenCalled(); expect(logger.error).not.toHaveBeenCalled();
+    } finally { localFetch.mockRestore(); vi.unstubAllEnvs(); }
+  });
+  it.each(['generation', 'claim'])('fences a late local deferral against a concurrent %s change', async change => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    let concurrent: admin.firestore.DocumentData | undefined;
+    const transport = { exists: vi.fn(), enqueue: vi.fn(async () => {
+      await ref.update(change === 'generation' ? { generation: 1 } : {
+        lease: 'synthetic-active-worker', leaseUntil: Timestamp.fromMillis(Date.now() + 60_000), attempts: 1,
+      });
+      concurrent = (await ref.get()).data();
+      return 'deferred' as const;
+    }) };
+    await dispatchBillingJob(db, id, transport);
+    expect((await ref.get()).data()).toEqual(concurrent);
+    expect(f.stripe.customers.create).not.toHaveBeenCalled();
+  });
+  it('preserves concurrent dispatch backoff when local delivery is deferred', async () => {
+    const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
+    const retryAt = Timestamp.fromMillis(Date.now() + 900_000);
+    await dispatchBillingJob(db, id, { exists: vi.fn(), enqueue: vi.fn(async () => {
+      await ref.update({ dispatchRetryAt: retryAt, recoverAt: retryAt, recoveries: 2 });
+      return 'deferred' as const;
+    }) });
+    const pending = (await ref.get()).data()!;
+    expect(pending).toMatchObject({ state: 'pending', generation: 0, attempts: 0, recoveries: 2 });
+    expect(pending.dispatchRetryAt.isEqual(retryAt)).toBe(true);
+    expect(pending.recoverAt.isEqual(retryAt)).toBe(true);
+    expect(pending.dispatchedAt).toBeUndefined();
   });
   it.each([false, true])('keeps retry durability when the deferral write fails (committed: %s)', async committed => {
     const f = await fixture(); const id = (await f.admit())!; const ref = db.doc(`${BILLING_JOBS}/${id}`);
