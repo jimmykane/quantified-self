@@ -406,6 +406,9 @@ describe('help.content', () => {
     expect(copy).toContain('fictional sample data');
     expect(copy).toContain('nothing is saved');
     expect(copy).toContain('Provider connections and history imports require Pro');
+    expect(copy).toContain("homepage's **Get Started** actions");
+    expect(copy).toContain('pricing and eligible trial offers in the membership section');
+    expect(copy).toContain('Opening pricing does not start checkout or connect a provider');
     expect(copy).toContain('jump links below its introduction');
     expect(copy).toContain('every feature section visible');
     expect(copy).not.toContain('dropdown');
