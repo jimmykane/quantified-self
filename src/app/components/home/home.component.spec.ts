@@ -75,10 +75,10 @@ describe('HomeComponent', () => {
     fixture.detectChanges();
     expect(training.querySelector('app-training-summary-cards')).toBeTruthy();
     expect(training.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
-    expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started Free');
-    expect(hero.querySelector('a[mat-flat-button]')?.getAttribute('href')).toBe('/pricing');
-    expect(hero.querySelector('a[href="/pricing"]')?.textContent).toContain('See pricing');
-    expect(hero.querySelector('a[mat-stroked-button]')?.getAttribute('href')).toBe('/login');
+    expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started');
+    expect(hero.querySelector('a[mat-flat-button]')?.getAttribute('href')).toBe('/login');
+    expect(hero.querySelector('a[href="/pricing"]')).toBeNull();
+    expect(hero.querySelector('a[mat-stroked-button]')?.getAttribute('href')).toBe('/features/training-analysis');
     expect(fixture.nativeElement.textContent).not.toMatch(/explore the demo|try the demo/i);
     expect(selection).not.toHaveBeenCalled();
   });
@@ -100,7 +100,7 @@ describe('HomeComponent', () => {
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
   });
 
-  it('puts Pro pricing beside the automation value and keeps Starter access explicit', () => {
+  it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
     expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('Pro imports new activities automatically');
     expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('supported recordings along the paths you choose');
@@ -108,19 +108,20 @@ describe('HomeComponent', () => {
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
     expect(integrations.textContent).toContain('you choose which services exchange activities');
-    expect(integrations.querySelector('.integration-actions a[href="/pricing"]')?.textContent).toContain('See pricing');
+    expect(integrations.querySelector('.integration-actions a[href="/login"]')?.textContent).toContain('Get Started');
+    expect(integrations.querySelector('a[href="/pricing"]')).toBeNull();
     expect(integrations.querySelector('.integration-actions a[href="/integrations"]')).toBeTruthy();
     expect(fixture.componentInstance.memberships.find(plan => plan.name === 'Pro')?.action).toBe('See pricing');
   });
 
   it.each([
-    { selector: '.hero-actions a[href="/pricing"]', destination: '/pricing' },
-    { selector: '.integration-actions a[href="/pricing"]', destination: '/pricing' },
+    { selector: '.hero-actions a[href="/login"]', destination: '/login' },
+    { selector: '.integration-actions a[href="/login"]', destination: '/login' },
     { selector: '.integration-actions a[href="/integrations"]', destination: '/integrations' },
     { selector: '.membership-grid mat-card:last-child a', destination: '/pricing' },
-    { selector: '.hero-actions a[href="/login"]', destination: '/login' },
+    { selector: '.hero-actions a[href="/features/training-analysis"]', destination: '/features/training-analysis' },
   ])('opens $destination from $selector with one shell-owned haptic', async ({ selector, destination }) => {
-    router.resetConfig(['', 'pricing', 'integrations', 'login'].map(path => ({ path, component: HomeDestinationStub })));
+    router.resetConfig(['', 'pricing', 'integrations', 'login', 'features/training-analysis'].map(path => ({ path, component: HomeDestinationStub })));
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     TestBed.inject(ShellNavigationEffectsService);
     await router.navigateByUrl('/');
@@ -133,16 +134,20 @@ describe('HomeComponent', () => {
     expect(selection).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps canceled Pro navigation silent', async () => {
+  it.each([
+    { selector: '.hero-actions a[href="/login"]', destination: 'login' },
+    { selector: '.integration-actions a[href="/login"]', destination: 'login' },
+    { selector: '.membership-grid mat-card:last-child a', destination: 'pricing' },
+  ])('keeps canceled navigation from $selector silent', async ({ selector, destination }) => {
     router.resetConfig([
       { path: '', component: HomeDestinationStub },
-      { path: 'pricing', component: HomeDestinationStub, canActivate: [() => false] },
+      { path: destination, component: HomeDestinationStub, canActivate: [() => false] },
     ]);
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     TestBed.inject(ShellNavigationEffectsService);
     await router.navigateByUrl('/');
 
-    fixture.nativeElement.querySelector('.hero-actions a[href="/pricing"]').click();
+    fixture.nativeElement.querySelector(selector).click();
     await fixture.whenStable();
 
     expect(router.url).toBe('/');
