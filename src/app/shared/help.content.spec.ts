@@ -16,6 +16,16 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the QS artifact definition and limits of comparisons with other apps', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('percentage of analyzed R–R intervals flagged as potential artifacts');
+    expect(copy).toContain('useful for comparing devices within QS');
+    expect(copy).toContain('different algorithms or thresholds');
+    expect(copy).toContain('artifact values are not directly comparable');
+    expect(copy).toContain('Flags are not confirmed strap errors');
+    expect(copy).toContain('a lower percentage alone does not prove that a device is more accurate');
+    expect(copy).toContain('Suspected ectopic pairs, invalid intervals and recording gaps are tracked separately');
+  });
   it('explains source updates, saved leg preferences and the retained-original boundary', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
     expect(copy).toContain('Training load override, exclusion and saved policy stay with');

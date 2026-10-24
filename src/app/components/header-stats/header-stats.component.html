@@ -75,7 +75,7 @@
   <section class="condensed">
     <mat-chip-set role="list">
       @for (stat of displayedStats; track stat) {
-      <mat-chip role="listitem" [matTooltip]="getNormalizedStatLabel(stat)" class="stat-chip" [highlighted]="false"
+      <mat-chip role="listitem" [matTooltip]="statTooltips[stat.getType()] || getNormalizedStatLabel(stat)" class="stat-chip" [highlighted]="false"
         [disableRipple]="true">
         <app-data-type-icon matChipAvatar [size]="'18px'" [vAlign]="'middle'"
           [dataType]="stat.getType()"></app-data-type-icon>

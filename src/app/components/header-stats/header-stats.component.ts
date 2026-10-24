@@ -5,6 +5,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { buildHeaderStatCards, HeaderStatCard } from '../../helpers/header-stats-composite.helper';
 import { normalizeUnitDerivedStatLabel } from '../../helpers/stat-label.helper';
 import { resolveSummaryDisplayStat } from '../../helpers/summary-display.helper';
+import { RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
 
 @Component({
   selector: 'app-header-stats',
@@ -14,6 +15,7 @@ import { resolveSummaryDisplayStat } from '../../helpers/summary-display.helper'
   standalone: false
 })
 export class HeaderStatsComponent implements OnChanges {
+  readonly statTooltips = RR_STAT_TOOLTIPS;
   @Input() statsToShow: string[];
   @Input() stats: DataInterface[] = [];
   @Input() singleValueTypes: string[] = [];

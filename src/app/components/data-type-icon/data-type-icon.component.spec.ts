@@ -105,7 +105,7 @@ import { By } from '@angular/platform-browser';
 import { MatTooltip } from '@angular/material/tooltip';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
-import { RR_METRICS } from '../../constants/rr-metrics';
+import { RR_METRICS, RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
 import { HeaderStatsComponent } from '../header-stats/header-stats.component';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 
@@ -247,6 +247,23 @@ describe('DataTypeIconComponent', () => {
     expect(host.querySelector('[data-letters]')?.getAttribute('data-letters')).toBe('UP');
     expect(fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message)
       .toBe('Unknown provider metric with a long name');
+  });
+
+  it('explains both artifact metrics in their icon tooltip and restores ordinary metric labels', async () => {
+    await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(DataTypeIconComponent);
+    for (const type of [RRMetrics.DataRRArtifactPercentage.type, RRMetrics.DataRRArtifactCount.type]) {
+      fixture.componentRef.setInput('dataType', type); fixture.detectChanges();
+      const message = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message;
+      expect(message).toBe(RR_STAT_TOOLTIPS[type]);
+      expect(message).toContain('comparisons within QS');
+      expect(message).toContain('aren’t directly comparable with other apps');
+      expect(message).toContain('aren’t confirmed strap errors');
+    }
+    for (const type of [RRMetrics.DataRRRMSSD.type, 'constructor', 'toString']) {
+      fixture.componentRef.setInput('dataType', type); fixture.detectChanges();
+      expect(fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message).toBe(type);
+    }
   });
 
   it('should return icons for newly surfaced max/min metrics', () => {

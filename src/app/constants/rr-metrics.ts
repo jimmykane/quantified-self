@@ -31,3 +31,10 @@ export const RR_METRICS = [
 
 export const RR_STAT_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
   RR_METRICS.map(metric => [metric.type, 'shortLabel' in metric ? metric.shortLabel : metric.label]));
+
+const ARTIFACT_TOOLTIP = 'Potential artifacts flagged using QS’s rules. The same rules apply to each recording for comparisons within QS, but values aren’t directly comparable with other apps. Flags aren’t confirmed strap errors.';
+
+export const RR_STAT_TOOLTIPS: Readonly<Record<string, string>> = Object.freeze(Object.assign(Object.create(null) as Record<string, string>, {
+  [DataRRArtifactPercentage.type]: ARTIFACT_TOOLTIP,
+  [DataRRArtifactCount.type]: ARTIFACT_TOOLTIP,
+}));
