@@ -4,10 +4,6 @@ Repository-owned billing replaces the `firestore-stripe-payments` extension. The
 
 ## Runtime and ownership
 
-For read-only first-payment, mature trial-conversion, and paid-retention analysis from existing Stripe
-records, see [Paid growth measurement](paid-growth-measurement.md). Invoice/subscription status and
-browser subscription events alone are not successful-payment evidence.
-
 Functions use Node 22, Stripe Node `22.4.0`, API `2026-07-29.dahlia`. Native billing endpoints run in `europe-west3`, matching the old extension. Existing claims, renewal, gift and Auth cleanup functions retain their regions. Only the existing `onSubscriptionUpdated` path reconciles claims, grace periods and subscription emails; webhook processing does not write claims. Gifts keep the isolated admin key and absolute `trial_end` behavior. New Checkout subscriptions explicitly select classic billing mode to preserve gift eligibility; the pinned Stripe API otherwise defaults to flexible billing.
 
 `configuration/stripeBilling` is server-owned. Its public fields are:
