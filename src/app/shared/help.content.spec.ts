@@ -16,12 +16,23 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the checkout handoff and recovery before another payment', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    expect(copy).toContain('checks your access for up to 20 seconds');
+    expect(copy).toContain('**Connect your devices** opens [Connections](/services)');
+    expect(copy).toContain('Opening Connections does not connect an account automatically');
+    expect(copy).toContain('**Membership still syncing**');
+    expect(copy).toContain('do not start another checkout while the result is unconfirmed');
+  });
   it('links membership and shareable getting-started and billing guides to their supported public URLs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(copy).toContain('[Membership](/pricing)');
+    expect(copy).toContain('[Garmin to Wahoo guide](/guides/sync-garmin-to-wahoo)');
     expect(copy).toContain('[Plans & Billing](/help#plans-and-billing)');
     expect(copy).toContain('[Getting Started](/help#getting-started)');
     expect(copy).toContain('Help topic cards are shareable links');
+    expect(copy).toContain('Continue to Connections');
+    expect(copy).toContain('Opening setup does not connect a provider or enable automatic sync');
   });
 
   it('explains the QS artifact definition and limits of comparisons with other apps', () => {

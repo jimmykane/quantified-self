@@ -654,6 +654,10 @@ describe('AppRoutingModule routes', () => {
         h1: 'How to sync Garmin data to Suunto automatically',
       },
       {
+        path: PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
+        h1: 'Sync Garmin activities to Wahoo',
+      },
+      {
         path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
         h1: 'How to sync COROS workouts to Suunto automatically',
       },

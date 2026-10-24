@@ -137,6 +137,15 @@ describe('onboardingGuard', () => {
         expect((result as any).toString()).toContain('/onboarding');
     });
 
+    it('keeps service setup as the destination while requiring onboarding', async () => {
+        const result = await firstValueFrom(runGuard({ uid: '123' }, [{ path: 'services' }]) as Observable<unknown>);
+
+        expect(result).not.toBe(true);
+        expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/onboarding'], {
+            queryParams: { returnUrl: '/services' },
+        });
+    });
+
     it('should allow payment success route when onboarding is incomplete', async () => {
         const user = {
             uid: '123',

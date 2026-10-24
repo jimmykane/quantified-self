@@ -66,13 +66,14 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
         const requestId = params.get('request_id') || '';
         // Keep destinations explicit; never accept an external/client OAuth callback here.
         const path = priceId ? '/subscriptions'
-            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions'
+            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions' || returnUrl === '/services'
                 ? returnUrl
                 : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
                     ? '/mcp/authorize' : '/dashboard';
         const label = path === '/tools/compare' ? 'Compare'
             : path === '/subscriptions' ? 'Subscriptions'
-                : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
+                : path === '/services' ? 'Connections'
+                    : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
         return { path, label, priceId, requestId };
     });
 
