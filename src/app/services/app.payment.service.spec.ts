@@ -10,6 +10,8 @@ import { AppFunctionsService } from './app.functions.service';
 import { LoggerService } from './logger.service';
 import { defer, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { initializeProductionAnalytics } from '../helpers/analytics-runtime.helper';
+import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 
 const { mockHttpsCallableFromURL } = vi.hoisted(() => {
     return {
@@ -98,6 +100,11 @@ const mockFunctionsService = {
     call: vi.fn().mockResolvedValue({ data: {} })
 };
 
+const productionAnalyticsEnvironment = {
+    production: true, beta: false, localhost: false, appVersion: 'test',
+    firebase: { projectId: 'quantified-self-io' },
+};
+
 describe('AppPaymentService', () => {
     let service: AppPaymentService;
     let generatedCheckoutDocSequence = 0;
@@ -113,6 +120,7 @@ describe('AppPaymentService', () => {
     beforeEach(() => {
         vi.clearAllMocks(); // Reset spies
         generatedCheckoutDocSequence = 0;
+        mockWindowService.currentDomain = 'http://localhost:4200';
         mockBillingControl.mockResolvedValue({ data: () => ({ requestsEnabled: true }) });
 
         mockAuth.currentUser = {
@@ -162,6 +170,61 @@ describe('AppPaymentService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    describe('Analytics compatibility with native billing', () => {
+        it('excludes the actual production Checkout success and cancellation return URLs from referrals', async () => {
+            mockWindowService.currentDomain = 'https://quantified-self.io';
+            await service.appendCheckoutSession('price_123', undefined, undefined, () => false);
+            const payload = mockSetDoc.mock.calls[0][1];
+
+            for (const href of [payload.success_url, payload.cancel_url]) {
+                const initialize = vi.fn();
+                initializeProductionAnalytics(productionAnalyticsEnvironment, {
+                    isBrowser: true, href, referrer: 'https://checkout.stripe.com/c/pay/synthetic',
+                }, initialize);
+
+                expect(initialize).toHaveBeenCalledExactlyOnceWith({ config: {
+                    app_name: 'quantified-self-io', app_version: 'test', debug_mode: false, ignore_referrer: true,
+                } });
+            }
+        });
+
+        it('excludes the actual return URL passed to the native portal callable from referrals', async () => {
+            mockWindowService.currentDomain = 'https://quantified-self.io';
+            // Stop this mocked request before browser navigation; no portal session is created.
+            const stopBeforeRedirect = new Error('Synthetic portal request stopped');
+            mockFunctionsService.call.mockRejectedValueOnce(stopBeforeRedirect);
+            await expect(service.manageSubscriptions()).rejects.toBe(stopBeforeRedirect);
+            expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('createPortalLink', {
+                returnUrl: 'https://quantified-self.io/subscriptions',
+            });
+            expect(FUNCTIONS_MANIFEST.createPortalLink).toEqual({ name: 'createStripePortalLink', region: 'europe-west3' });
+
+            const initialize = vi.fn();
+            initializeProductionAnalytics(productionAnalyticsEnvironment, {
+                isBrowser: true, href: mockFunctionsService.call.mock.calls[0][1].returnUrl,
+                referrer: 'https://billing.stripe.com/p/session/synthetic',
+            }, initialize);
+
+            expect(initialize).toHaveBeenCalledExactlyOnceWith({ config: {
+                app_name: 'quantified-self-io', app_version: 'test', debug_mode: false, ignore_referrer: true,
+            } });
+        });
+
+        it.each(['http://localhost:4210', 'https://beta.quantified-self.io'])('does not initialize Analytics for Checkout returns on %s', async currentDomain => {
+            mockWindowService.currentDomain = currentDomain;
+            await service.appendCheckoutSession('price_123', undefined, undefined, () => false);
+            const payload = mockSetDoc.mock.calls[0][1];
+
+            for (const href of [payload.success_url, payload.cancel_url]) {
+                const initialize = vi.fn();
+                expect(initializeProductionAnalytics(productionAnalyticsEnvironment, {
+                    isBrowser: true, href, referrer: 'https://checkout.stripe.com/c/pay/synthetic',
+                }, initialize)).toBeNull();
+                expect(initialize).not.toHaveBeenCalled();
+            }
+        });
     });
 
     it('should refresh auth and recover a permission-denied subscription listener', async () => {

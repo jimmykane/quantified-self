@@ -59,6 +59,20 @@ The policy recognizes return context for measurement only. It does not validate 
 create a checkout, change a provider callback, or send an activity. Missing/invalid referrers retain normal
 Analytics behavior; browsers may omit the referrer entirely.
 
+### Native Stripe billing compatibility
+
+Replacing the Stripe extension changes the server processor and callable ownership. The browser still
+writes Checkout requests with `/payment/success` and `/payment/cancel`, and portal requests with
+`/subscriptions`. `FUNCTIONS_MANIFEST.createPortalLink` routes the frontend's logical key to the native
+`createStripePortalLink` callable in `europe-west3`. The legacy callable alias uses the same server portal
+handler for cached clients. Neither callable name is a browser referrer or a return page.
+
+The payment-service spec passes its actual generated Checkout and portal return URLs through the
+Analytics initializer. It also verifies that local/beta Checkout returns cannot initialize Analytics even
+when the runtime is given production build flags. Billing admission/maintenance controls, webhook
+processing, and invoice/subscription projections are independent of referral filtering. Do not add
+Functions or Cloud Run domains to the referral policy as part of an extension retirement.
+
 ## GA4 administration and rollout
 
 No GA4 administrative settings are changed by this code. Windsor currently exposes reporting reads and no GA4
