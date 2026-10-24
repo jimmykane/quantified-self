@@ -5,6 +5,15 @@
   min-width: 0;
 }
 
+.selected-price-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+}
+
 .plan-action-content {
   display: flex;
   align-items: center;

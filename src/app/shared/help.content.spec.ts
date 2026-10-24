@@ -2251,6 +2251,10 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
     expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
     expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
+    expect(plansSection?.content).toContain('keeps that plan and billing option through sign-in and account setup');
+    expect(plansSection?.content).toContain('**Your selection**');
+    expect(plansSection?.content).toContain('Opening the page never starts checkout automatically');
+    expect(plansSection?.content).toContain('If the selected option is no longer available, choose a current option instead');
     expect(plansSection?.content).toContain('## Complimentary extensions');
     expect(plansSection?.content).toContain('without changing the plan, creating a charge or proration, or turning automatic renewal back on');
     expect(plansSection?.content).toContain('internal admin notes are never included');
