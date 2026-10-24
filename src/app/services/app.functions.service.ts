@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { FirebaseApp } from 'app/firebase/app';
+import { Auth } from 'app/firebase/auth';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
 import type { Functions as FirebaseFunctions } from 'firebase/functions';
 import { environment } from '../../environments/environment';
@@ -27,6 +28,7 @@ const CALLABLE_DIAGNOSTIC_CODES = new Set([
 })
 export class AppFunctionsService {
     private app = inject(FirebaseApp);
+    private readonly auth = inject(Auth);
     private appCheckReadiness = inject(AppCheckReadinessService);
     private logger = inject(LoggerService);
     private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
@@ -66,13 +68,35 @@ export class AppFunctionsService {
         }
         // A local cancellation check, never serialized or used as server authorization.
         let cancelled = false;
+        const refreshOwner = functionKey === 'ensureDerivedMetrics' ? this.auth.currentUser : null;
         const assertCurrent = () => {
-            if (options && !options.canExecute()) {
+            if ((refreshOwner && this.auth.currentUser !== refreshOwner) || (options && !options.canExecute())) {
                 cancelled = true;
                 throw new Error('Operation cancelled because its account or view changed.');
             }
         };
         assertCurrent();
+
+        // Only the idempotent freshness check may be replayed after a lost response.
+        // Keep one retry budget across transport recovery and the existing App Check retry.
+        let transientRetries = 0;
+        const invoke = async () => {
+            while (true) {
+                assertCurrent();
+                try {
+                    return await callable(data);
+                } catch (error) {
+                    const code = (error as { code?: unknown } | null)?.code;
+                    if (!refreshOwner || transientRetries >= 2 || typeof code !== 'string'
+                        || !['internal', 'unavailable', 'deadline-exceeded',
+                            'functions/internal', 'functions/unavailable', 'functions/deadline-exceeded'].includes(code)) {
+                        throw error;
+                    }
+                    assertCurrent();
+                    await this.waitForDerivedMetricsRetry(transientRetries++);
+                }
+            }
+        };
 
         let diagnosticAttempt: AppCheckOperationAttempt | undefined;
         try { diagnosticAttempt = this.appCheckDiagnostics.beginOperation(); } catch { /* Diagnostics must not gate requests. */ }
@@ -95,7 +119,7 @@ export class AppFunctionsService {
             try {
                 assertCurrent();
                 stage = 'callable';
-                const response = await callable(data);
+                const response = await invoke();
                 this.trackAppCheckOutcome('succeeded', diagnosticAttempt, functionKey, undefined, options);
                 return response;
             } catch (error) {
@@ -107,7 +131,7 @@ export class AppFunctionsService {
                 await this.appCheckReadiness.ensureReady(true);
                 assertCurrent();
                 stage = 'callable_retry';
-                const response = await callable(data);
+                const response = await invoke();
                 this.trackAppCheckOutcome('succeeded', diagnosticAttempt, functionKey, undefined, options);
                 return response;
             }
@@ -116,6 +140,10 @@ export class AppFunctionsService {
             if (reportFailure && !cancelled) this.reportEnsureFailure(error, stage, diagnosticUser);
             throw error;
         }
+    }
+
+    private waitForDerivedMetricsRetry(attempt: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt));
     }
 
     private trackAppCheckOutcome(

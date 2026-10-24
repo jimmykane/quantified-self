@@ -418,6 +418,36 @@ supported language, and unsupported or missing locales fall back to `en-GB`, nev
 patterns. Explicit UTC, provider-offset, and saved delivery-zone semantics remain unchanged. These are
 presentation-only optimizations with no Training calculation, planning, or MCP contract impact.
 
+### Active sickness context in Today and Training
+
+`ActiveSicknessNoteComponent` registers a bounded UTC-today ± one-day window with the existing owner-scoped
+Timeline notes workspace, so the context does not depend on scrolling a chart into view. That union covers today's
+calendar date in every captured note timezone. It uses only visible `sickness` category notes whose start/end dates
+include today in their original timezone; end dates are inclusive, and ongoing notes must have started. Global and
+per-note visibility remain authoritative. Ended/future notes and text that merely mentions sickness do not qualify.
+The shared component refreshes its clock each visible minute and on foreground return, pauses while hidden, and disposes its timer, listeners and
+range registration with the view. Ownerless/public contexts render nothing and register no reads.
+Same-day minute ticks do not re-register ranges; same-owner note refreshes do not restart the clock. Unchanged active
+note lists retain their identity, and date filtering resolves today only once per captured timezone. Range requests
+coalesce with chart windows through the existing workspace; no polling request, metric listener or chart rebuild is added.
+The workspace resolves the moving current-day window at read time, so an overnight foreground return does not first
+query yesterday's window. Complete chart unions satisfy current context without another read. A capped broad history
+triggers a bounded current-window validation through the same cache/query service; partial results cannot erase known
+current evidence. A complete bounded result replaces it, and explicit edits/deletions, owner or visibility changes clear
+it immediately. Retained current projections remain capped at the existing record limit and never widen chart history.
+
+Today places one surface-free, muted Material text action below the load caption; Training places it below the sport
+navigation for every destination. The link uses the app date/number formatters, includes a count for overlapping notes,
+and opens the existing note manager through the workspace's owner-fenced selection callback, which owns its one haptic.
+It introduces no banner, icon, tinted surface or new panel. While a qualifying note is visible, only the `Fresh` caption
+changes from `Ready to train` to `Low training load`. The state, readiness score, scales, metrics and forecasts are
+unchanged; removing/ending/hiding the note restores the normal caption. No note title/details are copied into metrics.
+
+This is frontend presentation over existing private note reads, not a planning feature. MCP/Assistant tools, scopes,
+strict schemas, safe projections, consent, provider actions and bundled skills are unchanged. No new callable, Rule,
+index, migration, reparse or derived-schema change is required. Verification covers dated filtering/timezones, current
+range registration without charts, owner changes, stale clicks, disposal, Material rendering and unchanged metric models.
+
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
@@ -3796,7 +3826,14 @@ callables and Training worker. The public provider rollout also requires the mat
 the owner setting does not. This implementation does not set secret values or deploy.
 Documented APIM subscription-key rejection signatures are application configuration failures, not revoked user OAuth
 consent: they do not block the connection generation or request reconnect. After correcting the key, Retry uses the
-same connection and consent. Other 401 responses retain the OAuth reconnect behavior; raw error bodies are never exposed.
+same connection and consent. Resource 401/403 responses allow one forced refresh through the existing coordinator,
+bound to the same exact account and connection generation. Before that refresh, Guide writes durably checkpoint the
+definitive rejection; before repeating the request they recheck Pro, consent, deletion and lifecycle authority. A persistent
+401/403 retains the existing auth/permission repair policy. Refresh failures are not treated as proven resource permission
+failures, and timeouts or ambiguous success responses never trigger this authorization replay. Raw error bodies are never
+exposed. Monitoring is covered/unchanged by the existing Training worker and committed-outcome signals (#655); no new
+counter dimensions, queue policy or resources are required. MCP impact: private transport recovery only, with no change
+to tools, strict proposal/confirmation schemas, read projections, scopes, consent, provider actions or registered contract.
 
 Authority resolves one server-bound account, never an account supplied by the browser. Multiple retained Suunto accounts
 require an existing authoritative selection; ambiguity shows connection repair, not a picker or arbitrary first match.
@@ -6166,6 +6203,52 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+### Stable recording associations across source revisions
+
+Existing activity document IDs survive safely matched provider revisions and retained-original reparses. The file
+supplies the sport; Quantified Self has no recorded-sport editor. Device names, explicit ascent/descent corrections,
+Training controls and dated applied policies retain their separate preservation rules.
+
+The server-owned `sourceIdentity` stores the bound document ID, complete source window and last imported sport.
+It certifies an already matched leg during interrupted-write recovery; it is not a sport override. The common pure
+matcher in `shared/activity-identity.ts` serves backend writes, read-only source hydration and MCP charts. Only a
+verified provider account/workout identity or retained-original reparse authorizes matching across sport/statistic
+changes by a unique complete source window. Ordinary uploads and read-only hydration retain strict source checks.
+Ambiguous windows and overlapping splits/merges fail before source reservation; no positional or unmatched-leg
+fallback is used. Legacy associations are adopted on normal writes, without downloading old originals to infer edits.
+
+Guarded preparation owns saved-ID reuse and applies assignments only after its reservation commits. Parsing/source-key
+generation supplies provisional IDs; only new legs keep them. The writer builds benchmark associations once, after
+preparation establishes final IDs. Explicit elevation corrections must pass strict matching for the same saved-ID
+pairing and remain eligible for the file's sport. Conflicting evidence cannot transfer a correction to another leg.
+ID binding changes only IDs and source associations; it does not rebuild recorded statistics. Correction handling owns
+its stricter validation and runs the additional match only when saved elevation corrections exist.
+
+The reservation passes verified IDs in memory to Training finalization. This preserves zero overrides, exclusions and
+saved policies across sport revisions without trusting arbitrary reused IDs. Source-write IDs, full source fingerprints,
+latest controls, account guards and deletion fences remain authoritative. Guarded document transactions preserve live
+event edits and custom device names. The parent activity-type summary follows the parsed legs. A source conflict uses
+the existing terminal review/dead-letter lifecycle (`ACTIVITY_IDENTITY_CONFLICT`), rather than an endless retry or
+implicit reassociation. Duplicate source keys fail before writes or ID assignment.
+
+Interrupted reparses use the frozen active-leg snapshot, ignoring partial duplicate copies. A pending legacy activity
+without valid source provenance must still match its frozen complete time window; controls without any frozen identity
+also require valid provenance. An overwritten/reused ID cannot certify another leg's controls. Missing or foreign active
+leg references require review. Long reparses recheck retained-file references before reservation. Reparse checks workout
+existence before reservation and inside parent/child transactions, preventing recreation of a deleted workout or new
+orphan writes. Child reads batch parent and activity; event rewrites reuse their preservation read. Deletion uses the
+existing skipped-write lifecycle.
+
+Stable leg IDs do not identify a stream revision. Event Details uses original paths/buckets/generations, completed
+reparse revision and validated source snapshots to refresh changed streams while keeping selected IDs. Ordinary
+metadata edits and unchanged multisport reorderings reuse streams. Refreshes coalesce to the latest live snapshot
+and respect the current selection, including an empty selection. Old reads cannot replace another account/route or
+restore a public share after access is lost. This browser behavior adds no trigger or stored state.
+
+Read-only hydration consumes the saved association without changing Firestore. No historical migration, mass reparse
+or provider fetch is required to adopt these associations. See the [provider lifecycle](provider-integration-guide.md)
+and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
+
 ### File-only TSS evaluation and owner load controls
 
 Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
@@ -6819,7 +6902,7 @@ the editor and compact cache; zero overrides and exclusions still take effect im
 output, storage schema, provider behavior or deployment authority.
 
 
-Root and Functions now pin published Sports Lib 23.6.0 with matching package integrity. The direct Functions FIT Parser
+Root and Functions now pin published Sports Lib 23.7.0 with matching package integrity. The direct Functions FIT Parser
 pin remains 6.2.2; Sports Lib retains its own compatible parser dependency.
 Both consumers use the installed canonical metric catalog, including the 20 R–R summary types. The earlier 22.0.0
 integration and its historical verification remain recorded here; package adoption does not deploy either consumer or start a production reparse.
@@ -6915,6 +6998,25 @@ MCP impact review: no new metric name, unit, tool, field, schema, scope, consent
 or plugin change. Existing persisted metric reads and bounded source chart/sample reads keep their projections.
 No registered-contract promotion or client refresh is required by this dependency change. The reparse runbook owns
 the adoption and historical-data checklist; deployment and production reparse remain separate approvals.
+
+#### Sports Lib 23.7.0 metric lookup performance adoption
+
+Root and Functions use the same published 23.7.0 artifact. Indexed constructor and alias lookup accelerates existing
+hydration without changing canonical values, units, parsing, Training load or durability calculations. QS now uses
+explicit `EventRead` summaries for dashboard, list, preview and marker consumers, with full models retained for detail,
+editing, reprocessing and stream hydration. Training impact inputs accept this read contract without changing any
+calculation. Existing selected-workout source validation requests an explicit raw source snapshot when required;
+optional derived pace reads do not add fields to its fingerprint. Already committed elevation patches update the local
+summary revision, including zero/removal. These local read changes do not add Training planning or provider capabilities.
+The [event reader guide](event-summary-reads.md) owns the general read-path and benchmark maintenance instructions.
+
+No historical reparse, summary regeneration, Training rebuild or derived schema bump is required. Existing source
+evidence, controls, dated policies and sanitized persistence retain their current behavior. Runtime reparse targets
+advance with the package; scanner settings and deployment authorization do not change.
+
+MCP impact review: discovery, persisted-only availability, aliases, sensitive-field exclusions and public projections
+are unchanged. No new tool, scope, consent, planning/provider capability, registered-contract promotion, client refresh
+or plugin rebuild is required. The reparse runbook owns the adoption checklist.
 
 #### Earlier published dependency verification
 

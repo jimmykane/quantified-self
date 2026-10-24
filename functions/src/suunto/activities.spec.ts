@@ -834,7 +834,7 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
-    it('should refresh only the status poll after a 401 without initializing or sending the blob again', async () => {
+    it.each([401, 403])('refreshes only the status poll after HTTP %s without repeating initialization or blob delivery', async statusCode => {
         vi.useFakeTimers();
         try {
             tokensMocks.getTokenData
@@ -848,7 +848,7 @@ describe('importActivityToSuuntoApp', () => {
             });
             requestMocks.put.mockResolvedValue({});
             requestMocks.get
-                .mockRejectedValueOnce(createStatusCodeError('Unauthorized', 401))
+                .mockRejectedValueOnce(createStatusCodeError('Unauthorized', statusCode))
                 .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'workout-key' });
 
             const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('data'));
@@ -865,6 +865,46 @@ describe('importActivityToSuuntoApp', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('recovers an initialization 403 before sending the FIT exactly once', async () => {
+        tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'old', userName: 'account' })
+            .mockResolvedValue({ accessToken: 'new', userName: 'account' });
+        requestMocks.post.mockRejectedValueOnce(createStatusCodeError('Forbidden', 403))
+            .mockResolvedValueOnce({ id: 'upload', url: 'https://storage.suunto.com/upload', headers: {} });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED' });
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('fit'), {
+            statusPollOptions: { maxAttempts: 1, pollDelayMs: 0 },
+        })).resolves.toMatchObject({ status: 'success', uploadId: 'upload' });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(requestMocks.put).toHaveBeenCalledOnce();
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), ServiceNames.SuuntoApp, true);
+        expect(requestMocks.post).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer new' }),
+        }));
+    });
+
+    it.each([401, 403])('does not refresh for a known application subscription rejection (%s)', async statusCode => {
+        requestMocks.post.mockRejectedValue(Object.assign(createStatusCodeError('Forbidden', statusCode), {
+            error: { statusCode, message: 'Access denied due to invalid subscription key.' },
+        }));
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('fit'))).rejects.toMatchObject({
+            disposition: 'permanent', providerCode: 'subscription_key_rejected',
+        });
+        expect(tokensMocks.getTokenData).toHaveBeenCalledOnce();
+        expect(requestMocks.post).toHaveBeenCalledOnce();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+    });
+
+    it('does not send FIT bytes after a persistent initialization 403', async () => {
+        requestMocks.post.mockRejectedValue(createStatusCodeError('Forbidden', 403));
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('fit'))).rejects.toMatchObject({
+            disposition: 'permission_required', retryMode: 'none', statusCode: 403,
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        expect(requestMocks.put).not.toHaveBeenCalled();
     });
 
     it('should not replay the persisted signed blob when the existing upload is already processed', async () => {
@@ -967,10 +1007,12 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
-    it('should preserve status resume identifiers when forced token refresh hits temporary invalid_grant', async () => {
+    it.each(['invalid_grant', 'sdk_403'])('preserves status resume identifiers after a temporary refresh failure (%s)', async scenario => {
         vi.useFakeTimers();
         try {
-            const temporaryInvalidGrant = Object.assign(new Error('invalid_grant during Suunto outage'), {
+            const refreshFailure = scenario === 'sdk_403' ? Object.assign(new Error('Response Error: 403 Forbidden'), {
+                isBoom: true, output: { statusCode: 403 }, data: { payload: { message: 'private provider detail' } },
+            }) : Object.assign(new Error('invalid_grant during Suunto outage'), {
                 statusCode: 400,
                 error: {
                     error: 'invalid_grant',
@@ -980,7 +1022,7 @@ describe('importActivityToSuuntoApp', () => {
             tokensMocks.getTokenData
                 .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
                 .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
-                .mockRejectedValueOnce(temporaryInvalidGrant);
+                .mockRejectedValueOnce(refreshFailure);
             requestMocks.post.mockResolvedValue({
                 id: 'post-blob-refresh-upload-id',
                 url: 'https://storage.suunto.com/post-blob-refresh-upload',
@@ -1003,15 +1045,16 @@ describe('importActivityToSuuntoApp', () => {
 
             expect(requestMocks.post).toHaveBeenCalledTimes(1);
             expect(requestMocks.put).toHaveBeenCalledTimes(1);
+            expect(requestMocks.get).toHaveBeenCalledTimes(1);
         } finally {
             vi.useRealTimers();
         }
     });
 
-    it('should normalize terminal token refresh cleanup as auth required', async () => {
+    it.each([401, 403])('normalizes terminal token refresh cleanup as auth required (HTTP %s)', async statusCode => {
         const terminalAuthError = Object.assign(new Error('Suunto connection requires reconnect'), {
             name: 'TerminalServiceAuthError',
-            statusCode: 401,
+            statusCode,
             providerErrorCode: 'invalid_token',
             providerErrorMessage: 'Refresh token revoked',
             providerUserId: 'token1',

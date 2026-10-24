@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
@@ -41,8 +42,8 @@ import {
   SimpleChanges,
   viewChild,
 } from '@angular/core';
-import { filter, firstValueFrom, Subscription, take } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { defer, filter, firstValueFrom, map, Observable, ReplaySubject, share, Subscription, take } from 'rxjs';
+
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -443,8 +444,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
   private tileEventListenerKeys = new Map<number, string>();
+  private tileEventQueries = new Map<string, Observable<EventRead[]>>();
+  private tileEventUserUID: string | null = null;
   private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
-  private tileEventsByOrder: Record<number, EventInterface[]> = {};
+  private tileEventsByOrder: Record<number, EventRead[]> = {};
   public tileEventLoadingByOrder: Record<number, boolean> = {};
   private routePreviewSubscription: Subscription | null = null;
   private routePreviewListenerKey: string | null = null;
@@ -1595,58 +1598,89 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.unsubscribeTileEventSubscriptions();
       return;
     }
+    if (this.tileEventUserUID !== uid) {
+      this.unsubscribeTileEventSubscriptions();
+      this.tileEventUserUID = uid;
+    }
 
-    const eventDataTiles = this.getOrderedDashboardSettingsTiles().filter(tile => this.isEventDataSettingsTile(tile));
-    const activeOrders = new Set(eventDataTiles.map(tile => tile.order));
-    for (const order of Array.from(this.tileEventSubscriptions.keys())) {
-      if (!activeOrders.has(order)) {
-        this.tileEventSubscriptions.get(order)?.unsubscribe();
-        this.tileEventSubscriptions.delete(order);
-        this.tileEventSubscriptionStates.delete(order);
-        this.tileEventListenerKeys.delete(order);
+    const nowMs = Date.now();
+    const requestedQueries = this.getOrderedDashboardSettingsTiles()
+      .filter(tile => this.isEventDataSettingsTile(tile))
+      .map(tile => {
+        const filters = this.getSettingsTileEventFilters(tile);
+        const window = resolveDashboardTileEventWindow(
+          filters,
+          this.user?.settings?.unitSettings?.startOfTheWeek,
+          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
+          nowMs,
+        );
+        return { order: tile.order, window, listenerKey: this.buildTileEventListenerKey(uid, tile.order, filters, window) };
+      });
+    const requestedKeysByOrder = new Map(requestedQueries.map(({ order, listenerKey }) => [order, listenerKey]));
+
+    // Release departing consumers before adding any replacements. A query without a live
+    // consumer must get a fresh clock window, regardless of the replacement tile's order.
+    for (const [order, subscription] of this.tileEventSubscriptions) {
+      if (!subscription.closed && this.tileEventListenerKeys.get(order) === requestedKeysByOrder.get(order)) {
+        continue;
+      }
+      subscription.unsubscribe();
+      this.tileEventSubscriptions.delete(order);
+      this.tileEventSubscriptionStates.delete(order);
+      this.tileEventListenerKeys.delete(order);
+      if (!requestedKeysByOrder.has(order)) {
         this.tileEventAnchorEndMsByOrder.delete(order);
         delete this.tileEventsByOrder[order];
         delete this.tileEventLoadingByOrder[order];
       }
     }
+    const liveQueryKeys = new Set(this.tileEventListenerKeys.values());
+    for (const key of this.tileEventQueries.keys()) {
+      if (!liveQueryKeys.has(key)) this.tileEventQueries.delete(key);
+    }
 
-    eventDataTiles.forEach((tile) => {
-      const filters = this.getSettingsTileEventFilters(tile);
-      const window = resolveDashboardTileEventWindow(
-        filters,
-        this.user?.settings?.unitSettings?.startOfTheWeek,
-        this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
-      );
-      const listenerKey = this.buildTileEventListenerKey(uid, tile.order, filters, window);
-      if (this.tileEventListenerKeys.get(tile.order) === listenerKey && this.tileEventSubscriptions.has(tile.order)) {
-        return;
+    requestedQueries.forEach(({ order, window, listenerKey }) => {
+      if (this.tileEventSubscriptions.has(order)) return;
+
+      this.tileEventListenerKeys.set(order, listenerKey);
+      this.tileEventLoadingByOrder[order] = true;
+      delete this.tileEventsByOrder[order];
+      const subscriptionState: DashboardTileEventSubscriptionState = { order };
+      this.tileEventSubscriptionStates.set(order, subscriptionState);
+
+      let events$ = this.tileEventQueries.get(listenerKey);
+      if (!events$) {
+        const where = this.buildTileEventWhereClauses(window);
+        // Matching tiles share hydration as well as the listener. Keep the first latest-window
+        // anchor while it has consumers, so tiles added later can reuse the same live query.
+        events$ = defer(() => this.eventService.getEventSummariesBy(eventUser, where, 'startDate', false, 0)).pipe(
+          map(events => (events || []).filter(event => !event.isMerge)),
+          share({
+            connector: () => new ReplaySubject<EventRead[]>(1),
+            // Replay terminal failures to all matching tiles in this synchronization.
+            // The next synchronization evicts the entry once all consumers are closed.
+            resetOnError: false,
+            resetOnComplete: false,
+            resetOnRefCountZero: true,
+          }),
+        );
+        this.tileEventQueries.set(listenerKey, events$);
       }
-
-      this.tileEventSubscriptions.get(tile.order)?.unsubscribe();
-      this.tileEventSubscriptionStates.delete(tile.order);
-      this.tileEventListenerKeys.set(tile.order, listenerKey);
-      this.tileEventLoadingByOrder[tile.order] = true;
-      const subscriptionState: DashboardTileEventSubscriptionState = { order: tile.order };
-      this.tileEventSubscriptionStates.set(tile.order, subscriptionState);
-
-      const where = this.buildTileEventWhereClauses(window);
-      this.tileEventSubscriptions.set(tile.order, this.eventService
-        .getEventsBy(eventUser, where, 'startDate', false, 0)
-        .subscribe({
-          next: (events) => {
-            const currentOrder = subscriptionState.order;
-            this.tileEventsByOrder[currentOrder] = (events || []).filter(event => !event.isMerge);
-            this.tileEventLoadingByOrder[currentOrder] = false;
-            this.tileRebuild.request();
-          },
-          error: (error) => {
-            const currentOrder = subscriptionState.order;
-            this.tileEventsByOrder[currentOrder] = [];
-            this.tileEventLoadingByOrder[currentOrder] = false;
-            this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
-            this.tileRebuild.request();
-          },
-        }));
+      this.tileEventSubscriptions.set(order, events$.subscribe({
+        next: (events) => {
+          const currentOrder = subscriptionState.order;
+          this.tileEventsByOrder[currentOrder] = events;
+          this.tileEventLoadingByOrder[currentOrder] = false;
+          this.tileRebuild.request();
+        },
+        error: (error) => {
+          const currentOrder = subscriptionState.order;
+          this.tileEventsByOrder[currentOrder] = [];
+          this.tileEventLoadingByOrder[currentOrder] = false;
+          this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
+          this.tileRebuild.request();
+        },
+      }));
     });
   }
 
@@ -1720,7 +1754,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       : `${window.startMs}:${window.endMs}`;
     return JSON.stringify({
       uid,
-      order,
       range,
       windowKey,
     });
@@ -1733,6 +1766,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     const nextSubscriptions = new Map<number, Subscription>();
     const nextSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
+    const nextListenerKeys = new Map<number, string>();
     this.tileEventSubscriptions.forEach((subscription, previousOrder) => {
       const nextOrder = orderRemap.get(previousOrder);
       if (nextOrder === undefined) {
@@ -1740,6 +1774,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         return;
       }
       nextSubscriptions.set(nextOrder, subscription);
+      // Query keys describe the live source, independent of tile order. Recomputing a
+      // calendar window here would label an old listener with a new date window.
+      const listenerKey = this.tileEventListenerKeys.get(previousOrder);
+      if (listenerKey !== undefined) nextListenerKeys.set(nextOrder, listenerKey);
       const subscriptionState = this.tileEventSubscriptionStates.get(previousOrder);
       if (subscriptionState) {
         subscriptionState.order = nextOrder;
@@ -1755,7 +1793,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
     });
 
-    const nextEventsByOrder: Record<number, EventInterface[]> = {};
+    const nextEventsByOrder: Record<number, EventRead[]> = {};
     Object.entries(this.tileEventsByOrder).forEach(([previousOrderKey, events]) => {
       const nextOrder = orderRemap.get(Number(previousOrderKey));
       if (nextOrder !== undefined) {
@@ -1773,37 +1811,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.tileEventSubscriptions = nextSubscriptions;
     this.tileEventSubscriptionStates = nextSubscriptionStates;
+    this.tileEventListenerKeys = nextListenerKeys;
     this.tileEventAnchorEndMsByOrder = nextAnchorEndMsByOrder;
     this.tileEventsByOrder = nextEventsByOrder;
     this.tileEventLoadingByOrder = nextLoadingByOrder;
-    this.refreshTileEventListenerKeysForCurrentSettings();
-  }
-
-  private refreshTileEventListenerKeysForCurrentSettings(): void {
-    const eventUser = (this.eventUser || this.user) as User | null;
-    const uid = `${eventUser?.uid || ''}`.trim();
-    if (!uid) {
-      this.tileEventListenerKeys.clear();
-      return;
-    }
-
-    const nextListenerKeys = new Map<number, string>();
-    this.getOrderedDashboardSettingsTiles()
-      .filter(tile => this.isEventDataSettingsTile(tile))
-      .forEach((tile) => {
-        if (!this.tileEventSubscriptions.has(tile.order)) {
-          return;
-        }
-        const filters = this.getSettingsTileEventFilters(tile);
-        const window = resolveDashboardTileEventWindow(
-          filters,
-          this.user?.settings?.unitSettings?.startOfTheWeek,
-          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
-        );
-        nextListenerKeys.set(tile.order, this.buildTileEventListenerKey(uid, tile.order, filters, window));
-      });
-
-    this.tileEventListenerKeys = nextListenerKeys;
   }
 
   private async updateTileEventFilters(
@@ -2836,6 +2847,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.tileEventSubscriptions.clear();
     this.tileEventSubscriptionStates.clear();
     this.tileEventListenerKeys.clear();
+    this.tileEventQueries.clear();
+    this.tileEventUserUID = null;
     this.tileEventAnchorEndMsByOrder.clear();
     this.tileEventsByOrder = {};
     this.tileEventLoadingByOrder = {};

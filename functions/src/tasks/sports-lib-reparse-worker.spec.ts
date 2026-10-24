@@ -1,4 +1,5 @@
 import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
+import { ActivityIdentityConflictError, ACTIVITY_IDENTITY_CONFLICT_MESSAGE } from '../shared/activity-identity-conflict';
 import { Timestamp } from 'firebase-admin/firestore';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1208,6 +1209,30 @@ describe('processSportsLibReparseTask', () => {
             terminalFailure: true,
             terminalFailureAt: 'SERVER_TIMESTAMP',
         }), { merge: true });
+    });
+
+    it.each([false, true])('commits identity review once and suppresses repeat deliveries (heavy: %s)', async heavy => {
+        const job = { uid: 'u1', eventId: 'e1', status: 'pending', attemptCount: 0, targetSportsLibVersion: '9.0.99' };
+        hoisted.jobGet.mockResolvedValueOnce({ exists: true, data: () => job });
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValueOnce(new ActivityIdentityConflictError());
+        // Service specs cover the real classification of source-key ambiguity; this suite covers the worker commit.
+        hoisted.isSportsLibReparseTerminalFailureMessage.mockReturnValueOnce(true);
+        hoisted.getSportsLibReparseFailureReason.mockReturnValueOnce('ACTIVITY_IDENTITY_CONFLICT');
+        const worker = heavy ? processSportsLibReparseHeavyTask : processSportsLibReparseTask;
+        await expect((worker as any)({ data: { jobId: 'job-1' } })).resolves.toBeUndefined();
+        expect(hoisted.isSportsLibReparseTerminalFailureMessage).toHaveBeenCalledWith(ACTIVITY_IDENTITY_CONFLICT_MESSAGE);
+        expect(hoisted.getSportsLibReparseFailureReason).toHaveBeenCalledWith(ACTIVITY_IDENTITY_CONFLICT_MESSAGE);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed', reason: 'ACTIVITY_IDENTITY_CONFLICT', terminalFailure: true,
+        }));
+        expect(hoisted.jobSet).toHaveBeenLastCalledWith(expect.objectContaining({
+            status: 'failed', failureReason: 'ACTIVITY_IDENTITY_CONFLICT', terminalFailure: true,
+        }), { merge: true });
+        const commits = hoisted.jobSet.mock.calls.length;
+        hoisted.jobGet.mockResolvedValueOnce({ exists: true, data: () => ({ ...job, status: 'failed', terminalFailure: true }) });
+        await expect((worker as any)({ data: { jobId: 'job-1' } })).resolves.toBeUndefined();
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(commits);
     });
 
     it('should process users without entitlement gating', async () => {

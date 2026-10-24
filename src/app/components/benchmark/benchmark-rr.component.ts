@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Input, OnChanges, OnDestroy, ViewChild, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, Input, OnChanges, OnDestroy, ViewChild, computed, inject, signal } from '@angular/core';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import type { ActivityInterface, RRAnalysis, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import type { TooltipComponentOption } from 'echarts/components';
@@ -14,10 +14,12 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { BenchmarkRRAnalysisService } from '../../services/benchmark-rr-analysis.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { EChartsHostController } from '../../helpers/echarts-host-controller';
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import { resolveDeviceChartColor } from '../../helpers/device-chart-appearance.helper';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS, resolveEChartsTooltipSurfaceConfig, resolveEChartsTooltipTriggerOn } from '../../helpers/echarts-tooltip-interaction.helper';
+import { buildRRPoincareChartOptions, formatRRPoincareSelection, RR_POINCARE_SYMBOLS, type RRPoincarePlot, type RRPoincareSelection } from '../../helpers/benchmark-rr-poincare.helper';
 import { buildBenchmarkRRChartOptions, type BenchmarkRRChartRecording } from '../../helpers/benchmark-rr-chart.helper';
 import { BENCHMARK_RR_METRICS, buildBenchmarkRRAnalysisInput, buildBenchmarkRRRows, getBenchmarkRRIntervalSource, getBenchmarkRRLabels, hasBenchmarkRRStats, type BenchmarkRRIntervalSource } from '../../helpers/benchmark-rr.helper';
 
@@ -52,6 +54,10 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   private readonly worker = inject(BenchmarkRRAnalysisService);
   private readonly loader = inject(EChartsLoaderService);
   private readonly logger = inject(LoggerService);
+  private readonly document = inject(DOCUMENT) as Document & {
+    webkitFullscreenElement?: Element | null;
+    webkitExitFullscreen?: () => Promise<void> | void;
+  };
   private readonly units = signal<UserUnitSettingsInterface | undefined>(undefined);
   readonly visible = signal(false);
   readonly sources = signal<RRSource[]>([]);
@@ -75,10 +81,28 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   readonly excludeFlagged = signal(false);
   readonly zoomed = signal(false);
   readonly markerSampling = signal(false);
+  readonly chartView = signal<'time' | 'poincare'>('time');
+  readonly poincareFullscreen = signal(false);
+  readonly fullscreenAvailable = signal(false);
+  readonly fullscreenPending = signal(false);
+  readonly fullscreenError = signal('');
+  private fullscreenPanel?: HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+  readonly poincarePairCount = signal(0);
+  readonly poincareSampled = signal(false);
+  readonly poincareHasFlags = signal(false);
+  readonly poincareSelection = signal<RRPoincareSelection | null>(null);
+  readonly poincareDetail = computed(() => {
+    const selection = this.poincareSelection();
+    return selection ? formatRRPoincareSelection(selection, this.units()) : null;
+  });
+  private poincareData: RRPoincarePlot | null = null;
+  private timelineZoom = { start: 0, end: 100 };
+
   readonly artifactColor = computed(() => resolveDeviceChartColor(AppColors.Orange, this.themeIsDark()));
   readonly sourceLegends = computed(() => this.selectedSources().filter(source => this.analyses().has(source.key)).map(source => ({
     ...source,
     plotColor: resolveDeviceChartColor(source.color, this.themeIsDark()),
+    pointIcon: RR_POINCARE_SYMBOLS[source.lineStyle].icon,
     metrics: buildBenchmarkRRRows([source.activity], BENCHMARK_RR_METRICS.filter(metric => metric.primary).map(metric => metric.type), this.units())
       .filter(row => row.cells[0].display !== null)
       .map(row => ({ ...row, label: RR_STAT_LABELS[row.type] ?? row.label, cell: row.cells[0] })),
@@ -95,14 +119,84 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   private destroyed = false;
   private rrElement?: HTMLElement;
   private dfaElement?: HTMLElement;
+  private poincareElement?: HTMLElement;
+  private boundPoincareChart: EChartsType | null = null;
   private boundChart: EChartsType | null = null;
   private connectedCharts: EChartsType[] = [];
   private disconnectCharts?: () => void;
   private readonly rrHost = this.createHost();
   private readonly dfaHost = this.createHost();
+  private readonly poincareHost = this.createHost();
 
   @ViewChild('rrChart') set rrChart(ref: ElementRef<HTMLElement> | undefined) { this.rrElement = ref?.nativeElement; this.scheduleCharts(); }
   @ViewChild('dfaChart') set dfaChart(ref: ElementRef<HTMLElement> | undefined) { this.dfaElement = ref?.nativeElement; this.scheduleCharts(); }
+
+  @ViewChild('poincareChart') set poincareChart(ref: ElementRef<HTMLElement> | undefined) {
+    const element = ref?.nativeElement;
+    if (element === this.poincareElement) return;
+    this.poincareElement = element;
+    if (element) this.scheduleCharts();
+  }
+
+  @ViewChild('poincarePanel') set poincarePanel(ref: ElementRef<HTMLElement> | undefined) {
+    this.fullscreenPanel = ref?.nativeElement;
+    this.fullscreenAvailable.set(BrowserCompatibilityService.checkFullscreenSupport(this.fullscreenPanel));
+    this.poincareFullscreen.set(!!this.fullscreenPanel && this.fullscreenElement === this.fullscreenPanel);
+    this.fullscreenError.set('');
+  }
+
+  private get fullscreenElement(): Element | null {
+    return this.document.fullscreenElement ?? this.document.webkitFullscreenElement ?? null;
+  }
+
+  @HostListener('document:fullscreenchange')
+  @HostListener('document:webkitfullscreenchange')
+  onFullscreenChange(): void {
+    const fullscreen = !!this.fullscreenPanel && this.fullscreenElement === this.fullscreenPanel;
+    if (fullscreen === this.poincareFullscreen()) return;
+    this.poincareFullscreen.set(fullscreen);
+    this.poincareHost.hideTooltip();
+    this.scheduleCharts();
+    this.poincareHost.scheduleResize();
+  }
+
+  async togglePoincareFullscreen(): Promise<void> {
+    const element = this.fullscreenPanel;
+    if (!element || this.fullscreenPending() || !BrowserCompatibilityService.checkFullscreenSupport(element)) return;
+    this.fullscreenPending.set(true); this.fullscreenError.set('');
+    try {
+      if (this.fullscreenElement === element) {
+        await this.exitPoincareFullscreen();
+      } else if (typeof element.requestFullscreen === 'function' && typeof this.document.exitFullscreen === 'function'
+        && this.document.fullscreenEnabled !== false) {
+        await element.requestFullscreen();
+      } else {
+        await element.webkitRequestFullscreen?.();
+      }
+      // A late permission response must not leave a removed chart in fullscreen.
+      if (this.destroyed || this.fullscreenPanel !== element) {
+        if (this.fullscreenElement === element) await this.exitPoincareFullscreen();
+        return;
+      }
+      this.onFullscreenChange();
+      this.haptics.selection();
+    } catch (error) {
+      if (this.destroyed || this.fullscreenPanel !== element) return;
+      this.fullscreenError.set('Fullscreen could not be changed. Please try again.');
+      this.logger.error('[BenchmarkRR] Fullscreen transition failed', error);
+      this.haptics.error();
+    } finally {
+      this.fullscreenPending.set(false);
+    }
+  }
+
+  private async exitPoincareFullscreen(): Promise<void> {
+    if (typeof this.document.exitFullscreen === 'function' && this.document.fullscreenElement) {
+      await this.document.exitFullscreen();
+    } else {
+      await this.document.webkitExitFullscreen?.();
+    }
+  }
 
   ngOnChanges(changes: Record<string, unknown>): void {
     this.units.set(this.unitSettings);
@@ -135,7 +229,7 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
       }).filter(source => source.hasStats || source.raw);
       this.sources.set(sources);
       this.visible.set(sources.length > 0);
-      if (differentEvent || !this.visible()) { this.expanded.set(false); this.showSummary.set(false); }
+      if (differentEvent || !this.visible()) { this.expanded.set(false); this.showSummary.set(false); this.chartView.set('time'); }
       const retained = sources.filter(source => differentEvent || !previousSources.length || selectedAll || previousKeys.includes(source.key));
       // A parent selection can remove every locally selected source. Recover to the
       // remaining event sources, while preserving a deliberate local clear.
@@ -169,13 +263,35 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
     void this.loadAnalysis();
   }
 
+  onChartViewChange(view: 'time' | 'poincare'): void {
+    if (!['time', 'poincare'].includes(view) || view === this.chartView() || !this.expanded() || this.status() !== 'ready') return;
+    const zoom = this.zoomRange();
+    this.disposeCharts();
+    this.timelineZoom = zoom; this.zoomed.set(zoom.start > 0 || zoom.end < 100);
+    this.chartView.set(view); this.haptics.selection(); this.scheduleCharts();
+  }
+
+  nextPoincareFlag(): void {
+    const chart = this.poincareHost.getChart(), flagged = this.poincareData?.flagged;
+    if (!chart || this.chartView() !== 'poincare' || this.excludeFlagged() || !flagged?.length) return;
+    const selected = this.poincareSelection();
+    const index = selected ? flagged.findIndex(point => point.seriesId === selected.seriesId && point.dataIndex === selected.dataIndex) : -1;
+    const next = flagged[(index + 1) % flagged.length];
+    if (next.seriesId === selected?.seriesId && next.dataIndex === selected.dataIndex) return;
+    this.poincareSelection.set(next);
+    chart.dispatchAction({ type: 'downplay' });
+    chart.dispatchAction({ type: 'highlight', seriesId: next.seriesId, dataIndex: next.dataIndex });
+    chart.dispatchAction({ type: 'showTip', seriesIndex: this.poincareData!.series.findIndex(row => row.id === next.seriesId) + 1, dataIndex: next.dataIndex });
+    this.haptics.selection();
+  }
+
   onExcludeFlagged(value: boolean): void {
     if (value === this.excludeFlagged()) return;
-    this.excludeFlagged.set(value); this.haptics.selection(); this.scheduleCharts();
+    this.excludeFlagged.set(value); this.poincareSelection.set(null); this.haptics.selection(); this.scheduleCharts();
   }
 
   resetZoom(): void {
-    if (!this.zoomed()) return;
+    if (!this.zoomed() || this.chartView() !== 'time') return;
     this.rrHost.getChart()?.dispatchAction({ type: 'dataZoom', start: 0, end: 100, $from: 'benchmark-rr-reset-sync' });
     this.zoomed.set(false); this.haptics.selection();
   }
@@ -237,12 +353,38 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
 
   private zoomRange(): { start: number; end: number } {
     const zoom = (this.rrHost.getChart()?.getOption()?.['dataZoom'] as { start?: number; end?: number }[] | undefined)?.[0];
-    return { start: zoom?.start ?? 0, end: zoom?.end ?? 100 };
+    return { start: zoom?.start ?? this.timelineZoom.start, end: zoom?.end ?? this.timelineZoom.end };
   }
 
   private async renderCharts(generation: number): Promise<void> {
     const recordings = this.chartRecordings();
-    if (!recordings.length || !this.expanded() || this.status() !== 'ready' || !this.rrElement || !this.dfaElement || this.destroyed) return;
+    if (!recordings.length || !this.expanded() || this.status() !== 'ready' || this.destroyed) return;
+    if (this.chartView() === 'poincare') {
+      if (!this.poincareElement) return;
+      const chart = await this.poincareHost.init(this.poincareElement, resolveEChartsThemeName(this.darkTheme));
+      if (generation !== this.chartGeneration || this.destroyed) return;
+      if (!chart) throw new Error('Poincaré chart initialization failed');
+      const data = buildRRPoincareChartOptions({ recordings, excludeFlagged: this.excludeFlagged(), darkTheme: this.darkTheme,
+        artifactColor: this.artifactColor(), width: this.poincareElement.clientWidth, height: this.poincareElement.clientHeight, unitSettings: this.units() });
+      data.option.tooltip = { ...data.option.tooltip as TooltipComponentOption,
+        ...resolveEChartsTooltipSurfaceConfig(this.poincareFullscreen() ? true : undefined), triggerOn: resolveEChartsTooltipTriggerOn() };
+      this.poincareHost.setOption(data.option, { notMerge: true, lazyUpdate: false });
+      this.poincareData = data; this.poincarePairCount.set(data.pairCount);
+      this.poincareSampled.set(data.sampled); this.poincareHasFlags.set(data.flagged.length > 0);
+      if (this.boundPoincareChart !== chart) {
+        this.boundPoincareChart = chart;
+        chart.on('click', (event: unknown) => {
+          if (chart !== this.poincareHost.getChart() || !event || typeof event !== 'object') return;
+          const params = event as { seriesId?: unknown; dataIndex?: unknown };
+          if (typeof params.seriesId !== 'string' || typeof params.dataIndex !== 'number' || !Number.isInteger(params.dataIndex)) return;
+          const row = this.poincareData?.series.find(row => row.id === params.seriesId), point = row?.points[params.dataIndex];
+          if (row && point) this.poincareSelection.set({ seriesId: row.id, sourceKey: row.sourceKey, label: row.label, point, dataIndex: params.dataIndex });
+          // The shared ECharts mobile feedback owns pointer haptics.
+        });
+      }
+      return;
+    }
+    if (!this.rrElement || !this.dfaElement) return;
     const zoom = this.zoomRange();
     const charts = await Promise.all([this.rrHost.init(this.rrElement, resolveEChartsThemeName(this.darkTheme)), this.dfaHost.init(this.dfaElement, resolveEChartsThemeName(this.darkTheme))]);
     if (generation !== this.chartGeneration || this.destroyed) return;
@@ -273,6 +415,9 @@ export class BenchmarkRRComponent implements OnChanges, OnDestroy {
   private disposeCharts(): void {
     this.chartGeneration++; this.disconnectCharts?.(); this.disconnectCharts = undefined;
     this.connectedCharts = []; this.boundChart = null;
-    this.rrHost.dispose(); this.dfaHost.dispose(); this.zoomed.set(false);
+    this.rrHost.dispose(); this.dfaHost.dispose(); this.poincareHost.dispose(); this.zoomed.set(false);
+    this.boundPoincareChart = null; this.poincareData = null; this.poincareSelection.set(null);
+    this.poincarePairCount.set(0); this.poincareHasFlags.set(false); this.poincareSampled.set(false);
+    this.timelineZoom = { start: 0, end: 100 };
   }
 }

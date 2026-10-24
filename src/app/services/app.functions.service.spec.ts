@@ -3,6 +3,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppFunctionsService } from './app.functions.service';
 import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
 import { FirebaseApp } from 'app/firebase/app';
+import { Auth } from 'app/firebase/auth';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { LoggerService } from './logger.service';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
@@ -83,6 +84,7 @@ vi.mock('@shared/functions-manifest', () => ({
 describe('AppFunctionsService', () => {
     let service: AppFunctionsService;
     let mockApp: any;
+    let auth: { currentUser: { uid: string } | null };
     let appCheckReadinessMock: Pick<AppCheckReadinessService, 'ensureReady' | 'isConfigured'>;
     let loggerMock: { getUser: ReturnType<typeof vi.fn>; captureMessage: ReturnType<typeof vi.fn> };
     let diagnostics: { authRevision: number; beginOperation: ReturnType<typeof vi.fn>; reportOperationBlocked: ReturnType<typeof vi.fn>;
@@ -93,6 +95,7 @@ describe('AppFunctionsService', () => {
             AppFunctionsService,
             { provide: Functions, useValue: { region: 'europe-west2-instance' } },
             { provide: FirebaseApp, useValue: mockApp },
+            { provide: Auth, useValue: auth },
             { provide: AppCheckReadinessService, useValue: appCheckReadinessMock },
             { provide: LoggerService, useValue: loggerMock },
             useRealDiagnostics ? AppCheckDiagnosticsService : { provide: AppCheckDiagnosticsService, useValue: diagnostics },
@@ -117,6 +120,7 @@ describe('AppFunctionsService', () => {
         mocks.setUseFunctionsEmulator(false);
 
         mockApp = { name: '[DEFAULT]' };
+        auth = { currentUser: { uid: 'account-a' } };
         appCheckReadinessMock = {
             ensureReady: mocks.ensureReadyMock,
             isConfigured: mocks.isConfiguredMock,
@@ -133,8 +137,125 @@ describe('AppFunctionsService', () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         vi.restoreAllMocks();
         vi.clearAllMocks();
+    });
+
+    describe('metrics refresh transport recovery', () => {
+        beforeEach(() => vi.useFakeTimers());
+
+        it.each(['internal', 'unavailable', 'deadline-exceeded', 'functions/internal',
+            'functions/unavailable', 'functions/deadline-exceeded'])('recovers a transient %s without reporting a failure', async code => {
+            const request = { metricKinds: ['form'] };
+            mocks.callableSpy.mockRejectedValueOnce({ code });
+            const result = service.call('ensureDerivedMetrics', request);
+            await vi.advanceTimersByTimeAsync(999);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(1);
+            await expect(result).resolves.toEqual({ data: 'success' });
+            expect(mocks.callableSpy.mock.calls).toEqual([[request], [request]]);
+            expect(mocks.ensureReadyMock).toHaveBeenCalledTimes(1);
+            expect(diagnostics.reportOperationBlocked).not.toHaveBeenCalled();
+            expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledTimes(1);
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it('backs off twice, then exposes and reports the final original failure', async () => {
+            const failure = { code: 'functions/internal', message: 'private-details' };
+            mocks.callableSpy.mockRejectedValue(failure);
+            const result = expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1999);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
+            await vi.advanceTimersByTimeAsync(1);
+            await result;
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(3);
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(1);
+            expect(diagnostics.reportOperationBlocked).toHaveBeenCalledTimes(1);
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it.each(['functions/unauthenticated', 'functions/permission-denied', 'functions/invalid-argument',
+            'functions/resource-exhausted', 'functions/failed-precondition'])('does not replay a permanent %s', async code => {
+            const failure = { code };
+            mocks.callableSpy.mockRejectedValue(failure);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it('keeps one transport retry budget across App Check recovery', async () => {
+            const failure = { code: 'functions/internal' };
+            mocks.callableSpy.mockRejectedValueOnce(failure)
+                .mockRejectedValueOnce({ code: 'functions/failed-precondition', message: 'App Check verification failed.' })
+                .mockRejectedValue(failure);
+            const result = expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            await vi.runAllTimersAsync();
+            await result;
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(4);
+            expect(mocks.ensureReadyMock.mock.calls).toEqual([[], [true]]);
+            expect(loggerMock.captureMessage).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(['sign-out', 'account switch', 'caller cancellation'])('stops before a delayed retry after %s', async change => {
+            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/internal' });
+            let current = true;
+            const result = expect(service.call('ensureDerivedMetrics', undefined, { canExecute: () => current }))
+                .rejects.toThrow('Operation cancelled');
+            await vi.advanceTimersByTimeAsync(0);
+            if (change === 'sign-out') auth.currentUser = null;
+            else if (change === 'account switch') auth.currentUser = { uid: 'account-b' };
+            else current = false;
+            await vi.runAllTimersAsync();
+            await result;
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+            expect(diagnostics.reportOperationBlocked).not.toHaveBeenCalled();
+        });
+
+        it('does not retry without an authenticated starting owner', async () => {
+            auth.currentUser = null;
+            mocks.callableSpy.mockRejectedValue({ code: 'functions/internal' });
+            await expect(service.call('ensureDerivedMetrics')).rejects.toMatchObject({ code: 'functions/internal' });
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('preserves an unclassified failure without coercing its error code', async () => {
+            const failure = { code: { toString: () => { throw new Error('must not coerce'); } } };
+            mocks.callableSpy.mockRejectedValue(failure);
+            await expect(service.call('ensureDerivedMetrics')).rejects.toBe(failure);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it.each(['defaultRegionFunc', 'resetAssistantConversation'])('does not replay another action: %s', async key => {
+            const failure = { code: 'functions/internal' };
+            mocks.callableSpy.mockRejectedValue(failure);
+            await expect(service.call(key as never)).rejects.toBe(failure);
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it('cancels an old metrics request when the account changes during App Check readiness', async () => {
+            mocks.ensureReadyMock.mockImplementationOnce(async () => { auth.currentUser = { uid: 'account-b' }; });
+            await expect(service.call('ensureDerivedMetrics')).rejects.toThrow('Operation cancelled');
+            expect(mocks.callableSpy).not.toHaveBeenCalled();
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
+
+        it('does not continue an old request after signing back into the same account', async () => {
+            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/internal' });
+            const result = expect(service.call('ensureDerivedMetrics')).rejects.toThrow('Operation cancelled');
+            await vi.advanceTimersByTimeAsync(0);
+            auth.currentUser = { uid: 'account-a' };
+            await vi.runAllTimersAsync();
+            await result;
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+            expect(loggerMock.captureMessage).not.toHaveBeenCalled();
+        });
     });
 
     it('should initialize all functions from manifest in constructor and reuse region instances', () => {
@@ -377,6 +498,9 @@ describe('AppFunctionsService', () => {
     });
 
     describe('derived-metric failure diagnostics', () => {
+        // Backoff timing and cancellation are exercised above; keep this suite focused on redaction/budgets.
+        beforeEach(() => vi.spyOn(service as unknown as { waitForDerivedMetricsRetry(attempt: number): Promise<void> },
+            'waitForDerivedMetricsRetry').mockResolvedValue(undefined));
         const appCheckRejection = {
             code: 'functions/failed-precondition',
             message: 'App Check verification failed. private-details',
@@ -472,7 +596,7 @@ describe('AppFunctionsService', () => {
             for (const [id, code] of [['account-a', 'functions/internal'], ['account-a', 'functions/unavailable'],
                 ['account-b', 'functions/unavailable']]) {
                 loggerMock.getUser.mockReturnValue({ id });
-                mocks.callableSpy.mockRejectedValueOnce({ code });
+                mocks.callableSpy.mockRejectedValue({ code });
                 await expect(service.call('ensureDerivedMetrics')).rejects.toEqual({ code });
             }
             expect(loggerMock.captureMessage).toHaveBeenCalledTimes(3);
@@ -493,7 +617,7 @@ describe('AppFunctionsService', () => {
             mocks.ensureReadyMock.mockImplementation(async () => {
                 loggerMock.getUser.mockReturnValue({ id: 'account-b' });
             });
-            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/internal' });
+            mocks.callableSpy.mockRejectedValue({ code: 'functions/internal' });
             await expect(service.call('ensureDerivedMetrics')).rejects.toMatchObject({ code: 'functions/internal' });
             expect(loggerMock.captureMessage).not.toHaveBeenCalled();
         });
@@ -521,7 +645,7 @@ describe('AppFunctionsService', () => {
         it.each([false, true])('does not report localhost failures (Functions emulator: %s)', async emulator => {
             mocks.setLocalhost(true);
             mocks.setUseFunctionsEmulator(emulator);
-            mocks.callableSpy.mockRejectedValueOnce({ code: 'functions/internal' });
+            mocks.callableSpy.mockRejectedValue({ code: 'functions/internal' });
             await expect(service.call('ensureDerivedMetrics')).rejects.toMatchObject({ code: 'functions/internal' });
             expect(loggerMock.captureMessage).not.toHaveBeenCalled();
         });

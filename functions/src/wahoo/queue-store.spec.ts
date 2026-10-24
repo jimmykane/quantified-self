@@ -1,3 +1,4 @@
+import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
@@ -145,6 +146,17 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
     expect(mocks.transactionDelete).not.toHaveBeenCalled();
+  });
+
+  it('commits a permanent identity conflict once without consuming the transient retry budget', async () => {
+    const item = { ...input, ref: mocks.ref, retryCount: 0, totalRetryCount: 0,
+      processingOwner: 'worker-1' } as WahooAPIWorkoutQueueItemInterface;
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => item });
+    await expect(failWahooWorkoutQueueRevision(item, 'worker-1', new ActivityIdentityConflictError()))
+      .resolves.toBe(QueueResult.MovedToDLQ);
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.failedRef, expect.objectContaining({ context: 'ACTIVITY_IDENTITY_CONFLICT' }));
+    expect(mocks.transactionDelete).toHaveBeenCalledWith(mocks.ref);
+    expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
 
   it.each([9, 18, 19])('applies the 20-failure budget to the current claimed revision at %i', async retryCount => {

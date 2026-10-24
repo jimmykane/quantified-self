@@ -152,7 +152,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(visibleLabelCount).toBeLessThanOrEqual(10);
   });
 
-  it('shows a label for every day in the default 14-day sleep window on desktop', async () => {
+  it('offers every day in a wide 14-day sleep window while retaining collision protection on resize', async () => {
     const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
       id: `sleep-${index + 1}`,
       sleepDate: `2026-04-${String(index + 1).padStart(2, '0')}`,
@@ -174,7 +174,7 @@ describe('ChartsSleepTrendComponent', () => {
     const option = optionCandidate as Record<string, any>;
 
     expect(option.xAxis.axisLabel.interval).toBe(0);
-    expect(option.xAxis.axisLabel.hideOverlap).toBe(false);
+    expect(option.xAxis.axisLabel.hideOverlap).toBe(true);
   });
 
   it('thins the default 14-day sleep labels in a narrow desktop card', async () => {

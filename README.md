@@ -277,6 +277,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Route import and delivery monitoring](docs/route-monitoring.md)
 - [Connection-history imports and coordinator monitoring](docs/connection-history-import.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
+- [Event summary readers and performance](docs/event-summary-reads.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
 - [Supported activities and metrics catalog](docs/supported-activities.md)
 - [MCP-backed built-in Assistant](docs/assistant.md)

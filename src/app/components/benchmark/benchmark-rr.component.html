@@ -22,7 +22,13 @@
           </mat-form-field>
         }
         @if (status() === 'ready') {
+          <mat-button-toggle-group class="qs-segmented-button-group rr-view-toggle" aria-label="R–R chart view" [value]="chartView()" (change)="onChartViewChange($event.value)">
+            <mat-button-toggle value="time">Time series</mat-button-toggle>
+            <mat-button-toggle value="poincare">Poincaré</mat-button-toggle>
+          </mat-button-toggle-group>
+          @if (chartView() === 'time') {
           <button mat-icon-button type="button" class="qs-action-menu-icon-button" aria-label="Reset zoom" matTooltip="Reset zoom" (click)="resetZoom()" [disabled]="!zoomed()"><mat-icon>restart_alt</mat-icon></button>
+          }
           <mat-checkbox [checked]="excludeFlagged()" (change)="onExcludeFlagged($event.checked)">Exclude flagged intervals</mat-checkbox>
         }
       </div>
@@ -31,7 +37,9 @@
         @for (source of sourceLegends(); track source.key) {
           <div class="rr-source-legend">
             <div class="rr-source-name">
+              @if (chartView() === 'poincare') { <mat-icon class="rr-device-symbol" [style.color]="source.plotColor" aria-hidden="true">{{ source.pointIcon }}</mat-icon> } @else {
               <span class="rr-device-line" [class.rr-device-line-dash-dot]="source.lineStyle === 'dash-dot'" [style.--rr-device-color]="source.plotColor" [style.border-top-style]="source.lineStyle === 'dash-dot' ? null : source.lineStyle" aria-hidden="true"></span>
+              }
               <span>{{ source.label }}</span>
             </div>
             @if (source.metrics.length) {
@@ -57,6 +65,43 @@
         <p class="rr-note">{{ selectedSources().length ? 'Original beat intervals are unavailable for the selected recordings. Saved statistics remain available.' : 'Choose at least one recording to display charts.' }}</p>
       }
       @if (status() === 'ready') {
+        @if (chartView() === 'poincare') {
+          <section #poincarePanel class="rr-poincare-panel" [class.rr-poincare-fullscreen]="poincareFullscreen()" aria-label="Poincaré plot">
+          <div class="rr-plot-heading">
+            <h3>Poincaré plot</h3>
+            <div class="rr-poincare-actions"><span class="rr-secondary">Full recordings</span>
+            @if (fullscreenAvailable()) {
+              <button mat-icon-button type="button" class="qs-action-menu-icon-button rr-fullscreen-toggle" [disabled]="fullscreenPending()" [attr.aria-busy]="fullscreenPending()" [attr.aria-label]="poincareFullscreen() ? 'Exit fullscreen' : 'Open Poincaré plot fullscreen'" [matTooltip]="poincareFullscreen() ? 'Exit fullscreen' : 'Open Poincaré plot fullscreen'" (click)="togglePoincareFullscreen()">
+                @if (fullscreenPending()) { <mat-spinner diameter="24"></mat-spinner> } @else { <mat-icon>{{ poincareFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon> }
+              </button>
+            }
+            </div>
+          </div>
+          @if (poincareFullscreen()) {
+            <div class="rr-poincare-sources">
+              @for (source of sourceLegends(); track source.key) {
+                <span class="rr-source-name"><mat-icon class="rr-device-symbol" [style.color]="source.plotColor" aria-hidden="true">{{ source.pointIcon }}</mat-icon>{{ source.label }}</span>
+              }
+              <mat-checkbox [checked]="excludeFlagged()" (change)="onExcludeFlagged($event.checked)">Exclude flagged intervals</mat-checkbox>
+            </div>
+          }
+          @if (fullscreenError()) { <p class="rr-note" role="status">{{ fullscreenError() }}</p> }
+          <div #poincareChart class="rr-chart rr-poincare-chart" role="img" aria-label="Consecutive R–R intervals within each recording, with equal interval scales on both axes. Crosses identify artifact flags and rings identify suspected pairs."></div>
+          <div class="rr-marker-legend rr-poincare-legend"><span><i class="rr-unflagged-key"></i>Unflagged</span><span><mat-icon aria-hidden="true">close</mat-icon>Artifact</span><span><i class="rr-ectopic-key"></i>Suspected pair</span><span><i class="rr-equal-key"></i>Equal intervals</span></div>
+          <div class="rr-poincare-inspector">
+            <div class="rr-note" aria-live="polite">
+              @if (poincareDetail(); as detail) {
+                <span>{{ detail.label }} · {{ detail.time }} · {{ detail.classification }}</span>
+                <span class="rr-value">{{ detail.current }} → {{ detail.next }}</span>
+              } @else { <span>Select a point to inspect its intervals.</span> }
+            </div>
+            <button mat-button type="button" [disabled]="!poincareHasFlags() || excludeFlagged()" (click)="nextPoincareFlag()">Next flagged pair<mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon></button>
+          </div>
+          <p class="rr-note">{{ poincarePairCount() | number }} adjacent interval pairs. Each point belongs to one recording.</p>
+          @if (!poincarePairCount()) { <p class="rr-note">No consecutive interval pairs are available for the selected recordings and filter.</p> }
+          @if (poincareSampled()) { <p class="rr-note">Dense points are sampled for display across each recording. Pair counts and saved statistics remain complete.</p> }
+          </section>
+        } @else {
         <div class="rr-plot-heading"><h3>R–R intervals</h3><div class="rr-marker-legend"><span><i [style.backgroundColor]="artifactColor()"></i>Artifact</span><span><i class="rr-ectopic-key"></i>Suspected pair</span></div></div>
         <div #rrChart class="rr-chart" role="img" aria-label="R–R intervals by elapsed time and recording, with artifact dots and suspected ectopic-pair rings"></div>
         <div class="rr-plot-heading"><h3>DFA α1</h3><span class="rr-secondary">Guides 0.75 and 0.50</span></div>
@@ -64,6 +109,7 @@
         @if (!hasDFA()) { <p class="rr-note">No complete, sufficiently clean DFA windows are available.</p> }
         <p class="rr-note">Elapsed time from the first plotted recording; original start offsets and gaps are preserved. Statistics describe each full recording.</p>
         @if (markerSampling()) { <p class="rr-note">Dense markers are sampled for display. Summary counts include every flagged interval.</p> }
+        }
       }
       <button mat-button type="button" class="rr-summary-toggle" [attr.aria-expanded]="showSummary()" [attr.aria-controls]="contentId + '-statistics'" (click)="toggleSummary()">
         {{ showSummary() ? 'Hide statistics' : 'Show statistics' }}

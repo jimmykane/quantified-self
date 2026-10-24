@@ -1,5 +1,5 @@
 import { resolveEffectiveTrainingLoad } from '@shared/training-load-policy';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
 import {
   buildTrainingSessionLoadImpact,
   isTrainingLoadWithinTotal,
@@ -45,7 +45,7 @@ export interface TrainingDayImpactView {
   unavailableSessionCount: number;
 }
 
-export function resolveTrainingImpactUtcDayMs(event: EventInterface): number | null {
+export function resolveTrainingImpactUtcDayMs(event: EventRead): number | null {
   const startDate = (event as { startDate?: unknown } | null)?.startDate;
   if (!(startDate instanceof Date) || !Number.isFinite(startDate.getTime())) {
     return null;
@@ -54,7 +54,7 @@ export function resolveTrainingImpactUtcDayMs(event: EventInterface): number | n
 }
 
 export function buildTrainingSessionImpactView(
-  event: EventInterface,
+  event: EventRead,
   source: TrainingImpactSnapshotState,
 ): TrainingSessionImpactView {
   const eventId = `${event?.getID?.() || ''}`.trim() || null;
@@ -103,7 +103,7 @@ export function buildTrainingSessionImpactView(
 }
 
 export function buildTrainingDayImpactView(
-  events: readonly EventInterface[] | null | undefined,
+  events: readonly EventRead[] | null | undefined,
   source: TrainingImpactSnapshotState,
 ): TrainingDayImpactView {
   const sessionViews = (events || []).map(event => buildTrainingSessionImpactView(event, source));

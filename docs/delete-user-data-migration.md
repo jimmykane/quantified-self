@@ -12,6 +12,78 @@ or merging this code does not deploy it or remove the installed extension.
 See [the deletion matrix](user-deletion-workflow.html) and
 [provider lifecycle guidance](provider-integration-guide.md#account-deletion).
 
+## Production status — 23 October 2026
+
+The separately approved deployment and extension retirement are complete in
+`quantified-self-io`. The client write fence and mail/campaign guards were deployed
+first, followed by the existing Gen 1 `cleanupUserAccounts` and `deleteSelf`.
+Both deployed source archives matched the approved build from commit
+`ddbbf9808904cdbf3d03b3bbf52248fcc8fb1d07` (2,414 files each).
+
+An owner-performed account deletion exercised both cleanup handlers before retirement.
+The native handler finished successfully in 6.796 seconds, recorded verified completion,
+and reported a memory sample of approximately 247 MiB against its 1 GiB allocation.
+Independent reads found Auth absent; no user/customer or provider-token descendants;
+no live account Storage objects; no matching operational/MCP/campaign records; and
+no unfinished operational checkpoints. The confirmation mail retained its 90-day expiry
+and the completed receipt its seven-day expiry. There were no execution errors.
+This account had no provider credentials; the check does not establish remote provider
+revocation or large-account performance. Both handlers ran, so it is overlap evidence.
+
+Pre-retirement readback found discovery disabled, no custom search or outgoing-event
+consumers, zero backlog on both extension subscriptions, and no pending native cleanup
+receipts. The approved removal used the official Firebase CLI:
+
+```sh
+firebase ext:uninstall delete-user-data --project quantified-self-io --immediate --force --non-interactive
+```
+
+Firebase removed the instance, its `ext-delete-user-data-clearData`,
+`ext-delete-user-data-handleSearch` and `ext-delete-user-data-handleDeletion` Functions,
+their subscriptions and the extension service account. The two retained topics had
+no subscriptions and were removed under the same explicit approval:
+
+```sh
+gcloud pubsub topics delete projects/quantified-self-io/topics/ext-delete-user-data-discovery projects/quantified-self-io/topics/ext-delete-user-data-deletion --project=quantified-self-io --quiet
+```
+
+Readback at 08:12 UTC confirmed all nine inventoried resources absent. Repository
+configuration no longer declares the instance, its deployment etag or its env file.
+`cleanupUserAccounts` version 231 and `deleteSelf` version 230 remain ACTIVE with
+unchanged runtime settings and secret bindings. Email and Stripe extension configuration
+also remained unchanged and ACTIVE.
+
+Monitoring coverage decision: **unchanged**. The existing native account failure/error
+coverage has no filter dependency on the retired extension. Before/after readback
+matched all nine cleanup metrics, seven enabled policies and the existing dashboard;
+no monitoring configuration was applied during retirement.
+
+Local retirement verification passed 103 focused Functions tests, nine Timeline
+adapter tests, twelve cleanup-monitoring tests and the frontend test policy.
+The former extension-config assertions now use the native recursive cleanup contract.
+Exact JSON comparisons preserved all other Firebase configuration; documentation and
+diagram checks passed without changing application runtime code.
+
+**Native-only verification complete:** the owner deleted a fresh account with a new
+UID after retirement. One native execution finished successfully in 6.844 seconds,
+recorded verified completion at 08:24:16 UTC and logged no errors. Independent reads
+at 08:26 UTC confirmed Auth absent; no user/customer or provider-token descendants;
+no live account Storage objects; zero matches across 30 UID-based operational/MCP
+queries; no campaign recipients; and no unfinished operational checkpoints. The only
+remaining UID-owned mail was the delivered deletion confirmation with its 90-day
+expiry. The completed receipt retained its seven-day expiry. A subsequent query found
+no pending native cleanup receipts.
+
+Post-deletion readback confirmed all nine retired extension resources still absent
+and the native Functions, Email/Stripe extensions and monitoring configuration
+unchanged. This completes the required native-only cutover check. The fresh account
+had no provider credentials, so this verifies native trigger delivery and scoped local
+completion without establishing remote provider revocation or large-account performance.
+
+The source comparison and rollout procedure below retain the pre-retirement evidence
+and recovery guidance; references to the installed extension describe that historical
+configuration.
+
 ## Evidence and scope
 
 Read-only inspection on 9 October 2026 found `delete-user-data` ACTIVE at

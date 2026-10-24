@@ -72,7 +72,7 @@ exports.getUpcomingRenewalAmount = require('./lib/functions/src/stripe/get-upcom
 const gifts = require('./lib/functions/src/admin/handlers/subscription-gifts.handlers');
 exports.previewAdminSubscriptionGift = gifts.previewAdminSubscriptionGift;
 exports.grantAdminSubscriptionGift = gifts.grantAdminSubscriptionGift;
-// Local-only substitute for the existing Auth cleanup + Delete User Data extension.
+// Local-only billing and recursive user/customer slice of native Auth cleanup.
 exports.localBillingAuthDeleted = require('firebase-functions/v1').region('europe-west2').auth.user().onDelete(async user => {
   const db=admin.firestore(); await db.doc('userDeletionTombstones/'+user.uid).set({});
   await require('./lib/functions/src/stripe/billing/service').requestBillingDeletion(db,user.uid);

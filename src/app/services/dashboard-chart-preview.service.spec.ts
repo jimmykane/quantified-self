@@ -14,12 +14,12 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { buildDashboardExampleEvents, buildDashboardExampleRoutes, buildDashboardThumbnailPreview, DashboardPreviewInput, DashboardChartPreview } from '../helpers/dashboard-chart-preview.helper';
 
 describe('read-only chart preview data', () => {
- const events = { getEventsBy: vi.fn() }; const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
+ const events = { getEventSummariesBy: vi.fn() }; const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
  const hrv = { watch: vi.fn() };
  const sleep = { watchForDashboard: vi.fn() }; const routes = { watchRecentRoutePreviews: vi.fn() };
  const user = { uid: 'test-owner', settings: { unitSettings: { startOfTheWeek: 1 }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;
  beforeEach(() => {
-  vi.clearAllMocks(); hrv.watch.mockReturnValue(of(null)); events.getEventsBy.mockReturnValue(of([])); derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState())); sleep.watchForDashboard.mockReturnValue(of([])); routes.watchRecentRoutePreviews.mockReturnValue(of([]));
+  vi.clearAllMocks(); hrv.watch.mockReturnValue(of(null)); events.getEventSummariesBy.mockReturnValue(of([])); derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState())); sleep.watchForDashboard.mockReturnValue(of([])); routes.watchRecentRoutePreviews.mockReturnValue(of([]));
   TestBed.configureTestingModule({ providers: [DashboardChartPreviewService, { provide: DashboardHrvService, useValue: hrv }, { provide: AppEventService, useValue: events }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: AppSleepService, useValue: sleep }, { provide: AppRouteService, useValue: routes }] });
  });
  it('loads only missing deduplicated KPI snapshots and does not let them overwrite unrelated seeded contexts', () => {
@@ -39,7 +39,7 @@ describe('read-only chart preview data', () => {
   expect(result.derivedMetrics.formNow).toBeUndefined();
   expect(result.derivedMetrics.formPlus7d).toEqual(state.formPlus7d);
   subscription.unsubscribe(); expect(cleanup).toHaveBeenCalledOnce();
-  expect(events.getEventsBy).not.toHaveBeenCalled(); expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+  expect(events.getEventSummariesBy).not.toHaveBeenCalled(); expect(derived.ensureForDashboard).not.toHaveBeenCalled();
  });
  it('uses the picker’s shared KPI seed without starting a second detail subscription', () => {
   const entry = getDashboardChartCatalog().find(entry => entry.definition.id === 'kpi-acwr')!;
@@ -72,15 +72,15 @@ describe('read-only chart preview data', () => {
   subscription.unsubscribe();
  });
  it('loads all non-KPI sources once, preserves incremental results and releases every read', () => {
-  const subjects = [events.getEventsBy, sleep.watchForDashboard, routes.watchRecentRoutePreviews, hrv.watch, derived.watch]
+  const subjects = [events.getEventSummariesBy, sleep.watchForDashboard, routes.watchRecentRoutePreviews, hrv.watch, derived.watch]
     .map(mock => { const source$ = new Subject(); mock.mockReturnValue(source$); return source$; });
   const service = TestBed.inject(DashboardChartPreviewService);
   const tiles = getDashboardChartCatalog().filter(entry => entry.lane !== 'kpi').map(entry => entry.tile);
   let patch: Partial<DashboardPreviewInput>;
   const stream$ = service.watchLibraryContexts(user, tiles, { tiles: [], routePreviews: [] });
-  expect(events.getEventsBy).not.toHaveBeenCalled();
+  expect(events.getEventSummariesBy).not.toHaveBeenCalled();
   const subscription = stream$.subscribe(value => patch = value);
-  expect(events.getEventsBy).toHaveBeenCalledOnce();
+  expect(events.getEventSummariesBy).toHaveBeenCalledOnce();
   expect(derived.watch).toHaveBeenCalledOnce();
   const kinds = derived.watch.mock.calls[0][1].metricKinds;
   expect(kinds).toEqual(expect.arrayContaining(['recovery_now', 'form', 'freshness_forecast', 'intensity_distribution', 'power_curve', 'efficiency_trend']));
@@ -102,7 +102,7 @@ describe('read-only chart preview data', () => {
   expect(patch!.routePreviews).toEqual(savedRoutes);
   expect(patch!.previewEventsByRange?.['90d']).toEqual(accountEvents);
   service.watch(user, tile, { tiles: [], ...patch }).subscribe(detail => expect(detail.source).toBe('user'));
-  expect(events.getEventsBy).toHaveBeenCalledOnce();
+  expect(events.getEventSummariesBy).toHaveBeenCalledOnce();
   subscription.unsubscribe(); expect(subjects.every(source$ => !source$.observed)).toBe(true);
   expect(derived.ensureForDashboard).not.toHaveBeenCalled();
  });
@@ -111,10 +111,10 @@ describe('read-only chart preview data', () => {
   const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'custom-distance-columns')!.tile;
   const thirtyDays = { ...tile, eventFilters: { range: '30d', activityTypes: [] } };
   const accountEvents = buildDashboardExampleEvents(Date.now());
-  events.getEventsBy.mockReturnValueOnce(of(accountEvents)).mockReturnValueOnce(of([]));
+  events.getEventSummariesBy.mockReturnValueOnce(of(accountEvents)).mockReturnValueOnce(of([]));
   let patch: Partial<DashboardPreviewInput>;
   service.watchLibraryContexts(user, [tile, thirtyDays], { tiles: [] }).subscribe(value => patch = value);
-  expect(events.getEventsBy).toHaveBeenCalledTimes(2);
+  expect(events.getEventSummariesBy).toHaveBeenCalledTimes(2);
   expect(buildDashboardThumbnailPreview(tile, { tiles: [], ...patch }).source).toBe('user');
   expect(buildDashboardThumbnailPreview(thirtyDays, { tiles: [], ...patch }).source).toBe('example');
   const running = { ...tile, eventFilters: { range: '90d', activityTypes: ['Running'] } };
@@ -123,7 +123,7 @@ describe('read-only chart preview data', () => {
   service.watch(user, running, { tiles: [], ...patch }).subscribe(value => detail = value);
   expect(detail!.tile['data']).toEqual(row.tile['data']);
   expect(row.tile['data'].every(item => item.type === 'Running')).toBe(true);
-  expect(events.getEventsBy).toHaveBeenCalledTimes(2);
+  expect(events.getEventSummariesBy).toHaveBeenCalledTimes(2);
  });
  it('does not reuse a 90-day library read when settings select another range', () => {
   const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'custom-distance-columns')!.tile;
@@ -131,8 +131,8 @@ describe('read-only chart preview data', () => {
   TestBed.inject(DashboardChartPreviewService).watch(user, changed, { tiles: [],
     previewStates: { 'events:90d': 'ready' }, previewEventsByRange: { '90d': buildDashboardExampleEvents() },
   }).subscribe();
-  expect(events.getEventsBy).toHaveBeenCalledOnce();
-  const bounds = events.getEventsBy.mock.calls[0][1];
+  expect(events.getEventSummariesBy).toHaveBeenCalledOnce();
+  const bounds = events.getEventSummariesBy.mock.calls[0][1];
   expect(bounds[1].value - bounds[0].value).toBe(30 * 86400000);
  });
  it('does not repeat a known empty read on selection and keeps failures explicitly labeled', () => {
@@ -143,14 +143,14 @@ describe('read-only chart preview data', () => {
   expect(result!.availability?.label).toContain('Could not load'); expect(sleep.watchForDashboard).not.toHaveBeenCalled();
  });
  it('does nothing until subscribed, shares a bounded event query and releases its listener', () => {
-  const cleanup = vi.fn(); events.getEventsBy.mockReturnValue(new Observable(subscriber => { subscriber.next(buildDashboardExampleEvents()); return cleanup; }));
+  const cleanup = vi.fn(); events.getEventSummariesBy.mockReturnValue(new Observable(subscriber => { subscriber.next(buildDashboardExampleEvents()); return cleanup; }));
   const service = TestBed.inject(DashboardChartPreviewService);
   const tiles = getDashboardChartCatalog().filter(entry => entry.definition.category === 'custom').slice(0,2);
   const first$ = service.watch(user, tiles[0].tile, { tiles: [] });
-  expect(events.getEventsBy).not.toHaveBeenCalled();
+  expect(events.getEventSummariesBy).not.toHaveBeenCalled();
   const a = first$.subscribe(); const b = service.watch(user, tiles[1].tile, { tiles: [] }).subscribe();
-  expect(events.getEventsBy).toHaveBeenCalledTimes(1);
-  const clauses = events.getEventsBy.mock.calls[0][1];
+  expect(events.getEventSummariesBy).toHaveBeenCalledTimes(1);
+  const clauses = events.getEventSummariesBy.mock.calls[0][1];
   expect(clauses[1].value - clauses[0].value).toBe(90*86400000);
   a.unsubscribe(); expect(cleanup).not.toHaveBeenCalled(); b.unsubscribe(); expect(cleanup).toHaveBeenCalledTimes(1);
  });
@@ -165,9 +165,9 @@ describe('read-only chart preview data', () => {
   const seed = { tiles: [tile], tileEventsByOrder: { [tile.order]: buildDashboardExampleEvents() } };
   const service = TestBed.inject(DashboardChartPreviewService);
   service.watch(user, tile, seed).subscribe();
-  expect(events.getEventsBy).not.toHaveBeenCalled();
+  expect(events.getEventSummariesBy).not.toHaveBeenCalled();
   service.watch(user, tile, { ...seed, tileEventAnchorsByOrder: { [tile.order]: Date.now()-90*86400000 } }).subscribe();
-  expect(events.getEventsBy).toHaveBeenCalledTimes(1);
+  expect(events.getEventSummariesBy).toHaveBeenCalledTimes(1);
  });
  it('loads HRV through the Health adapter and reuses only matching current data', () => {
   const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
@@ -181,13 +181,13 @@ describe('read-only chart preview data', () => {
   service.watch(user, tile, { tiles: [] }).subscribe(value => result = value);
   expect(hrv.watch).toHaveBeenCalledWith(user.uid, '14d', expect.any(Number), user.settings.unitSettings);
   expect(result!.tile['hrvTrend']).toEqual(context);
-  expect(sleep.watchForDashboard).not.toHaveBeenCalled(); expect(events.getEventsBy).not.toHaveBeenCalled();
+  expect(sleep.watchForDashboard).not.toHaveBeenCalled(); expect(events.getEventSummariesBy).not.toHaveBeenCalled();
   hrv.watch.mockReturnValue(of({ ...context, charts: [] }));
   service.watch(user, tile, { tiles: [] }).subscribe(value => result = value);
   expect(result!.source).toBe('example');
  });
  it('labels failed and missing personal data as an example without mixing sources', () => {
-  events.getEventsBy.mockReturnValue(throwError(() => new Error('offline')));
+  events.getEventSummariesBy.mockReturnValue(throwError(() => new Error('offline')));
   const tile = getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!.tile;
   const values: DashboardChartPreview[] = [];
   TestBed.inject(DashboardChartPreviewService).watch(user, tile, { tiles: [] }).subscribe(value => values.push(value));

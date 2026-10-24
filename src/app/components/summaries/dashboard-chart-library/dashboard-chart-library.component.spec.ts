@@ -40,7 +40,7 @@ describe('responsive chart picker interactions', () => {
   let discard = false;
   const save = vi.fn();
   const discovery = { seenRevision: vi.fn((_owner: AppUserInterface, _lane: string) => 1), acknowledge: vi.fn().mockResolvedValue(undefined) };
-  const events = { getEventsBy: vi.fn() };
+  const events = { getEventSummariesBy: vi.fn() };
   const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const settle = async () => {
@@ -54,7 +54,7 @@ describe('responsive chart picker interactions', () => {
     discovery.seenRevision.mockImplementation((owner, lane) => owner.settings.appSettings?.dashboardChartLibrarySeen?.[lane] || 1);
     discovery.acknowledge.mockResolvedValue(undefined);
     derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
-    events.getEventsBy.mockReturnValue(of([]));
+    events.getEventSummariesBy.mockReturnValue(of([]));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent, ActivityTypesMultiSelectComponent], imports: [ActivityFilterPickerComponent, CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
       { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
       {provide:DashboardHealthService,useValue:{watch:()=>EMPTY}}, DashboardChartLibraryState, { provide: DashboardChartDiscoveryService, useValue: discovery }, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
@@ -75,7 +75,7 @@ describe('responsive chart picker interactions', () => {
     expect(component.addActionLabel()).toContain('Add to dashboard');
     expect(component.unseen().length).toBeGreaterThan(0);
     expect(component.sections()).toHaveLength(7);
-    expect(derived.watch).not.toHaveBeenCalled(); expect(events.getEventsBy).not.toHaveBeenCalled();
+    expect(derived.watch).not.toHaveBeenCalled(); expect(events.getEventSummariesBy).not.toHaveBeenCalled();
     expect(discovery.acknowledge).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     await component.toggle(); await settle();
     expect(component.browseLane()).toBe('section:health');
@@ -239,7 +239,7 @@ describe('responsive chart picker interactions', () => {
 
   it('groups at most two ready suggestions without duplicating rows or changing a selected draft', async () => {
     const source$ = new Subject<ReturnType<typeof buildDashboardExampleEvents>>();
-    events.getEventsBy.mockReturnValue(source$);
+    events.getEventSummariesBy.mockReturnValue(source$);
     fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
     await component.toggle(); await settle();
     const selected = component.state.selected()?.definition.id;
@@ -302,17 +302,17 @@ describe('responsive chart picker interactions', () => {
   });
   it('hydrates all activity rows through one read and retains previews while searching', async () => {
     const source$ = new Subject<ReturnType<typeof buildDashboardExampleEvents>>();
-    events.getEventsBy.mockReturnValue(source$);
+    events.getEventSummariesBy.mockReturnValue(source$);
     fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
     await component.toggle(); await settle();
-    expect(events.getEventsBy).toHaveBeenCalledOnce();
+    expect(events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(component.rowPreviews().every(row => row.preview.loading)).toBe(true);
     source$.next(buildDashboardExampleEvents(Date.now())); await settle();
     const rows = component.rowPreviews();
     expect(rows.every(row => row.preview.source === 'user' && !row.preview.loading)).toBe(true);
     component.filter('Distance'); await settle();
     expect(component.rowPreviews().every(row => rows.includes(row))).toBe(true);
-    expect(events.getEventsBy).toHaveBeenCalledOnce();
+    expect(events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(derived.watch).not.toHaveBeenCalled();
     await component.close(); await settle();
     expect(source$.observed).toBe(false);
@@ -327,14 +327,14 @@ describe('responsive chart picker interactions', () => {
     await settle(); await component.toggle(); await settle();
     const selected = component.state.selected()?.definition.id;
     expect(component.suggested()).toHaveLength(2);
-    expect(events.getEventsBy).not.toHaveBeenCalled();
+    expect(events.getEventSummariesBy).not.toHaveBeenCalled();
 
     fixture.componentRef.setInput('seed', { tiles: [existing], tileEventsByOrder: { [existing.order]: [] } });
     await settle();
     expect(component.suggested()).toHaveLength(0);
     expect(component.rowPreviews().every(row => row.preview.availability?.state === 'no-data')).toBe(true);
     expect(component.state.selected()?.definition.id).toBe(selected);
-    expect(events.getEventsBy).not.toHaveBeenCalled();
+    expect(events.getEventSummariesBy).not.toHaveBeenCalled();
   });
   it('opens a wide dialog without expanding the dashboard', async () => {
     await component.toggle(); await settle();
@@ -691,7 +691,7 @@ describe('responsive chart picker interactions', () => {
     await component.toggle(); await settle(); button('Create custom chart').click(); await settle();
     const editor = component.state.editor()!;
     editor.onCategoryChange(category); editor.mapSource = 'events'; component.state.refreshDraft(); await settle();
-    const readCount = events.getEventsBy.mock.calls.length;
+    const readCount = events.getEventSummariesBy.mock.calls.length;
     const field = document.body.querySelector<HTMLInputElement>('app-dashboard-tile-editor input[aria-label="Sports"]')!;
     expect(field).toBeTruthy(); field.click(); await settle();
     const dialog = Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]')).find(element => element.getAttribute('aria-label') === 'Choose sports')!;
@@ -713,7 +713,7 @@ describe('responsive chart picker interactions', () => {
     expect(running.getAttribute('aria-disabled')).toBe('false'); expect(clear.disabled).toBe(false);
     expect(selectedSports()).toEqual([ActivityTypes.Running]);
     [...dialog.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
-    expect(component.expanded()).toBe(true); expect(events.getEventsBy).toHaveBeenCalledTimes(readCount);
+    expect(component.expanded()).toBe(true); expect(events.getEventSummariesBy).toHaveBeenCalledTimes(readCount);
   });
 
   it('locks chart settings until the pending save completes', async () => {

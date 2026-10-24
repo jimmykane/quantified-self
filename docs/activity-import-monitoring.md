@@ -225,3 +225,12 @@ configuration changes. Natural idle/live
 observations are operational evidence, not provider receipt, full backlog coverage or a
 fabricated failure/email test. The unchanged Alerts channel's opened/closed email proof is
 reused from completed #655.
+
+## Recording identity review outcomes
+
+Coverage decision: **covered**. `ACTIVITY_IDENTITY_CONFLICT` uses the existing committed `dead_lettered` outcome for
+Suunto, COROS, Garmin and Wahoo. It is emitted after the guarded terminal transaction/batch commits, not once per
+HTTP delivery or error log. The fixed failure context is diagnostic only; no identity, sport, source path or raw
+error is added as a metric label. Existing actionable backlog-age, worker/dispatch failure and unknown-telemetry
+checks remain applicable. No monitoring resources, retry schedules or probes change. A review conflict preserves the
+saved recording and Training controls; inspect the authorized originals before any separately approved recovery.

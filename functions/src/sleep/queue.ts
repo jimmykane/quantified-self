@@ -46,6 +46,7 @@ import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUs
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
+import { executeWithTokenRetry } from '../suunto/retry-helper';
 import { isSuuntoImportDisconnected } from '../suunto/disconnected-import';
 import {
     deferQueueItemForPendingDisconnect,
@@ -1725,50 +1726,51 @@ async function processSuuntoQueueItem(
         if (!Number.isFinite(queueItem.rangeStartMs) || !Number.isFinite(queueItem.rangeEndMs)) {
             throw new Error(`Suunto poll queue item ${queueItem.id} has invalid range`);
         }
-        const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp);
-        const refreshedProviderUserId = typeof tokenData.userName === 'string'
-            ? tokenData.userName.trim()
-            : '';
-        if (refreshedProviderUserId !== queueItem.providerUserId) {
-            throw new SuuntoSleepLifecycleChangedError();
-        }
-        const refreshedTokenSnapshot = {
-            id: tokenSnapshot.id,
-            ref: tokenSnapshot.ref,
-            data: () => ({
-                ...(tokenSnapshot.data() as Record<string, unknown> | undefined),
-                ...(tokenData as unknown as Record<string, unknown>),
-                serviceName: ServiceNames.SuuntoApp,
-                userName: refreshedProviderUserId,
-                tokenCredentialGeneration:
-                    initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration,
-            }),
-        } as unknown as TokenSnapshot;
-        const currentLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
-            admin.firestore(),
-            firebaseUserID,
-            queueItem.providerUserId,
-            refreshedTokenSnapshot,
-        );
-        if (!currentLifecycleGuards
-            || !areSuuntoWebhookWriteLifecycleGuardsContinuous(
-                initialLifecycleGuards,
-                currentLifecycleGuards,
-            )) {
-            throw new SuuntoSleepLifecycleChangedError();
-        }
-        // Publish the rotated credential guard before provider I/O so a later
-        // request failure cannot make our own refresh suppress error state.
-        onLifecycleGuardsCaptured(currentLifecycleGuards);
-        const payload = await requestPromise.get({
-            headers: {
-                Authorization: toSuuntoAuthorizationHeader(tokenData.accessToken),
-                'Content-Type': 'application/json',
-                'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-            },
-            json: true,
-            url: `https://cloudapi.suunto.com/247samples/sleep?from=${Math.floor(queueItem.rangeStartMs || 0)}&to=${Math.floor(queueItem.rangeEndMs || 0)}`,
-        });
+        const payload = await executeWithTokenRetry(tokenSnapshot, async (_accessToken, tokenData) => {
+            const refreshedProviderUserId = typeof tokenData.userName === 'string'
+                ? tokenData.userName.trim()
+                : '';
+            if (refreshedProviderUserId !== queueItem.providerUserId) {
+                throw new SuuntoSleepLifecycleChangedError();
+            }
+            const refreshedTokenSnapshot = {
+                id: tokenSnapshot.id,
+                ref: tokenSnapshot.ref,
+                data: () => ({
+                    ...(tokenSnapshot.data() as Record<string, unknown> | undefined),
+                    ...(tokenData as unknown as Record<string, unknown>),
+                    serviceName: ServiceNames.SuuntoApp,
+                    userName: refreshedProviderUserId,
+                    tokenCredentialGeneration:
+                        initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration,
+                }),
+            } as unknown as TokenSnapshot;
+            const currentLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
+                admin.firestore(),
+                firebaseUserID,
+                queueItem.providerUserId,
+                refreshedTokenSnapshot,
+            );
+            if (!currentLifecycleGuards
+                || !areSuuntoWebhookWriteLifecycleGuardsContinuous(
+                    initialLifecycleGuards,
+                    currentLifecycleGuards,
+                )) {
+                throw new SuuntoSleepLifecycleChangedError();
+            }
+            // Publish the rotated credential guard before provider I/O so a later
+            // request failure cannot make our own refresh suppress error state.
+            onLifecycleGuardsCaptured(currentLifecycleGuards);
+            return requestPromise.get({
+                headers: {
+                    Authorization: toSuuntoAuthorizationHeader(tokenData.accessToken),
+                    'Content-Type': 'application/json',
+                    'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                },
+                json: true,
+                url: `https://cloudapi.suunto.com/247samples/sleep?from=${Math.floor(queueItem.rangeStartMs || 0)}&to=${Math.floor(queueItem.rangeEndMs || 0)}`,
+            });
+        }, 'sleep_poll');
         return keepBestMapperResultPerSourceSession(normalizePayloadArray(payload, 'samples')
             .map((sample) => mapSuuntoSleepSample(sample, queueItem.providerUserId, Date.now()))
             .filter((result): result is SleepMapperResult => result !== null));

@@ -23,14 +23,14 @@ class EventTableStubComponent {
 
 describe('ActivityRangeTableSectionComponent', () => {
   let fixture: ComponentFixture<ActivityRangeTableSectionComponent>;
-  const getEventsBy = vi.fn();
+  const getEventSummariesBy = vi.fn();
   const user = new User('user-1');
 
   beforeEach(async () => {
-    getEventsBy.mockReset();
+    getEventSummariesBy.mockReset();
     await TestBed.configureTestingModule({
       imports: [ActivityRangeTableSectionComponent],
-      providers: [{ provide: AppEventService, useValue: { getEventsBy } }],
+      providers: [{ provide: AppEventService, useValue: { getEventSummariesBy } }],
     }).overrideComponent(ActivityRangeTableSectionComponent, {
       remove: { imports: [EventTableModule] },
       add: { imports: [EventTableStubComponent] },
@@ -39,7 +39,7 @@ describe('ActivityRangeTableSectionComponent', () => {
   });
 
   it('queries the supplied range and excludes generated records', async () => {
-    getEventsBy.mockReturnValue(of([
+    getEventSummariesBy.mockReturnValue(of([
       event('activity-1'),
       event('merged', { isMerge: true }),
       event('benchmark', { benchmarkResults: { current: {} } }),
@@ -54,7 +54,7 @@ describe('ActivityRangeTableSectionComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(getEventsBy).toHaveBeenCalledWith(user, [{
+    expect(getEventSummariesBy).toHaveBeenCalledWith(user, [{
       fieldPath: 'startDate',
       opStr: '>=',
       value: new Date(2026, 7, 1).getTime(),
@@ -73,7 +73,7 @@ describe('ActivityRangeTableSectionComponent', () => {
 
   it('queries a target user while preserving the viewer for table preferences', async () => {
     const targetUser = new User('target-user');
-    getEventsBy.mockReturnValue(of([event('activity-1')]));
+    getEventSummariesBy.mockReturnValue(of([event('activity-1')]));
     fixture.componentRef.setInput('user', user);
     fixture.componentRef.setInput('targetUser', targetUser);
     fixture.componentRef.setInput('range', {
@@ -84,7 +84,7 @@ describe('ActivityRangeTableSectionComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(getEventsBy).toHaveBeenCalledWith(targetUser, expect.any(Array), 'startDate', false, 0);
+    expect(getEventSummariesBy).toHaveBeenCalledWith(targetUser, expect.any(Array), 'startDate', false, 0);
     const table = fixture.debugElement.query(By.directive(EventTableStubComponent))
       .componentInstance as EventTableStubComponent;
     expect(table.user).toBe(user);
@@ -92,7 +92,7 @@ describe('ActivityRangeTableSectionComponent', () => {
   });
 
   it('refreshes the query when the range changes and exposes a contextual error', async () => {
-    getEventsBy.mockReturnValueOnce(of([])).mockReturnValueOnce(throwError(() => new Error('offline')));
+    getEventSummariesBy.mockReturnValueOnce(of([])).mockReturnValueOnce(throwError(() => new Error('offline')));
     fixture.componentRef.setInput('user', user);
     fixture.componentRef.setInput('range', {
       startMs: new Date(2026, 7, 1).getTime(),
@@ -110,14 +110,14 @@ describe('ActivityRangeTableSectionComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(getEventsBy).toHaveBeenCalledTimes(2);
+    expect(getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(fixture.componentInstance.hasError()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Activities for August 2026 could not be loaded.');
   });
 
   it('keeps the loading state visible until the first query result arrives', async () => {
     const response = new Subject<any[]>();
-    getEventsBy.mockReturnValue(response);
+    getEventSummariesBy.mockReturnValue(response);
     fixture.componentRef.setInput('user', user);
     fixture.componentRef.setInput('range', {
       startMs: new Date(2026, 7, 1).getTime(),

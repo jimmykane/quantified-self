@@ -440,7 +440,7 @@ service cloud.firestore {
             allow create: if false;
             allow delete: if false;
             allow update: if mayWriteAccount(userID)
-              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eventID', 'userID', 'eventStartDate', 'sourceActivityKey', 'ascentCorrection', 'descentCorrection'])
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eventID', 'userID', 'eventStartDate', 'sourceActivityKey', 'sourceIdentity', 'ascentCorrection', 'descentCorrection'])
               && isOwnEventRef(request.resource.data);
           }
 

@@ -39,6 +39,7 @@ import { inspectFitPayload } from '../shared/fit-payload';
 import { uploadDebugFile } from '../debug-utils';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
 import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from '../shared/import-preservation';
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
 const ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE = 'Account deletion is in progress. Please sign in again.';
@@ -527,6 +528,10 @@ export const uploadActivity = onRequest({
       uploadCountAfterWrite: eventAlreadyExists ? currentCount : (currentCount + 1),
     });
   } catch (error) {
+    if (isActivityIdentityConflict(error)) {
+      response.status(409).json({ error: ACTIVITY_IDENTITY_CONFLICT_MESSAGE, code: error.code });
+      return;
+    }
     if (error instanceof EventWriteSkippedForDeletedUserError) {
       response.status(409).json({
         error: ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE,

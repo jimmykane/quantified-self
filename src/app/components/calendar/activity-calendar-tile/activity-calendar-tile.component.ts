@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -16,7 +17,7 @@ import {
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
-import type { EventInterface, User } from '@sports-alliance/sports-lib';
+import type { User } from '@sports-alliance/sports-lib';
 import { catchError, distinctUntilChanged, finalize, map, of, shareReplay, startWith, Subscription, switchMap, take } from 'rxjs';
 import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
@@ -58,7 +59,7 @@ import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../.
 
 interface ActivityCalendarTileState {
   status: 'loading' | 'ready' | 'error';
-  events: EventInterface[];
+  events: EventRead[];
 }
 
 interface ActivityCalendarTilePlansState {

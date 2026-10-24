@@ -1,3 +1,4 @@
+import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
@@ -407,6 +408,13 @@ describe('processWahooWorkoutQueueItem', () => {
       expect.any(String),
       expect.objectContaining({ message: 'Wahoo activity processing failed: Error' }),
     );
+  });
+
+  it('retains the typed source conflict for revision-aware terminal handling', async () => {
+    const error = new ActivityIdentityConflictError();
+    mocks.setEvent.mockRejectedValueOnce(error);
+    await processWahooWorkoutQueueItem(queueItem);
+    expect(mocks.failRevision).toHaveBeenCalledWith(queueItem, expect.any(String), error);
   });
 
   it('sanitizes signed provider URLs before persisting retry errors', async () => {

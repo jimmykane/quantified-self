@@ -1,6 +1,7 @@
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router, RouterModule } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
+import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -20,7 +21,9 @@ import { CalendarDayDetailsNavigationService } from '../../services/calendar-day
 import { LOCALE_ID, NO_ERRORS_SCHEMA, signal, type WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { of, Subject, Subscription } from 'rxjs';
+import { Observable, of, Subject, Subscription } from 'rxjs';
+import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { AppDashboardChartTileSettingsInterface } from '../../models/app-user.interface';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { readFileSync } from 'node:fs';
@@ -79,7 +82,7 @@ describe('SummariesComponent', () => {
     ensureForDashboard: ReturnType<typeof vi.fn>;
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
-  let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
+  let mockEventService: { getEventSummariesBy: ReturnType<typeof vi.fn> };
   let mockRouteService: { watchRecentRoutePreviews: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
@@ -155,7 +158,7 @@ describe('SummariesComponent', () => {
       watchForDashboard: vi.fn().mockReturnValue(of([])),
     };
     mockEventService = {
-      getEventsBy: vi.fn().mockReturnValue(of([])),
+      getEventSummariesBy: vi.fn().mockReturnValue(of([])),
     };
     mockRouteService = {
       watchRecentRoutePreviews: vi.fn().mockReturnValue(of([])),
@@ -186,7 +189,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
@@ -237,7 +240,7 @@ describe('SummariesComponent', () => {
     const routes = new Subject<never[]>();
     mockDashboardDerivedMetricsService.watch.mockReturnValue(metrics);
     mockSleepService.watchForDashboard.mockReturnValue(sleep);
-    mockEventService.getEventsBy.mockReturnValue(events);
+    mockEventService.getEventSummariesBy.mockReturnValue(events);
     mockRouteService.watchRecentRoutePreviews.mockReturnValue(routes);
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = { uid: 'batch-owner', settings: { dashboardSettings: { tiles: [
@@ -885,7 +888,7 @@ describe('SummariesComponent', () => {
       fixture.detectChanges();
 
       expect(component.todayGreeting).toBe('Good evening, Morgan');
-      expect(vi.getTimerCount()).toBe(1);
+      expect(vi.getTimerCount()).toBe(2); // Greeting boundary and visible sickness-context clock.
     } finally {
       if (visibilityDescriptor) {
         Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
@@ -929,7 +932,7 @@ describe('SummariesComponent', () => {
     } as any;
     component.showActions = true;
     fixture.detectChanges();
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2); // Both Today clocks are disposed below.
 
     fixture.destroy();
 
@@ -1042,6 +1045,9 @@ describe('SummariesComponent', () => {
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    // Actions share the heading row, leaving the date the full content width on phones.
+    expect(dashboardHeader?.querySelector('.qs-page-header__title-row .dashboard-section-actions')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
     expect(dashboardHeader?.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
     expect(dashboardHeader?.textContent).not.toContain('Dashboard manager');
@@ -2158,6 +2164,31 @@ describe('SummariesComponent', () => {
       .toBe('negative');
   });
 
+  it('keeps active sickness discreet and owner-only, without changing the state or readiness score', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 12));
+    component.user = { uid: 'owner-user' } as SummariesComponent['user'];
+    component.dashboardTodayTrainingState = { label: 'Fresh', caption: 'Ready to train', scalePosition: 1, scaleTone: 'positive', contextText: '' };
+    const readiness = component.dashboardTodayReadiness.scoreText;
+    const service = TestBed.inject(AppTimelineNotesService);
+    vi.mocked(service.loadRange).mockResolvedValue({ notes: [{ id: 'a', category: 'sickness', title: 'Sore throat',
+      startDate: '2026-10-21', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 }], incomplete: null });
+    fixture.detectChanges(); TestBed.flushEffects();
+    await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    const state = fixture.nativeElement.querySelector('.dashboard-training-state-primary') as HTMLElement;
+    expect(state.textContent).toContain('Sickness noted');
+    expect(state.textContent).toContain('Low training load');
+    expect(state.textContent).not.toContain('Ready to train');
+    expect(component.dashboardTodayTrainingState.label).toBe('Fresh');
+    expect(component.dashboardTodayReadiness.scoreText).toBe(readiness);
+    const haptics = TestBed.inject(AppHapticsService);
+    vi.mocked(haptics.selection).mockClear();
+    state.querySelector<HTMLButtonElement>('app-active-sickness-note button')!.click();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ uid: 'owner-user' }) }));
+    component.user = { uid: 'other-user' } as SummariesComponent['user']; fixture.detectChanges();
+    expect(state.querySelector('app-active-sickness-note button')).toBeNull();
+  });
+
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
     const nowMs = Date.UTC(2026, 6, 18, 12);
     vi.useFakeTimers();
@@ -2420,16 +2451,263 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
-    expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
+    expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventSummariesBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
+    expect(mockEventService.getEventSummariesBy.mock.calls[0][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (90 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
-    expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
+    expect(mockEventService.getEventSummariesBy.mock.calls[1][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
+  });
+
+  describe('shared tile event queries', () => {
+    beforeEach(() => {
+      buildDashboardTileViewModelsSpy.mockReturnValue([]);
+      component.user = {
+        uid: 'query-owner', settings: { dashboardSettings: { tiles: [
+          { type: TileTypes.Chart, order: 0, chartType: ChartTypes.ColumnsVertical,
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Running] } },
+          { type: TileTypes.Map, order: 1,
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] } },
+        ] } },
+      } as SummariesComponent['user'];
+      component.eventUser = component.user;
+    });
+
+    it('shares one live subscription and one filtered event array across matching chart and map tiles', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      let subscriptions = 0;
+      mockEventService.getEventSummariesBy.mockReturnValue(new Observable<EventInterface[]>(subscriber => {
+        subscriptions++;
+        return incoming$.subscribe(subscriber);
+      }));
+      const nowMs = 1800000000000;
+      const now = vi.spyOn(Date, 'now').mockImplementation(() => nowMs + now.mock.calls.length);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(subscriptions).toBe(1);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      const event = { isMerge: false } as EventInterface;
+      incoming$.next([event, { isMerge: true } as EventInterface]);
+      expect(component['tileEventsByOrder'][0]).toEqual([event]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+      expect(component.user.settings.dashboardSettings.tiles.map(tile => (tile as AppDashboardChartTileSettingsInterface).eventFilters.activityTypes))
+        .toEqual([[ActivityTypes.Running], [ActivityTypes.Cycling]]);
+    });
+
+    it('replays loaded events to a later matching tile without changing the original window', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValue(incoming$);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+      component['syncTileEventSubscriptions']();
+      const event = { isMerge: false } as EventInterface;
+      incoming$.next([event]);
+      now.mockReturnValue(1800000060000);
+      component.user.settings.dashboardSettings.tiles.push({
+        type: TileTypes.Map, order: 2, eventFilters: { range: '1y', activityTypes: [] },
+      } as typeof component.user.settings.dashboardSettings.tiles[number]);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(component['tileEventsByOrder'][2]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder[2]).toBe(false);
+    });
+
+    it.each([
+      { change: 'replaced', newOrder: 0 },
+      { change: 'replaced', newOrder: 3 },
+      { change: 'changed range', newOrder: 0 },
+      { change: 'changed range', newOrder: 3 },
+    ] as const)(
+      'refreshes the latest window when its final consumers are $change and the replacement has order $newOrder', ({ change, newOrder }) => {
+        mockEventService.getEventSummariesBy.mockImplementation(() => new Subject<EventInterface[]>());
+        component.user.settings.dashboardSettings.tiles.forEach((tile, index) => { tile.order = index + 1; });
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+        component['syncTileEventSubscriptions']();
+        now.mockReturnValue(1800000060000);
+        if (change === 'replaced') {
+          component.user.settings.dashboardSettings.tiles = [
+            { type: TileTypes.Chart, order: 1, chartType: DASHBOARD_FORM_CHART_TYPE },
+            { type: TileTypes.Chart, order: 2, chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE },
+          ] as typeof component.user.settings.dashboardSettings.tiles;
+        } else {
+          component.user.settings.dashboardSettings.tiles.forEach(tile => {
+            (tile as AppDashboardChartTileSettingsInterface).eventFilters.range = '30d';
+          });
+        }
+        component.user.settings.dashboardSettings.tiles.push({
+          type: TileTypes.Map, order: newOrder, eventFilters: { range: '1y', activityTypes: [] },
+        } as typeof component.user.settings.dashboardSettings.tiles[number]);
+        component['syncTileEventSubscriptions']();
+
+        const latestCall = mockEventService.getEventSummariesBy.mock.calls.filter(call => {
+          const clauses = call[1] as Array<{ value: number }>;
+          return clauses[1].value - clauses[0].value === 365 * 24 * 60 * 60 * 1000;
+        }).at(-1);
+        expect(latestCall?.[1]).toEqual([
+          { fieldPath: 'startDate', opStr: '>=', value: 1800000060000 - 365 * 24 * 60 * 60 * 1000 },
+          { fieldPath: 'startDate', opStr: '<=', value: 1800000060000 },
+        ]);
+      },
+    );
+
+    it('shares a synchronous startup failure across tiles and retries only on the next synchronization', () => {
+      mockEventService.getEventSummariesBy.mockImplementation(() => { throw new Error('query startup failed'); });
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+
+      const retry$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValue(retry$);
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      retry$.next([]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
+
+    it('keeps a shared source alive until its final tile is removed and releases its replayed data', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      const teardown = vi.fn();
+      mockEventService.getEventSummariesBy.mockReturnValue(new Observable<EventInterface[]>(subscriber => {
+        const subscription = incoming$.subscribe(subscriber);
+        return () => { subscription.unsubscribe(); teardown(); };
+      }));
+      component['syncTileEventSubscriptions']();
+      incoming$.next([{ isMerge: false } as EventInterface]);
+      const savedTiles = component.user.settings.dashboardSettings.tiles;
+      component.user.settings.dashboardSettings.tiles = savedTiles.slice(1);
+      component['syncTileEventSubscriptions']();
+      expect(teardown).not.toHaveBeenCalled();
+      expect(component['tileEventsByOrder'][0]).toBeUndefined();
+      component.user.settings.dashboardSettings.tiles = [];
+      component['syncTileEventSubscriptions']();
+      expect(teardown).toHaveBeenCalledOnce();
+      expect(component['tileEventQueries'].size).toBe(0);
+
+      component.user.settings.dashboardSettings.tiles = savedTiles;
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(component['tileEventsByOrder']).toEqual({});
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      fixture.destroy();
+      expect(teardown).toHaveBeenCalledTimes(2);
+      expect(component['tileEventQueries'].size).toBe(0);
+    });
+
+    it('keeps changed date windows independent without restarting their unchanged peers', () => {
+      const latest$ = new Subject<EventInterface[]>();
+      const shorter$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(latest$).mockReturnValueOnce(shorter$);
+      component['syncTileEventSubscriptions']();
+      const event = { isMerge: false } as EventInterface;
+      latest$.next([event]);
+      (component.user.settings.dashboardSettings.tiles[0] as AppDashboardChartTileSettingsInterface).eventFilters.range = '30d';
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(latest$.observed).toBe(true);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: false });
+      expect(component['tileEventsByOrder'][0]).toBeUndefined();
+      expect(component['tileEventsByOrder'][1]).toEqual([event]);
+      shorter$.next([]);
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [event] });
+    });
+
+    it('refreshes a shared calendar query after a date boundary and reorder before adding a matching tile', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 9, 31, 12));
+      component.user.settings.dashboardSettings.tiles.forEach(tile => {
+        (tile as AppDashboardChartTileSettingsInterface).eventFilters.range = 'thisMonth';
+      });
+      const previous$ = new Subject<EventInterface[]>();
+      const current$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(previous$).mockReturnValueOnce(current$);
+      component['syncTileEventSubscriptions']();
+      previous$.next([{ isMerge: false } as EventInterface]);
+
+      vi.setSystemTime(new Date(2026, 10, 1, 12));
+      component.user.settings.dashboardSettings.tiles.forEach(tile => { tile.order = 1 - tile.order; });
+      component['remapTileEventStateForOrderChange'](new Map([[0, 1], [1, 0]]));
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      component.user.settings.dashboardSettings.tiles.push({
+        type: TileTypes.Map, order: 2, eventFilters: { range: 'thisMonth', activityTypes: [] },
+      } as typeof component.user.settings.dashboardSettings.tiles[number]);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(previous$.observed).toBe(false);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true, 2: true });
+      expect(mockEventService.getEventSummariesBy.mock.calls[1][1]).toEqual([
+        { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 10, 1).getTime() },
+        { fieldPath: 'startDate', opStr: '<=', value: new Date(2026, 10, 2).getTime() },
+      ]);
+      current$.next([]);
+      expect(component['tileEventsByOrder'][0]).toBe(component['tileEventsByOrder'][2]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][2]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false, 2: false });
+      expect(component['tileEventQueries'].size).toBe(1);
+    });
+
+    it('tears down the previous account and clears its values before loading the next account', () => {
+      const previous$ = new Subject<EventInterface[]>();
+      const next$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(previous$).mockReturnValueOnce(next$);
+      component['syncTileEventSubscriptions']();
+      previous$.next([{ isMerge: false } as EventInterface]);
+      component['tileEventAnchorEndMsByOrder'].set(0, 1700000000000);
+      component.eventUser = { uid: 'next-account' } as SummariesComponent['eventUser'];
+      component['syncTileEventSubscriptions']();
+
+      expect(previous$.observed).toBe(false);
+      expect(component['tileEventAnchorEndMsByOrder'].size).toBe(0);
+      expect(mockEventService.getEventSummariesBy.mock.calls.map(call => call[0].uid)).toEqual(['query-owner', 'next-account']);
+      expect(component['tileEventsByOrder']).toEqual({});
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      previous$.next([{ isMerge: false } as EventInterface]);
+      expect(component['tileEventsByOrder']).toEqual({});
+      next$.next([]);
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+    });
+
+    it('shares matching historical windows while keeping the latest window independent', () => {
+      const latest$ = new Subject<EventInterface[]>();
+      const historical$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(latest$).mockReturnValueOnce(historical$);
+      component['syncTileEventSubscriptions']();
+      component['tileEventAnchorEndMsByOrder'].set(0, 1700000000000);
+      component['syncTileEventSubscriptions']();
+      expect(latest$.observed).toBe(true);
+      expect(historical$.observed).toBe(true);
+      component['tileEventAnchorEndMsByOrder'].set(1, 1700000000000);
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(latest$.observed).toBe(false);
+      historical$.next([]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
+
+    it('reports errors to all consumers and reconnects once when subscriptions are synchronized again', () => {
+      const failed$ = new Subject<EventInterface[]>();
+      const retry$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(failed$).mockReturnValueOnce(retry$);
+      component['syncTileEventSubscriptions']();
+      failed$.error(new Error('offline'));
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      retry$.next([]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
   });
 
   it('should maintain independent tile event loading states and pass per-tile events into the builder', async () => {
@@ -2438,7 +2716,7 @@ describe('SummariesComponent', () => {
     const customEvent = { id: 'custom-1', isMerge: false };
     const mergedEvent = { id: 'merged-1', isMerge: true };
     const mapEvent = { id: 'map-1', isMerge: false };
-    mockEventService.getEventsBy
+    mockEventService.getEventSummariesBy
       .mockReturnValueOnce(customEventsSubject.asObservable())
       .mockReturnValueOnce(mapEventsSubject.asObservable());
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
@@ -2560,7 +2838,7 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(mockRouteService.watchRecentRoutePreviews).toHaveBeenCalledWith(component.eventUser, 50);
     expect(component.routePreviewLoading).toBe(true);
     expect(component.isTileLoading({
@@ -2648,7 +2926,7 @@ describe('SummariesComponent', () => {
         isFirstChange: () => true,
       } as any,
     });
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
 
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
 
@@ -2657,7 +2935,7 @@ describe('SummariesComponent', () => {
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(true);
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: '14d', activityTypes: [] });
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(
+    expect(mockEventService.getEventSummariesBy).toHaveBeenLastCalledWith(
       component.user,
       [
         { fieldPath: 'startDate', opStr: '>=', value: nowMs - (2 * fourteenDaysMs) },
@@ -2668,13 +2946,13 @@ describe('SummariesComponent', () => {
       0,
     );
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     component.onTileEventFilterNavigate(0, 'newer');
 
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: '14d', activityTypes: [] });
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(
+    expect(mockEventService.getEventSummariesBy).toHaveBeenLastCalledWith(
       component.user,
       [
         { fieldPath: 'startDate', opStr: '>=', value: nowMs - fourteenDaysMs },
@@ -2690,6 +2968,8 @@ describe('SummariesComponent', () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
+    const incoming$ = new Subject<EventInterface[]>();
+    mockEventService.getEventSummariesBy.mockReturnValue(incoming$);
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = {
       uid: 'user-1',
@@ -2718,14 +2998,14 @@ describe('SummariesComponent', () => {
         isFirstChange: () => true,
       } as any,
     });
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+    expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(1);
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     vi.setSystemTime(new Date(nowMs + 1000));
     (component as any).syncTileEventSubscriptions();
 
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
   });
 
   it('should require confirmation before switching a tile event range to all', async () => {
@@ -2757,7 +3037,7 @@ describe('SummariesComponent', () => {
         isFirstChange: () => true,
       } as any,
     });
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(false) });
 
     await component.onTileEventFilterRangeChange(0, 'all');
@@ -2765,7 +3045,7 @@ describe('SummariesComponent', () => {
     expect(mockDialog.open).toHaveBeenCalledTimes(1);
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters.range).toBe('90d');
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
 
     mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
 
@@ -2775,7 +3055,7 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
-    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
+    expect(mockEventService.getEventSummariesBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
   });
 
   it('should switch Power Curve ranges without a query or all-range confirmation', async () => {
@@ -2802,7 +3082,7 @@ describe('SummariesComponent', () => {
     await component.onTileEventFilterRangeChange(0, 'all');
 
     expect(mockDialog.open).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({
       range: 'all',
       activityTypes: getDashboardPowerCurveActivityTypes('running'),
@@ -3807,7 +4087,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
@@ -3820,13 +4100,13 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
 
     const previousUser = component.user;
     const echoedUser = JSON.parse(JSON.stringify(previousUser));
     component.user = echoedUser as any;
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
 
     await component.ngOnChanges({
@@ -3838,7 +4118,7 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
   });
 
@@ -3861,7 +4141,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE } as any,
     ];
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
     await component.onKpiTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
 
@@ -3874,7 +4154,7 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
   });
 
@@ -3932,7 +4212,7 @@ describe('SummariesComponent', () => {
       [1, secondSubscription],
     ]);
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     expect((component as any).tileEventsByOrder).toEqual({
@@ -3947,13 +4227,13 @@ describe('SummariesComponent', () => {
     expect((component as any).tileEventSubscriptions.get(1)).toBe(firstSubscription);
     expect(firstUnsubscribeSpy).not.toHaveBeenCalled();
     expect(secondUnsubscribeSpy).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
   });
 
   it('should keep late tile event emissions aligned with remapped orders after dashboard tile reorder', async () => {
     const firstTileEvents = new Subject<any[]>();
     const secondTileEvents = new Subject<any[]>();
-    mockEventService.getEventsBy
+    mockEventService.getEventSummariesBy
       .mockReturnValueOnce(firstTileEvents.asObservable())
       .mockReturnValueOnce(secondTileEvents.asObservable());
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
@@ -3994,9 +4274,9 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
     (component as any).syncTileEventSubscriptions();
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     const lateFirstTileEvent = { id: 'late-first-tile-event', isMerge: false };
@@ -4009,7 +4289,7 @@ describe('SummariesComponent', () => {
       0: [lateSecondTileEvent],
       1: [lateFirstTileEvent],
     });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
   });
 
   it('should not persist when dropped at the same index', async () => {

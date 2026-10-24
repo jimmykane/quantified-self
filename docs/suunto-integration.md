@@ -19,7 +19,7 @@ If a saved activity or original becomes permanently ineligible before Suunto upl
 
 ## Provider contract
 
-### Read authorization recovery
+### Authorization recovery
 
 Queued workout FIT downloads, activity-history listing, and Health pulls retry a rejected HTTP 401/403 read once after
 forcing refresh through the existing guarded `getTokenData()` coordinator, against the same token document and Suunto
@@ -39,11 +39,28 @@ its existing durable retry/exhaustion policy. 403 feed attempts remain in the ex
 `unauthorized` counter continues to mean 401 only. Local token-expiry INFO explicitly states that provider access has
 not been verified.
 
-This worker/read-only-call change requires no new Function, credential, schema, index, Rules, migration, Help or MCP
-contract update. After separately approved deployment, verify `processWorkoutTask`, `processSleepSyncTask`, and
-`addSuuntoAppHistoryToQueue`; monitor 403 recovery outcomes, access-denied failed jobs, and refresh contention. Do not
-replay old-account failed jobs as part of rollout. Roll back these Functions revisions to restore the prior read policy
-without changing accepted data or connections.
+Activity upload initialization/status, route listing/export/import, Sleep-only polling, and Training Guides also allow
+one same-account forced OAuth refresh after a resource HTTP 401/403. Route reads recognize explicit numeric 401/403
+codes in small HTTP 200 JSON error envelopes before treating the response as GPX or a route listing. The refreshed
+request repeats current account, deletion and lifecycle checks. A persistent rejection returns to the existing caller's
+permission/reconnect or durable retry policy; it never loops or switches accounts. A token-endpoint 403 is a refresh
+failure, not proof that resource permission was tested. Refresh status extraction includes OAuth SDK `output.statusCode`
+errors; an explicit terminal credential-lifecycle decision still propagates unchanged for reconnect handling. In these
+paths, known APIM subscription-key rejection signatures are application configuration failures and do not trigger
+user-token refresh. Signed activity blob URLs are not OAuth endpoints and are never refreshed or replayed by this recovery.
+
+Recovery repeats only the rejected request: a status failure cannot restart activity initialization or resend the FIT.
+Guides journal definitive write rejection before refreshing, recheck consent/Pro/lifecycle guards before another request,
+and preserve their existing accepted-ID and uncertain-write recovery. Timeouts, malformed success responses and other
+ambiguous writes do not qualify for automatic authorization replay. See [Training delivery](training-workspace.md).
+
+No new Function, credential, schema, index, Rules, migration, Help or MCP contract is required. Monitoring is
+**covered/unchanged**: existing committed outcomes and worker events in activity delivery (#832), routes (#833),
+Sleep/Health (#830) and Training (#655) retain their fixed provider/queue/outcome dimensions. Refresh INFO contains only
+the status code, never caller context, identifiers, credentials or provider bodies. After separately approved deployment,
+verify the corresponding upload/route/history/Sleep/Training callers, persistent rejection outcomes, and refresh contention.
+Do not replay old-account failed jobs as part of rollout. Roll back the affected Functions revisions to restore the prior
+policy without changing stored data.
 
 Suunto exposes three relevant pull resources. Every request is authenticated with the connected user's OAuth access token and the Suunto subscription key. Suunto documents the stable account identity in the access token JWT's custom `user` claim; OAuth exchange and refresh handling normalize that claim before credential persistence. A legacy top-level `user` response field is accepted only when it agrees with the claim, and any mismatch with the expected retained account is rejected.
 

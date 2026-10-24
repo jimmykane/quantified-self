@@ -1,6 +1,7 @@
+import type { EventRead } from '@shared/event-read';
 import { Component, Inject, inject } from '@angular/core';
 import { isRunningFamilyActivityType } from '@shared/activity-type-family';
-import { EventInterface } from '@sports-alliance/sports-lib';
+
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -52,7 +53,7 @@ export class EventsExportFormComponent extends FormsAbstract {
 
   public exportFromGroup: UntypedFormGroup;
   public user: User;
-  public events: EventInterface[];
+  public events: EventRead[];
   public startDate: Date;
   public endDate: Date;
   public isLoading: boolean;
@@ -75,7 +76,7 @@ export class EventsExportFormComponent extends FormsAbstract {
       throw new Error('Component needs events, user, start date and end date')
     }
 
-    this.events.sort((eventA: EventInterface, eventB: EventInterface) => {
+    this.events.sort((eventA: EventRead, eventB: EventRead) => {
       return +eventA.startDate - +eventB.startDate;
     });
 

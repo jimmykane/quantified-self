@@ -35,14 +35,17 @@ import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
+import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import { HapticTapDirective } from '../../directives/haptic-tap.directive';
+import { By } from '@angular/platform-browser';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { buildDashboardFormPointsFromDailyLoads } from '../../helpers/dashboard-form.helper';
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
-class TimelineNotesWorkspaceStubComponent { context = () => null; }
+class TimelineNotesWorkspaceStubComponent { context = signal<TimelineNoteChartContext | null>(null); }
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -196,6 +199,7 @@ describe('TrainingWorkspaceComponent', () => {
         MatTooltipModule,
         PageHeaderComponent,
         TrainingSummaryCardsComponent,
+        ActiveSicknessNoteComponent,
         TrainingMetricGridComponent,
       ],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
@@ -330,6 +334,21 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+    const workspace = fixture.debugElement.query(By.directive(TimelineNotesWorkspaceStubComponent)).componentInstance as TimelineNotesWorkspaceStubComponent;
+    const readiness = fixture.componentInstance.trainingReadiness.scoreText;
+    fixture.componentInstance.trainingStatus = { ...fixture.componentInstance.trainingStatus, stateLabel: 'Fresh', stateCaption: 'Ready to train' };
+    fixture.componentInstance.trainingSummaryCards = [{ id: 'state', kind: 'state', label: 'State', valueText: 'Fresh', captionText: 'Ready to train' }];
+    workspace.context.set({ ownerUid: 'user-1', notes: [{ id: 'sickness', category: 'sickness', title: 'Sore throat',
+      startDate: '2020-01-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      reportRange: vi.fn(), select: vi.fn() });
+    fixture.detectChanges();
+    expect(element.querySelector('app-active-sickness-note button')?.textContent).toContain('Sickness noted');
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Low training load');
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Fresh');
+    expect(fixture.componentInstance.trainingReadiness.scoreText).toBe(readiness);
+    workspace.context.set(null); fixture.detectChanges();
+    expect(element.querySelector('app-active-sickness-note button')).toBeNull();
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Ready to train');
   });
 
   it('shows the validated training-summary cutoff when the route is ready', async () => {
@@ -3037,7 +3056,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
     expect(pageHeader?.nextElementSibling).toBe(statusDetails);
     expect(statusDetails.nextElementSibling?.classList).toContain('training-destination-navigation');
-    expect(statusDetails.nextElementSibling?.nextElementSibling).toBe(firstSection);
+    const sicknessContext = statusDetails.nextElementSibling?.nextElementSibling;
+    expect(sicknessContext?.tagName.toLowerCase()).toBe('app-active-sickness-note');
+    expect(sicknessContext?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
 
     derivedState$.next({

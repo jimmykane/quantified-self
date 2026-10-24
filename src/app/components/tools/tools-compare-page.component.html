@@ -136,6 +136,12 @@
         </mat-card-header>
 
         <mat-card-content>
+          @if (needsAccountSetup()) {
+          <p>Complete your account setup before selecting files. You can continue with the free plan.</p>
+          <button mat-stroked-button type="button" (click)="completeAccountSetup()">
+            Complete account setup
+          </button>
+          }
           <div class="upload-composer">
             <input
               class="upload-title-input"

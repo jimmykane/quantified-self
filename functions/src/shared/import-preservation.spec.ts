@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
-import { DataAscent, DataDescent, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, ServiceNames, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { EventWriter, type FirestoreAdapter } from './event-writer';
 import { prepareImportedEventWrite, prepareReparsedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './import-preservation';
 
 const state = vi.hoisted(() => ({
   activities: new Map<string, Record<string, unknown>>(), metadata: {} as Record<string, unknown>, parentExists: true,
-  parent: {} as Record<string, unknown>,
+  parent: {} as Record<string, unknown>, provider: {} as Record<string, unknown>,
   get: vi.fn(), prepare: vi.fn(), commit: vi.fn(), collection: vi.fn(), select: vi.fn(), where: vi.fn(), limit: vi.fn(),
 }));
 vi.mock('../training-load/training-load-metadata', () => ({ prepareTrainingLoadMetadata: state.prepare }));
@@ -24,6 +24,7 @@ function activity(index = 0, type = 'Running') {
 
 function event(activities = [activity()]) {
   return { getID: () => 'event', getActivities: () => activities,
+    addStat: vi.fn(),
     toJSON: () => ({ name: 'File title', description: 'File description', activities: [], streams: {} }),
   } as unknown as EventInterface;
 }
@@ -31,7 +32,7 @@ function event(activities = [activity()]) {
 describe('shared import preservation', () => {
   let authorize: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {};
+    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {}; state.provider = {};
     const query = { where: state.where, select: state.select, limit: state.limit };
     state.collection.mockReturnValue(query); state.where.mockReturnValue(query);
     state.select.mockReturnValue(query); state.limit.mockReturnValue(query);
@@ -39,6 +40,7 @@ describe('shared import preservation', () => {
       ? { size: state.activities.size, docs: [...state.activities].map(([id, data]) => ({ id, data: () => data })) }
       : ref.path.includes('/activities/') ? { id: ref.path.split('/').at(-1), exists: state.activities.has(ref.path.split('/').at(-1)),
         data: () => state.activities.get(ref.path.split('/').at(-1)) }
+      : ref.path.endsWith(`/${ServiceNames.SuuntoApp}`) ? { exists: true, data: () => state.provider }
       : ref.path.endsWith('/trainingLoad') ? { data: () => state.metadata } : { exists: state.parentExists, data: () => state.parent });
     state.prepare.mockImplementation(async (_uid, _event, authorize) => {
       const doc = (path: string) => ({ path, collection: (name: string) => ({ doc: (id: string) => doc(`${path}/${name}/${id}`) }) });
@@ -55,6 +57,12 @@ describe('shared import preservation', () => {
     state.activities.set(id, { ...parsed.toJSON(), ...extra });
   }
 
+  it('does not reserve a reparse after the workout was deleted', async () => {
+    state.parentExists = false;
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toMatchObject({ name: 'EventWriteSkippedForDeletedEventError' });
+    expect(state.commit).not.toHaveBeenCalled();
+  });
+
   it.each(['pending', 'finalized', 'legacy'])('recovers corrected activities from an interrupted reparse: %s', async phase => {
     const parsed = EventImporterJSON.getEventFromJSON({ name: 'Run', startDate: 1700000000000, endDate: 1700003600000,
       activities: [{ ...activity().toJSON(), streams: [], laps: [], intensityZones: [] }], stats: {} }).setID('event');
@@ -63,7 +71,8 @@ describe('shared import preservation', () => {
     store('saved-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 }, descentCorrection: { value: 80, sourceValue: 120 } });
     store('partial-id', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 }, descentCorrection: { value: 80, sourceValue: 320 } });
     state.parent = { benchmarkSourceWritePending: true };
-    const legs = { original: { activityId: phase === 'finalized' ? 'partial-id' : 'saved-id' } };
+    const legs = { original: { activityId: phase === 'finalized' ? 'partial-id' : 'saved-id',
+      identity: { startMs: +parsed.getFirstActivity().startDate, endMs: +parsed.getFirstActivity().endDate } } };
     state.metadata = { sourceWritePending: phase !== 'finalized', [phase === 'legacy' ? 'legacyLegs' : 'legs']: legs };
     if (phase === 'pending') for (let index = 0; index < 101; index++)
       store(`partial-${index}`, activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 250 } });
@@ -79,13 +88,93 @@ describe('shared import preservation', () => {
     store('saved-id', activity(), { eventID: recovering ? 'another-event' : 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
     store('duplicate', activity(), { eventID: 'event', ascentCorrection: { value: 75, sourceValue: 100 } });
     state.metadata = recovering ? { sourceWritePending: true, legs: { original: { activityId: 'saved-id' } } } : {};
-    await expect(prepareReparsedEventWrite('owner', event())).rejects.toThrow();
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
     expect(state.commit).not.toHaveBeenCalled();
+  });
+
+  it('requires review instead of retrying a missing active leg during interrupted reparse recovery', async () => {
+    state.metadata = { sourceWritePending: true, legs: { controlled: { activityId: 'missing-leg' } },
+      controls: { controlled: { override: 0 } } };
+    await expect(prepareReparsedEventWrite('owner', event())).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+  });
+
+  it.each(['import', 'reparse'])('rejects legacy IDs overwritten by a different leg during an interrupted %s', async mode => {
+    const old = activity(), incoming = activity(1);
+    store('reused-id', incoming, { eventID: 'event' });
+    state.metadata = { sourceWritePending: true, legs: { controlled: {
+      activityId: 'reused-id', identity: { startMs: +old.startDate, endMs: +old.endDate, type: old.type },
+    } }, controls: { controlled: { override: 0 } } };
+    await expect(mode === 'import' ? prepareImportedEventWrite('owner', event([incoming]))
+      : prepareReparsedEventWrite('owner', event([incoming])))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(incoming.getID()).toBe('legacy-1');
+  });
+
+  it.each(['import', 'reparse'])('requires source evidence for a pending legacy control without a frozen identity during %s', async mode => {
+    const incoming = activity(); store('controlled-id', incoming, { eventID: 'event' });
+    state.metadata = { sourceWritePending: true, sourceFirstImport: true, controls: { 'controlled-id': { override: 0 } } };
+    await expect(mode === 'import' ? prepareImportedEventWrite('owner', event([incoming]))
+      : prepareReparsedEventWrite('owner', event([incoming])))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(incoming.getID()).toBe('legacy-0');
+  });
+
+  it.each([
+    { mode: 'import', frozen: true }, { mode: 'reparse', frozen: true },
+    { mode: 'import', frozen: false }, { mode: 'reparse', frozen: false },
+  ])('recovers valid source provenance during an interrupted $mode (frozen identity: $frozen)', async ({ mode, frozen }) => {
+    const old = activity(), incoming = activity(1);
+    store('stable-id', incoming, { eventID: 'event', sourceIdentity: { version: 1, activityId: 'stable-id',
+      startMs: +incoming.startDate, endMs: +incoming.endDate, importedType: incoming.type } });
+    state.metadata = { sourceWritePending: true, ...(frozen ? { legs: { controlled: {
+      activityId: 'stable-id', identity: { startMs: +old.startDate, endMs: +old.endDate, type: old.type },
+    } } } : { sourceFirstImport: true }), controls: { [frozen ? 'controlled' : 'stable-id']: { override: 0 } } };
+    if (mode === 'import') await prepareImportedEventWrite('owner', event([incoming]));
+    else await prepareReparsedEventWrite('owner', event([incoming]));
+    expect(state.commit).toHaveBeenCalledOnce();
+    expect(incoming.getID()).toBe('stable-id');
   });
 
   it('rejects silently dropping a saved descent correction', () => {
     expect(() => preserveImportedActivityEdits({ stats: { Descent: 300 } }, { descentCorrection: { value: 80, sourceValue: 120 } }))
       .toThrow('descent correction was not safely matched');
+  });
+
+  it.each(['import', 'reparse'])('takes the newly parsed sport for a matched legacy leg during %s', async mode => {
+    store('stable-id', activity(0, 'Stretching'));
+    const incoming = activity(0, 'Yoga');
+    state.provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic', serviceWorkoutID: 'workout' };
+    if (mode === 'import') await prepareImportedEventWrite('owner', event([incoming]), authorize, state.provider);
+    else await prepareReparsedEventWrite('owner', event([incoming]));
+    expect(state.commit).toHaveBeenCalledOnce();
+    expect(incoming.getID()).toBe('stable-id');
+    expect(incoming.type).toBe('Yoga');
+    expect(incoming).toHaveProperty('sourceIdentity.importedType', 'Yoga');
+  });
+
+  it('keeps the file sport while preserving device names and legacy source keys', () => {
+    expect(preserveImportedActivityEdits({ type: 'Yoga', creator: { name: 'Parsed watch' } },
+      { type: 'Stretching', creator: { name: 'Custom watch' }, sourceActivityKey: 'saved-key' }))
+      .toMatchObject({ type: 'Yoga', creator: { name: 'Custom watch' }, sourceActivityKey: 'saved-key' });
+  });
+
+  it('does not accept a sport revision from a mismatched provider recording', async () => {
+    store('stable-id', activity(0, 'Stretching'));
+    state.provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic', serviceWorkoutID: 'old' };
+    await expect(prepareImportedEventWrite('owner', event([activity(0, 'Yoga')]), authorize,
+      { ...state.provider, serviceWorkoutID: 'different' })).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale retained references before reserving a reparse', async () => {
+    state.parent = { originalFile: { path: 'users/owner/events/event/original.fit', generation: '2' } };
+    const { retainedSourceRevision } = await import('./retained-activity-source');
+    const expected = retainedSourceRevision({ originalFile: { path: 'users/owner/events/event/original.fit', generation: '1' } });
+    await expect(prepareReparsedEventWrite('owner', event(), expected)).rejects.toThrow('Recording source changed');
+    expect(state.commit).not.toHaveBeenCalled();
   });
 
   it('keeps new-import IDs unchanged and scopes/masks the existing-activity read', async () => {
@@ -94,7 +183,7 @@ describe('shared import preservation', () => {
     expect(parsed.getID()).toBe('legacy-0');
     expect(state.collection).toHaveBeenCalledWith('users/owner/activities');
     expect(state.where).toHaveBeenCalledWith('eventID', '==', 'event');
-    expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'stats.Duration', 'stats.Distance', 'ascentCorrection', 'descentCorrection');
+    expect(state.select).toHaveBeenCalledWith('startDate', 'endDate', 'type', 'sourceActivityKey', 'sourceIdentity', 'stats.Duration', 'stats.Distance', 'ascentCorrection', 'descentCorrection');
     expect(state.limit).toHaveBeenCalledWith(101);
     expect(state.get.mock.invocationCallOrder.at(-1)).toBeLessThan(state.commit.mock.invocationCallOrder[0]);
   });
@@ -128,7 +217,7 @@ describe('shared import preservation', () => {
   it('rejects ID collisions during partial-first-import recovery before changing any IDs', async () => {
     state.metadata = { sourceFirstImport: true }; store('legacy-1', activity());
     const first = activity(), second = activity(1);
-    await expect(prepareImportedEventWrite('owner', event([first, second]), authorize)).rejects.toThrow('Cannot safely reuse');
+    await expect(prepareImportedEventWrite('owner', event([first, second]), authorize)).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
     expect(first.getID()).toBe('legacy-0');
   });
 
@@ -148,12 +237,39 @@ describe('shared import preservation', () => {
     expect(state.get).not.toHaveBeenCalled(); expect(parsed.getID()).toBe('legacy-0');
   });
 
+  it('keeps strict correction matching for an ordinary upload with an altered source window', async () => {
+    store('stable-id', activity(), { ascentCorrection: { value: 75, sourceValue: 100 } });
+    const parsed = activity(); parsed.endDate = new Date(+parsed.endDate + 1000);
+    await expect(prepareImportedEventWrite('owner', event([parsed])))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(parsed.getID()).toBe('legacy-0');
+  });
+
   it('rejects a corrected source changing to diving before committing a source reservation', async () => {
     store('saved-id', activity(), { sourceActivityKey: 'same-source', ascentCorrection: { value: 75, sourceValue: 100 } });
     const parsed = Object.assign(activity(0, 'Scuba Diving'), { sourceActivityKey: 'same-source' });
-    await expect(prepareImportedEventWrite('owner', event([parsed]))).rejects.toThrow('Reset it before changing');
+    await expect(prepareImportedEventWrite('owner', event([parsed]))).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
     expect(state.commit).not.toHaveBeenCalled();
     expect(parsed.getID()).toBe('legacy-0');
+  });
+
+  it('rejects conflicting correction and ID pairings before committing a source reservation', async () => {
+    store('first', activity(), { sourceActivityKey: 'first-source', ascentCorrection: { value: 75, sourceValue: 100 } });
+    store('second', activity(1), { sourceActivityKey: 'second-source' });
+    const parsed = EventImporterJSON.getEventFromJSON({ name: 'Multisport', startDate: 1700000000000, endDate: 1700007200000,
+      activities: [activity(), activity(1)].map(item => ({ ...item.toJSON(), streams: [], laps: [], intensityZones: [] })), stats: {} }).setID('event');
+    parsed.getActivities().forEach((item, index) => {
+      item.setID(`incoming-${index}`);
+      Object.assign(item, { sourceActivityKey: index ? 'first-source' : 'second-source' });
+      item.addStat(new DataAscent(300));
+    });
+    state.provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'synthetic', serviceWorkoutID: 'workout' };
+    await expect(prepareImportedEventWrite('owner', parsed, authorize, state.provider))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(parsed.getActivities().map(item => item.getID())).toEqual(['incoming-0', 'incoming-1']);
+    expect(parsed.getActivities().every(item => !('ascentCorrection' in item))).toBe(true);
   });
 
   it('does not apply identities from a failed or retried reservation transaction', async () => {

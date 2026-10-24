@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeRRIntervals, DistanceUnits } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { buildRRPoincareChartOptions, buildRRPoincareSeries } from './benchmark-rr-poincare.helper';
 import { buildBenchmarkRRChartOptions, buildBenchmarkRRSeries } from './benchmark-rr-chart.helper';
 
 function analysis() {
@@ -82,5 +83,80 @@ describe('benchmark R–R charts', () => {
     const hidden = buildBenchmarkRRChartOptions({ recordings, excludeFlagged: true, darkTheme: true, artifactColor: '#FFA500', width: 320 });
     expect(hidden.rr.series?.[0].data?.[0]).toEqual([2800,null]);
     expect(hidden.rr.series?.[1].data).toEqual([]);
+  });
+});
+
+
+describe('Poincaré interval pairs', () => {
+  it.each([[288,288,192],[816,816,720],[1440,700,620],[700,1000,604]])('keeps equal physical scales at %s × %s without wasting available plot space', (width, height, expectedSize) => {
+    const result = buildRRPoincareChartOptions({recordings:[recording()],excludeFlagged:false,darkTheme:false,artifactColor:'#654321',width,height});
+    expect(result.option.grid).toMatchObject({width:expectedSize,height:expectedSize});
+    expect(result.option.xAxis.min).toBe(result.option.yAxis.min);
+    expect(result.option.xAxis.max).toBe(result.option.yAxis.max);
+    expect(result.option.grid.left).toBeGreaterThanOrEqual(68);
+    expect(result.option.grid.top).toBeGreaterThanOrEqual(18);
+  });
+  it('pairs only original adjacent intervals and never joins segment boundaries or invalid observations', () => {
+    const input = analysis();
+    expect(buildRRPoincareSeries(input, false).points.accepted).toEqual([{value:[800,800],time:800,kind:'accepted'}]);
+    for (const invalid of [NaN,Infinity,0,-1]) {
+      input.beats = [800,810,invalid,820,830].map((interval,index)=>({interval,time:index*1000,segment:0,classification:'accepted'}));
+      expect(buildRRPoincareSeries(input,false).points.accepted.map(p=>p.value)).toEqual([[800,810],[820,830]]);
+    }
+    input.beats[1].time=0;
+    expect(buildRRPoincareSeries(input,false).points.accepted.map(p=>p.value)).toEqual([[820,830]]);
+  });
+  it('flags either interval, gives artifact flags precedence and excludes pairs without joining neighbours', () => {
+    const input=analysis();
+    input.beats=[800,810,500,900,820,830].map((interval,index)=>({interval,time:index*1000,segment:0,
+      classification:index===2?'short':index===3?'suspected-ectopic':'accepted'}));
+    const before=JSON.stringify(input), visible=buildRRPoincareSeries(input,false),hidden=buildRRPoincareSeries(input,true);
+    expect(visible.points.artifact.map(p=>p.value)).toEqual([[810,500],[500,900]]);
+    expect(visible.points['suspected-ectopic'].map(p=>p.value)).toEqual([[900,820]]);
+    expect(hidden.points.accepted.map(p=>p.value)).toEqual([[800,810],[820,830]]);
+    expect(hidden.pairCount).toBe(2);expect(visible.pairCount).toBe(5);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+  it('bounds every point category across the whole recording, retaining ends and unsampled extents', () => {
+    const input=analysis(); input.beats=Array.from({length:10001},(_,i)=>({time:i+1,interval:i===5001?1800:800,segment:0,classification:'accepted'}));
+    const result=buildRRPoincareSeries(input,false);
+    expect(result.points.accepted).toHaveLength(4000);expect(result.pairCount).toBe(10000);expect(result.sampled).toBe(true);
+    expect(result.points.accepted[0].time).toBe(1);expect(result.points.accepted.at(-1)?.time).toBe(10000);expect(result.max).toBe(1800);
+  });
+  it.each([DistanceUnits.Kilometers,DistanceUnits.Miles])('uses equal axes and square geometry with canonical tooltips (%s)', distanceUnits => {
+    const source={...recording(),label:'<img src=x onerror=alert(1)>'};
+    const result=buildRRPoincareChartOptions({recordings:[source,{...recording(),key:'watch',label:'Watch',startTimeMs:1000,lineStyle:'dashed'}],
+      excludeFlagged:false,darkTheme:true,artifactColor:'#654321',width:320,height:330,unitSettings:{...getDefaultUserUnitSettings(),distanceUnits}});
+    expect(result.option.backgroundColor).toBe('transparent');
+    expect(result.option.xAxis.axisLabel).toMatchObject({showMinLabel:false,showMaxLabel:false,hideOverlap:true});
+    expect(result.option.yAxis.axisLabel).toMatchObject({showMinLabel:false,showMaxLabel:false,hideOverlap:true});
+    expect(result.option.grid.width).toBe(result.option.grid.height);
+    expect(result.option.xAxis.min).toBe(result.option.yAxis.min);expect(result.option.xAxis.max).toBe(result.option.yAxis.max);
+    expect(result.option.xAxis.name).toBe('Current R–R interval (ms)');expect(result.option.yAxis.name).toBe('Next R–R interval (ms)');
+    expect(result.series).toHaveLength(6);expect(result.series[0].points[0].time).toBe(800);expect(result.series[3].points[0].time).toBe(1800);
+    const tooltip=result.option.tooltip as {formatter:(p:unknown)=>string};
+    expect(tooltip.formatter({seriesId:result.series[0].id,dataIndex:0})).toContain('Current: 800.0 ms');
+    expect(tooltip.formatter({seriesId:result.series[0].id,dataIndex:0})).toContain('&lt;img');
+    expect(tooltip.formatter({seriesId:result.series[0].id,dataIndex:0})).not.toContain('<img');
+    expect(tooltip.formatter(null)).toBe('');expect(tooltip.formatter({seriesId:'unknown'})).toBe('');
+  });
+  it('does not use a backward-time observation in either adjacent pair', () => {
+    const input=analysis();
+    input.beats=[1000,500,2000,3000].map((time,index)=>({time,interval:800+index,segment:0,classification:'accepted'}));
+    expect(buildRRPoincareSeries(input,false).points.accepted.map(point=>point.value)).toEqual([[802,803]]);
+  });
+  it('bounds both flagged categories independently while retaining their complete counts', () => {
+    for (const classification of ['short','suspected-ectopic'] as const) {
+      const input=analysis();input.beats=Array.from({length:10001},(_,index)=>({time:index+1,interval:800,segment:0,classification}));
+      const result=buildRRPoincareSeries(input,false),points=result.points[classification==='short'?'artifact':'suspected-ectopic'];
+      expect(points).toHaveLength(4000);expect(points[0].time).toBe(1);expect(points.at(-1)?.time).toBe(10000);
+      expect(result.pairCount).toBe(10000);expect(result.sampled).toBe(true);
+    }
+  });
+  it('keeps empty/one-beat plots finite and empty, with no invented zero pair', () => {
+    const source=recording();source.analysis.beats=source.analysis.beats.slice(0,1);
+    const result=buildRRPoincareChartOptions({recordings:[source],excludeFlagged:false,darkTheme:false,artifactColor:'#654321',width:320,height:330});
+    expect(result.pairCount).toBe(0);expect(result.series.every(s=>!s.points.length)).toBe(true);
+    expect(result.option.xAxis).toMatchObject({min:0,max:1});expect(result.flagged).toEqual([]);
   });
 });

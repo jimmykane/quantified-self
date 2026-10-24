@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  projectTripDetectionInput,
   DetectedHomeArea,
   MyTracksTripDetectionService,
   TripDetectionInput,
@@ -353,5 +354,16 @@ describe('MyTracksTripDetectionService', () => {
     ]);
 
     expect(detectionResult.homeArea).toBeNull();
+  });
+});
+
+describe('persisted trip input projection', () => {
+  it('reads zero coordinates and supported timestamps without reading other stats', () => {
+    const stats = { 'Start Position': { latitudeDegrees: 0, longitudeDegrees: 0 } };
+    Object.defineProperty(stats, 'Unrelated Metric', { get: () => { throw new Error('unrelated read'); } });
+    expect(projectTripDetectionInput({ id: 'e', startDate: { toDate: () => new Date(1000) }, stats }))
+      .toEqual({ eventId: 'e', startDate: new Date(1000), latitudeDegrees: 0, longitudeDegrees: 0 });
+    expect(projectTripDetectionInput({ id: 'e', startDate: 1000, isMerge: true, stats })).toBeNull();
+    expect(projectTripDetectionInput({ id: 'e', startDate: 1000, stats: { 'Start Position': { latitudeDegrees: 91, longitudeDegrees: 0 } } })).toBeNull();
   });
 });

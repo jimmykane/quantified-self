@@ -192,6 +192,8 @@
     </div>
   </nav>
 
+  <app-active-sickness-note #sicknessContext [context]="timelineNotes.context()" />
+
   @if (isLoading) {
     <div class="training-loading" role="status"><mat-spinner diameter="28"></mat-spinner></div>
   } @else {
@@ -204,7 +206,8 @@
         </div>
         <span class="training-section-note">All training</span>
       </div>
-      <app-training-summary-cards [cards]="trainingSummaryCards" ariaLabel="Current Training comparison">
+      <app-training-summary-cards [cards]="trainingSummaryCards" ariaLabel="Current Training comparison"
+        [stateCaptionOverride]="sicknessContext.hasActiveSickness() && trainingStatus.stateLabel === 'Fresh' ? 'Low training load' : null">
         @if (useTrainingStateDetailsDialog()) {
           <button
             trainingSummaryStateAction

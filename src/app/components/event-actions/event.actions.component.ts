@@ -1,15 +1,16 @@
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { Auth } from 'app/firebase/auth';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
-import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
-import { applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { activityElevationMetric, applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
@@ -67,7 +68,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityElevationUpdate | undefined) => {
         this.ascentEditorOpen = false;
         if (!saved || !isCurrent()) return;
-        applySavedActivityElevation(event, saved);
+        if (isCompleteEvent(event)) applySavedActivityElevation(event, saved);
+        else event.applySavedStat?.(activityElevationMetric(saved.metric).type, saved.eventValue);
         this.ascentChanged.emit(event);
         this.changeDetectorRef.markForCheck();
       });
@@ -86,12 +88,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (opened) this.hapticsService.selection();
   }
 
-  @Input() event!: EventInterface;
+  @Input() event!: EventRead;
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
   @Input() navigateAfterDelete = true;
   @Output() eventDeleted = new EventEmitter<string>();
-  @Output() ascentChanged = new EventEmitter<EventInterface>();
+  @Output() ascentChanged = new EventEmitter<EventRead>();
 
   public isReprocessing = false;
   public isSharing = false;
@@ -143,17 +145,17 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   isHydrated() {
-    const activities = this.event.getActivities();
+    const activities = this.event.getActivities?.() ?? [];
     return activities.some(activity => activity.getAllStreams().length > 0);
   }
 
   hasDistance() {
-    const activities = this.event.getActivities();
+    const activities = this.event.getActivities?.() ?? [];
     return activities.some(activity => activity.hasStreamData(DataDistance.type));
   }
 
   hasPositionalData() {
-    return this.event.getStat(DataStartPosition.type) || this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
+    return this.event.getStat(DataStartPosition.type) || (this.event.getActivities?.() ?? []).filter(activity => activity.hasPositionData()).length > 0
   }
 
   public canReimportFromOriginalFile(): boolean {
@@ -257,6 +259,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.isReprocessing) {
       return;
     }
+    const source = this.event, owner = this.user;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => this.isCurrentEvent(source, owner) && this.sendAuth?.currentUser?.uid === viewerID;
     try {
       this.isReprocessing = true;
       const confirmed = await this.confirmReprocessAction({
@@ -265,7 +270,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Regenerate',
         confirmColor: 'primary',
       });
-      if (!confirmed) {
+      if (!confirmed || !isCurrent()) {
         return;
       }
 
@@ -276,18 +281,25 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.regenerateEventStatistics(this.user, this.event as any, {
+        await this.eventReprocessService.regenerateEventStatistics(owner, source, {
+          canExecute: isCurrent,
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
         this.processingService.completeJob(jobId, 'Activity statistics recalculated');
+        if (!isCurrent()) return;
         this.snackBar.open('Activity statistics have been recalculated', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
-        this.changeDetectorRef.detectChanges();
       } catch (error) {
-        this.processingService.failJob(jobId, 'Re-calculation failed');
+        if (error instanceof ReprocessError && error.code === 'CANCELLED') {
+          this.processingService.removeJob(jobId);
+          return;
+        }
+        if (error instanceof ReprocessError && error.code === 'PERSIST_FAILED') this.processingService.completeJob(jobId, 'Activity reprocessed; refresh needed');
+        else this.processingService.failJob(jobId, 'Re-calculation failed');
+        if (!isCurrent()) return;
         this.logger.error('[EventActionsComponent] Failed to re-calculate activity statistics', error);
         this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not recalculate statistics.'), undefined, {
           duration: 4000,
@@ -296,6 +308,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.isReprocessing = false;
+      if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -303,6 +316,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.isReprocessing || !this.canReimportFromOriginalFile()) {
       return;
     }
+    const source = this.event, owner = this.user;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => this.isCurrentEvent(source, owner) && this.sendAuth?.currentUser?.uid === viewerID;
     try {
       this.isReprocessing = true;
       const sourceFilesCount = this.getSourceFilesCount();
@@ -314,7 +330,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Reimport',
         confirmColor: 'primary',
       });
-      if (!confirmed) {
+      if (!confirmed || !isCurrent()) {
         return;
       }
 
@@ -325,18 +341,25 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, this.event as any, {
+        await this.eventReprocessService.reimportEventFromOriginalFiles(owner, source, {
+          canExecute: isCurrent,
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
         this.processingService.completeJob(jobId, 'Activity reimport completed');
+        if (!isCurrent()) return;
         this.snackBar.open('Activity reimported from source file', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
-        this.changeDetectorRef.detectChanges();
       } catch (error) {
-        this.processingService.failJob(jobId, 'Reimport failed');
+        if (error instanceof ReprocessError && error.code === 'CANCELLED') {
+          this.processingService.removeJob(jobId);
+          return;
+        }
+        if (error instanceof ReprocessError && error.code === 'PERSIST_FAILED') this.processingService.completeJob(jobId, 'Activity reprocessed; refresh needed');
+        else this.processingService.failJob(jobId, 'Reimport failed');
+        if (!isCurrent()) return;
         this.logger.error('[EventActionsComponent] Failed to reimport activity from source file', error);
         this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not reimport activity from file.'), undefined, {
           duration: 4000,
@@ -345,6 +368,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.isReprocessing = false;
+      if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -391,7 +415,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         return 'Could not parse the original source file.';
       }
       if (error.code === 'PERSIST_FAILED') {
-        return 'Could not save the updated activity after reprocessing.';
+        return error.message;
       }
     }
     return fallback;
@@ -416,7 +440,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     return confirmed === true;
   }
 
-  // downloadEventAsTCX(event: EventInterface) {
+  // downloadEventAsTCX(event: EventRead) {
   //   // EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
   //   //   FileService.downloadFile(
   //   //     blob,
@@ -429,13 +453,32 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   //   // });
   // }
 
+  private isCurrentEvent(source: EventRead, owner: User): boolean {
+    return !this.destroyRef.destroyed && this.event === source && this.user?.uid === owner?.uid;
+  }
+
+  private async completeEvent(source: EventRead, owner: User, isCurrent: () => boolean) {
+    if (!isCurrent()) return null;
+    if (isCompleteEvent(source)) return source;
+    const event = await firstValueFrom(this.eventService.getEventAndActivitiesOnce(owner, source.getID()));
+    if (!isCurrent()) return null;
+    if (!event) throw new Error('Activity no longer exists');
+    return event;
+  }
+
   async downloadGPX() {
+    const source = this.event, owner = this.user;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => this.isCurrentEvent(source, owner) && this.sendAuth?.currentUser?.uid === viewerID;
     this.hapticsService.selection();
     try {
-      const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
+      const event = await this.completeEvent(source, owner, isCurrent);
+      if (!event || !isCurrent()) return;
+      const blob = await this.eventService.getEventAsGPXBloB(owner, event);
+      if (!isCurrent()) return;
       this.fileService.downloadFile(
         blob,
-        this.getFileName(this.event),
+        this.getFileName(source),
         new EventExporterGPX().fileExtension,
       );
       this.analyticsService.logEvent('downloaded_gpx_file');
@@ -444,6 +487,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       });
       this.hapticsService.success();
     } catch (error) {
+      if (!isCurrent()) return;
       this.logger.error('[EventActionsComponent] Failed to download GPX from original files', error);
       this.snackBar.open('Could not download GPX file', undefined, {
         duration: 3000,
@@ -540,7 +584,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getFileName(event: EventInterface): string {
+  private getFileName(event: EventRead): string {
     const eventDate = this.fileService.toDate(event.startDate);
     const dateStr = eventDate ? eventDate.toISOString() : 'unknown';
     return `${dateStr}#${event.getActivityTypesAsString()}`

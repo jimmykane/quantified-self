@@ -346,6 +346,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
+    // Help also describes bounded dashboard freshness retries, Health range menus, newest-first sorting and empty notices.
     // Help also documents the collapsed R-R chart panel, overlaid recordings and legend labels for unavailable beats.
     // Help also explains ongoing-note comparisons, stored versus requested history,
     // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
@@ -354,9 +355,11 @@ describe('Firebase Hosting configuration', () => {
     // browser verification recovery with bounded temporary-error retries,
     // and display-only Raw/3s Power charts with recorded peaks and dips.
     // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
-    // This same-day Help revision includes app-only ascent corrections and source-preserving reset.
+    // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    // File-comparison signup help also covers required account setup and the return to Compare.
+    // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
@@ -398,16 +401,19 @@ describe('Firebase Hosting configuration', () => {
     // Account deletion now lives in the separate Data management settings section.
     // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
     // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
+    // Recording-update help also covers stable legs, saved preferences and retained-original reprocessing.
     // Benchmark R–R help covers source-separated summaries, linked plots and the original-timing boundary.
     // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
     // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
+    // Help also documents Poincaré pairs, flagged-point inspection and preserved adjacency.
+    // Poincaré help also covers the responsive square plot and browser-supported fullscreen controls.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.
     // Pool swims default to Duration and disable the Distance chart axis.
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

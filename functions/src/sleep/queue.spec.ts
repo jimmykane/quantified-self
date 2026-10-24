@@ -2655,6 +2655,55 @@ describe('sleep queue', () => {
         }));
     });
 
+    it.each(['401', '403', 'persistent_403', 'refresh_403', 'changed_lifecycle'] as const)(
+        'bounds Suunto Sleep OAuth recovery and fences persistence (%s)', async scenario => {
+            const tokenSnapshot = {
+                id: 'suunto-user-1',
+                data: () => ({ serviceName: ServiceNames.SuuntoApp, userName: 'suunto-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            };
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+            const initialGuards = await hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards();
+            hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockClear();
+            const rotatedGuards = { ...initialGuards, requiredExistingTokenCredential: {
+                ...initialGuards.requiredExistingTokenCredential, accessToken: 'new-token',
+            } };
+            hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards)
+                .mockResolvedValueOnce(initialGuards).mockResolvedValueOnce(initialGuards);
+            hoisted.getTokenData.mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suunto-user-1' })
+                .mockResolvedValue({ accessToken: 'new-token', userName: 'suunto-user-1' });
+            const statusCode = scenario === '401' ? 401 : 403;
+            hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('resource rejected'), { statusCode }))
+                .mockResolvedValue({ samples: [] });
+            if (scenario === 'persistent_403') hoisted.requestGet.mockRejectedValue(Object.assign(new Error('rejected again'), { statusCode: 403 }));
+            if (scenario === 'refresh_403') hoisted.getTokenData.mockRejectedValueOnce(Object.assign(new Error('refresh rejected'), { statusCode: 403 }));
+            if (scenario === 'changed_lifecycle') hoisted.areSuuntoWebhookWriteLifecycleGuardsContinuous
+                .mockReturnValueOnce(true).mockReturnValue(false);
+            const update = vi.fn().mockResolvedValue(undefined);
+            const result = await processSleepSyncQueueItem({
+                id: 'suunto-auth-recovery', dateCreated: 1_700_000_000_000,
+                processed: false, provider: 'SuuntoApp', userID: 'test-user-uid', providerUserId: 'suunto-user-1',
+                retryCount: 0, type: 'suunto_poll', rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: { update } as unknown as admin.firestore.DocumentReference,
+            });
+            expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+            expect(hoisted.getTokenData).toHaveBeenNthCalledWith(2, tokenSnapshot, ServiceNames.SuuntoApp, true);
+            const success = scenario === '401' || scenario === '403';
+            expect(hoisted.requestGet).toHaveBeenCalledTimes(scenario === 'refresh_403' || scenario === 'changed_lifecycle' ? 1 : 2);
+            if (success) {
+                expect(result).toBe(QueueResult.Processed);
+                expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+                    headers: expect.objectContaining({ Authorization: 'Bearer new-token' }),
+                }));
+                expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('test-user-uid', [], expect.any(Number), rotatedGuards);
+                expect(update).toHaveBeenCalledWith(expect.objectContaining({ processed: true, resultStatus: 'success' }));
+            } else {
+                expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+                expect(result).toBe(scenario === 'changed_lifecycle' ? QueueResult.Processed : QueueResult.RetryIncremented);
+                expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ resultStatus: 'success' }));
+            }
+        });
+
     it('rebases a same-generation Suunto credential rotation before finalizing an embedded Sleep webhook', async () => {
         const tokenSnapshot = {
             id: 'suunto-user-1',

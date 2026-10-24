@@ -1,8 +1,9 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { ActivityInterface, ActivityTypes, ActivityTypesHelper, EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
     resolveActivityTypeMaterialIcon,
     resolvePrimaryActivityType,
@@ -21,7 +22,7 @@ export class ActivityTypeIconComponent {
     constructor(private eventColorService?: AppEventColorService) {}
 
     @Input() activityType!: unknown;
-    @Input() event: EventInterface | null = null;
+    @Input() event: EventRead | null = null;
     @Input() activity: ActivityInterface | null = null;
     @Input() activities: ActivityInterface[] | null = null;
     @Input() size?: string;

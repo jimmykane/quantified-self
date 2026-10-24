@@ -6,7 +6,7 @@ import { ChartSourcePickerComponent } from '../../shared/chart-source-picker/cha
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSelectModule } from '@angular/material/select';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import type { HealthProvider } from '@shared/health';
 import { HEALTH_METRIC_CATALOG } from '@shared/health';
@@ -24,7 +24,7 @@ import { healthMetricReadingTitle, restingHeartRateSupportNote } from '../../../
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
     host: { '[class.health-dashboard-tile]': '!preview() && !thumbnail() && !overview()' },
-    imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
+    imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
     templateUrl: './dashboard-health-chart.component.html', styleUrls: ['./dashboard-health-chart.component.css'], changeDetection: ChangeDetectionStrategy.OnPush })
 export class DashboardHealthChartComponent {
     readonly user = input.required<AppUserInterface>();
@@ -116,7 +116,14 @@ export class DashboardHealthChartComponent {
     readonly ranges: readonly {
         value: AppHealthWorkspaceRange;
         label: string;
-    }[] = [{ value: 'today', label: '1d' }, { value: '14d', label: '14d' }, { value: '30d', label: '30d' }, { value: '90d', label: '90d' }, { value: '1y', label: '1y' }];
+        menuLabel: string;
+    }[] = [{ value: 'today', label: '1d', menuLabel: '1 day' }, { value: '14d', label: '14d', menuLabel: '14 days' },
+        { value: '30d', label: '30d', menuLabel: '30 days' }, { value: '90d', label: '90d', menuLabel: '90 days' },
+        { value: '1y', label: '1y', menuLabel: '1 year' }];
+    readonly rangeLabel = computed(() => this.ranges.find(range => range.value === this.settings().range)?.label || '');
+    onRangeMenuOpened(): void {
+        if (!this.disabled()) this.haptics.selection();
+    }
     isRangeDisabled(range: AppHealthWorkspaceRange): boolean {
         return range === '1y' && this.context()?.sampleRangeLimited === true;
     }

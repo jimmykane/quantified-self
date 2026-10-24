@@ -1,14 +1,15 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, computed, inject, type Signal } from '@angular/core';
 import { TIMELINE_NOTE_LABELS, timelineNoteDates, type TimelineNote } from '@shared/timeline-notes';
 import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
 import { getEventTags } from '@shared/event-tags';
-import type { AppEventInterface } from '@shared/app-event.interface';
+
 import { CalendarActivityTagsComponent } from '../calendar-activity-tags/calendar-activity-tags.component';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import { AppUserService } from '../../../services/app.user.service';
 import type { CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
-import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   type ActivityCalendarDayViewModel,
   buildActivityCalendarPeriodSummary,
@@ -192,7 +193,7 @@ export class CalendarDayDetailsComponent {
     });
   }
 
-  private buildEventRow(event: EventInterface): CalendarDayEventRow {
+  private buildEventRow(event: EventRead): CalendarDayEventRow {
     const eventId = `${event?.getID?.() || ''}`.trim();
     const startDate = resolveEventStartDate(event);
     const durationSeconds = resolveActivityCalendarEventDurationSeconds(event);
@@ -225,7 +226,7 @@ export class CalendarDayDetailsComponent {
       id: eventId || `${startDate?.getTime() || 'activity'}`,
       familyId: eventFamily?.id || null,
       label,
-      tags: getEventTags(event as AppEventInterface),
+      tags: getEventTags(event as EventRead),
       activityType: activityTypeLabel,
       detailLabel: detailParts.map(part => part.text).join(' - '),
       detailParts,
@@ -238,7 +239,7 @@ export class CalendarDayDetailsComponent {
   }
 }
 
-function resolveEventStartDate(event: EventInterface): Date | null {
+function resolveEventStartDate(event: EventRead): Date | null {
   const value = (event as { startDate?: unknown } | null)?.startDate;
   if (value instanceof Date && Number.isFinite(value.getTime())) {
     return value;

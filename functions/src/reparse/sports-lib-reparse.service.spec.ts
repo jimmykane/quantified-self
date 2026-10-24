@@ -1,8 +1,10 @@
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE } from '../shared/activity-identity-conflict';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 // EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
 // training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
 const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../training-load/training-load-source-write', () => ({
+vi.mock('../training-load/training-load-source-write', async importOriginal => ({
+    ...await importOriginal<typeof import('../training-load/training-load-source-write')>(),
     TrainingLoadSourceWrite: class {
         assertCurrent = sourceWriteGuard.assertCurrent;
         constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
@@ -46,6 +48,7 @@ const hoisted = vi.hoisted(() => {
         set: mockTransactionSet,
         delete: mockTransactionDelete,
         get: vi.fn(async (ref: any) => ref.get()),
+        getAll: vi.fn(async (...refs: any[]) => Promise.all(refs.map(ref => ref.get()))),
     }));
     const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
         userExists: true,
@@ -315,6 +318,7 @@ describe('sports-lib-reparse.service', () => {
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
             get: vi.fn(async (ref: any) => ref.get()),
+            getAll: vi.fn(async (...refs: any[]) => Promise.all(refs.map(ref => ref.get()))),
         }));
         hoisted.mockTransactionSet.mockImplementation(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
             if (typeof ref?.set === 'function') {
@@ -322,7 +326,8 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-        hoisted.mockDoc.mockImplementation(() => ({
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path, id: path.split('/').at(-1),
             get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
             set: vi.fn().mockResolvedValue(undefined),
         }));
@@ -403,6 +408,12 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Invalid target sports-lib version');
         expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', 'not-semver'))
             .toThrow('Invalid runtime sports-lib version');
+    });
+
+    it('classifies source identity review failures as terminal, without treating retryable source changes as terminal', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(ACTIVITY_IDENTITY_CONFLICT_MESSAGE)).toBe(true);
+        expect(getSportsLibReparseFailureReason(ACTIVITY_IDENTITY_CONFLICT_MESSAGE)).toBe('ACTIVITY_IDENTITY_CONFLICT');
+        expect(isSportsLibReparseTerminalFailureMessage('Recording source changed while reparsing; retry from the current original files.')).toBe(false);
     });
 
     it('isSportsLibReparseTerminalFailureMessage should treat size and runtime budget failures as terminal', () => {
@@ -878,7 +889,8 @@ describe('sports-lib-reparse.service', () => {
         const set = vi.fn().mockResolvedValue(undefined);
         const live = { comparisonTitle: 'Latest title', benchmarkResults: { original: liveReport }, hasBenchmark: true,
             benchmarkStatus: 'draft', toolSource: 'tools/compare', sourceFilesCount: 2, tags: ['review'] };
-        hoisted.mockDoc.mockImplementation(() => ({ get: vi.fn().mockResolvedValue({ exists: true, data: () => live }), set }));
+        hoisted.mockDoc.mockImplementation((path: string) => ({ path, id: path.split('/').at(-1),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => live }), set }));
         await persistReparsedEvent('u1', 'e1', parsed, { comparisonTitle: 'Outdated title' }, [{ id: 'old-ref', data: () => old }] as any, TARGET_SPORTS_LIB_VERSION);
         const adapter = hoisted.eventWriterCtorArgs[0].adapter;
         await adapter.setDoc(['users', 'u1', 'events', 'e1'], { name: 'Parsed event', activities: [], nested: { streams: [] } });
@@ -1039,6 +1051,7 @@ describe('sports-lib-reparse.service', () => {
     it('resolveActivityEditCarryover should preserve creator names using deterministic matching when order changes', () => {
         const activityOne = {
             creator: { name: 'new1' },
+            setID: vi.fn(),
             startDate: new Date('2026-01-01T10:00:00.000Z'),
             endDate: new Date('2026-01-01T10:30:00.000Z'),
             type: 'Run',
@@ -1078,6 +1091,7 @@ describe('sports-lib-reparse.service', () => {
 
         expect(result.assignments.size).toBe(2);
         expect(activityOne.creator.name).toBe('old1');
+        expect(activityOne.setID).not.toHaveBeenCalled(); // Edit carryover cannot claim a saved ID outside the reservation.
         expect(activityTwo.creator.name).toBe('old2');
     });
 
@@ -1299,6 +1313,17 @@ describe('sports-lib-reparse.service', () => {
         expect(activityTwo.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyTwo}`);
     });
 
+    it('leaves saved-ID reuse to guarded preparation instead of claiming it during source-key generation', async () => {
+        const parsed = { startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
+            getStat: () => ({ getValue: () => 60 }), setID: vi.fn(), getID: () => 'provisional' };
+        hoisted.mockGenerateActivityIDFromSourceKey.mockResolvedValueOnce('derived-id');
+        await assignReimportActivityIds({ getActivities: () => [parsed] } as any, 'event', {
+            combinedSourceContentHash: 'a'.repeat(64),
+            existingActivities: [{ ...parsed, getID: () => 'saved-id' }],
+        });
+        expect(parsed.setID).toHaveBeenCalledExactlyOnceWith('derived-id');
+    });
+
     it('assignReimportActivityIds should keep key-based ids stable even when parsed order changes', async () => {
         const combinedHash = 'c'.repeat(64);
         const sourceKeyA = `${combinedHash}:${'a'.repeat(64)}:0`;
@@ -1411,7 +1436,7 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Missing or invalid combinedSourceContentHash');
     });
 
-    it('assignReimportActivityIds should fail on strict ambiguity after restamp', async () => {
+    it.each([false, true])('terminalizes ambiguous source-key assignment before assigning IDs (duplicate keys: %s)', async duplicateKeys => {
         const combinedHash = 'f'.repeat(64);
         const ambiguousActivities = [
             {
@@ -1431,14 +1456,19 @@ describe('sports-lib-reparse.service', () => {
                 getStat: vi.fn(() => null),
             },
         ];
+        if (duplicateKeys) for (const activity of ambiguousActivities)
+            Object.assign(activity, { sourceActivityKey: `${combinedHash}:${'a'.repeat(64)}:0` });
 
-        await expect(assignReimportActivityIds({
+        const error = await assignReimportActivityIds({
             getActivities: () => ambiguousActivities,
         } as any, 'event-3', {
             combinedSourceContentHash: combinedHash,
-        }))
-            .rejects
-            .toThrow('Ambiguous sourceActivityKey stamping');
+        }).then(() => null, (error: unknown) => error);
+        expect(error).toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT', message: ACTIVITY_IDENTITY_CONFLICT_MESSAGE });
+        expect(isSportsLibReparseTerminalFailureMessage((error as Error).message)).toBe(true);
+        expect(getSportsLibReparseFailureReason((error as Error).message)).toBe('ACTIVITY_IDENTITY_CONFLICT');
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).not.toHaveBeenCalled();
+        for (const activity of ambiguousActivities) expect(activity.setID).not.toHaveBeenCalled();
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
@@ -2193,7 +2223,7 @@ describe('sports-lib-reparse.service', () => {
     it.each(['changed', 'deleted', 'user-deleted', 'unchanged'])('guards classification status against %s source lifecycle', async lifecycle => {
         const set = vi.fn();
         const sources = [{ path: 'original.fit' }];
-        hoisted.mockDoc.mockImplementation(() => ({ set, get: vi.fn().mockResolvedValue({
+        hoisted.mockDoc.mockImplementation((path: string) => ({ path, id: path.split('/').at(-1), set, get: vi.fn().mockResolvedValue({
             exists: lifecycle !== 'deleted', data: () => ({ originalFiles: lifecycle === 'changed' ? [{ path: 'new.fit' }] : sources }),
         }) }));
         if (lifecycle === 'user-deleted') hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
@@ -2539,7 +2569,9 @@ describe('sports-lib-reparse.service', () => {
                 ],
                 targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
             }),
-        ).rejects.toThrow('Ambiguous sourceActivityKey stamping');
+        ).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT', message: ACTIVITY_IDENTITY_CONFLICT_MESSAGE });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
     });
 
     it('reparseEventFromOriginalFiles should run activity-level sports-lib regeneration in regenerate mode', async () => {

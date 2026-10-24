@@ -1,3 +1,4 @@
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import type { ActivityFilterPickerOption } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { Auth } from 'app/firebase/auth';
 import {
@@ -25,26 +26,25 @@ import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
-import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
+import { BenchmarkResult } from '@shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { EventInterface } from '@sports-alliance/sports-lib';
+
 import { Privacy } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, map } from 'rxjs/operators';
 import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation } from '../../animations/animations';
-import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
-import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
+import { DataTableAbstractDirective, StatRowElement, EVENT_TABLE_STAT_TYPES } from '../data-table/data-table-abstract.directive';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
@@ -66,7 +66,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
 
 interface EventTableRowCacheEntry {
-  event: EventInterface;
+  event: EventRead;
   eventRowContentKey: string;
   renderContextKey: string;
   row: StatRowElement;
@@ -110,7 +110,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   @Input() user!: User;
-  @Input() events!: EventInterface[];
+  @Input() events!: EventRead[];
   @Input() targetUser!: User;
   @Input() showActions!: boolean;
   @Input() presentation: EventTablePresentation = 'dashboard';
@@ -118,8 +118,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() filterContext = '';
   @Input() preserveSearchOnFilterChange = false;
   @Input() hideGeneratedNames = false;
-  @Input() emptyMessage = 'No activities yet';
-  @Input() emptyHint = 'Import an activity or change your filters';
+  @Input() emptyMessage = 'No activities to show';
+  @Input() emptyHint = '';
+  @Input() hasLoadError = false;
   @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
@@ -140,6 +141,22 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
   ];
   displayedColumns: string[] = [];
+
+  get showEmptyNotice(): boolean {
+    if (this.isLoading || this.hasLoadError || !this.events) return false;
+    const rows = this.data.filteredData ?? this.data.data;
+    return rows.length === 0 && (this.events.length === 0 || this.data.data.length > 0);
+  }
+
+  get emptyNoticeMessage(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'No activities match your filters' : this.emptyMessage;
+  }
+
+  get emptyNoticeHint(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'Change your dates or clear a filter.' : this.emptyHint;
+  }
 
   public show = true
 
@@ -253,7 +270,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.loading();
       return;
     }
-    if (this.events && (simpleChanges.events || simpleChanges.presentation || simpleChanges.hideGeneratedNames) && this.paginator && this.sort) {
+    if (this.events && (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames) && this.paginator && this.sort) {
       this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
     if (preferencesChanged) {
@@ -412,7 +429,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
   }
 
-  public refreshSavedAscent(event: EventInterface): void {
+  public refreshSavedAscent(event: EventRead): void {
     if (this.destroyed || !this.user || !this.events?.includes(event)) return;
     this.invalidateRowCacheForEvent(event);
     this.processChanges('ascent_saved', true);
@@ -433,10 +450,27 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
    * Opens the benchmark report or selection dialog for a merged event directly from the table.
    * Stops propagation to prevent row navigation.
    */
-  openBenchmarkFlow(event: Event, appEvent: AppEventInterface): void {
+  async openBenchmarkFlow(event: Event, eventRead: EventRead): Promise<void> {
     event.stopPropagation();
     event.preventDefault();
 
+    const user = this.user;
+    const owner = this.targetUser || user;
+    const ownerID = owner?.uid;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => !this.destroyed && this.user?.uid === user?.uid && (this.targetUser || this.user)?.uid === ownerID
+      && this.sendAuth?.currentUser?.uid === viewerID;
+    let appEvent;
+    try {
+      appEvent = await this.loadCompleteEvent(eventRead, owner);
+    } catch (error) {
+      if (!isCurrent()) return;
+      this.logger.error('Could not load activity for benchmark', error);
+      this.snackBar.open('Could not load activity', undefined, { duration: 3000 });
+      this.hapticsService.error();
+      return;
+    }
+    if (!isCurrent()) return;
     const initialSelection = appEvent.getActivities().slice(0, 2);
     const result = this.getFirstBenchmarkResult(appEvent);
 
@@ -445,7 +479,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         event: appEvent,
         hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
-        user: this.user,
+        user,
         result,
         initialSelection
       });
@@ -454,13 +488,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         event: appEvent,
         hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
-        user: this.user,
+        user,
         initialSelection
       });
     }
   }
 
-  getBenchmarkColor(appEvent: AppEventInterface): string {
+  getBenchmarkColor(appEvent: EventRead): string {
     const result = this.getFirstBenchmarkResult(appEvent);
     if (!result) return '';
 
@@ -470,7 +504,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return AppColors.Orange;
   }
 
-  private getFirstBenchmarkResult(appEvent: AppEventInterface): BenchmarkResult | null {
+  private getFirstBenchmarkResult(appEvent: EventRead): BenchmarkResult | null {
     const results = appEvent.benchmarkResults;
     if (results) {
       const keys = Object.keys(results);
@@ -496,7 +530,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   trackByEventId = (index: number, row: StatRowElement): string | number => {
-    const event = row?.Event as EventInterface | undefined;
+    const event = row?.Event as EventRead | undefined;
     return event?.getID ? event.getID() : index;
   }
 
@@ -538,7 +572,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.hapticsService.selection();
   }
 
-  private collectSourceFilePaths(event: EventInterface): string[] {
+  private collectSourceFilePaths(event: EventRead): string[] {
     const appEvent = event as {
       originalFiles?: Array<{ path?: unknown }>;
       originalFile?: { path?: unknown };
@@ -554,7 +588,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return legacyPath.length > 0 ? [legacyPath] : [];
   }
 
-  private hasDuplicateSourceFilePaths(events: EventInterface[]): boolean {
+  private hasDuplicateSourceFilePaths(events: EventRead[]): boolean {
     const seenPaths = new Set<string>();
 
     for (const appEvent of events) {
@@ -578,8 +612,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
     const selectedRows = [...this.selection.selected] as StatRowElement[];
     const selectedEvents = selectedRows
-      .map((selected) => selected?.Event as EventInterface | undefined)
-      .filter((selectedEvent): selectedEvent is EventInterface => !!selectedEvent);
+      .map((selected) => selected?.Event as EventRead | undefined)
+      .filter((selectedEvent): selectedEvent is EventRead => !!selectedEvent);
 
     if (this.hasDuplicateSourceFilePaths(selectedEvents)) {
       this.snackBar.open(this.duplicateSourceFilesMessage, undefined, { duration: 4000 });
@@ -746,11 +780,25 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
+  private async loadCompleteEvent(event: EventRead, owner: User) {
+    if (isCompleteEvent(event)) {
+      // Full readers can be passed through; summaries must be fetched explicitly.
+      return event;
+    }
+    const fullEvent = await firstValueFrom(this.eventService.getEventAndActivitiesOnce(owner, event.getID()));
+    if (!fullEvent) throw new Error('Activity no longer exists');
+    return fullEvent;
+  }
+
   public async downloadGPXSelection() {
+    const viewer = this.user, owner = this.targetUser || viewer;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => !this.destroyed && this.user?.uid === viewer?.uid
+      && (this.targetUser || this.user)?.uid === owner?.uid && this.sendAuth?.currentUser?.uid === viewerID;
     const jobId = this.processingService.addJob('download', 'Preparing GPX export...');
 
     try {
-      const selectedEvents = this.selection.selected.map(selected => selected.Event) as EventInterface[];
+      const selectedEvents = this.selection.selected.map(selected => selected.Event) as EventRead[];
       if (selectedEvents.length === 0) {
         this.snackBar.open('No activities selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
@@ -770,17 +818,34 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       let completed = 0;
 
       for (const event of selectedEvents) {
+        if (!isCurrent()) {
+          this.processingService.removeJob(jobId);
+          return;
+        }
         const eventDate = this.fileService.toDate(event.startDate);
         const eventId = event.getID ? event.getID() : null;
 
         try {
-          const data = await this.eventService.getEventAsGPXBloB(this.user, event as any);
+          const fullEvent = await this.loadCompleteEvent(event, owner);
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
+          const data = await this.eventService.getEventAsGPXBloB(owner, fullEvent);
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
           generatedFiles.push({ data, eventDate, eventId });
           if (eventDate) {
             if (!minDate || eventDate < minDate) minDate = eventDate;
             if (!maxDate || eventDate > maxDate) maxDate = eventDate;
           }
         } catch (error) {
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
           failedCount++;
           this.logger.error('Failed to export GPX for selected event:', eventId, error);
         }
@@ -861,7 +926,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const jobId = this.processingService.addJob('download', 'Preparing download...');
 
     try {
-      const selectedEvents = this.selection.selected.map(s => s.Event) as EventInterface[];
+      const selectedEvents = this.selection.selected.map(s => s.Event) as EventRead[];
       if (selectedEvents.length === 0) {
         this.snackBar.open('No activities selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
@@ -989,7 +1054,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  async saveEventDescription(description: string, event: EventInterface) {
+  async saveEventDescription(description: string, event: EventRead) {
     event.description = description;
     this.invalidateRowCacheForEvent(event);
     await this.eventService.updateEventProperties(this.user, event.getID(), {
@@ -1000,7 +1065,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  async saveEventName(name: string, event: EventInterface) {
+  async saveEventName(name: string, event: EventRead) {
     event.name = name;
     this.invalidateRowCacheForEvent(event);
     await this.eventService.updateEventProperties(this.user, event.getID(), {
@@ -1062,7 +1127,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
   }
 
-  async openEventTagsDialog(domEvent: Event, event: AppEventInterface): Promise<void> {
+  async openEventTagsDialog(domEvent: Event, event: EventRead): Promise<void> {
     domEvent.preventDefault();
     domEvent.stopPropagation();
     if (!this.showActions || !this.user || !event?.getID?.()) {
@@ -1116,8 +1181,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     const selectedEvents = this.selection.selected
-      .map(row => row?.Event as AppEventInterface | undefined)
-      .filter((event): event is AppEventInterface => !!event?.getID?.());
+      .map(row => row?.Event as EventRead | undefined)
+      .filter((event): event is EventRead => !!event?.getID?.());
     const selectedEventIDs = selectedEvents.map(event => event.getID());
     if (!selectedEventIDs.length) {
       this.snackBar.open('Select at least one valid activity to update tags.', undefined, { duration: 2500 });
@@ -1173,11 +1238,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private applySavedTagsToLoadedEvent(
     eventID: string,
     tags: string[],
-    fallbackEvent: AppEventInterface,
+    fallbackEvent: EventRead,
   ): void {
     fallbackEvent.tags = tags;
     delete fallbackEvent.benchmarkReviewTags;
-    const loadedEvent = this.events.find(event => event.getID() === eventID) as AppEventInterface | undefined;
+    const loadedEvent = this.events.find(event => event.getID() === eventID) as EventRead | undefined;
     if (loadedEvent && loadedEvent !== fallbackEvent) {
       loadedEvent.tags = tags;
       delete loadedEvent.benchmarkReviewTags;
@@ -1465,19 +1530,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private buildRowElement(
-    event: EventInterface,
+    event: EventRead,
     dateFormat: string,
     removedAscentTypes: Set<ActivityTypes>,
     removedDescentTypes: Set<ActivityTypes>,
   ): StatRowElement {
-    const activityTypesStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-    const statRowElement = this.getStatsRowElement(
-      event.getStatsAsArray(),
-      activityTypesStat ? activityTypesStat.getValue() : [ActivityTypes.unknown],
+    const activityTypes = event.getActivityTypesAsArray();
+    const statRowElement = this.getStatsRowElementFromReader(
+      event,
+      activityTypes.length ? activityTypes : [ActivityTypes.unknown],
       this.user.settings.unitSettings,
       event.isMerge
     );
-    const activityTypes = event.getActivityTypesAsArray();
     const primaryActivityType = activityTypes.length > 1
       ? ActivityTypes.Multisport
       : (ActivityTypes[activityTypes[0] as keyof typeof ActivityTypes] || ActivityTypes.unknown);
@@ -1501,7 +1565,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
-    const tags = getEventTags(event as AppEventInterface);
+    const tags = getEventTags(event as EventRead);
     statRowElement['Tags'] = tags.join(' ');
     statRowElement['Tag Values'] = tags;
     statRowElement['Tags Title'] = tags.join('\n');
@@ -1542,11 +1606,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return statRowElement;
   }
 
-  private isEventPubliclyShared(event: EventInterface): boolean {
+  private isEventPubliclyShared(event: EventRead): boolean {
     return event?.privacy === Privacy.Public;
   }
 
-  private buildDeviceNameDisplayItems(event: EventInterface): DeviceNameDisplayItem[] {
+  private buildDeviceNameDisplayItems(event: EventRead): DeviceNameDisplayItem[] {
     const activities = event.getActivities?.() ?? [];
     if (!activities.length) {
       return this.buildDeviceNameDisplayItemsFromNames(this.getDeviceNamesFromStat(event));
@@ -1585,7 +1649,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }));
   }
 
-  private getDeviceNamesFromStat(event: EventInterface): string[] {
+  private getDeviceNamesFromStat(event: EventRead): string[] {
     const deviceNamesStat = this.safeCallForCacheKey(() => event.getStat(DataDeviceNames.type), null);
     if (!deviceNamesStat || typeof (deviceNamesStat as any).getValue !== 'function') {
       return [];
@@ -1629,6 +1693,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } | undefined;
 
     return JSON.stringify({
+      owner: this.targetUser?.uid || this.user?.uid,
       dateFormat,
       presentation: this.presentation,
       hideGeneratedNames: this.hideGeneratedNames,
@@ -1638,7 +1703,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  private buildEventRowContentKey(event: EventInterface): string {
+  private buildEventRowContentKey(event: EventRead): string {
     const stats = this.readStatsForCacheKey(event);
     const benchmarkResults = (event as any).benchmarkResults;
     const startDate = event.startDate instanceof Date && !isNaN(+event.startDate)
@@ -1648,7 +1713,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return JSON.stringify({
       name: event.name ?? null,
       description: event.description ?? null,
-      tags: getEventTags(event as AppEventInterface),
+      tags: getEventTags(event as EventRead),
       privacy: event.privacy ?? null,
       isMerge: event.isMerge ?? false,
       startDate,
@@ -1666,7 +1731,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  private readDeviceNameItemsForCacheKey(event: EventInterface): unknown[] {
+  private readDeviceNameItemsForCacheKey(event: EventRead): unknown[] {
     const activities = this.safeCallForCacheKey(() => event.getActivities?.() ?? [], []);
     if (!Array.isArray(activities)) {
       return [];
@@ -1681,18 +1746,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }));
   }
 
-  private readStatsForCacheKey(event: EventInterface): unknown[] {
-    const stats = this.safeCallForCacheKey(() => event.getStatsAsArray(), []);
-    if (!Array.isArray(stats)) {
-      return [];
-    }
-
-    return stats.map((stat: any) => ({
-      type: this.safeCallForCacheKey(() => stat?.getType?.(), null),
-      value: this.normalizeCacheValue(this.safeCallForCacheKey(() => stat?.getValue?.(), null)),
-      displayValue: this.safeCallForCacheKey(() => stat?.getDisplayValue?.(), null),
-      displayUnit: this.safeCallForCacheKey(() => stat?.getDisplayUnit?.(), null),
-    }));
+  private readStatsForCacheKey(event: EventRead): unknown[] {
+    if (event.getReadRevision) return [event.getReadRevision()];
+    const types = [
+      ...EVENT_TABLE_STAT_TYPES,
+      ...event.getActivityTypesAsArray().flatMap(type => ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(
+        ActivityTypes[type as keyof typeof ActivityTypes])),
+    ];
+    return [...new Set(types)].map(type => [type, this.normalizeCacheValue((event.getStat(type) || undefined)?.getValue())]);
   }
 
   private safeCallForCacheKey<T>(read: () => T, fallback: T): T {
@@ -1732,12 +1793,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return String(value);
   }
 
-  private getEventID(event: EventInterface | undefined): string | null {
+  private getEventID(event: EventRead | undefined): string | null {
     if (!event) {
       return null;
     }
 
-    const eventWithID = event as EventInterface & { id?: string };
+    const eventWithID = event as EventRead & { id?: string };
     if (typeof eventWithID.getID === 'function') {
       return eventWithID.getID() || null;
     }
@@ -1745,7 +1806,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return eventWithID.id || null;
   }
 
-  private invalidateRowCacheForEvent(event: EventInterface | undefined): void {
+  private invalidateRowCacheForEvent(event: EventRead | undefined): void {
     const eventID = this.getEventID(event);
     if (!eventID) {
       return;

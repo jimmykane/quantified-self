@@ -1,5 +1,5 @@
-import { EventInterface, ServiceNames } from '@sports-alliance/sports-lib';
-import { AppEventInterface } from '@shared/app-event.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
 import {
     buildProviderPresentation,
     getProviderDisplayName,
@@ -33,8 +33,8 @@ function resolveActivityDeviceName(activity: unknown): string | null {
     return null;
 }
 
-function resolveGarminDeviceNamesFromActivities(event: EventInterface | null | undefined): string[] {
-    const sourceEvent = event as (EventInterface & { getActivities?: () => unknown[] }) | null | undefined;
+function resolveGarminDeviceNamesFromActivities(event: EventRead | null | undefined): string[] {
+    const sourceEvent = event;
     if (!sourceEvent || typeof sourceEvent.getActivities !== 'function') {
         return [];
     }
@@ -54,8 +54,8 @@ function resolveGarminDeviceNamesFromActivities(event: EventInterface | null | u
     }
 }
 
-function resolveGarminDeviceNamesFromEventSummary(event: EventInterface | null | undefined): string[] {
-    const sourceEvent = event as (AppEventInterface & { getDeviceNamesAsString?: () => string }) | null | undefined;
+function resolveGarminDeviceNamesFromEventSummary(event: EventRead | null | undefined): string[] {
+    const sourceEvent = event;
     if (!sourceEvent || typeof sourceEvent.getDeviceNamesAsString !== 'function') {
         return [];
     }
@@ -75,7 +75,7 @@ function resolveGarminDeviceNamesFromEventSummary(event: EventInterface | null |
     }
 }
 
-function resolveSingleGarminDeviceLabel(event: EventInterface | null | undefined): string | null {
+function resolveSingleGarminDeviceLabel(event: EventRead | null | undefined): string | null {
     const activityDeviceNames = resolveGarminDeviceNamesFromActivities(event);
     if (activityDeviceNames.length === 1) {
         return activityDeviceNames[0];
@@ -101,7 +101,7 @@ function formatGarminSourceLabel(deviceLabel: string | null): string {
 
 export function buildSourceProviderPresentation(
     serviceName: ServiceNames | null,
-    event?: EventInterface | null,
+    event?: EventRead | null,
 ): ProviderPresentation | null {
     if (!serviceName) {
         return null;

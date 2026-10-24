@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { OnboardingComponent } from './onboarding.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -27,6 +27,7 @@ describe('OnboardingComponent', () => {
     let mockAnalyticsService: any;
     let mockPaymentService: any;
     let mockDialog: any;
+    let routeSnapshot: { queryParamMap: ReturnType<typeof convertToParamMap> };
 
     const mockUser = {
         uid: 'test-user-123',
@@ -49,6 +50,7 @@ describe('OnboardingComponent', () => {
     };
 
     beforeEach(async () => {
+        routeSnapshot = { queryParamMap: convertToParamMap({}) };
         mockUserService = {
             createOrUpdateUser: vi.fn().mockResolvedValue(undefined),
             isPro: vi.fn().mockResolvedValue(false),
@@ -96,6 +98,7 @@ describe('OnboardingComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: Router, useValue: mockRouter },
+                { provide: ActivatedRoute, useValue: { snapshot: routeSnapshot } },
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: AppPaymentService, useValue: mockPaymentService },
@@ -539,6 +542,93 @@ describe('OnboardingComponent', () => {
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { onboardingCompleted: true });
     });
+
+    it('returns to Compare after required consent and free account setup complete', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+        const returnFixture = TestBed.createComponent(OnboardingComponent);
+        const returningComponent = returnFixture.componentInstance;
+        returningComponent.user = { ...mockUser } as any;
+        returnFixture.detectChanges();
+        await returnFixture.whenStable();
+        vi.clearAllMocks();
+
+        for (const field of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+            returningComponent.termsFormGroup.get(field)!.setValue(true);
+        }
+        await returningComponent.onTermsSubmit();
+        await returningComponent.finishOnboarding();
+
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(returningComponent.user);
+        expect(mockUserService.setFreeTier).toHaveBeenCalledWith(returningComponent.user);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(returningComponent.user, { onboardingCompleted: true });
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare']);
+        expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain('Continue to Compare');
+        expect(returningComponent.isLoading).toBe(false);
+    });
+
+    it('returns an already completed account to Compare without rewriting its profile', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+
+        await returningComponent.finishOnboarding();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare']);
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('returns to the same MCP request after setup (previously complete: %s)', async (onboardingCompleted) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id: 'request-1' });
+        const returnFixture = TestBed.createComponent(OnboardingComponent);
+        const returningComponent = returnFixture.componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted } as any;
+        returnFixture.detectChanges();
+        await returnFixture.whenStable();
+        if (!onboardingCompleted) {
+            for (const field of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+                returningComponent.termsFormGroup.get(field)!.setValue(true);
+            }
+            await returningComponent.onTermsSubmit();
+        }
+
+        await returningComponent.finishOnboarding();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/mcp/authorize'], { queryParams: { request_id: 'request-1' } });
+        expect(returningComponent.completionLabel).toBe('MCP connection');
+    });
+
+    it('returns to Subscriptions after its existing account-setup handoff', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions' });
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+
+        await returningComponent.finishOnboarding();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
+        expect(returningComponent.completionLabel).toBe('Subscriptions');
+    });
+
+    it.each(['', 'request/other', 'request?scope=all', 'a'.repeat(257)])('rejects an invalid MCP return request ID: %s', async (request_id) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id });
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+        await returningComponent.finishOnboarding();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it.each(['https://example.com', '//example.com', '/login', '/onboarding', '/tools/compare?other=1', '/mcp/authorize?request_id=request-1'])(
+        'ignores unsupported onboarding return destinations: %s', async (returnUrl) => {
+            routeSnapshot.queryParamMap = convertToParamMap({ returnUrl });
+            const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+            returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+
+            await returningComponent.finishOnboarding();
+
+            expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        },
+    );
 
     it('should skip hasPaidAccess and free-tier logic when canFinish is already true', async () => {
         await fixture.whenStable();

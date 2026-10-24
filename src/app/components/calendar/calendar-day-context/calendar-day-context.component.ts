@@ -1,11 +1,12 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
 import { getEventTags } from '@shared/event-tags';
-import type { AppEventInterface } from '@shared/app-event.interface';
+
 import type { TimelineNote } from '@shared/timeline-notes';
-import { AppThemes, type EventInterface } from '@sports-alliance/sports-lib';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
 import { CalendarDayHealthService } from '../../../services/calendar-day-health.service';
@@ -161,10 +162,10 @@ export class CalendarDayContextComponent {
   });
   readonly isDarkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly duplicatingId = signal<string | null>(null);
-  readonly activities = computed(() => this.day().events.map((event: EventInterface) => ({
+  readonly activities = computed(() => this.day().events.map((event: EventRead) => ({
     id: `${event.getID?.() || ''}`,
     name: resolveActivityCalendarEventLabel(event),
-    tags: getEventTags(event as AppEventInterface),
+    tags: getEventTags(event as EventRead),
     activityType: `${event.getActivityTypesAsString?.() || 'Activity'}`,
     duration: (() => {
       const seconds = resolveActivityCalendarEventDurationSeconds(event);

@@ -5,6 +5,7 @@ import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import * as logger from 'firebase-functions/logger';
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
@@ -191,7 +192,8 @@ vi.mock('../shared/id-generator', () => ({
   generateActivityID: (...args: unknown[]) => hoisted.mockGenerateActivityID(...args),
 }));
 
-vi.mock('@sports-alliance/sports-lib', () => ({
+vi.mock('@sports-alliance/sports-lib', async importOriginal => ({
+  ...await importOriginal<typeof import('@sports-alliance/sports-lib')>(),
   EventImporterFIT: hoisted.mockFITImporter,
   EventImporterGPX: hoisted.mockGPXImporter,
   EventImporterTCX: hoisted.mockTCXImporter,
@@ -371,6 +373,17 @@ describe('uploadActivity', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
     expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('returns a review conflict instead of a server failure when saved activity identities cannot be matched', async () => {
+    hoisted.mockWriteAllEventData.mockRejectedValueOnce(new ActivityIdentityConflictError());
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({ headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' } }), response);
+    expect(response.status).toHaveBeenCalledExactlyOnceWith(409);
+    expect(response.json).toHaveBeenCalledExactlyOnceWith({ error: ACTIVITY_IDENTITY_CONFLICT_MESSAGE, code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('returns a deletion conflict when deletion starts during event persistence', async () => {
@@ -1548,11 +1561,13 @@ describe('uploadActivity', () => {
     for (const kind of ['events', 'activities']) {
       await adapter.setDoc(['users', 'user-1', kind, 'saved'], { creator: { name: 'Parsed' } });
       const transform = hoisted.mockSetEventDocumentIfUserActive.mock.calls.at(-1)![5] as (incoming: object, saved: object) => object;
-      expect(transform(kind === 'events' ? { name: 'File' } : { creator: { name: 'Parsed' } },
-        kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { creator: { name: 'Edited watch' } }))
-        .toMatchObject(kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { creator: { name: 'Edited watch' } });
+      expect(transform(kind === 'events' ? { name: 'File' } : { type: 'Yoga', creator: { name: 'Parsed' } },
+        kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { type: 'Stretching', creator: { name: 'Edited watch' } }))
+        .toMatchObject(kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { type: 'Yoga', creator: { name: 'Edited watch' } });
     }
     hoisted.mockPrepareTrainingLoad.mockRejectedValueOnce(new Error('deleted or superseded'));
     await expect(adapter.prepareTrainingLoad(parsed)).rejects.toThrow('deleted or superseded');
   });
+
+
 });

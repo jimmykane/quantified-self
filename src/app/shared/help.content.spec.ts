@@ -16,6 +16,17 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains source updates, saved leg preferences and the retained-original boundary', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
+    expect(copy).toContain('Training load override, exclusion and saved policy stay with');
+    expect(copy).toContain('The updated file supplies the sport');
+    expect(copy).toContain('custom device name and ascent/descent corrections');
+    expect(copy).toContain('does not fetch a sport change');
+    expect(copy).toContain('does not guess how to move preferences between multisport legs');
+    expect(copy).toContain('repeat manual upload');
+    expect(copy).toContain('repeating the upload cannot resolve an ambiguous leg association');
+  });
+
   it('explains independent ascent/descent correction, reviewed reset and source preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
     for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',
@@ -102,9 +113,18 @@ describe('help.content', () => {
     expect(content).toContain('**Import existing routes** remains available separately');
     expect(content).not.toContain('Saved-route libraries remain separate manual actions');
   });
+  it('explains the full-label Dashboard Health range menu', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('Tap the range button to open a menu with full labels and a checked selection.');
+  });
+
   it('explains the activity explorer, full shared table, partial history and saved filters', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
+      'compact notice below their existing column headings', '**Change dates**',
+      'Activity tables default to **Start Date**, newest first', 'your choice is saved',
+      'no filter matches suggest changing dates or clearing a filter', '**All dates** without filters uses a neutral message',
+      'offers connection setup only when no service is connected',
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
       '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
       'Searching keeps checked choices selected', '**Clear selection**',
@@ -138,6 +158,12 @@ describe('help.content', () => {
     expect(copy).toContain('complete pool lengths and a complete recorded distance counter or an independent session total agree');
     expect(copy).toContain('that distance is counted once');
     expect(copy).toContain('Missing or conflicting evidence is not used to guess a correction');
+  });
+  it('explains bounded dashboard freshness-check recovery without promising unavailable values', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('retried automatically up to twice, while your available values stay visible');
+    expect(copy).toContain('Retries stop if you sign out or change accounts');
+    expect(copy).toContain('If the connection stays unavailable, use **Retry** once it returns');
   });
   it('distinguishes rejected calculations from missing inputs and explains importer metadata corrections', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
@@ -195,6 +221,13 @@ describe('help.content', () => {
     expect(copy).toContain('**Saved comparisons** table includes a compact **R–R & HRV** column');
     expect(copy).toContain('without additional reads or analysis');
     expect(copy).toContain('show **Not loaded** rather than claiming HRV is missing');
+    expect(copy).toContain('Choose **Poincaré** in the R–R chart view selector');
+    expect(copy).toContain('without joining the remaining neighbours');
+    expect(copy).toContain('Gaps and invalid observations always break adjacency');
+    expect(copy).toContain('Point-pair counts are separate from suspected ectopic-pair statistics');
+    expect(copy).toContain('larger centred square on desktop');
+    expect(copy).toContain('**Open Poincaré plot fullscreen**');
+    expect(copy).toContain('without repeating beat analysis');
     expect(copy).toContain('Generated **benchmark reports**, including shared and saved images');
     expect(copy).toContain('seven key R–R & HRV statistics side by side');
     expect(copy).toContain('differences appear only when both recordings have a valid value');
@@ -954,6 +987,8 @@ describe('help.content', () => {
     for (const id of ['health', 'training-analysis']) {
       const content = HELP_SECTIONS.find(section => section.id === id)?.content;
       expect(content).toContain('## Timeline notes');
+      expect(content).toContain('small **Sickness noted** link');
+      expect(content).toContain('**Low training load** instead of **Ready to train**');
       expect(content).toContain('ongoing notes must already have started');
       expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
       expect(content).toContain('notes appear on the Highlights trend charts');
@@ -1225,6 +1260,10 @@ describe('help.content', () => {
   it('should document the ChatGPT MCP setup path and production endpoint', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
+    expect(dataAndPrivacySection?.content).toContain('**Complete account setup**');
+    expect(dataAndPrivacySection?.content).toContain('same request for review and explicit approval; it does not grant access');
+    expect(dataAndPrivacySection?.content).toContain('**Deny** without completing setup');
+    expect(dataAndPrivacySection?.content).toContain('If the request expires during setup, start authorization again');
     expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
     expect(dataAndPrivacySection?.content).toContain('Developer mode');
     expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');
@@ -1988,6 +2027,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
+    expect(gettingStartedSection?.content).toContain('**Complete account setup**');
+    expect(gettingStartedSection?.content).toContain('accept the required policies before selecting files');
+    expect(gettingStartedSection?.content).toContain('**Continue to Compare** finishes free account setup');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
     expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is in **Settings -> Charts**, below **Line Width**');
     expect(gettingStartedSection?.content).toContain('It is off by default');

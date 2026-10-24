@@ -512,7 +512,37 @@ fences for both calculation and chart initialization. Worker failures keep saved
 Chart rendering failures dispose both hosts, including a partially initialized partner, before offering Retry.
 This panel introduces no Firestore query, write, index, reparse, original-file fetch or server endpoint.
 
-The two ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
+The local **Time series / Poincaré** Material toggle defaults to Time series. Poincaré lazily replaces the two time hosts
+with one unconnected scatter host using the same cached source analyses, source selection, unit preferences, theme and
+shared mobile tooltip/haptic handling. Switching views preserves timeline zoom; changing source/event or closing the
+panel retains the existing disposal/cancellation policy. Failed or stale scatter initialization is fenced and disposed,
+and the existing Retry path reuses successful analyses. Saved-only sources stay in statistics, outside the plots.
+
+The scatter host fills phone width and centres on desktop at up to 816 CSS pixels (720 pixels of plotting area).
+Its square geometry and identical axis bounds preserve interval-pair shape. The plot-only native fullscreen control
+is offered through `BrowserCompatibilityService` only when both entry and exit APIs are available and policy permits
+them, including the WebKit-prefixed API. Fullscreen keeps source identities, the flagged filter and point inspector
+accessible, sizes the same shared chart host to available height, and retains the cached analysis. Native exit events
+restore layout silently; pending requests are deduplicated, failures leave the chart usable, and a late entry for a
+removed plot is exited. Short viewports scroll with the global QS scrollbar skin rather than clipping controls.
+
+`benchmark-rr-poincare.helper.ts` pairs original adjacent analyzed observations within a source segment before applying
+quality filters. Invalid/nonpositive intervals, invalid time and non-increasing time break pairing. A point is artifact-flagged
+when either member has an artifact classification; otherwise either suspected-ectopic classification gives a ring.
+Removing flagged points never creates a new neighbouring pair. Each source preserves its full-event symbol assignment
+(circle, square, triangle, diamond) and device color. A two-pass scan bounds allocations/rendering to 4,000 points per
+category per recording, sampling ranks across the complete domain with first/last retention. Counts include all eligible
+pairs; axis extents include all pairs before filtering/sampling so rare extremes remain within the plot. Axes use equal
+canonical interval bounds and a square plot region. This is interval-pair geometry, not another classifier, an SD1/SD2
+implementation or a new persisted metric. Native ECharts point tooltips escape source labels. The keyboard/touch **Next
+flagged pair** action inspects displayed flagged points; its interval/time values use the shared canonical formatter.
+The adjacent-pair count is deliberately distinct from Sports Lib's suspected ectopic-pair count.
+
+MCP impact: this browser-only plot exposes no new MCP field, numeric class, parser/persistence change, grant or query.
+Raw beats/classifications remain outside the existing MCP surface. No original-file fetch, Firestore read/write/index,
+backend computation, reparse or Training change is introduced.
+
+The two time-series ECharts hosts share native zoom/hover with matching zoom IDs (including the DFA host's hidden slider).
 Reset uses the shared sync-source suppression so the button owns its single haptic response. Chart gestures use the
 shared ECharts feedback helper. Shared host lifecycle, theme/contrast, tooltip and resize helpers remain authoritative.
 Flag exclusion masks plot values only; null windows and recording segment boundaries stay gaps. Native LTTB is disabled
@@ -550,6 +580,38 @@ QA must include genuinely overflowing content in dialogs, sheets and nested pane
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
 
+## Dashboard activity query sharing
+
+`SummariesComponent` owns a shared activity-query stream for each event owner and tile date window. Duration
+windows use one clock anchor during synchronization; a latest-window stream retains its first anchor while it
+has consumers. Matching charts and event maps share the listener, event hydration and merge exclusion. Sport
+filters remain per tile in the view-model builder. Historical windows remain separate from the latest window.
+
+Streams use reference-counted replay: removing the final consumer stops the SDK listener, and unused query
+entries are removed. Synchronization releases all departing consumers before starting replacements, so a
+window without remaining consumers gets a fresh clock anchor regardless of tile order. Dashboard destruction
+and event-owner changes clear the streams, values and transient navigation anchors. Tile reorder remaps
+consumers with their existing source keys without restarting reads. The next synchronization can then detect
+calendar windows that changed across a date boundary and replace the old shared listener. A startup failure is
+shared across matching tiles within one synchronization;
+failed streams may reconnect on the next synchronization. The activity table, route previews and derived-metric
+readers retain their independent query lifecycles.
+
+## Firestore Angular boundary
+
+`app/firebase/firestore.ts` runs the provider factory, live-listener registration/teardown and the exported
+one-shot document/query/count reads outside Angular's zone. Firestore transport and IndexedDB callbacks otherwise
+inherit Angular task tracking, which becomes expensive for large cached histories. The SDK offers no Angular
+scheduling integration, so this boundary lives in the existing adapter rather than individual consumers.
+
+Snapshot, error and observer-completion callbacks enter Angular at the application boundary; `collectionData`
+and `docData` still filter cache/pending snapshots before entering when `waitForServer` is requested. One-shot
+reads preserve the original promises and error objects, and caller continuations retain their own zone context.
+The provider's zone registry covers reads started outside an injection context; without a zone, reads execute
+directly. Access rules, persistence settings and write APIs are unchanged. Regression coverage belongs in
+`firestore.spec.ts` and the dashboard subscription tests. These scheduling changes add no product settings or
+MCP/Training planning contracts and require no app-help changes.
+
 ## Firestore HTTP error responses
 
 The Firebase adapter installs `firestore-http-response-guard.ts` before browser RPCs run. The full SDK's XHR
@@ -581,6 +643,26 @@ record identifiers and activity/workout contents. Sentry retains the application
 Each failed subscription reports once; successful reads, cancelled reads and a restore-in-progress state are silent.
 Error displays and user-triggered retries retain their existing behavior. This is app diagnostics only, with no
 change to Training planning semantics or MCP read/write contracts, scopes, projections or bundled workflows.
+
+## Callable freshness-check recovery
+
+`AppFunctionsService` retries only `ensureDerivedMetrics` after SDK `internal`, `unavailable` or
+`deadline-exceeded` failures, accepting both prefixed and unprefixed codes. A lost browser response does not prove
+the server failed; the existing freshness probe/coordinator coalesces already queued work, so replaying this check
+is safe. Other callable actions retain their existing retry behavior.
+
+There are at most two transport retries, delayed by one and two seconds. That budget is shared across the existing
+single App Check verification retry, rather than restarting after a token refresh. Authentication, permission,
+validation, quota and unclassified errors do not trigger transport retries. Capture the Firebase Auth user object
+before asynchronous work and recheck it before each dispatch, alongside the caller's existing cancellation guard.
+Sign-out, an account switch or a new sign-in to the same account stops an older request; tokens and user identifiers
+are not added to requests or telemetry. A recovered check is silent; exhausted recovery preserves the final rejection
+for existing retry notifications and redacted diagnostics. Background retries produce no haptic feedback.
+
+This is frontend callable transport recovery only. It changes no metric calculations, stored values, Firestore
+listener policies, Training planning/provider actions, backend queue lifecycle or MCP contracts. Verification covers
+backoff timing, bounded attempts, combined App Check recovery, account/view cancellation, permanent failures,
+non-replay of other actions and existing diagnostics, plus derived-metric/dashboard consumer tests.
 
 ## Account profile recovery
 
@@ -1289,10 +1371,42 @@ commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
-At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for the metric plot; page scrolling exposes the complete chart and date axis. Shorter cards still fill their row, including Sleep. Desktop grids retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
+At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for scalar metric plots. Sleep overview grows with its own stats and averages, reserving at least 220px for its canvas, legend and axes through the scoped `--sleep-trend-plot-min-height` variable. Its canvas uses size containment so a previous ECharts resize cannot inflate the next flex layout. Page scrolling exposes the complete chart and date axis; shorter cards still fill their row. Desktop grids, picker previews, 42px thumbnails and Health overview cards retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
+
+Sleep retains ECharts label-collision protection even when a wide 14-day view initially offers every date. A later
+resize can hide colliding labels without waiting for a data/theme update; recorded bars and values remain unchanged.
 
 Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.
+
+Dashboard Health range controls use a compact Material button and the shared `qs-menu-panel` menu, matching the source and measurement menus. Menu options spell out the duration and mark the selected range; their width follows the app menu styling rather than the trigger width. Opening owns one selection haptic and makes no data request. A changed range retains the chart handler as its sole feedback/settings owner. Current, unavailable sample-only year and disabled choices remain inert; Material owns keyboard navigation and focus return. This changes presentation only, without Health/MCP reads, metric contracts, consent or stored settings changes on opening.
 
 Health thumbnails reuse completed browser evidence for the same owner, metric, range and source while their visible subscription hydrates. Their latest value uses the existing canonical display string. The inert ECharts sparkline fits the span of recorded points, preserving values, gaps and colors; single readings and zero-valued bars remain visible. Full charts retain their selected date axis. Source options require drawable points in the selected window (or renderable Sleep sessions). A saved missing source retains its identity and displays `Source unavailable` with an explanation. The menu offers available replacements without silently substituting one; with no replacements it remains plain attribution.
 
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
+
+
+## Empty activity tables
+
+The Dashboard table's projected date/sport toolbar uses a content-sized flex basis at the same small-screen breakpoint
+where the table stacks its filters. Its desktop width hint must not reserve vertical space above the column headings.
+The shared table defaults to Start Date descending using numeric timestamps, including across month/year boundaries
+and live arrivals; an explicitly saved sort remains respected.
+
+The shared event table keeps its existing surface, filter controls, icon headings, data rows and saved table preferences.
+A completed query with no displayed activities renders a compact, surface-free notice below the table's scroll owner;
+it does not use the loading shade's error card. Empty date ranges suggest a wider range; sport, text and tag no-matches
+suggest changing dates or clearing a filter. All dates without filters uses a neutral message with no wider-range hint.
+Connection/upload guidance stays in Dashboard's confirmed first-activity state; connection setup is offered only when
+no service is connected. Calendar retains its period-specific empty message and uses the shared filter hint for local
+no-matches. Loading, absent
+inputs and failed activity reads do not render the notice. Empty pagination is hidden without destroying the shared
+paginator or sort instances, so populated results retain their subscriptions and preferences.
+
+Dashboard and Activities project a Material **Change dates** button into the notice. It opens the existing preset
+selector or custom-date calendar without applying a range, changing filters, saving settings or fetching activities.
+Preset opening owns one selection haptic; custom calendars reuse their existing opened-event feedback. Disabled,
+loading and already-open controls are silent. Both controls receive focus before opening, keeping keyboard navigation
+and calendar focus return on the stable date field. The notice wraps its action below the copy at phone widths.
+
+MCP impact review: completed-activity presentation only; readers, canonical metrics, stored data, Training plan/workout
+contracts, consent and provider actions are unchanged.

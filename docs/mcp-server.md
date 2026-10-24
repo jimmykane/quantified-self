@@ -913,6 +913,14 @@ Hosting routes these paths to `mcpApi`:
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
+Firebase sign-in alone does not create a QS profile. A new user must select **Complete account setup**, accept the
+required policies and finish free or paid setup before approval is available. Free setup returns to the same local
+consent route using only its opaque `request_id`; external OAuth callbacks are never onboarding destinations. Returning
+does not approve the request, issue credentials or preserve a hidden grant: the user reviews the requested permissions
+again and explicitly approves. Denial remains available without a profile. The original ten-minute request expiry and
+backend deletion/profile fences are unchanged; an expired request must be restarted from the client. This browser-only
+handoff changes no public tools, schemas, scopes, instructions or plugin metadata, so no registered-contract promotion,
+client rescan or plugin rebuild is needed.
 Each connection separates data access from optional Training changes and lists every supported permission with an explicit
 **Granted** or **Not granted** status. Missing permissions, including scopes added since authorization, remain not granted.
 This display does not expand grants. OAuth authorization must start in the MCP client so its identity, redirect URI and
@@ -1568,6 +1576,17 @@ plugin sync remain explicit lifecycle actions.
    document whenever the public contract moves.
 
 ## Sports Lib metric discovery
+
+Sports Lib 23.7.0 indexes existing constructors and aliases without changing catalog membership, canonical names/units,
+validators, persisted-only availability or sensitive-field exclusions. QS's dashboard/list readers use an explicit
+summary path while full event readers remain available. MCP selected-metric queries reuse the already validated
+persisted metric instances instead of constructing them again in a complete event. A per-request aggregation context
+reuses sorting, activity keys and timezone buckets across selectors. Existing field masks, cumulative stat/document/byte
+budgets, malformed-stat skipping, per-metric exclusions and output projections stay in force. Missing persisted pace
+is not inferred from a speed stat. See [the read-path guide](event-summary-reads.md) for maintenance and benchmarks.
+This performance change requires no historical reparse or derived refresh and changes no tool, field, schema, scope,
+consent, planning/provider capability or plugin contract. No registered-contract promotion, client rescan, plugin
+rebuild, historical reparse or derived-data refresh is required.
 
 Sports Lib 23.6.0 preserves catalog membership, canonical names/units, validators and existing JSON/output schemas.
 Its GPS calculation changes can affect generated distance, speed, pace and dependent summaries on new imports or
@@ -2955,3 +2974,14 @@ Root and Functions now pin published 23.0.0, retaining the 22.0.0 EnergySense su
 chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
 release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
 promotion, real-profile plugin install or historical reparse is performed by this implementation.
+
+## Stable activity source associations
+
+Chart/sample source reads use the common pure activity matcher and the validated server-owned `sourceIdentity`
+snapshot internally to identify the bound recording without borrowing another leg's data. The parsed file supplies
+the sport; no sport override is inferred. The allowlisted snapshot participates in the opaque source-context fingerprint so
+stale pagination/cache context cannot survive a source association change. Read-only consumers retain strict matching;
+provider-only cross-sport window authorization and write-reservation certificates never come from MCP inputs.
+`sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,
+schemas, grants, units and original-file budgets are unchanged; no mutation or reparse capability is added. Negative
+activity projection fixtures cover the new stored field. Training plan/workout contracts have no impact.
