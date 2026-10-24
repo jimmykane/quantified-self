@@ -151,6 +151,27 @@ describe('AppAnalyticsService', () => {
         });
     });
 
+    it('does not call the SDK when the runtime boundary supplies null Analytics, even with forced collection', () => {
+        (environment as any).forceAnalyticsCollection = true;
+        TestBed.resetTestingModule();
+        vi.clearAllMocks();
+        TestBed.configureTestingModule({
+            providers: [
+                AppAnalyticsService,
+                { provide: Analytics, useValue: null },
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: APP_STORAGE, useValue: mockStorage },
+            ]
+        });
+        const excludedService = TestBed.inject(AppAnalyticsService);
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        expect(excludedService.logEvent('tool_compare_entry', { source: 'side_nav' })).toBe(false);
+        expect(logEvent).not.toHaveBeenCalled();
+        expect(setAnalyticsCollectionEnabled).not.toHaveBeenCalled();
+    });
+
     it('should log a deduplicated subscription_started event without a subscription identifier', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 
@@ -197,11 +218,11 @@ describe('AppAnalyticsService', () => {
             signed_in: true,
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_entry', {
-            source: 'side_nav',
+            interaction_source: 'side_nav',
             signed_in: true,
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_sign_in', {
-            source: 'guest_create',
+            interaction_source: 'guest_create',
             destination: 'compare',
         });
     });
@@ -338,13 +359,13 @@ describe('AppAnalyticsService', () => {
             skipped_count: 2,
             file_type: 'gpx',
             zipped: true,
-            source: 'routes_list_bulk',
+            interaction_source: 'routes_list_bulk',
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
             action: 'send_service_route',
             status: 'success',
             route_count: 1,
-            source: 'routes_list_row',
+            interaction_source: 'routes_list_row',
             destination_service: 'SuuntoApp',
         });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'saved_route_action', {
