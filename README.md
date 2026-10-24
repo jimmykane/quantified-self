@@ -247,6 +247,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [Analytics collection, attribution boundaries, and rollout checks](docs/analytics-attribution.md)
 - [Firestore stats index allowlist, query audit and two-phase rollout](docs/firestore-stats-indexes.md)
 - [Benchmark comparison generation and reparse preservation](docs/benchmark-comparisons.md)
 - [CI test coverage and emulator isolation](docs/ci-testing.md)

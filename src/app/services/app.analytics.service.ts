@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Analytics } from 'app/firebase/analytics';
+import { analyticsEventParameters } from '../helpers/analytics-runtime.helper';
 import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -199,7 +200,7 @@ export class AppAnalyticsService {
 
         try {
             // Defer to the Firebase SDK
-            logEvent(this.analytics, eventName, params);
+            logEvent(this.analytics, eventName, analyticsEventParameters(params));
             return true;
         } catch (error) {
             this.logger.warn('Analytics logEvent error:', error);

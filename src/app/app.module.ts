@@ -9,7 +9,7 @@ import { AppRoutingModule } from './app.routing.module';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
-import { isPlatformBrowser } from '@angular/common';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from 'app/firebase/app';
 import { provideAuth, getAuth } from 'app/firebase/auth';
@@ -49,6 +49,7 @@ import { MAT_DATE_LOCALE_PROVIDER, getAppLocale } from './shared/adapters/date-l
 import { APP_STORAGE } from './services/storage/app.storage.token';
 import { MemoryStorage } from './services/storage/memory.storage';
 import { shouldProvideClientHydrationForRuntime } from './shared/public-startup-route';
+import { initializeProductionAnalytics } from './helpers/analytics-runtime.helper';
 
 export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   overlayPanelClass: 'qs-menu-panel',
@@ -171,17 +172,13 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
       return getPerformance();
     }),
     provideAnalytics(() => {
-      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
-        return null as unknown as ReturnType<typeof initializeAnalytics>;
-      }
-
-      return initializeAnalytics(getApp(), {
-        config: {
-          app_name: environment.firebase.projectId,
-          app_version: environment.appVersion,
-          debug_mode: environment.localhost
-        }
-      });
+      const browser = isPlatformBrowser(inject(PLATFORM_ID));
+      const document = inject(DOCUMENT);
+      return initializeProductionAnalytics(environment, {
+        isBrowser: browser && !billingTest,
+        href: browser ? document.location?.href ?? '' : '',
+        referrer: browser ? document.referrer : '',
+      }, settings => initializeAnalytics(getApp(), settings)) as ReturnType<typeof initializeAnalytics>;
     }),
     provideRemoteConfig(() => {
       if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
