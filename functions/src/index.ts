@@ -21,3 +21,10 @@ if (functionTarget && optimizedHandler) {
   // the complete entrypoint until they are explicitly added to the optimized map.
   Object.assign(module.exports, module.require('./full-entrypoint'));
 }
+
+// Firebase manifests convert hyphens in endpoint IDs to dotted runtime paths.
+// Keep discovery's flat compatibility ID while making that runtime path resolvable.
+const portalCompatibility = module.exports['ext-firestore-stripe-payments-createPortalLink'];
+if (portalCompatibility) Object.defineProperty(module.exports, 'ext', {
+  enumerable: false, value: { firestore: { stripe: { payments: { createPortalLink: portalCompatibility } } } },
+});

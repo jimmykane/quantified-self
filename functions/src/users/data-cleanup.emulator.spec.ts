@@ -66,6 +66,27 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await admin.app().delete();
     });
 
+    it('durably captures native Stripe deletion before removing the customer root', async () => {
+        const uid = owner();
+        const customerId = `cus_${uid.replaceAll('-', '')}`;
+        await db.doc('configuration/stripeBilling').set({ owner: 'native', nativeSince: Timestamp.fromMillis(1) });
+        await db.doc(`users/${uid}`).set({ synthetic: true });
+        await db.doc(`customers/${uid}`).set({ stripeId: customerId });
+        try {
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
+            expect((await db.doc(`customers/${uid}`).get()).exists).toBe(false);
+            expect((await db.doc(`stripeBillingAccounts/${uid}`).get()).data()).toMatchObject({ deleting: true, deleteIds: [customerId] });
+            const jobs = await db.collection('stripeBillingJobs').where('uid', '==', uid).get();
+            expect(jobs.docs.map(doc => doc.data())).toMatchObject([{ kind: 'delete', state: 'pending' }]);
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('complete');
+        } finally {
+            await db.doc('configuration/stripeBilling').delete();
+            await db.recursiveDelete(db.doc(`stripeBillingAccounts/${uid}`));
+            const jobs = await db.collection('stripeBillingJobs').where('uid', '==', uid).get();
+            for (const job of jobs.docs) await db.recursiveDelete(job.ref);
+        }
+    }, 30_000);
+
     it('retries full-handler partial queue deletion with retained identifiers, recursive roots and account isolation', async () => {
         const uid = owner();
         const other = owner();

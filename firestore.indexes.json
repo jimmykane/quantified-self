@@ -1,6 +1,10 @@
 {
   "indexes": [
     {
+      "collectionGroup": "stripeBillingJobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "recoverAt", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "derivedMetrics", "queryScope": "COLLECTION_GROUP",
       "fields": [{ "fieldPath": "entryType", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAtMs", "order": "ASCENDING" }, { "fieldPath": "generation", "order": "ASCENDING" }]
     },
@@ -1785,6 +1789,7 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "stripeBillingJobs", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     {"collectionGroup": "events", "fieldPath": "stats", "indexes": []},
     {"collectionGroup": "activities", "fieldPath": "stats", "indexes": []},
     {"collectionGroup": "events", "fieldPath": "stats.`Activity Types`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"arrayConfig": "CONTAINS", "queryScope": "COLLECTION"}]},

@@ -186,6 +186,9 @@ describe('Firestore Security Rules', () => {
         const uid = 'deleting-owner';
         const accountPath = `users/${uid}`;
         const checkoutPath = `customers/${uid}/checkout_sessions/session`;
+        const checkout = (owner: string) => ({ price: 'price_123', mode: 'subscription',
+            success_url: 'https://quantified-self.io/success', cancel_url: 'https://quantified-self.io/cancel',
+            metadata: { firebaseUID: owner }, automatic_tax: { enabled: true }, allow_promotion_codes: true });
         const fixtures = {
             [accountPath]: { displayName: 'Owner' },
             [`${accountPath}/config/settings`]: { theme: 'dark' },
@@ -193,7 +196,10 @@ describe('Firestore Security Rules', () => {
             [`${accountPath}/events/event`]: { name: 'Run', privacy: 'private' },
             [`${accountPath}/routes/route`]: { name: 'Route' },
             [`${accountPath}/activities/activity`]: { eventID: 'event', name: 'Activity' },
-            [checkoutPath]: { price: 'price_123' },
+            [checkoutPath]: checkout(uid),
+            'configuration/stripeBilling': { owner: 'native', requestsEnabled: true },
+            'stripeBillingPrices/price_123': { active: true, product: 'prod_existing', mode: 'subscription', trialDays: 0 },
+            'products/prod_existing': { active: true },
         };
         const mutations = [
             { name: 'profile creation', path: accountPath, operation: 'create', data: { displayName: 'Late profile' } },
@@ -208,7 +214,7 @@ describe('Firestore Security Rules', () => {
             { name: 'route update', path: `${accountPath}/routes/route`, operation: 'update', data: { name: 'Late route' } },
             { name: 'route deletion', path: `${accountPath}/routes/route`, operation: 'delete' },
             { name: 'activity update', path: `${accountPath}/activities/activity`, operation: 'update', data: { name: 'Late activity' } },
-            { name: 'checkout creation', path: checkoutPath, operation: 'create', data: { price: 'price_456' } },
+            { name: 'checkout creation', path: checkoutPath, operation: 'create', data: checkout(uid) },
             { name: 'checkout update', path: checkoutPath, operation: 'update', data: { price: 'price_456' } },
             { name: 'checkout deletion', path: checkoutPath, operation: 'delete' },
         ] as const;
@@ -250,7 +256,7 @@ describe('Firestore Security Rules', () => {
             });
             await assertFails(owner.doc(accountPath).set({ displayName: 'Resurrected' }));
             await assertFails(owner.doc(`${accountPath}/config/settings`).set({ theme: 'light' }));
-            await assertFails(owner.doc(checkoutPath).set({ price: 'price_456' }));
+            await assertFails(owner.doc(checkoutPath).set(checkout(uid)));
         });
 
         it('preserves ordinary owner reads and backend writes while pending', async () => {
@@ -282,7 +288,7 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(owner.doc(`users/${newUid}`).set({ displayName: 'New owner', creationDate: new Date() }));
             await assertSucceeds(owner.doc(`users/${newUid}/config/settings`).set({ theme: 'light' }));
             await assertSucceeds(owner.doc(`users/${newUid}/legal/agreements`).set({ acceptedMarketingPolicy: false }));
-            await assertSucceeds(owner.doc(`customers/${newUid}/checkout_sessions/new`).set({ price: 'price_123' }));
+            await assertSucceeds(owner.doc(`customers/${newUid}/checkout_sessions/new`).set(checkout(newUid)));
             await assertFails(owner.doc(`users/${uid}`).update({ displayName: 'Wrong owner' }));
         });
     });
@@ -637,16 +643,48 @@ describe('Firestore Security Rules', () => {
         const uid = 'checkout_owner';
         const path = `customers/${uid}/checkout_sessions/attempt`;
         const payload = {
-            price: 'price_existing', mode: 'subscription',
-            success_url: 'https://example.com/success', cancel_url: 'https://example.com/cancel',
+            price: 'price_existing123', mode: 'subscription',
+            success_url: 'https://quantified-self.io/success', cancel_url: 'https://quantified-self.io/cancel',
             metadata: { firebaseUID: uid }, automatic_tax: { enabled: true },
             allow_promotion_codes: true, payment_method_collection: 'if_required', trial_period_days: 7
         };
 
-        it.each([true, false])('preserves normal create, update, read and delete with email_verified=%s', async (email_verified) => {
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc(`users/${uid}`).set({});
+                await db.doc('configuration/stripeBilling').set({ owner: 'native', requestsEnabled: true });
+                await db.doc('stripeBillingPrices/price_existing123').set({ active: true, product: 'prod_existing', mode: 'subscription', trialDays: 7 });
+                await db.doc('products/prod_existing').set({ active: true });
+            });
+        });
+        it.each([
+            { customer: 'cus_forged' }, { price: 'price_unknown' }, { trial_period_days: 730 },
+            { sessionId: 'cs_forged' }, { url: 'https://attacker.example' }, { mode: 'payment' },
+            { metadata: { firebaseUID: 'other' } }, { automatic_tax: { enabled: false } },
+            { success_url: 'https://attacker.example/' }, { error: { message: 'forged' } }
+        ])('rejects forged checkout fields %j', async patch => {
+            await assertFails(testEnv.authenticatedContext(uid).firestore().doc(path).set({ ...payload, ...patch }));
+        });
+        it('blocks cached clients during maintenance and account deletion', async () => {
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await testEnv.withSecurityRulesDisabled(async c => { await c.firestore().doc('configuration/stripeBilling').update({ requestsEnabled: false }); });
+            await assertFails(ref.set(payload));
+            await testEnv.withSecurityRulesDisabled(async c => {
+                await c.firestore().doc('configuration/stripeBilling').update({ requestsEnabled: true });
+                await c.firestore().doc(`userDeletionTombstones/${uid}`).set({});
+            });
+            await assertFails(ref.set(payload));
+        });
+        it.each(['stripeBillingJobs/job', `stripeBillingAccounts/${uid}`, 'stripeBillingLocks/lock'])('hides private billing records: %s', async path => {
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertFails(ref.get()); await assertFails(ref.set({}));
+        });
+        it.each([true, false])('preserves create, read and delete but rejects mutation with email_verified=%s', async (email_verified) => {
             const owner = testEnv.authenticatedContext(uid, { email_verified }).firestore().doc(path);
             await assertSucceeds(owner.set(payload));
-            await assertSucceeds(owner.set({ ...payload, mode: 'payment' }, { merge: true }));
+            await assertFails(owner.set({ ...payload, mode: 'payment' }, { merge: true }));
             await assertSucceeds(owner.get());
             await assertSucceeds(owner.delete());
         });
@@ -654,7 +692,7 @@ describe('Firestore Security Rules', () => {
         it.each([
             { line_items: [{ price_data: { currency: 'eur', unit_amount: 0, recurring: { interval: 'month' }, product_data: { name: 'Forged Pro', metadata: { firebaseRole: 'pro' } } } }] },
             { line_items: [{ price_data: { currency: 'eur', unit_amount: 0, recurring: { interval: 'month' }, product: 'prod_existing_pro' } }] },
-            { line_items: [{ price: 'price_existing' }] },
+            { line_items: [{ price: 'price_existing123' }] },
             { line_items: [] },
             { line_items: null }
         ])('rejects caller line_items on both create and update: %j', async ({ line_items }) => {
@@ -679,7 +717,7 @@ describe('Firestore Security Rules', () => {
 
         it('preserves owner reads and deletion of legacy inline checkout records', async () => {
             await testEnv.withSecurityRulesDisabled(async context => {
-                await context.firestore().doc(path).set({ ...payload, line_items: [{ price: 'price_existing' }] });
+                await context.firestore().doc(path).set({ ...payload, line_items: [{ price: 'price_existing123' }] });
             });
             const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
             await assertSucceeds(owner.get());

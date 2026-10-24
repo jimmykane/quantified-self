@@ -12,7 +12,8 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 180;
+const EXPECTED_FULL_EXPORT_COUNT = 188;
+const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -106,6 +107,7 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
 };
 const RUNTIME_CONTRACT_TARGETS = [
+  ...BILLING_TARGETS,
   ...CONNECTION_HISTORY_TARGETS,
   ...Object.keys(GEN1_DISPATCHER_METADATA),
   'processGarminHealthBackfillTask',
@@ -323,6 +325,12 @@ function probe(targetArgument: string): void {
   const target = process.env.FUNCTION_TARGET?.trim() || null;
   const runtimeTarget = resolveRuntimeFunctionTarget(process.env);
   const exports = sortedKeys(entrypoint);
+  const compatibilityId = 'ext-firestore-stripe-payments-createPortalLink';
+  if (entrypoint[compatibilityId]) {
+    const dotted = compatibilityId.split('-').reduce<unknown>((value, key) => (value as Record<string, unknown>)?.[key], entrypoint);
+    assert(dotted === entrypoint[compatibilityId], 'Legacy portal dotted runtime target must preserve the handler identity.');
+    assert(!exports.includes('ext'), 'Legacy portal runtime alias must not create duplicate discovered endpoints.');
+  }
   const isolatedRuntimeContracts: Record<string, unknown> = {};
   for (const contractTarget of RUNTIME_CONTRACT_TARGETS) {
     if (!exports.includes(contractTarget)) continue;
@@ -613,15 +621,42 @@ async function check(): Promise<void> {
       || GEN1_DISPATCHER_METADATA[target]
       ? 'gcfv1' : 'gcfv2';
     assert(endpoint?.platform === expectedPlatform, `${target} runtime generation changed.`);
-    assert(endpoint.entryPoint === target, `${target} entrypoint metadata changed.`);
+    assert(endpoint.entryPoint === target.replace(/-/g, '.'), `${target} entrypoint metadata changed.`);
     assert(
-      arraysEqual(endpoint.region || [], ['europe-west2']),
+      arraysEqual(endpoint.region || [], [BILLING_TARGETS.includes(target) ? 'europe-west3' : 'europe-west2']),
       `${target} region metadata changed.`,
     );
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
       .map(secret => secret.key || '')
       .sort();
-    if (target === 'mcpApi') {
+    if (BILLING_TARGETS.includes(target)) {
+      const callable = target === 'createStripePortalLink' || target.startsWith('ext-');
+      const webhook = target === 'stripeBillingWebhook';
+      const task = target === 'processStripeBillingTask';
+      assert(endpoint.availableMemoryMb === 512 && endpoint.timeoutSeconds === (callable || webhook ? 60 : 300), `${target} billing runtime changed.`);
+      assert(arraysEqual(secretKeys, callable || task ? ['STRIPE_BILLING_KEY'] : webhook ? ['STRIPE_BILLING_WEBHOOK_SECRET'] : []), `${target} billing secrets changed.`);
+      if (callable) assert(endpoint.callableTrigger !== undefined, `${target} callable changed.`);
+      else if (webhook) assert(endpoint.httpsTrigger !== undefined, `${target} webhook changed.`);
+      else if (task) {
+        assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === 20
+          && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
+          && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14400
+          && endpoint.taskQueueTrigger.retryConfig.maxDoublings === 4
+          && endpoint.taskQueueTrigger.rateLimits?.maxConcurrentDispatches === 10
+          && endpoint.taskQueueTrigger.rateLimits?.maxDispatchesPerSecond === 10
+          && endpoint.concurrency === 1, 'Billing task retry/rate contract changed.');
+      } else if (target === 'recoverStripeBillingJobs') assert(endpoint.scheduleTrigger?.schedule === '*/30 * * * *', 'Billing recovery schedule changed.');
+      else {
+        const events: Record<string, [string, string]> = {
+          createStripeCheckoutSession: ['created', 'customers/{uid}/checkout_sessions/{requestId}'],
+          dispatchStripeBillingJob: ['written', 'stripeBillingJobs/{id}'],
+          deleteStripeCustomerOnDocumentDeleted: ['deleted', 'customers/{uid}'],
+        };
+        assert(endpoint.eventTrigger?.eventType === `google.cloud.firestore.document.v1.${events[target][0]}`
+          && endpoint.eventTrigger.eventFilterPathPatterns?.document === events[target][1]
+          && endpoint.eventTrigger.retry === true, `${target} billing event contract changed.`);
+      }
+    } else if (target === 'mcpApi') {
       assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 120, `${target} timeout configuration changed.`);
       assert(endpoint.concurrency === 4

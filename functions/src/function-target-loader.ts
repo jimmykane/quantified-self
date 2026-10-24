@@ -35,6 +35,14 @@ const loadActivityImportDispatchers = (): FunctionModule =>
   module.require('./queue') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
+  'createStripeCheckoutSession': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'createStripePortalLink': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'ext-firestore-stripe-payments-createPortalLink': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'stripeBillingWebhook': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'dispatchStripeBillingJob': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'recoverStripeBillingJobs': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'processStripeBillingTask': () => module.require('./stripe/billing/handlers') as FunctionModule,
+  'deleteStripeCustomerOnDocumentDeleted': () => module.require('./stripe/billing/handlers') as FunctionModule,
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
   getSuuntoAPIAuthRequestTokenRedirectURI:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
@@ -196,7 +204,9 @@ export function resolveRuntimeFunctionTarget(
     return undefined;
   }
 
-  return environment.FUNCTION_TARGET?.trim() || undefined;
+  const target = environment.FUNCTION_TARGET?.trim();
+  return target === 'ext.firestore.stripe.payments.createPortalLink'
+    ? 'ext-firestore-stripe-payments-createPortalLink' : target || undefined;
 }
 
 export function loadFunctionTarget(

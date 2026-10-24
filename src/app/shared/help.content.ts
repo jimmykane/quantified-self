@@ -502,6 +502,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Explore before signing in
 
+- [Membership](/pricing) shows current plans and offers. Read [Plans & Billing](/help#plans-and-billing) for plan limits and billing guidance.
+- Help topic cards are shareable links. Open a topic and copy its address, or open its link in a new tab. [Getting Started](/help#getting-started) links directly to this guide.
 - The [homepage](/) shows shared Training, Health, dashboard, workout-analysis, map, and device-comparison previews. The Training Plans section has a Calendar and workout-profile example with fictional sample data. Select a day or switch to Workout profile to inspect its prescription; nothing is saved.
 - The Health example uses the same category cards and charts as the signed-in workspace. Choose a category or **View history**, then use **Health overview** to return. Its readings are fictional, and it never loads your account data or saves changes.
 - The homepage keeps every feature section visible as you scroll. Use the jump links below its introduction to go directly to Training, Workouts, Plans, Health, Assistant, Maps, Comparisons, or Integrations. Focus moves to the chosen section's heading, so Tab continues through that section's controls. Each section has a shareable link, such as [Comparisons](/#home-comparisons); your browser's Back and Forward buttons restore the exact place you were reading, including the homepage view before your first jump.
@@ -811,6 +813,8 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 ### Activity beat-interval statistics
 
 When an original file contains beat-to-beat R–R intervals, newly imported or reparsed activities can include **R–R RMSSD**, **R–R SDNN**, **R–R pNN50**, recording coverage and artifact statistics. Ordinary heart-rate readings cannot supply these statistics. They describe the activity recording and are separate from overnight HRV and Readiness. Missing statistics stay unavailable. Older saved summaries need an original-file reparse; opening a chart alone does not update them. Multisport legs keep their own values rather than an invented workout average.
+
+**Artifacts** is the percentage of analyzed R–R intervals flagged as potential artifacts by QS’s detection rules; **Artifact count** shows their number. The same rules apply to each recording, making this useful for comparing devices within QS. Other apps may use different algorithms or thresholds, so their artifact values are not directly comparable. Flags are not confirmed strap errors, and a lower percentage alone does not prove that a device is more accurate. Suspected ectopic pairs, invalid intervals and recording gaps are tracked separately.
 
 The **R–R & HRV** summary tab appears on any Event Details page with valid saved beat-interval statistics, immediately before **Device**. Coverage, artifacts, suspected pairs, RMSSD, SDNN, pNN50 and median DFA α1 appear when recorded; **Show details**, alongside the metric tiles, reveals the other available R–R metrics without a separate action row. Choose a **Recording** when several have saved values. Values always belong to that recording, never a combined workout average. Benchmarks with two selected recordings show the usual **Δ** and percentage difference only for statistics present and valid in both recordings. Ordinary events and multisport legs do not show benchmark deltas. Recorded zero remains zero; missing or invalid values are omitted, not replaced with zero.
 
@@ -1168,8 +1172,12 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 
 ## Billing basics
 
+- Choosing a paid plan on the public pricing page keeps that plan and billing option through sign-in and account setup. It is shown first with **Your selection** on the subscription page.
+- Review the current price and trial terms, then choose the plan to start checkout. Opening the page never starts checkout automatically. If the selected option is no longer available, choose a current option instead.
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
+- During billing maintenance, new checkout and portal requests are temporarily paused. Existing subscriptions continue billing normally. Wait for billing to reopen before trying again.
+- If a checkout result is still being confirmed, contact support before starting another payment.
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
 - Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
@@ -1349,6 +1357,8 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 Activity-history date pickers for Garmin and Suunto default to the latest **2 calendar years** through today. COROS defaults to its full **3-month** provider limit, and Wahoo defaults to the latest **2 years**. You can select a longer or shorter range before importing, subject to each provider's available-history limit.
 
 For Garmin, Suunto, COROS, and Wahoo, **Import already running** means an existing activity-history request is still active. The duplicate request does not start another import and does not mean the original import failed. Wait for the active import to finish before requesting more history.
+
+COROS activity history prevents overlapping requests from separate tabs or devices, even when they select different dates. If a later part of a scan fails, activities already queued keep processing and the cooldown reflects the queued count. An empty scan allows another request. A finished request or an expired running status does not mean all queued activities have finished importing.
 
 ## Send activities once
 
@@ -1800,6 +1810,10 @@ Some older email delivery records may remain after account deletion. Those with 
 - Make sure you are opening the link for the same email address you entered.
 - If one sign-in method does not match your existing account, try the provider you originally used.
 - If you see **We couldn't load your account** or **We can't reach your account data**, check your connection and select **Retry**. This keeps you signed in while your account data is verified again; it does not reset your account or require you to repeat onboarding. If your sign-in session has actually expired, sign in again.
+
+### App stays on the loading screen
+
+If sign-in or account loading has not finished after 15 seconds, **Loading is taking longer than expected** replaces the rolling numbers. Check your connection and select **Reload page** to try again. Reloading keeps your browser session and does not clear storage or change saved account data. If loading finishes in the meantime, the app continues automatically. If you then see an account recovery message, use **Retry** there. For repeated failures, contact support with your browser name and the time it happened; never send passwords or verification tokens.
 
 ### Browser verification paused
 

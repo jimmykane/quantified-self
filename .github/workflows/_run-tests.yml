@@ -83,6 +83,9 @@ jobs:
       - name: Test Sports Lib activity and route reprocessing monitoring configuration
         run: npm run test:reparse-monitoring
 
+      - name: Test isolated Stripe billing tools and monitoring
+        run: npm run test:stripe-billing-tools
+
       - name: Test account cleanup and disconnect recovery monitoring configuration
         run: npm run test:cleanup-monitoring
 

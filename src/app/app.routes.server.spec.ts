@@ -153,6 +153,10 @@ describe('serverRoutes', () => {
     expect(PUBLIC_REDIRECT_ROUTES).toEqual([
       'features/workout-file-comparison',
       'features/sports-watch-benchmark',
+      'membership',
+      'help/getting-started',
+      'help/plans-and-billing',
+      'help/plans-billing',
     ]);
     expect(CLIENT_RENDERED_APP_ROUTES.every(path => !path.includes('**'))).toBe(true);
     expect(fallbackRoute).toMatchObject({

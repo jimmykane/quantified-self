@@ -7,6 +7,6 @@ export function maybeConnectAuthEmulator(auth: FirebaseAuthType): FirebaseAuthTy
     return auth;
   }
 
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+  connectAuthEmulator(auth, environment.firebase?.projectId === 'demo-stripe-billing' ? 'http://127.0.0.1:9191' : 'http://localhost:9099', { disableWarnings: true });
   return auth;
 }

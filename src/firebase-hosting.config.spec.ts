@@ -6,6 +6,8 @@ import {
   PRERENDERED_PUBLIC_ROUTES,
   PUBLIC_REDIRECT_ROUTES,
 } from './app/app.routes.server';
+import { LEGACY_WORKOUT_DATA_COMPARISON_PATHS } from './app/components/features/workout-data-comparison-page.paths';
+import { PUBLIC_ENTRY_REDIRECTS } from './app/shared/public-entry-redirects';
 
 interface FirebaseHostingTarget {
   target: string;
@@ -84,7 +86,7 @@ const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
 const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
-const expectedComparisonRedirects = PUBLIC_REDIRECT_ROUTES.map(path => ({
+const expectedComparisonRedirects = LEGACY_WORKOUT_DATA_COMPARISON_PATHS.map(path => ({
   source: routePathToHostingSource(path),
   destination: '/features/workout-data-comparison',
   type: 301,
@@ -224,7 +226,7 @@ describe('Firebase Hosting configuration', () => {
 
   it('permanently redirects legacy comparison pages to the consolidated canonical page', () => {
     for (const target of firebaseConfig.hosting) {
-      expect(target.redirects).toEqual(expectedComparisonRedirects);
+      expect(target.redirects).toEqual(expect.arrayContaining(expectedComparisonRedirects));
       expect(target.redirects?.every(redirect => redirect.type === 301)).toBe(true);
 
       const rewriteSources = new Set((target.rewrites ?? []).map(rewrite => rewrite.source));
@@ -232,6 +234,28 @@ describe('Firebase Hosting configuration', () => {
         expect(rewriteSources.has(redirect.source)).toBe(false);
       }
     }
+  });
+
+  it('redirects public membership and help entry links without hiding unknown paths or indexing aliases', () => {
+    const entryRedirects = PUBLIC_ENTRY_REDIRECTS.map(({ path, destination }) => ({
+      source: `/${path}`, destination, type: 301,
+    }));
+    for (const target of firebaseConfig.hosting) {
+      expect(target.redirects).toEqual([...entryRedirects, ...expectedComparisonRedirects]);
+      const sources = (target.redirects ?? []).map(redirect => redirect.source);
+      expect(matchesAnyHostingSource(sources, '/help/unknown-topic')).toBe(false);
+      expect(matchesAnyHostingSource(sources, '/membership/unknown')).toBe(false);
+      for (const { source } of entryRedirects) {
+        expect(sitemapUrls()).not.toContain(`${siteOrigin}${source}`);
+        expect(serviceWorkerConfig.navigationUrls).not.toContain(source);
+      }
+    }
+    expect(PUBLIC_REDIRECT_ROUTES).toEqual([
+      ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+      ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
+    ]);
+    // Shareable topic cards and membership/billing entry guidance were updated together.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -358,7 +382,9 @@ describe('Firebase Hosting configuration', () => {
     // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
     // File-comparison signup help also covers required account setup and the return to Compare.
+    // COROS history help also explains cross-client admission, partial scans and queued-work completion.
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
+    // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -374,6 +400,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
+    // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
@@ -387,6 +415,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
+    // Billing help also explains maintenance and pending checkout confirmation (2026-10-23).
     // Health help also covers primary Heart rate choices, nightly HRV history, same-account daily averages, automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.
@@ -406,6 +435,7 @@ describe('Firebase Hosting configuration', () => {
     // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
     // Help also documents Poincaré pairs, flagged-point inspection and preserved adjacency.
     // Poincaré help also covers the responsive square plot and browser-supported fullscreen controls.
+    // Artifact help explains QS-specific flags and why values differ across platforms.
     // Single-lap tables omit the persistent Summary row; selected summaries remain available.
     // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.

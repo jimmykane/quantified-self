@@ -25,6 +25,12 @@ export interface HistoryExecution {
 export class HistoryLifecycleChangedError extends Error {
   constructor() { super('This history import belongs to an earlier connection.'); this.name = 'HistoryLifecycleChangedError'; }
 }
+/** Known admission refusals retain their callable code/message across wrappers. */
+export class HistoryImportAdmissionError extends HttpsError {
+  constructor(code: 'permission-denied' | 'failed-precondition' | 'unauthenticated', message: string) {
+    super(code, message);
+  }
+}
 export async function assertHistoryConnectionCurrent(run: ConnectionHistoryRun, transaction: admin.firestore.Transaction): Promise<void> {
   const db = admin.firestore();
   const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, run.userID);

@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs/operators';
-import { RouterLink } from '@angular/router';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { filter, map } from 'rxjs/operators';
+import { ActivatedRoute, NavigationEnd, Router, RouterLink } from '@angular/router';
 import { SafeHtml } from '@angular/platform-browser';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -15,6 +15,7 @@ import { MatListModule } from '@angular/material/list';
 import { MarkdownPipe } from '../../helpers/markdown.pipe';
 import { searchHelpSections } from '../../helpers/help-search.helper';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpAction, HelpSection, HelpSectionId } from '../../shared/help.content';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 interface HelpActionCard extends HelpAction {
   description: string;
@@ -58,6 +59,10 @@ export class HelpPageComponent implements OnInit, OnDestroy {
   private document = inject(DOCUMENT);
   private breakpointObserver = inject(BreakpointObserver);
   private markdownPipe = inject(MarkdownPipe);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private destroyRef = inject(DestroyRef);
+  private haptics = inject(AppHapticsService);
   private onHashChange = () => this.selectSectionFromHash();
 
   readonly sections = computed(() => HELP_SECTIONS);
@@ -93,7 +98,14 @@ export class HelpPageComponent implements OnInit, OnDestroy {
   );
 
   ngOnInit(): void {
-    this.selectSectionFromHash();
+    this.selectSectionFromFragment(this.route.snapshot.fragment || this.document.location.hash.replace('#', '').trim());
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(event => {
+      this.searchQuery.set('');
+      this.selectSectionFromFragment(this.router.parseUrl(event.urlAfterRedirects).fragment ?? '');
+    });
     this.document.defaultView?.addEventListener('hashchange', this.onHashChange, { passive: true });
   }
 
@@ -101,7 +113,10 @@ export class HelpPageComponent implements OnInit, OnDestroy {
     this.document.defaultView?.removeEventListener('hashchange', this.onHashChange);
   }
 
-  openSection(sectionId: HelpSectionId): void {
+  openSection(sectionId: HelpSectionId, event?: MouseEvent): void {
+    if (event && (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) return;
+    if (!this.isKnownSectionId(sectionId)) return;
+    if (this.selectedSectionId() !== sectionId) this.haptics.selection();
     this.searchQuery.set('');
     this.selectSection(sectionId, true);
   }
@@ -126,6 +141,12 @@ export class HelpPageComponent implements OnInit, OnDestroy {
 
   private selectSectionFromHash(): void {
     const sectionId = this.document.location.hash.replace('#', '').trim();
+    this.selectSectionFromFragment(sectionId);
+  }
+
+  private selectSectionFromFragment(fragment: string): void {
+    // Hosting redirects may forward the original query after the destination fragment.
+    const sectionId = fragment.split('?', 1)[0];
     if (!this.isKnownSectionId(sectionId)) {
       this.selectedSectionId.set(null);
       return;
@@ -162,7 +183,10 @@ export class HelpPageComponent implements OnInit, OnDestroy {
     const sections = this.sections();
     let current = true;
     onCleanup(() => { current = false; });
-    untracked(() => this.selectSectionFromHash());
+    untracked(() => {
+      const sectionId = this.selectedSectionId();
+      if (sectionId && !this.isKnownSectionId(sectionId)) this.selectedSectionId.set(null);
+    });
     void this.preRenderSectionContent(sections).then(html => {
       if (current) this.renderedSections.set({ source: sections, html });
     });

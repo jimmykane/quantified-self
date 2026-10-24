@@ -2,13 +2,14 @@ import { replacesSupersededHistoryWork } from './connection-history/queue-replac
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { type HistoryExecution, HistoryLifecycleChangedError, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
+import { type HistoryExecution, HistoryImportAdmissionError, HistoryLifecycleChangedError, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { activityHistoryNextAllowedAt } from '../../shared/history-import.constants';
+import { isServiceUnavailableForSyncConnection } from '../../shared/service-connection';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
-import { getTokenData } from './tokens';
+import { getTokenData, TokenRefreshSkippedForDeletedUserError, TokenUseSkippedForPendingDisconnectError } from './tokens';
 import * as requestPromise from './request-helper';
 import { config } from './config';
 import { generateIDFromParts } from './utils';
@@ -17,6 +18,7 @@ import { getServiceConfig } from './OAuth2';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
   COROS_API_REQUEST_TIMEOUT_MS,
+  COROSAPI_ACCESS_TOKENS_COLLECTION_NAME,
   PRODUCTION_URL,
   STAGING_URL,
   USE_STAGING,
@@ -41,9 +43,70 @@ import {
 } from './shared/user-deletion-guard';
 import { getActiveRevisionProcessingLease } from './queue/revision-processing-lease';
 import { toSuuntoAuthorizationHeader } from './suunto/authorization-header';
+import { ProviderPendingDisconnectError } from './shared/provider-pending-disconnect-error';
 
 const BATCH_SIZE = 450;
 const SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT = 1_000_000;
+// Exceeds the bounded manual callables (COROS: 300 seconds). A crashed request
+// recovers by expiry; every read/write still fences an expired or replaced owner.
+const ACTIVITY_HISTORY_IMPORT_LEASE_MS = 30 * 60_000;
+
+interface ManualHistoryImportLease {
+  owner: string;
+  connectionStateGeneration: unknown;
+  corosCredentialGeneration: unknown;
+}
+
+async function readCOROSHistoryCredentialGeneration(
+  userID: string, transaction: admin.firestore.Transaction, phase: 'admission' | 'execution' = 'execution',
+): Promise<unknown> {
+  const root = await transaction.get(admin.firestore().collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(userID));
+  const data = root.data();
+  if (!root.exists || data?.disconnectOperationGeneration || data?.disconnectGeneration) {
+    if (phase === 'admission') {
+      if (!root.exists) throw new HistoryImportAdmissionError('unauthenticated', 'Reconnect COROS before importing history.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'COROS disconnect is pending.');
+    }
+    throw new HistoryLifecycleChangedError();
+  }
+  return data?.activeOAuthCredentialGeneration;
+}
+
+async function assertManualHistoryCredentialCurrent(
+  userID: string, serviceName: ServiceNames, transaction: admin.firestore.Transaction, lease: ManualHistoryImportLease,
+): Promise<void> {
+  if (serviceName === ServiceNames.COROSAPI
+    && await readCOROSHistoryCredentialGeneration(userID, transaction) !== lease.corosCredentialGeneration) {
+    throw new HistoryLifecycleChangedError();
+  }
+}
+
+function assertManualHistoryImportLease(
+  meta: admin.firestore.DocumentData | undefined,
+  lease: ManualHistoryImportLease,
+): void {
+  if (meta?.historyImportLeaseOwner !== lease.owner
+    || !Number.isFinite(meta?.historyImportLeaseExpiresAt)
+    || meta.historyImportLeaseExpiresAt <= Date.now()
+    || meta.connectionStateGeneration !== lease.connectionStateGeneration
+    || isServiceUnavailableForSyncConnection(meta)) {
+    throw new HistoryLifecycleChangedError();
+  }
+}
+
+async function assertManualHistoryImportCurrent(
+  userID: string, serviceName: ServiceNames, lease: ManualHistoryImportLease,
+): Promise<void> {
+  const db = admin.firestore();
+  await db.runTransaction(async transaction => {
+    const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    if (deletion.shouldSkip) throw new HistoryImportSkippedForDeletedUserError(userID, 'manual_lease');
+    const snapshot = await transaction.get(db.collection('users').doc(userID).collection('meta').doc(serviceName));
+    assertHistoryReservation(snapshot.data());
+    assertManualHistoryImportLease(snapshot.data(), lease);
+    await assertManualHistoryCredentialCurrent(userID, serviceName, transaction, lease);
+  });
+}
 
 // Define result interface
 export interface HistoryImportResult {
@@ -70,12 +133,11 @@ interface COROSHistoryResponse {
   data?: unknown;
 }
 
-export class HistoryImportSkippedForDeletedUserError extends Error {
+export class HistoryImportSkippedForDeletedUserError extends HistoryImportAdmissionError {
   readonly name = 'HistoryImportSkippedForDeletedUserError';
-  readonly code = 'failed-precondition';
 
   constructor(public readonly userID: string, public readonly phase: string) {
-    super('Account is being deleted or no longer exists.');
+    super('failed-precondition', 'Account is being deleted or no longer exists.');
   }
 }
 
@@ -100,12 +162,15 @@ async function commitHistoryBatchForActiveUser(params: {
   endDate: Date;
   processedActivitiesCount: number;
   execution?: HistoryExecution;
+  manualLease?: ManualHistoryImportLease;
 }): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async transaction => {
     await params.execution?.inTransaction(transaction);
     const reservationMeta = await transaction.get(db.collection('users').doc(params.userID).collection('meta').doc(params.serviceName));
     assertHistoryReservation(reservationMeta.data(), params.execution?.runId);
+    if (params.manualLease) assertManualHistoryImportLease(reservationMeta.data(), params.manualLease);
+    if (params.manualLease) await assertManualHistoryCredentialCurrent(params.userID, params.serviceName, transaction, params.manualLease);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
@@ -198,18 +263,39 @@ export async function withActivityHistoryImportReservation<T>(
 ): Promise<T> {
   const owner = randomUUID(); const db = admin.firestore();
   const ref = db.collection('users').doc(userID).collection('meta').doc(serviceName);
-  await db.runTransaction(async transaction => {
+  const lease = await db.runTransaction(async transaction => {
     const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
     if (deletion.shouldSkip) throw new HistoryImportSkippedForDeletedUserError(userID, 'reservation');
     const snapshot = await transaction.get(ref); const meta = snapshot.data();
     assertHistoryReservation(meta);
     if (Number(meta?.historyImportLeaseExpiresAt) > Date.now()) throw new HttpsError('already-exists', 'Another history import is running.');
     const next = activityHistoryNextAllowedAt(Number(meta?.didLastHistoryImport), Number(meta?.processedActivitiesFromLastHistoryImportCount));
-    if (next > Date.now()) throw new HttpsError('resource-exhausted', 'History import is in cooldown.');
-    transaction.set(ref, { historyImportLeaseOwner: owner, historyImportLeaseExpiresAt: Date.now() + 30 * 60_000,
+    if (next > Date.now()) throw new HistoryImportAdmissionError('permission-denied', `History import is not allowed until ${new Date(next).toISOString()}`);
+    if (isServiceUnavailableForSyncConnection(meta)) throw new HistoryImportAdmissionError('failed-precondition', 'Reconnect before importing history.');
+    const corosCredentialGeneration = serviceName === ServiceNames.COROSAPI
+      ? await readCOROSHistoryCredentialGeneration(userID, transaction, 'admission') : undefined;
+    transaction.set(ref, { historyImportLeaseOwner: owner, historyImportLeaseExpiresAt: Date.now() + ACTIVITY_HISTORY_IMPORT_LEASE_MS,
       connectionHistoryReservation: FieldValue.delete(), connectionHistoryReservationExpiresAt: FieldValue.delete() }, { merge: true });
+    return { owner, connectionStateGeneration: meta?.connectionStateGeneration, corosCredentialGeneration };
   });
-  try { return await operation((startDate, endDate, options = {}) => addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options)); }
+  try {
+    const result = await operation(async (startDate, endDate, options = {}) => {
+      try {
+        return await addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options, lease);
+      } catch (error) {
+        // Token lookup/refresh has its own lifecycle guards. Normalize only
+        // those trusted refusals before the manual callable handles failures.
+        if (error instanceof TokenRefreshSkippedForDeletedUserError) {
+          throw new HistoryImportSkippedForDeletedUserError(userID, 'manual_token_resolution');
+        }
+        if (error instanceof TokenUseSkippedForPendingDisconnectError
+          || error instanceof ProviderPendingDisconnectError) throw new HistoryLifecycleChangedError();
+        throw error;
+      }
+    });
+    await assertManualHistoryImportCurrent(userID, serviceName, lease);
+    return result;
+  }
   finally {
     await db.runTransaction(async transaction => {
       const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -221,6 +307,7 @@ export async function withActivityHistoryImportReservation<T>(
 }
 async function addHistoryToQueueOperation(
   userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date, options: HistoryImportOptions,
+  manualLease?: ManualHistoryImportLease,
 ): Promise<HistoryImportResult> {
   await assertHistoryImportUserActive(userID, 'before_token_lookup');
   const metadataStartDate = options.cumulativeMetadata?.startDate ?? startDate;
@@ -264,6 +351,7 @@ async function addHistoryToQueueOperation(
       };
       try {
         await options.execution?.beforeRequest();
+        if (manualLease) await assertManualHistoryImportCurrent(userID, serviceName, manualLease);
         workoutQueueItems = await getWorkoutQueueItems(serviceName,
           serviceToken as COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface,
           startDate, endDate, requestOptions);
@@ -281,6 +369,7 @@ async function addHistoryToQueueOperation(
         }
         await assertHistoryImportUserActive(userID, 'before_refreshed_provider_request');
         await options.execution?.beforeRequest();
+        if (manualLease) await assertManualHistoryImportCurrent(userID, serviceName, manualLease);
         workoutQueueItems = await getWorkoutQueueItems(serviceName,
           refreshedToken as SuuntoAPIAuth2ServiceTokenInterface, startDate, endDate, requestOptions);
       }
@@ -312,6 +401,7 @@ async function addHistoryToQueueOperation(
           userID,
           serviceName,
           execution: options.execution,
+          manualLease,
           providerUserId: tokenQueryDocumentSnapshot.id,
           workoutQueueItems: [],
           startDate: metadataStartDate,
@@ -341,6 +431,7 @@ async function addHistoryToQueueOperation(
           userID,
           serviceName,
           execution: options.execution,
+          manualLease,
           providerUserId: tokenQueryDocumentSnapshot.id,
           workoutQueueItems: batchToProcess,
           startDate: metadataStartDate,
@@ -370,7 +461,9 @@ async function addHistoryToQueueOperation(
       } catch (e: any) {
         if (options.execution) throw e;
         if (e instanceof HistoryImportSkippedForDeletedUserError
+          || e instanceof HistoryLifecycleChangedError
           || e instanceof UserDeletionGuardReadError
+          || (e instanceof HttpsError && e.code === 'already-exists')
           || (serviceName === ServiceNames.COROSAPI && `${e?.code || ''}`.replace(/^functions\//, '') === 'unauthenticated')) {
           throw e;
         }

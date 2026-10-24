@@ -6,7 +6,8 @@ import * as admin from 'firebase-admin';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
-import { HistoryImportResult, withActivityHistoryImportReservation, getNextAllowedHistoryImportDate } from '../history';
+import { HistoryImportResult, withActivityHistoryImportReservation } from '../history';
+import { HistoryImportAdmissionError, HistoryLifecycleChangedError } from '../connection-history/execution';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getActiveCOROSTokenSnapshot } from './account';
@@ -33,7 +34,13 @@ interface HistoryToQueueResponse {
 }
 
 function toHistoryCallableError(error: unknown): functions.https.HttpsError {
+  if (error instanceof HistoryLifecycleChangedError) {
+    return new functions.https.HttpsError('failed-precondition', 'History import is no longer active. Please retry.');
+  }
   const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+  if (error instanceof functions.https.HttpsError && code === 'already-exists') {
+    return new functions.https.HttpsError('already-exists', 'Another history import is running.');
+  }
   if (code === 'unauthenticated') {
     return new functions.https.HttpsError('unauthenticated', 'Reconnect COROS before importing history.');
   }
@@ -50,10 +57,10 @@ async function assertCOROSHistoryAllowed(userID: string, phase: string): Promise
   try {
     const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
     if (deletionGuard.shouldSkip) {
-      throw new functions.https.HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'Account is being deleted or no longer exists.');
     }
     if (await isServiceUnavailableForSyncForUser(userID, SERVICE_NAME)) {
-      throw new functions.https.HttpsError('failed-precondition', 'Reconnect COROS before importing history.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'Reconnect COROS before importing history.');
     }
   } catch (error) {
     if (error instanceof functions.https.HttpsError) throw error;
@@ -141,13 +148,6 @@ export const addCOROSAPIHistoryToQueue = functions
       if (historyImport) return { result: 'History import accepted', historyImport };
     }
 
-    // First check last history import
-    const nextAllowedDate = await getNextAllowedHistoryImportDate(userID, SERVICE_NAME);
-    if (nextAllowedDate && nextAllowedDate > new Date()) {
-      logger.error(`User ${userID} tried todo history import for ${SERVICE_NAME} while not allowed. (Requested: ${startDate.toISOString()} - ${endDate.toISOString()}, Available on: ${nextAllowedDate.toISOString()})`);
-      throw new functions.https.HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);
-    }
-
     const dateWindows = chunkCOROSInclusiveDateRange(startDate, endDate);
 
     const totalStats: HistoryImportResult = {
@@ -156,20 +156,20 @@ export const addCOROSAPIHistoryToQueue = functions
       processedBatches: 0,
       failedBatches: 0,
     };
-    await assertCOROSHistoryAllowed(userID, 'before_account_lookup');
-    let expectedProviderUserId: string;
-    try {
-      expectedProviderUserId = (await getActiveCOROSTokenSnapshot(userID)).id;
-    } catch (error) {
-      logger.warn('[COROSHistoryImport] Could not resolve the active account.', {
-        userID,
-        errorName: error instanceof Error ? error.name : typeof error,
-        code: (error as { code?: unknown } | null)?.code,
-      });
-      throw toHistoryCallableError(error);
-    }
-
     return withActivityHistoryImportReservation(userID, SERVICE_NAME, async importWindow => {
+      await assertCOROSHistoryAllowed(userID, 'before_account_lookup');
+      let expectedProviderUserId: string;
+      try {
+        expectedProviderUserId = (await getActiveCOROSTokenSnapshot(userID)).id;
+      } catch (error) {
+        logger.warn('[COROSHistoryImport] Could not resolve the active account.', {
+          userID,
+          errorName: error instanceof Error ? error.name : typeof error,
+          code: (error as { code?: unknown } | null)?.code,
+        });
+        throw toHistoryCallableError(error);
+      }
+
       for (let i = 0; i < dateWindows.length; i++) {
         const { startDate: batchStartDate, endDate: batchEndDate } = dateWindows[i];
 
@@ -197,6 +197,11 @@ export const addCOROSAPIHistoryToQueue = functions
             logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
           }
         } catch (e: any) {
+          if (e instanceof HistoryImportAdmissionError) throw e;
+          if (e instanceof HistoryLifecycleChangedError
+            || (e instanceof functions.https.HttpsError && e.code === 'already-exists')) {
+            throw toHistoryCallableError(e);
+          }
           logger.error('[COROSHistoryImport] Failed to queue a history window.', {
             userID,
             providerUserId: expectedProviderUserId,
@@ -209,5 +214,8 @@ export const addCOROSAPIHistoryToQueue = functions
         }
       }
       return { result: 'History items added to queue', stats: totalStats };
+    }).catch(error => {
+      if (error instanceof HistoryLifecycleChangedError) throw toHistoryCallableError(error);
+      throw error;
     });
   });

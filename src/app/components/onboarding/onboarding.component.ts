@@ -1,5 +1,5 @@
-import { AfterViewInit, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges, ViewChild, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { AfterViewInit, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges, ViewChild, computed, inject } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
@@ -18,6 +18,8 @@ import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
+import { membershipPriceIdFromReturnUrl } from '../../helpers/membership-selection.helper';
+import { of } from 'rxjs';
 
 @Component({
     selector: 'app-onboarding',
@@ -53,16 +55,29 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     private logger = inject(LoggerService);
     private analyticsService = inject(AppAnalyticsService);
     private destroyRef = inject(DestroyRef);
-    private readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-    private readonly mcpRequestId = this.route.snapshot.queryParamMap.get('request_id') || '';
-    // Keep destinations explicit; never accept an external/client OAuth callback here.
-    readonly completionPath = this.returnUrl === '/tools/compare' || this.returnUrl === '/subscriptions'
-        ? this.returnUrl
-        : this.returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(this.mcpRequestId)
-            ? '/mcp/authorize' : '/dashboard';
-    readonly completionLabel = this.completionPath === '/tools/compare' ? 'Compare'
-        : this.completionPath === '/subscriptions' ? 'Subscriptions'
-            : this.completionPath === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
+    private readonly completionQueryParams = toSignal(
+        this.route.queryParamMap ?? of(this.route.snapshot.queryParamMap),
+        { initialValue: this.route.snapshot.queryParamMap },
+    );
+    private readonly completionTarget = computed(() => {
+        const params = this.completionQueryParams();
+        const returnUrl = params.get('returnUrl');
+        const priceId = membershipPriceIdFromReturnUrl(returnUrl);
+        const requestId = params.get('request_id') || '';
+        // Keep destinations explicit; never accept an external/client OAuth callback here.
+        const path = priceId ? '/subscriptions'
+            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions'
+                ? returnUrl
+                : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
+                    ? '/mcp/authorize' : '/dashboard';
+        const label = path === '/tools/compare' ? 'Compare'
+            : path === '/subscriptions' ? 'Subscriptions'
+                : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
+        return { path, label, priceId, requestId };
+    });
+
+    get completionPath(): string { return this.completionTarget().path; }
+    get completionLabel(): string { return this.completionTarget().label; }
 
     ngOnInit() {
         // Log onboarding start
@@ -275,10 +290,14 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     }
 
     private navigateAfterOnboarding(): Promise<boolean> {
-        if (this.completionPath === '/mcp/authorize') {
-            return this.router.navigate([this.completionPath], { queryParams: { request_id: this.mcpRequestId } });
+        const target = this.completionTarget();
+        if (target.priceId) {
+            return this.router.navigate(['/subscriptions'], { queryParams: { priceId: target.priceId } });
         }
-        return this.router.navigate([this.completionPath]);
+        if (target.path === '/mcp/authorize') {
+            return this.router.navigate([target.path], { queryParams: { request_id: target.requestId } });
+        }
+        return this.router.navigate([target.path]);
     }
 
     togglePolicyDetails(policyId: string) {

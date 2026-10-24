@@ -16,6 +16,10 @@ const SUUNTO_API = [...SUUNTO, 'SUUNTOAPP_SUBSCRIPTION_KEY'];
 const WAHOO = ['WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET'];
 
 const EXPECTED_BINDINGS: Record<string, string[]> = {
+  createStripePortalLink: ['STRIPE_BILLING_KEY'],
+  'ext-firestore-stripe-payments-createPortalLink': ['STRIPE_BILLING_KEY'],
+  processStripeBillingTask: ['STRIPE_BILLING_KEY'],
+  stripeBillingWebhook: ['STRIPE_BILLING_WEBHOOK_SECRET'],
   addCOROSAPIHistoryToQueue: COROS,
   addSuuntoAppHistoryToQueue: SUUNTO_API,
   addSuuntoAppRoutesToQueue: SUUNTO_API,
@@ -100,6 +104,8 @@ describe('Function Secret Manager policy', () => {
       'MAPBOX_ACCESS_TOKEN',
       'MARKETING_UNSUBSCRIBE_SIGNING_KEY',
       'STRIPE_ADMIN_BILLING_KEY',
+      'STRIPE_BILLING_KEY',
+      'STRIPE_BILLING_WEBHOOK_SECRET',
       'STRIPE_SECRET_KEY',
       'SUUNTOAPP_CLIENT_ID',
       'SUUNTOAPP_CLIENT_SECRET',

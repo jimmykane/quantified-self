@@ -20,7 +20,7 @@ still require separate approval; this documentation update changes no secret bin
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
 | Suunto Training Guide application name | `SUUNTOAPP_GUIDE_OWNER` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
 | Marketing unsubscribe | `MARKETING_UNSUBSCRIBE_SIGNING_KEY` |
@@ -102,6 +102,8 @@ firebase emulators:start --only auth,functions,firestore,storage
 Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Never copy production credentials into an emulator checkout: provider calls and background workers can still reach real external services.
 
 ### Stripe key separation
+
+Native billing uses `STRIPE_BILLING_KEY` only on its portal/compatibility portal and private worker; ingress binds only `STRIPE_BILLING_WEBHOOK_SECRET`. These are independent of the installed extension and gift credentials. See [Stripe billing](stripe-billing.md#credentials) for permissions, the two-value local test file, and cutover prerequisites.
 
 `STRIPE_SECRET_KEY` remains the general server key used by the existing custom Stripe Functions. `STRIPE_ADMIN_BILLING_KEY` is a separate restricted key used only by `previewAdminSubscriptionGift` and `grantAdminSubscriptionGift`. In Stripe Dashboard, create one environment-specific restricted key with subscription read/write access (`Subscriptions: Write`, which permits the retrieve and update calls) and leave every unrelated resource permission disabled. Do not reuse the Invertase extension key or the general server key for this admin path.
 

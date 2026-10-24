@@ -73,6 +73,10 @@ export class AppRemoteConfigService {
     readonly isLoading = computed(() => !this._configLoaded());
 
     constructor() {
+        if (environment.firebase.projectId === 'demo-stripe-billing') {
+            this._configLoaded.set(true);
+            return;
+        }
         // Set minimum fetch interval:
         // - Production: 1 hour (3,600,000ms) - balance between freshness and throttle limits
         // - Dev/Beta: 5 minutes (300,000ms) - faster updates for testing

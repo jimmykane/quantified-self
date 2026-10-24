@@ -5,6 +5,7 @@ import {
 } from './components/features/workout-data-comparison-page.paths';
 import { SUPPORTED_ACTIVITIES_PATH } from './components/features/supported-activities-page.paths';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
+import { PUBLIC_ENTRY_REDIRECTS } from './shared/public-entry-redirects';
 
 export const PRERENDERED_INTEGRATION_ROUTES = [
   'integrations',
@@ -30,7 +31,10 @@ export const PRERENDERED_FEATURE_ROUTES = [
   PUBLIC_FEATURE_PATHS.routeFiles,
 ] as const;
 
-export const PUBLIC_REDIRECT_ROUTES = LEGACY_WORKOUT_DATA_COMPARISON_PATHS;
+export const PUBLIC_REDIRECT_ROUTES = [
+  ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+  ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
+] as const;
 
 export const PRERENDERED_GUIDE_ROUTES = [
   PUBLIC_GUIDE_PATHS.hub,

@@ -14,6 +14,7 @@ export const EMULATOR_SUITES = {
     'src/training-plans/delivery/suunto/suunto.emulator.spec.ts',
   ],
   lifecycle: [
+    'src/stripe/billing/billing.emulator.spec.ts',
     'src/training-load/training-load.persistence.emulator.spec.ts',
     'src/training-plans/large-schedule.emulator.spec.ts',
     'src/training-plans/strength.lifecycle.emulator.spec.ts',
@@ -32,6 +33,7 @@ export const EMULATOR_SUITES = {
     'src/email/monitoring.emulator.spec.ts',
     'src/connection-history/monitoring.emulator.spec.ts',
     'src/connection-history/manual-activity.emulator.spec.ts',
+    'src/coros/history-import-lease.emulator.spec.ts',
     'src/activity-sync/monitoring.emulator.spec.ts',
     'src/routes/monitoring.emulator.spec.ts',
     'src/sleep/monitoring.emulator.spec.ts',

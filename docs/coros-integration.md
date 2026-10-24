@@ -22,7 +22,48 @@ Every automatic activity and saved-route direction is off by default. Empty roll
 
 The Connections overview exposes the daily replay as a dedicated **Sleep & daily Health history** card with an **Import history** action, separate from the COROS activity-history card. Both cards open the shared History import tool, where activity ranges and the three-month Sleep/Health replay remain distinct controls.
 
-The tool locks each request immediately and keeps its pending/result state across dialog reopenings in the same app, separately for the current user's COROS activities and Sleep/Health. Sleep/Health stays disabled until its cooldown status is read successfully; failed reads show **Retry status check**. Existing callable cooldown timestamps are shown as normal next-available dates, retained on reopening, without a frontend error report or error haptic. Closing a dispatched request leaves it running; late responses update shared status without notifying a destroyed or changed account/provider view. This frontend-only feedback uses existing callables and metadata. It adds no cross-tab server lease, queue change, Rules change or migration; server admission remains authoritative.
+The tool locks each request immediately and keeps its pending/result state across dialog reopenings in the same app, separately for the current user's COROS activities and Sleep/Health. Sleep/Health stays disabled until its cooldown status is read successfully; failed reads show **Retry status check**. Existing callable cooldown timestamps are shown as normal next-available dates, retained on reopening, without a frontend error report or error haptic. Closing a dispatched request leaves it running; late responses update shared status without notifying a destroyed or changed account/provider view. Activity history also reads the finite future server lease and treats `already-exists` as normal **Import already running** feedback across clients.
+
+### Manual activity-history admission
+
+The synchronous/legacy COROS callable reserves one activity-history import per Firebase user across all date ranges.
+The shared `withActivityHistoryImportReservation` transaction checks deletion, active manual/connection-history
+reservations and cooldown before provider work. Active contention returns `already-exists`; cooldown returns
+`permission-denied` with its exact next-allowed ISO timestamp. The random owner holds a bounded 30-minute lease,
+longer than this callable's 300-second runtime. No lease renewal or new queue is needed.
+
+Missing credentials at admission return `unauthenticated` with reconnect guidance; pending disconnect or account
+deletion returns `failed-precondition`. These trusted admission errors remain callable-safe through the shared
+COROS/Suunto wrappers, including the exact cooldown deadline. Expired or superseded imports return
+`failed-precondition` with retry guidance. A generic database error carrying an `already-exists` code remains an
+observable failure; only typed callable contention receives normal **Import already running** treatment.
+The manual reservation also translates typed deletion/disconnect refusals from token lookup, refresh or the active-account
+recheck, including inactive credential generations, before the callable classifies failures. These refusals stop provider reads and
+queue/history writes without producing an internal-error response or an ERROR import log.
+
+The owner, finite future expiry and captured connection generation fence provider reads, every queue/metadata
+commit and successful finalization. The captured COROS token-root credential generation and pending disconnect
+state are rechecked too; ordinary token refresh within the same credential generation remains valid. Existing
+active-account checks, rolling three-month calendar windows and queue revision/processing-lease protections remain.
+Expired ownership can recover, but an older response cannot write against its replacement. Cleanup removes only
+the matching owner's lease, including after failure, and never recreates a missing/deleting user's metadata.
+
+Every committed batch retains its count and cooldown if a later batch/window fails. Empty trailing windows retain
+the cumulative count; an entirely empty scan records zero without imposing a cooldown. None of these counts,
+lease removal or callable success implies completed activity ingestion. The newer durable background path keeps
+its separate coordinator reservations and execution fences.
+
+Regression coverage includes real Firestore concurrent calls for equal/different ranges, independent users,
+cooldown/lease ordering, expiry/takeover, owner-only cleanup, stale reads/writes/finalization, account/credential
+replacement, legacy absent generations, ordinary token refresh, disconnect/deletion races, callable error contracts,
+token-resolution refusals, provider/queue failures and partial/empty windows. The suite is registered once in the
+isolated `mcp-data` emulator
+group; existing frontend tests cover COROS lease reopen/removal/expiry and
+silent expected contention. Monitoring is **covered/unchanged** by the existing import bundle: contention and stale
+admission are not worker failures, while committed queued work retains normal backlog/retry/DLQ coverage.
+No MCP/Training contract, Rule, index, migration, scheduler or provider scope changes. After separate approval,
+deploy compatible Functions before Hosting. Because the reservation helper is shared, include both existing
+`addCOROSAPIHistoryToQueue` and `addSuuntoAppHistoryToQueue` callables; rollback restores their prior revisions.
 
 ## Account identity
 

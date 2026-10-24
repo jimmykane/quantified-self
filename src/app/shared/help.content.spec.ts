@@ -16,6 +16,24 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('links membership and shareable getting-started and billing guides to their supported public URLs', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('[Membership](/pricing)');
+    expect(copy).toContain('[Plans & Billing](/help#plans-and-billing)');
+    expect(copy).toContain('[Getting Started](/help#getting-started)');
+    expect(copy).toContain('Help topic cards are shareable links');
+  });
+
+  it('explains the QS artifact definition and limits of comparisons with other apps', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('percentage of analyzed R–R intervals flagged as potential artifacts');
+    expect(copy).toContain('useful for comparing devices within QS');
+    expect(copy).toContain('different algorithms or thresholds');
+    expect(copy).toContain('artifact values are not directly comparable');
+    expect(copy).toContain('Flags are not confirmed strap errors');
+    expect(copy).toContain('a lower percentage alone does not prove that a device is more accurate');
+    expect(copy).toContain('Suspected ectopic pairs, invalid intervals and recording gaps are tracked separately');
+  });
   it('explains source updates, saved leg preferences and the retained-original boundary', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
     expect(copy).toContain('Training load override, exclusion and saved policy stay with');
@@ -32,6 +50,14 @@ describe('help.content', () => {
     for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',
       'without replacing your correction', 'not the altitude chart, laps, original file']) expect(copy).toContain(phrase);
   });
+  it('explains stalled startup recovery without recommending clearing browser storage', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['after 15 seconds', '**Loading is taking longer than expected**', '**Reload page**',
+      'does not clear storage', 'the app continues automatically', 'use **Retry** there']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('explains browser verification cooldowns and recovery without resetting account data', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     expect(copy).toContain('Temporary verification service errors retry automatically after short pauses');
@@ -306,6 +332,10 @@ describe('help.content', () => {
     expect(copy).toContain('The duplicate request does not start another import');
     expect(copy).toContain('does not mean the original import failed');
     expect(copy).toContain('Wait for the active import to finish');
+    expect(copy).toContain('COROS activity history prevents overlapping requests from separate tabs or devices');
+    expect(copy).toContain('activities already queued keep processing and the cooldown reflects the queued count');
+    expect(copy).toContain('An empty scan allows another request');
+    expect(copy).toContain('does not mean all queued activities have finished importing');
   });
 
   it('explains pending history requests, delayed records, and the Sleep status retry', () => {
@@ -2241,6 +2271,10 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
     expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
     expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
+    expect(plansSection?.content).toContain('keeps that plan and billing option through sign-in and account setup');
+    expect(plansSection?.content).toContain('**Your selection**');
+    expect(plansSection?.content).toContain('Opening the page never starts checkout automatically');
+    expect(plansSection?.content).toContain('If the selected option is no longer available, choose a current option instead');
     expect(plansSection?.content).toContain('## Complimentary extensions');
     expect(plansSection?.content).toContain('without changing the plan, creating a charge or proration, or turning automatic renewal back on');
     expect(plansSection?.content).toContain('internal admin notes are never included');

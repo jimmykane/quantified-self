@@ -99,7 +99,7 @@ export const FUNCTIONS_MANIFEST = {
     linkExistingStripeCustomer: { name: 'linkExistingStripeCustomer', region: 'europe-west2' },
     cleanupStripeCustomer: { name: 'cleanupStripeCustomer', region: 'europe-west2' },
     getUpcomingRenewalAmount: { name: 'getUpcomingRenewalAmount', region: 'europe-west2' },
-    createPortalLink: { name: 'ext-firestore-stripe-payments-createPortalLink', region: 'europe-west3' },
+    createPortalLink: { name: 'createStripePortalLink', region: 'europe-west3' },
 
     // Reparse Functions
     scheduleSportsLibReparseScan: { name: 'scheduleSportsLibReparseScan', region: 'europe-west2' },
