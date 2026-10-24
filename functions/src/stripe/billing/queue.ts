@@ -8,6 +8,7 @@ import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, BILLING_LEASE_MS, Bill
   type BillingEvent, type BillingJob } from './model';
 import { acquireBillingLease, assertBillingAuthority, commitBillingProjections, createBillingCheckout,
   deleteBillingCustomer, fetchBillingProjections, releaseBillingLease, resolveBillingOwner, type BillingDependencies } from './service';
+import type { BillingLease } from './service';
 
 export type BillingObservation = 'accepted' | 'admission_failure' | 'processed' | 'skipped' | 'processing_failure'
   | 'terminal_failure' | 'checkout_failure' | 'dispatch_failure' | 'heartbeat' | 'backlog_age' | 'observation_unknown';
@@ -127,6 +128,40 @@ async function failBillingJob(db: Firestore, id: string, job: BillingJob, error:
   if (changed && !terminal) throw new BillingError('provider_unavailable', true);
 }
 
+async function deferBillingContention(ctx: BillingDependencies, id: string, generation: number, lease?: BillingLease): Promise<void> {
+  await ctx.db.runTransaction(async tx => {
+    const ref = ctx.db.collection(BILLING_JOBS).doc(id);
+    const [snapshot, controlSnapshot] = await tx.getAll(ref, ctx.db.doc(BILLING_CONTROL));
+    const current = snapshot.data() as BillingJob | undefined;
+    const control = billingControl(controlSnapshot.data());
+    if (!current || current.state !== 'pending' || current.generation !== generation
+      || control.owner !== 'native' || !control.nativeSince) return;
+    if (current.uid && current.kind !== 'delete') {
+      const guard = await getUserDeletionGuardStateInTransaction(ctx.db, tx, current.uid);
+      const account = await tx.get(ctx.db.collection(BILLING_ACCOUNTS).doc(current.uid));
+      if (guard.shouldSkip || account.get('deleting')) {
+        // Private receipt/outbox leaves must not survive account deletion.
+        tx.delete(ref);
+        return;
+      }
+    }
+    const time = ctx.now?.() ?? Date.now();
+    // A duplicate delivery must not invalidate another worker's active claim.
+    // That worker (or its existing recovery deadline) still owns completion.
+    if ((current.leaseUntil?.toMillis() ?? 0) > time && current.lease !== lease?.token) return;
+    if (!Number.isSafeInteger(generation + 1)) throw new Error('billing_generation_exhausted');
+    // Stable jitter spreads bursts for the same customer/catalog. Keep provider
+    // and dispatch backoff intact; contention consumes neither failure budget.
+    const delay = 5_000 + parseInt(billingId(id, String(generation)).slice(0, 8), 16) % 5_001;
+    const dueAt = Timestamp.fromMillis(Math.max(time + delay, current.dueAt.toMillis(), current.dispatchRetryAt?.toMillis() ?? 0));
+    // The generation-change trigger dispatches this durable successor. Persist
+    // before ACK: if this transaction fails, the original task must still retry.
+    tx.update(ref, { generation: generation + 1, dueAt, recoverAt: dueAt,
+      dispatchedAt: FieldValue.delete(), dispatchRetryAt: FieldValue.delete(),
+      lease: FieldValue.delete(), leaseUntil: FieldValue.delete() });
+  });
+}
+
 export async function processBillingJob(ctx: BillingDependencies, id: string, generation: number): Promise<void> {
   if (!/^[a-f0-9]{64}$/.test(id) || !Number.isSafeInteger(generation) || generation < 0) throw new BillingError('invalid_request');
   const ref = ctx.db.collection(BILLING_JOBS).doc(id);
@@ -135,9 +170,10 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
   const control = billingControl((await ctx.db.doc(BILLING_CONTROL).get()).data());
   if (control.owner !== 'native' || !control.nativeSince) return;
   const time = ctx.now?.() ?? Date.now();
-  const lease = await acquireBillingLease(ctx.db, initial.uid ? `customer:${initial.uid}` : 'catalog', time);
+  let acquiredLease: BillingLease | undefined;
   let job: BillingJob | null = null;
   try {
+    const lease = acquiredLease = await acquireBillingLease(ctx.db, initial.uid ? `customer:${initial.uid}` : 'catalog', time);
     job = await ctx.db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
       if (!snapshot.exists || snapshot.get('generation') !== generation || snapshot.get('state') !== 'pending') return null;
@@ -182,12 +218,16 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
     if (await commitBillingProjections(ctx, lease, job.uid, job.customerId, projections, { ref, generation })) observeBilling('processed');
     else if (await finishBillingJob(ctx.db, id, generation, 'skipped')) observeBilling('skipped');
   } catch (error) {
-    if (error instanceof BillingContention || !job) throw error;
+    if (error instanceof BillingContention) {
+      await deferBillingContention(ctx, id, generation, acquiredLease);
+      return;
+    }
+    if (!job) throw error;
     if (error instanceof BillingError && error.code === 'account_unavailable') {
       if (await finishBillingJob(ctx.db, id, generation, 'skipped')) observeBilling('skipped');
       return;
     }
     if (job.kind === 'checkout') await writeCheckoutError(ctx.db, job.uid!, job.requestId!, error);
     await failBillingJob(ctx.db, id, job, error, ctx.now?.() ?? Date.now());
-  } finally { await releaseBillingLease(ctx.db, lease); }
+  } finally { if (acquiredLease) await releaseBillingLease(ctx.db, acquiredLease); }
 }
