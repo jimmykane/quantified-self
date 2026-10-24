@@ -579,7 +579,46 @@ describe('OnboardingComponent', () => {
         expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
     });
 
-    it.each(['https://example.com', '//example.com', '/login', '/onboarding', '/tools/compare?other=1'])(
+    it.each([false, true])('returns to the same MCP request after setup (previously complete: %s)', async (onboardingCompleted) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id: 'request-1' });
+        const returnFixture = TestBed.createComponent(OnboardingComponent);
+        const returningComponent = returnFixture.componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted } as any;
+        returnFixture.detectChanges();
+        await returnFixture.whenStable();
+        if (!onboardingCompleted) {
+            for (const field of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+                returningComponent.termsFormGroup.get(field)!.setValue(true);
+            }
+            await returningComponent.onTermsSubmit();
+        }
+
+        await returningComponent.finishOnboarding();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/mcp/authorize'], { queryParams: { request_id: 'request-1' } });
+        expect(returningComponent.completionLabel).toBe('MCP connection');
+    });
+
+    it('returns to Subscriptions after its existing account-setup handoff', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions' });
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+
+        await returningComponent.finishOnboarding();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
+        expect(returningComponent.completionLabel).toBe('Subscriptions');
+    });
+
+    it.each(['', 'request/other', 'request?scope=all', 'a'.repeat(257)])('rejects an invalid MCP return request ID: %s', async (request_id) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id });
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+        await returningComponent.finishOnboarding();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it.each(['https://example.com', '//example.com', '/login', '/onboarding', '/tools/compare?other=1', '/mcp/authorize?request_id=request-1'])(
         'ignores unsupported onboarding return destinations: %s', async (returnUrl) => {
             routeSnapshot.queryParamMap = convertToParamMap({ returnUrl });
             const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;

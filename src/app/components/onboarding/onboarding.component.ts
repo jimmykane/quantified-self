@@ -53,10 +53,16 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     private logger = inject(LoggerService);
     private analyticsService = inject(AppAnalyticsService);
     private destroyRef = inject(DestroyRef);
-    // Only the comparison signup flow opts into returning somewhere other than Dashboard.
-    readonly completionPath = this.route.snapshot.queryParamMap.get('returnUrl') === '/tools/compare'
-        ? '/tools/compare' : '/dashboard';
-    readonly completionLabel = this.completionPath === '/tools/compare' ? 'Compare' : 'Dashboard';
+    private readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+    private readonly mcpRequestId = this.route.snapshot.queryParamMap.get('request_id') || '';
+    // Keep destinations explicit; never accept an external/client OAuth callback here.
+    readonly completionPath = this.returnUrl === '/tools/compare' || this.returnUrl === '/subscriptions'
+        ? this.returnUrl
+        : this.returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(this.mcpRequestId)
+            ? '/mcp/authorize' : '/dashboard';
+    readonly completionLabel = this.completionPath === '/tools/compare' ? 'Compare'
+        : this.completionPath === '/subscriptions' ? 'Subscriptions'
+            : this.completionPath === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
 
     ngOnInit() {
         // Log onboarding start
@@ -240,7 +246,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             // A recovered existing account may still be on /onboarding. Leave
             // without rewriting its profile or repeating completion analytics.
             if ((this.user as AppUserInterface).onboardingCompleted === true) {
-                await this.router.navigate([this.completionPath]);
+                await this.navigateAfterOnboarding();
                 return;
             }
             // Implicit Free Tier Selection:
@@ -260,12 +266,19 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             // Log onboarding completion
             this.analyticsService.logEvent('tutorial_complete');
 
-            await this.router.navigate([this.completionPath]);
+            await this.navigateAfterOnboarding();
         } catch (error) {
             this.logger.error('Error completing onboarding:', error);
         } finally {
             this.isLoading = false;
         }
+    }
+
+    private navigateAfterOnboarding(): Promise<boolean> {
+        if (this.completionPath === '/mcp/authorize') {
+            return this.router.navigate([this.completionPath], { queryParams: { request_id: this.mcpRequestId } });
+        }
+        return this.router.navigate([this.completionPath]);
     }
 
     togglePolicyDetails(policyId: string) {

@@ -1260,6 +1260,10 @@ describe('help.content', () => {
   it('should document the ChatGPT MCP setup path and production endpoint', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
+    expect(dataAndPrivacySection?.content).toContain('**Complete account setup**');
+    expect(dataAndPrivacySection?.content).toContain('same request for review and explicit approval; it does not grant access');
+    expect(dataAndPrivacySection?.content).toContain('**Deny** without completing setup');
+    expect(dataAndPrivacySection?.content).toContain('If the request expires during setup, start authorization again');
     expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
     expect(dataAndPrivacySection?.content).toContain('Developer mode');
     expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');

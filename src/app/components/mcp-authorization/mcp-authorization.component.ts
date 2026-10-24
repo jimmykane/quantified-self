@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxChange, MatCheckboxModule } from '@angular/material/checkbox';
@@ -10,6 +10,8 @@ import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService } from '../../services/app.user.service';
 
 import { MCP_SCOPE_CONTENT, MCP_SCOPE_PARENTS, type McpScope } from '../../helpers/mcp-permissions.helper';
 
@@ -41,6 +43,9 @@ interface McpAuthorizationRequest {
 export class McpAuthorizationComponent implements OnInit {
   private readonly haptics = inject(AppHapticsService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly auth = inject(AppAuthService);
+  private readonly userService = inject(AppUserService);
   private readonly functions = inject(AppFunctionsService);
   private readonly windowService = inject(AppWindowService);
   private readonly logger = inject(LoggerService);
@@ -50,6 +55,18 @@ export class McpAuthorizationComponent implements OnInit {
   readonly deciding = signal<'approve' | 'deny' | null>(null);
   readonly error = signal<string | null>(null);
   readonly selectedScopes = signal<McpScope[]>([]);
+  readonly hasAccountProfile = computed(() => {
+    const profile = this.userService.profileReadState();
+    return profile.status === 'ready'
+      && profile.uid === this.auth.currentUser?.uid
+      && profile.profileExists;
+  });
+  readonly needsAccountSetup = computed(() => {
+    const profile = this.userService.profileReadState();
+    return profile.status === 'ready'
+      && profile.uid === this.auth.currentUser?.uid
+      && !profile.profileExists;
+  });
   readonly isAndroid = /android/i.test(
     this.windowService.windowRef.navigator?.userAgent || '',
   );
@@ -121,9 +138,23 @@ export class McpAuthorizationComponent implements OnInit {
     return this.decide(false);
   }
 
+  async completeAccountSetup(): Promise<void> {
+    const request = this.request();
+    if (!request || !this.needsAccountSetup() || this.deciding()) {
+      return;
+    }
+    this.haptics.selection();
+    await this.router.navigate(['/onboarding'], {
+      queryParams: { returnUrl: '/mcp/authorize', request_id: request.requestId },
+    });
+  }
+
   private async decide(approved: boolean): Promise<void> {
     const request = this.request();
     if (!request || this.deciding()) {
+      return;
+    }
+    if (approved && !this.hasAccountProfile()) {
       return;
     }
     if (approved && this.selectedScopes().length === 0) {

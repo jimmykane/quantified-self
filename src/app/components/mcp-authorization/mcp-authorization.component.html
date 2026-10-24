@@ -51,6 +51,11 @@
           </div>
         }
 
+        @if (needsAccountSetup()) {
+          <p role="note">Complete your account setup before allowing access. A paid plan is not required.
+            Setup does not connect this client; you will return here to review and approve the request.</p>
+        }
+
         <section class="mcp-authorization__permissions" aria-labelledby="mcp-permissions-title">
           <h2 id="mcp-permissions-title">Requested permissions</h2>
           @for (option of scopeOptions(); track option.scope) {
@@ -94,10 +99,15 @@
 
     @if (request()) {
       <mat-card-actions class="mcp-authorization__actions">
+        @if (needsAccountSetup()) {
+          <button mat-flat-button type="button" [disabled]="deciding() !== null" (click)="completeAccountSetup()">
+            Complete account setup
+          </button>
+        } @else {
         <button
           mat-flat-button
           type="button"
-          [disabled]="deciding() !== null || selectedScopes().length === 0"
+          [disabled]="!hasAccountProfile() || deciding() !== null || selectedScopes().length === 0"
           (click)="approve()">
           <span class="mcp-authorization__button-content">
             @if (deciding() === 'approve') {
@@ -109,6 +119,7 @@
             }
           </span>
         </button>
+        }
         <button mat-button type="button" [disabled]="deciding() !== null" (click)="deny()">
           <span class="mcp-authorization__button-content">
             @if (deciding() === 'deny') {
