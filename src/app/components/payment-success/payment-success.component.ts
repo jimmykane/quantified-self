@@ -1,4 +1,5 @@
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +9,7 @@ import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService, SubscriptionPlan, SubscriptionStartStatus } from '../../services/app.analytics.service';
 import { AppPaymentService, StripeSubscription } from '../../services/app.payment.service';
-import { filter, firstValueFrom, map, take, timeout } from 'rxjs';
+import { catchError, defer, filter, firstValueFrom, map, of, take, timeout, timer } from 'rxjs';
 
 @Component({
   selector: 'app-payment-success',
@@ -38,37 +39,52 @@ export class PaymentSuccessComponent implements OnInit {
     }
 
     const maxAttempts = 10;
+    const deadline = Date.now() + 20_000;
     let attempt = 0;
     let hasPremiumClaim = false;
 
     this.logger.log('PaymentSuccess: Starting claim polling...');
 
-    while (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid)) {
+    while (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid) && Date.now() < deadline) {
       attempt++;
       try {
         this.logger.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
         // Force refresh
-        const tokenResult = await user.getIdTokenResult(true);
+        const tokenResult = await firstValueFrom(defer(() => user.getIdTokenResult(true)).pipe(
+          timeout({ first: Math.max(0, deadline - Date.now()) }),
+          catchError(error => {
+            if (this.isCurrentUser(user.uid)) {
+              this.logger.error('PaymentSuccess: Error refreshing token:', error);
+            }
+            return of(null);
+          }),
+          takeUntilDestroyed(this.destroyRef),
+        ), { defaultValue: null });
         if (!this.isCurrentUser(user.uid)) {
           break;
         }
-        const role = tokenResult.claims['stripeRole'];
+        const role = tokenResult?.claims['stripeRole'];
 
         if (this.isPaidSubscriptionPlan(role)) {
           this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
           hasPremiumClaim = true;
           this.assignedRole = role;
           void this.logSubscriptionStarted(role);
-        } else {
+        } else if (tokenResult) {
           this.logger.warn(`PaymentSuccess: Paid-plan access not confirmed on attempt ${attempt}.`);
         }
       } catch (error) {
+        if (!this.isCurrentUser(user.uid)) {
+          break;
+        }
         this.logger.error('PaymentSuccess: Error refreshing token:', error);
       }
 
-      if (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid)) {
+      if (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid) && Date.now() < deadline) {
         // Leave time for the server-owned subscription claim to arrive, including after errors.
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await firstValueFrom(timer(Math.min(2000, deadline - Date.now())).pipe(
+          takeUntilDestroyed(this.destroyRef),
+        ), { defaultValue: 0 });
       }
     }
 

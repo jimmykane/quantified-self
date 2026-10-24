@@ -18,6 +18,7 @@ import {
 describe('help.content', () => {
   it('explains the checkout handoff and recovery before another payment', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    expect(copy).toContain('checks your access for up to 20 seconds');
     expect(copy).toContain('**Connect your devices** opens [Connections](/services)');
     expect(copy).toContain('Opening Connections does not connect an account automatically');
     expect(copy).toContain('**Membership still syncing**');

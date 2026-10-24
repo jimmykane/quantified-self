@@ -159,6 +159,64 @@ describe('PaymentSuccessComponent', () => {
         expect(fixture.nativeElement.querySelector('.checkmark')).toBeNull();
     });
 
+    it('offers recovery after 20 seconds even when a token refresh hangs, ignoring a late Pro claim', async () => {
+        vi.useFakeTimers();
+        let resolveToken!: (value: { claims: { stripeRole: string } }) => void;
+        authUser.getIdTokenResult.mockReturnValue(new Promise(resolve => { resolveToken = resolve; }));
+        render();
+        await vi.advanceTimersByTimeAsync(20_000);
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent).toContain('Membership still syncing');
+        expect(fixture.nativeElement.querySelector('button[mat-flat-button]').disabled).toBe(false);
+        expect(authUser.getIdTokenResult).toHaveBeenCalledTimes(1);
+
+        resolveToken({ claims: { stripeRole: 'pro' } });
+        await vi.advanceTimersByTimeAsync(0);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.assignedRole).toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('Welcome to Pro!');
+        expect(paymentService.getUserSubscriptions).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('shares the 20-second deadline across slow refreshes and retry waits', async () => {
+        vi.useFakeTimers();
+        authUser.getIdTokenResult.mockImplementation(() => new Promise(resolve => {
+            setTimeout(() => resolve({ claims: { stripeRole: 'free' } }), 6000);
+        }));
+        render();
+        await vi.advanceTimersByTimeAsync(19_999);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.isRefreshing).toBe(true);
+        expect(authUser.getIdTokenResult).toHaveBeenCalledTimes(3);
+
+        await vi.advanceTimersByTimeAsync(1);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Membership still syncing');
+        expect(fixture.nativeElement.querySelector('button[mat-flat-button]').disabled).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(authUser.getIdTokenResult).toHaveBeenCalledTimes(3);
+    });
+
+    it.each(['token request', 'retry wait'])('settles verification on teardown during a pending %s', async pending => {
+        vi.useFakeTimers();
+        authUser.getIdTokenResult.mockReturnValue(pending === 'token request'
+            ? new Promise(() => {})
+            : Promise.resolve({ claims: { stripeRole: 'free' } }));
+        fixture = TestBed.createComponent(PaymentSuccessComponent);
+        const verification = fixture.componentInstance.ngOnInit();
+        const settled = vi.fn();
+        void verification.then(settled);
+        await vi.advanceTimersByTimeAsync(0);
+        fixture.destroy();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(settled).toHaveBeenCalledTimes(1);
+        expect(paymentService.getUserSubscriptions).not.toHaveBeenCalled();
+    });
+
     it.each(['account changed', 'page destroyed'])('ignores a late claim when the %s', async scenario => {
         let resolveToken!: (value: { claims: { stripeRole: string } }) => void;
         authUser.getIdTokenResult.mockReturnValue(new Promise(resolve => { resolveToken = resolve; }));
