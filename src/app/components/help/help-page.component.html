@@ -138,7 +138,7 @@
           <mat-card appearance="outlined" class="search-results-card">
             <mat-nav-list class="search-results-list" aria-label="Matching documentation guides">
               @for (section of searchResults(); track section.id) {
-                <a mat-list-item class="search-result" [routerLink]="[]" [fragment]="section.id" (click)="openSection(section.id)">
+                <a mat-list-item class="search-result" [routerLink]="['/help']" [fragment]="section.id" (click)="openSection(section.id, $event)">
                   <span matListItemIcon class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
                   <span matListItemTitle class="search-result-title">{{ section.title }}</span>
                   <span matListItemLine class="search-result-summary">{{ section.summary }}</span>
@@ -170,14 +170,14 @@
 
           <div class="topic-grid">
             @for (section of sections(); track section.id) {
-              <button mat-stroked-button type="button" class="topic-card" (click)="openSection(section.id)">
+              <a mat-stroked-button class="topic-card" [routerLink]="['/help']" [fragment]="section.id" (click)="openSection(section.id, $event)">
                 <span class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
                 <span class="topic-card-copy">
                   <span class="topic-card-title">{{ section.title }}</span>
                   <span class="topic-card-summary">{{ section.summary }}</span>
                 </span>
                 <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
-              </button>
+              </a>
             }
           </div>
         </section>
@@ -191,7 +191,7 @@
             <mat-card-content>
               <mat-nav-list aria-label="Popular documentation guides">
                 @for (section of popularSections(); track section.id) {
-                  <a mat-list-item [routerLink]="[]" [fragment]="section.id" (click)="openSection(section.id)">
+                  <a mat-list-item [routerLink]="['/help']" [fragment]="section.id" (click)="openSection(section.id, $event)">
                     <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
                     <span matListItemTitle>{{ section.title }}</span>
                   </a>

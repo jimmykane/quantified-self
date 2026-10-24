@@ -16,6 +16,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('links membership and shareable getting-started and billing guides to their supported public URLs', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('[Membership](/pricing)');
+    expect(copy).toContain('[Plans & Billing](/help#plans-and-billing)');
+    expect(copy).toContain('[Getting Started](/help#getting-started)');
+    expect(copy).toContain('Help topic cards are shareable links');
+  });
+
   it('explains the QS artifact definition and limits of comparisons with other apps', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
     expect(copy).toContain('percentage of analyzed R–R intervals flagged as potential artifacts');
