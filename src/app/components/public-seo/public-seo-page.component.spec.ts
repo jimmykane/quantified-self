@@ -1,20 +1,22 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublicSeoPageComponent } from './public-seo-page.component';
 import { PUBLIC_SEO_PAGES, PublicSeoPage } from './public-seo-pages.content';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('PublicSeoPageComponent', () => {
-  let fixture: ComponentFixture<PublicSeoPageComponent>;
   let routeStub: { snapshot: { data: { publicSeoPage: PublicSeoPage } } };
+  const selection = vi.fn();
 
   beforeEach(async () => {
+    selection.mockClear();
     routeStub = {
       snapshot: {
         data: {
@@ -32,14 +34,15 @@ describe('PublicSeoPageComponent', () => {
       ],
       providers: [
         { provide: ActivatedRoute, useValue: routeStub },
+        { provide: AppHapticsService, useValue: { selection } },
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(PublicSeoPageComponent);
-    fixture.detectChanges();
   });
 
   it('renders page content, sections, FAQ items, and CTAs from route data', () => {
+    const fixture = TestBed.createComponent(PublicSeoPageComponent);
+    fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
     const featureRows = fixture.debugElement.queryAll(By.directive(CompactRowComponent));
     const faqItems = fixture.nativeElement.querySelectorAll('.faq-item');
@@ -80,6 +83,12 @@ describe('PublicSeoPageComponent', () => {
     const proLinks = Array.from(guideFixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     expect(proLinks.filter(link => link.textContent?.includes('See Pro Options')).map(link => link.getAttribute('href')))
       .toEqual(['/pricing', '/pricing']);
+    const setupLink = proLinks.find(link => link.textContent?.includes('Start Setup'))!;
+    expect(setupLink.getAttribute('href')).toBe('/services');
+    expect(selection).not.toHaveBeenCalled();
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    setupLink.click();
+    expect(selection).toHaveBeenCalledTimes(1);
 
     for (const step of PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps ?? []) {
       expect(text).toContain(step);
@@ -89,6 +98,7 @@ describe('PublicSeoPageComponent', () => {
   });
 
   it('uses the shared compact-row surface for every public feature-page section', () => {
+    let setupLinkCount = 0;
     for (const page of Object.values(PUBLIC_SEO_PAGES)) {
       routeStub.snapshot.data.publicSeoPage = page;
       const pageFixture = TestBed.createComponent(PublicSeoPageComponent);
@@ -102,9 +112,15 @@ describe('PublicSeoPageComponent', () => {
       expect(pageFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(expectedItemCount);
       expect(pageFixture.nativeElement.querySelectorAll('.compact-row-stack')).toHaveLength(page.sections.length);
       expect(pageFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(0);
+      const links = Array.from(pageFixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
+      for (const link of links.filter(candidate => candidate.textContent?.includes('Start Setup'))) {
+        expect(link.getAttribute('href'), page.path).toBe('/services');
+        setupLinkCount++;
+      }
 
       pageFixture.destroy();
     }
+    expect(setupLinkCount).toBe(6);
   });
 
   it('renders the public MCP capabilities, boundaries, and setup links', () => {

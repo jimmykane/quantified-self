@@ -357,16 +357,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
-  it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
-    const expectedLastmod = '2026-06-26';
-    const updatedUrls = [
-      `${siteOrigin}/features/fit-gpx-route-files`,
-      `${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`,
-    ];
-
-    for (const url of updatedUrls) {
-      expect(sitemapLastmodForUrl(url), url).toBe(expectedLastmod);
-    }
+  it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
@@ -402,9 +395,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
     // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-10-09');

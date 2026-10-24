@@ -1240,7 +1240,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['Garmin', 'Suunto', 'Automatic activity sync', 'Past activity sync', 'Pro'],
     actions: [
       routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
-      routeAction('Start Setup', '/login'),
+      routeAction('Start Setup', '/services'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
@@ -1334,7 +1334,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Connect COROS and Suunto, then choose whether new COROS activities should be sent to Suunto automatically. You can also sync past activities from a date range.',
     chips: ['COROS', 'Suunto', 'Automatic sync', 'Recent history', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('COROS Integration', '/integrations/coros'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1421,7 +1421,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Connect Wahoo and Suunto, then choose whether new eligible Wahoo activities should be sent to Suunto automatically. You can also sync past retained Wahoo FIT activities from a date range whenever you need to.',
     chips: ['Wahoo', 'Suunto', 'FIT activities', 'Automatic activity sync', 'Past activity sync', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1513,7 +1513,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Use Quantified Self to send a selected FIT activity to Suunto, automatically deliver eligible new Garmin, COROS, or Wahoo activities, or choose a date range for activities already in your account archive.',
     chips: ['Suunto', 'FIT activities', 'Garmin', 'COROS', 'Wahoo', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1605,7 +1605,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Use Quantified Self to send a selected FIT activity to Wahoo, automatically deliver eligible new Garmin, COROS, or Suunto activities, or choose a date range for FIT-backed activities already in your account archive.',
     chips: ['Wahoo', 'FIT activities', 'Garmin', 'COROS', 'Suunto', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1697,7 +1697,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Quantified Self can send Suunto routes from your Routes library to Garmin Connect as courses after both accounts are connected and Course Import is allowed in Garmin.',
     chips: ['Suunto routes', 'Garmin courses', 'Course Import', 'Automatic route sending', 'Saved routes'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
       routeAction('Garmin Integration', '/integrations/garmin'),
       routeAction('Route Files', '/features/fit-gpx-route-files'),

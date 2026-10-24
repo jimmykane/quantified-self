@@ -500,6 +500,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 2. Complete onboarding and accept the required policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
 
+The sync guides' **Start Setup** action opens Connections. If sign-in or onboarding is required, complete it and choose **Continue to Connections** to resume setup. Provider connections require Pro. Opening setup does not connect a provider or enable automatic sync; you choose those actions in Connections.
+
 ## Explore before signing in
 
 - [Membership](/pricing) shows current plans and offers. Read [Plans & Billing](/help#plans-and-billing) for plan limits and billing guidance.
