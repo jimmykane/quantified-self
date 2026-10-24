@@ -359,6 +359,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
     // File-comparison signup help also covers required account setup and the return to Compare.
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
+    // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');

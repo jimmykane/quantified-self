@@ -666,6 +666,26 @@ non-replay of other actions and existing diagnostics, plus derived-metric/dashbo
 
 ## Account profile recovery
 
+Private startup loading has a 15-second UI deadline independent of Firebase Auth's first callback and account
+profile loading. If the merged user stream has not emitted, the shell replaces the rolling metrics with a
+Material **Reload page** recovery action. An early stream error/completion uses the same recovery screen.
+Public startup content remains visible and is not replaced by this private loading deadline. A late user result
+clears recovery and opens the normal shell; no synthetic signed-out identity or authenticated content is produced
+to unblock a pending read. Destruction and successful startup cancel the deadline.
+
+The shell reports **App startup stalled** once per blocked startup through the existing Sentry logger, using only
+fixed reason and profile-status tags, without account identifiers, tokens, URLs or profile contents in the added
+context. Reporting failure cannot block recovery. Reload requires an explicit click and one selection haptic;
+the action displays **Reloading…** and is disabled while navigation is pending. A five-second UI fallback allows
+another click if navigation was cancelled. Teardown and late startup success cancel that fallback. Recovery never
+signs out, clears browser persistence or writes account data.
+
+Each claim-merge attempt, including any token refresh inside it, has the existing ten-second profile deadline
+and bounded transient retry budget. Timed-out promises cannot publish late results. Exhaustion enters the existing
+profile-error state, allowing the login recovery panel to offer **Retry** with the current session. Generation and
+account-change fences remain authoritative, including intentionally suspended stale reads. This closes an observed
+infinite-loading path; the exact cached-state trigger of the original mobile incident was not captured in Sentry.
+
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
 server snapshots; permission and transient App Check network/server failures refresh both credentials with bounded
 retry/backoff. For App Check `initial-throttle`/`throttled` with HTTP 408/429/5xx, a validated remaining SDK wait of

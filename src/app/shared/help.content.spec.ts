@@ -42,6 +42,14 @@ describe('help.content', () => {
     for (const phrase of ['**Edit ascent / descent**', '**Ascent** or **Descent**', 'corrections are independent', '**Reset to imported value**', '**Edited**',
       'without replacing your correction', 'not the altitude chart, laps, original file']) expect(copy).toContain(phrase);
   });
+  it('explains stalled startup recovery without recommending clearing browser storage', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['after 15 seconds', '**Loading is taking longer than expected**', '**Reload page**',
+      'does not clear storage', 'the app continues automatically', 'use **Retry** there']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('explains browser verification cooldowns and recovery without resetting account data', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     expect(copy).toContain('Temporary verification service errors retry automatically after short pauses');

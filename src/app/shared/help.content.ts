@@ -1805,6 +1805,10 @@ Some older email delivery records may remain after account deletion. Those with 
 - If one sign-in method does not match your existing account, try the provider you originally used.
 - If you see **We couldn't load your account** or **We can't reach your account data**, check your connection and select **Retry**. This keeps you signed in while your account data is verified again; it does not reset your account or require you to repeat onboarding. If your sign-in session has actually expired, sign in again.
 
+### App stays on the loading screen
+
+If sign-in or account loading has not finished after 15 seconds, **Loading is taking longer than expected** replaces the rolling numbers. Check your connection and select **Reload page** to try again. Reloading keeps your browser session and does not clear storage or change saved account data. If loading finishes in the meantime, the app continues automatically. If you then see an account recovery message, use **Retry** there. For repeated failures, contact support with your browser name and the time it happened; never send passwords or verification tokens.
+
 ### Browser verification paused
 
 Temporary verification service errors retry automatically after short pauses. If you see **We couldn't verify this browser**, you're still signed in, but the browser security check could not finish. A rejected check can pause verification in the current page for up to **24 hours**. Repeated retries in that page do not clear the pause.
