@@ -7,7 +7,7 @@ import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { of, Subject } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { Firestore } from 'app/firebase/firestore';
@@ -28,6 +28,7 @@ describe('OnboardingComponent', () => {
     let mockPaymentService: any;
     let mockDialog: any;
     let routeSnapshot: { queryParamMap: ReturnType<typeof convertToParamMap> };
+    let routeStub: { snapshot: typeof routeSnapshot; queryParamMap?: BehaviorSubject<ReturnType<typeof convertToParamMap>> };
 
     const mockUser = {
         uid: 'test-user-123',
@@ -51,6 +52,7 @@ describe('OnboardingComponent', () => {
 
     beforeEach(async () => {
         routeSnapshot = { queryParamMap: convertToParamMap({}) };
+        routeStub = { snapshot: routeSnapshot };
         mockUserService = {
             createOrUpdateUser: vi.fn().mockResolvedValue(undefined),
             isPro: vi.fn().mockResolvedValue(false),
@@ -98,7 +100,7 @@ describe('OnboardingComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: Router, useValue: mockRouter },
-                { provide: ActivatedRoute, useValue: { snapshot: routeSnapshot } },
+                { provide: ActivatedRoute, useValue: routeStub },
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: AppPaymentService, useValue: mockPaymentService },
@@ -620,6 +622,30 @@ describe('OnboardingComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions'], { queryParams: { priceId: 'price_pro_yearly' } });
         expect(returningComponent.completionLabel).toBe('Subscriptions');
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { returnUrl: '/subscriptions?priceId=price_pro_yearly', path: '/subscriptions', label: 'Subscriptions', queryParams: { priceId: 'price_pro_yearly' } },
+        { returnUrl: '/subscriptions', path: '/subscriptions', label: 'Subscriptions', queryParams: null },
+        { returnUrl: '//example.com/subscriptions?priceId=price_pro_yearly', path: '/dashboard', label: 'Dashboard', queryParams: null },
+    ])('uses the latest safe membership return URL when onboarding is reused: $returnUrl', async ({ returnUrl, path, label, queryParams }) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions?priceId=price_pro_monthly' });
+        routeStub.queryParamMap = new BehaviorSubject(routeSnapshot.queryParamMap);
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+
+        // Angular reuses the routed component when only query parameters change.
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl });
+        routeStub.queryParamMap.next(routeSnapshot.queryParamMap);
+        await returningComponent.finishOnboarding();
+
+        if (queryParams) {
+            expect(mockRouter.navigate).toHaveBeenCalledWith([path], { queryParams });
+        } else {
+            expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
+        }
+        expect(returningComponent.completionLabel).toBe(label);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
     it.each(['', 'request/other', 'request?scope=all', 'a'.repeat(257)])('rejects an invalid MCP return request ID: %s', async (request_id) => {

@@ -393,7 +393,10 @@ describe('public-seo-pages.content', () => {
     expect(garminGuideCopy).toContain('Preview sends nothing');
     expect(garminGuideCopy).toContain('latest rolling five years');
     expect(garminGuideCopy).toContain('Retained FIT activities only');
-    expect(garminGuideCopy).toContain('Queued means scheduled, not delivered');
+    expect(garminGuideCopy).toContain('Scheduling complete confirms queueing, not delivery');
+    expect(garminGuideCopy).toContain('Scheduled and Could not schedule');
+    expect(garminGuideCopy).toContain('check Suunto for the delivered workout');
+    expect(garminGuideCopy).not.toContain('delivery result in Services');
     expect(garminGuideCopy).toContain('Garmin does not need to remain connected');
     expect(garminGuideCopy).not.toContain('Sync past activities');
 

@@ -1308,7 +1308,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What if a workout does not appear in Suunto?',
-        answer: 'Check that Suunto is connected and that the workout has a retained original FIT file. For a past send, review the preview exclusions and delivery result in Services. Queued means scheduled, not delivered. If access was revoked or a provider was disconnected, reconnect and enable the automatic destination again.',
+        answer: 'Check that Suunto is connected and that the workout has a retained original FIT file. For a past send, review the preview exclusions and the Scheduled and Could not schedule counts in Services. Scheduling complete confirms queueing, not delivery; check Suunto for the delivered workout. If access was revoked or a provider was disconnected, reconnect and enable the automatic destination again.',
       },
     ],
     closingTitle: 'Ready to send Garmin workouts to Suunto?',
