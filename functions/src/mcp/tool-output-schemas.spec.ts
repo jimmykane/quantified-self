@@ -2535,23 +2535,26 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   });
 
-  it('isolates Training permission and rejects injected identity or private output on every transport', async () => {
+  it('isolates Training read permission from Metrics and Timeline notes permission', async () => {
     const service = createFixtureDataService();
     const denied = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.TimelineNotesRead]); connections.push(denied);
     expect((await denied.client.listTools()).tools.map(tool => tool.name).filter(name => (TRAINING_READ_TOOLS as readonly string[]).includes(name))).toEqual([]);
+  });
+
+  // Each tool gets its own timeout budget as the Training read registry grows.
+  // Keep every private-field canary on all three transports.
+  it.each(TRAINING_READ_TOOLS)('rejects injected identity and private output for %s', async tool => {
+    const service = createFixtureDataService();
     const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(connection);
-    for (const tool of TRAINING_READ_TOOLS) {
-      vi.mocked(service.readTrainingPlans).mockClear();
-      const injected = await connection.client.callTool({ name: tool, arguments: { ...successfulToolArguments[tool], uid:'attacker' } });
-      expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
-      for (const field of ['id','owner','destinationKey','approvalDigest','issues','remoteWorkoutId','receipt',
-        'suuntoSwimmingGuide','suuntoSwimmingSettings','suuntoApprovedSwimmingSettings','suuntoMappingSwimmingSettings',
-        'guideMappingVersion','guideFields','fieldAllocation','suuntoGuideGeneration','suuntoRetiredGuides','suuntoRetiredExternalIds']) {
-        service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-TRAINING-CANARY' });
-        const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
-        expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
-        expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
-      }
+    const injected = await connection.client.callTool({ name: tool, arguments: { ...successfulToolArguments[tool], uid:'attacker' } });
+    expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
+    for (const field of ['id','owner','destinationKey','approvalDigest','issues','remoteWorkoutId','receipt',
+      'suuntoSwimmingGuide','suuntoSwimmingSettings','suuntoApprovedSwimmingSettings','suuntoMappingSwimmingSettings',
+      'guideMappingVersion','guideFields','fieldAllocation','suuntoGuideGeneration','suuntoRetiredGuides','suuntoRetiredExternalIds']) {
+      service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-TRAINING-CANARY' });
+      const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
     }
   });
 
