@@ -6,6 +6,7 @@ import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
 import * as logger from 'firebase-functions/logger';
+import { ProviderPendingDisconnectError } from './shared/provider-pending-disconnect-error';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoisted mocks (Vitest requirement)
@@ -71,7 +72,8 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-vi.mock('./tokens', () => ({
+vi.mock('./tokens', async importOriginal => ({
+    ...await importOriginal<typeof import('./tokens')>(),
     getTokenData: vi.fn().mockResolvedValue({ accessToken: 'testToken', userName: 'testUser' })
 }));
 
@@ -186,7 +188,7 @@ describe('history', () => {
         }) => unknown) => runner({
             set: hoisted.batchSetMock,
             get: vi.fn().mockImplementation(async () => ({
-                exists: historyLeaseMetadata !== undefined,
+                exists: true,
                 data: () => historyLeaseMetadata,
             })),
             getAll: hoisted.transactionGetAllMock,
@@ -356,6 +358,114 @@ describe('history', () => {
         expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => typeof data.historyImportLeaseOwner === 'string')).toHaveLength(1);
     });
 
+    function expectOnlyHistoryLeaseWrites() {
+        expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
+            expect.objectContaining({
+                historyImportLeaseOwner: expect.any(String),
+                historyImportLeaseExpiresAt: expect.any(Number),
+            }),
+            expect.objectContaining({ historyImportLeaseOwner: expect.anything() }),
+        ]);
+    }
+
+    describe('manual history lease fencing', () => {
+        function useMetadata(meta: Record<string, unknown>) {
+            hoisted.runTransactionMock.mockImplementation(async runner => runner({
+                get: vi.fn(async () => ({ exists: true, data: () => ({ ...meta }) })),
+                getAll: hoisted.transactionGetAllMock,
+                set: vi.fn((ref, data) => {
+                    Object.assign(meta, data);
+                    hoisted.batchSetMock(ref, data);
+                }),
+            }));
+        }
+
+        it.each([
+            [ServiceNames.COROSAPI, false, 'deletion'],
+            [ServiceNames.COROSAPI, false, 'disconnect'],
+            [ServiceNames.SuuntoApp, false, 'deletion'],
+            [ServiceNames.SuuntoApp, false, 'disconnect'],
+            [ServiceNames.SuuntoApp, true, 'deletion'],
+            [ServiceNames.SuuntoApp, true, 'disconnect'],
+        ] as const)('keeps %s token lifecycle refusal callable-safe (forced refresh: %s, reason: %s)', async (service, forcedRefresh, reason) => {
+            const error = reason === 'deletion'
+                ? new tokens.TokenRefreshSkippedForDeletedUserError('uid', service, 'token1', 'before_refresh')
+                : new tokens.TokenUseSkippedForPendingDisconnectError('uid', service, 'token1', 'before_refresh');
+            if (forcedRefresh) {
+                vi.mocked(tokens.getTokenData).mockResolvedValueOnce({ accessToken: 'testToken', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+                vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            }
+            vi.mocked(tokens.getTokenData).mockRejectedValueOnce(error);
+
+            await expect(history.addHistoryToQueue('uid', service, new Date(), new Date()))
+                .rejects.toBeInstanceOf(reason === 'deletion' ? history.HistoryImportSkippedForDeletedUserError : HistoryLifecycleChangedError);
+            expect(requestHelper.get).toHaveBeenCalledTimes(forcedRefresh ? 1 : 0);
+            expectOnlyHistoryLeaseWrites();
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('keeps the active-account disconnect guard within the same manual lifecycle response', async () => {
+            hoisted.getActiveCOROSTokenSnapshot.mockRejectedValueOnce(new ProviderPendingDisconnectError('uid', ServiceNames.COROSAPI, 'active_account_lookup'));
+            await expect(history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date(), new Date()))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(requestHelper.get).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
+        });
+
+        it('preserves the cooldown code and exact next-allowed date inside atomic admission', async () => {
+            const lastImport = Date.now();
+            useMetadata({ didLastHistoryImport: lastImport, processedActivitiesFromLastHistoryImportCount: 500 });
+            const operation = vi.fn();
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, operation))
+                .rejects.toMatchObject({ code: 'permission-denied', message: `History import is not allowed until ${new Date(lastImport + 86_400_000).toISOString()}` });
+            expect(operation).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('rejects a missing COROS root at admission with the existing callable reconnect response', async () => {
+            hoisted.runTransactionMock.mockImplementationOnce(async runner => runner({
+                get: vi.fn(async () => ({ exists: false, data: () => undefined })),
+                set: hoisted.batchSetMock,
+            }));
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, vi.fn()))
+                .rejects.toMatchObject({ code: 'unauthenticated', httpErrorCode: { status: 401 }, message: 'Reconnect COROS before importing history.' });
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('makes deletion admission errors callable-safe instead of relying on a plain Error code', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            const operation = vi.fn();
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, operation))
+                .rejects.toMatchObject({ code: 'failed-precondition', httpErrorCode: { status: 400 } });
+            expect(operation).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('keeps generic already-exists queue errors observable as failed batches', async () => {
+            vi.mocked(requestHelper.get).mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            const error = Object.assign(new Error('Unexpected database failure'), { code: 'already-exists' });
+            hoisted.transactionGetAllMock.mockRejectedValueOnce(error);
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .resolves.toMatchObject({ successCount: 0, failureCount: 1, failedBatches: 1 });
+            expect(logger.error).toHaveBeenCalledWith(expect.any(String), error);
+        });
+
+        it.each(['owner', 'expiry', 'connection'] as const)('rejects a stale %s before queue or history writes', async change => {
+            const meta: Record<string, unknown> = {};
+            useMetadata(meta);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({ accessToken: 'test', openId: 'active-coros-token' } as COROSAPIAuth2ServiceTokenInterface);
+            vi.mocked(requestHelper.get).mockImplementationOnce(async () => {
+                if (change === 'owner') meta.historyImportLeaseOwner = 'replacement';
+                if (change === 'expiry') meta.historyImportLeaseExpiresAt = Date.now() - 1;
+                if (change === 'connection') meta.connectionStateGeneration = 'replacement-connection';
+                return JSON.stringify({ result: '0000', data: [{ workoutId: '1' }] });
+            });
+            await expect(history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date(), new Date()))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => 'didLastHistoryImport' in data || 'fromHistory' in data)).toHaveLength(0);
+        });
+    });
+
     describe('addHistoryToQueue', () => {
         function automaticExecution(serviceName = ServiceNames.SuuntoApp): HistoryExecution {
             return {
@@ -447,17 +557,6 @@ describe('history', () => {
             await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), automatic ? { execution: automaticExecution(), maxItems: 100 } : {});
             expect(hoisted.dispatchConnectionHistoryWorkoutBatch).not.toHaveBeenCalled();
         });
-
-        function expectOnlyHistoryLeaseWrites() {
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
-            expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
-                expect.objectContaining({
-                    historyImportLeaseOwner: expect.any(String),
-                    historyImportLeaseExpiresAt: expect.any(Number),
-                }),
-                expect.objectContaining({ historyImportLeaseOwner: expect.anything() }),
-            ]);
-        }
 
         it.each([401, 403])('refreshes the same Suunto token once after history HTTP %s', async statusCode => {
             vi.mocked(tokens.getTokenData)
@@ -554,8 +653,8 @@ describe('history', () => {
             expectOnlyHistoryLeaseWrites();
         });
 
-        it('propagates a disconnect-blocked history refresh without another provider read', async () => {
-            const error = Object.assign(new Error('disconnect pending'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+        it('preserves an untrusted refresh failure named like a disconnect refusal without another provider read', async () => {
+            const error = Object.assign(new Error('Synthetic token failure'), { name: 'TokenUseSkippedForPendingDisconnectError' });
             vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
             vi.mocked(tokens.getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
@@ -628,12 +727,11 @@ describe('history', () => {
         });
 
         it('releases its reservation after empty history without admitting queue items', async () => {
-            const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expectOnlyHistoryLeaseWrites();
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -651,18 +749,16 @@ describe('history', () => {
             const workouts = Array.from({ length: 451 }, (_, i) => ({ workoutKey: `w${i}` }));
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: workouts }));
 
-            // First batch commit succeeds, second fails
-            hoisted.runTransactionMock
-                .mockImplementationOnce(async runner => runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock }))
-                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock; get: ReturnType<typeof vi.fn>; getAll: typeof hoisted.transactionGetAllMock }) => unknown) => (
-                    runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock })
-                ))
-                .mockRejectedValueOnce(new Error('commit failed'));
+            // Bind failure to the one-item batch, independently of lease reads.
+            hoisted.transactionGetAllMock.mockImplementation(async (...refs: unknown[]) => {
+                if (refs.length === 1) throw new Error('commit failed');
+                return refs.map(() => ({ exists: false, data: () => undefined }));
+            });
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(4);
+            expect(hoisted.transactionGetAllMock.mock.calls.map(refs => refs.length)).toEqual([450, 1]);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({

@@ -324,6 +324,10 @@ describe('help.content', () => {
     expect(copy).toContain('The duplicate request does not start another import');
     expect(copy).toContain('does not mean the original import failed');
     expect(copy).toContain('Wait for the active import to finish');
+    expect(copy).toContain('COROS activity history prevents overlapping requests from separate tabs or devices');
+    expect(copy).toContain('activities already queued keep processing and the cooldown reflects the queued count');
+    expect(copy).toContain('An empty scan allows another request');
+    expect(copy).toContain('does not mean all queued activities have finished importing');
   });
 
   it('explains pending history requests, delayed records, and the Sleep status retry', () => {

@@ -7,6 +7,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
 import { startManualActivityHistory } from '../connection-history/manual-activity';
+import { HistoryImportAdmissionError, HistoryLifecycleChangedError } from '../connection-history/execution';
 vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 // Mock firebase-functions/v2/https
@@ -181,6 +182,25 @@ describe('Suunto History to Queue', () => {
             });
             expect(logger.error).toHaveBeenCalledWith(error);
             expect(logger.info).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            new HistoryImportAdmissionError('permission-denied', 'History import is not allowed until 2026-11-01T00:00:00.000Z'),
+            new HistoryImportAdmissionError('failed-precondition', 'Reconnect before importing history.'),
+        ])('preserves shared admission refusal %s without a false failure report', async error => {
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02' } });
+            await expect(addSuuntoAppHistoryToQueue(request as never)).rejects.toBe(error);
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('returns a callable precondition error after its shared manual lease is superseded', async () => {
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(new HistoryLifecycleChangedError());
+            const request = createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02' } });
+            await expect(addSuuntoAppHistoryToQueue(request as never)).rejects.toMatchObject({
+                code: 'failed-precondition', httpErrorCode: { status: 400 }, message: 'History import is no longer active. Please retry.',
+            });
+            expect(logger.error).not.toHaveBeenCalled();
         });
 
         it('should throw error if App Check fails', async () => {

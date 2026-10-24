@@ -5,6 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { hasProAccess, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
+import { HistoryImportAdmissionError, HistoryLifecycleChangedError } from '../connection-history/execution';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
@@ -86,6 +87,14 @@ export const addSuuntoAppHistoryToQueue = onCall({
       logger.warn(`Partial import success: ${stats.successCount} imported, ${stats.failureCount} failed.`);
     }
   } catch (e: any) {
+    if (e instanceof HistoryImportAdmissionError) {
+      logger.info('[SuuntoHistoryImport] History admission was blocked.', { code: e.code });
+      throw e;
+    }
+    if (e instanceof HistoryLifecycleChangedError) {
+      logger.info('[SuuntoHistoryImport] History import is no longer active.');
+      throw new HttpsError('failed-precondition', 'History import is no longer active. Please retry.');
+    }
     if (e instanceof HttpsError && e.code === 'already-exists') {
       logger.info('[SuuntoHistoryImport] History import is already running.');
       throw e;

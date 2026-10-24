@@ -1356,6 +1356,8 @@ Activity-history date pickers for Garmin and Suunto default to the latest **2 ca
 
 For Garmin, Suunto, COROS, and Wahoo, **Import already running** means an existing activity-history request is still active. The duplicate request does not start another import and does not mean the original import failed. Wait for the active import to finish before requesting more history.
 
+COROS activity history prevents overlapping requests from separate tabs or devices, even when they select different dates. If a later part of a scan fails, activities already queued keep processing and the cooldown reflects the queued count. An empty scan allows another request. A finished request or an expired running status does not mean all queued activities have finished importing.
+
 ## Send activities once
 
 [Send activities](/send-activities) supports **Suunto, COROS, and Wahoo**. It is a separate workspace from automatic sync and route/course uploads. Anyone signed in can view the page and their retained results; preparing and starting a send requires **Pro**, rather than Basic. Connect the destination in **Connections**, choose local files or saved activities, review the selected recordings and warnings, then explicitly confirm **Send**.
