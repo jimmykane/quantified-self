@@ -6,6 +6,8 @@ import {
   PRERENDERED_PUBLIC_ROUTES,
   PUBLIC_REDIRECT_ROUTES,
 } from './app/app.routes.server';
+import { LEGACY_WORKOUT_DATA_COMPARISON_PATHS } from './app/components/features/workout-data-comparison-page.paths';
+import { PUBLIC_ENTRY_REDIRECTS } from './app/shared/public-entry-redirects';
 
 interface FirebaseHostingTarget {
   target: string;
@@ -84,7 +86,7 @@ const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
 const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
-const expectedComparisonRedirects = PUBLIC_REDIRECT_ROUTES.map(path => ({
+const expectedComparisonRedirects = LEGACY_WORKOUT_DATA_COMPARISON_PATHS.map(path => ({
   source: routePathToHostingSource(path),
   destination: '/features/workout-data-comparison',
   type: 301,
@@ -224,7 +226,7 @@ describe('Firebase Hosting configuration', () => {
 
   it('permanently redirects legacy comparison pages to the consolidated canonical page', () => {
     for (const target of firebaseConfig.hosting) {
-      expect(target.redirects).toEqual(expectedComparisonRedirects);
+      expect(target.redirects).toEqual(expect.arrayContaining(expectedComparisonRedirects));
       expect(target.redirects?.every(redirect => redirect.type === 301)).toBe(true);
 
       const rewriteSources = new Set((target.rewrites ?? []).map(rewrite => rewrite.source));
@@ -232,6 +234,28 @@ describe('Firebase Hosting configuration', () => {
         expect(rewriteSources.has(redirect.source)).toBe(false);
       }
     }
+  });
+
+  it('redirects public membership and help entry links without hiding unknown paths or indexing aliases', () => {
+    const entryRedirects = PUBLIC_ENTRY_REDIRECTS.map(({ path, destination }) => ({
+      source: `/${path}`, destination, type: 301,
+    }));
+    for (const target of firebaseConfig.hosting) {
+      expect(target.redirects).toEqual([...entryRedirects, ...expectedComparisonRedirects]);
+      const sources = (target.redirects ?? []).map(redirect => redirect.source);
+      expect(matchesAnyHostingSource(sources, '/help/unknown-topic')).toBe(false);
+      expect(matchesAnyHostingSource(sources, '/membership/unknown')).toBe(false);
+      for (const { source } of entryRedirects) {
+        expect(sitemapUrls()).not.toContain(`${siteOrigin}${source}`);
+        expect(serviceWorkerConfig.navigationUrls).not.toContain(source);
+      }
+    }
+    expect(PUBLIC_REDIRECT_ROUTES).toEqual([
+      ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+      ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
+    ]);
+    // Shareable topic cards and membership/billing entry guidance were updated together.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {

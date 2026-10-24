@@ -16,6 +16,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('links membership and shareable getting-started and billing guides to their supported public URLs', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('[Membership](/pricing)');
+    expect(copy).toContain('[Plans & Billing](/help#plans-and-billing)');
+    expect(copy).toContain('[Getting Started](/help#getting-started)');
+    expect(copy).toContain('Help topic cards are shareable links');
+  });
   it('explains source updates, saved leg preferences and the retained-original boundary', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
     expect(copy).toContain('Training load override, exclusion and saved policy stay with');

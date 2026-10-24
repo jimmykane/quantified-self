@@ -194,6 +194,10 @@
       ],
       "trailingSlash": false,
       "redirects": [
+        { "source": "/membership", "destination": "/pricing", "type": 301 },
+        { "source": "/help/getting-started", "destination": "/help#getting-started", "type": 301 },
+        { "source": "/help/plans-and-billing", "destination": "/help#plans-and-billing", "type": 301 },
+        { "source": "/help/plans-billing", "destination": "/help#plans-and-billing", "type": 301 },
         {
           "source": "/features/workout-file-comparison",
           "destination": "/features/workout-data-comparison",
@@ -542,6 +546,10 @@
       ],
       "trailingSlash": false,
       "redirects": [
+        { "source": "/membership", "destination": "/pricing", "type": 301 },
+        { "source": "/help/getting-started", "destination": "/help#getting-started", "type": 301 },
+        { "source": "/help/plans-and-billing", "destination": "/help#plans-and-billing", "type": 301 },
+        { "source": "/help/plans-billing", "destination": "/help#plans-and-billing", "type": 301 },
         {
           "source": "/features/workout-file-comparison",
           "destination": "/features/workout-data-comparison",

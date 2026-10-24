@@ -1,5 +1,5 @@
-import { NgModule } from '@angular/core';
-import { RouterModule } from '@angular/router';
+import { NgModule, inject } from '@angular/core';
+import { Router, RouterModule } from '@angular/router';
 import type { Data, ResolveData, Route, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
@@ -22,6 +22,7 @@ import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
+import { PUBLIC_ENTRY_REDIRECTS } from './shared/public-entry-redirects';
 
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
 const PUBLIC_SEO_RESOLVED_KEYS = [
@@ -133,6 +134,16 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
 ]);
 
 const topLevelRoutes: Routes = [
+  ...PUBLIC_ENTRY_REDIRECTS.map(({ path, destination }): Route => ({
+    path,
+    pathMatch: 'full',
+    redirectTo: ({ queryParams, fragment }) => {
+      const url = inject(Router).parseUrl(destination);
+      url.queryParams = queryParams;
+      url.fragment ??= fragment;
+      return url;
+    },
+  })),
   ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS.map(path => ({
     path,
     redirectTo: WORKOUT_DATA_COMPARISON_PATH,

@@ -22,6 +22,7 @@ describe('PublicFooterComponent', () => {
     const text = footer?.textContent ?? '';
 
     expect(footer).toBeTruthy();
+    expect(footer?.querySelector('a[href="/pricing"]')?.textContent).toContain('Explore membership');
     expect(text).toContain('Activity calendar');
     expect(text).toContain('Training analysis');
     expect(text).toContain('Training plans');

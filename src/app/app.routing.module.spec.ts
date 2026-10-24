@@ -75,6 +75,24 @@ describe('AppRoutingModule routes', () => {
     expect(publicLayoutRoute?.children?.some(route => route.path === 'help')).toBe(true);
   });
 
+  it.each([
+    ['/membership?source=footer#plans', '/pricing?source=footer#plans'],
+    ['/help/getting-started?source=guide', '/help?source=guide#getting-started'],
+    ['/help/plans-and-billing', '/help#plans-and-billing'],
+    ['/help/plans-billing#old', '/help#plans-and-billing'],
+  ])('redirects public entry %s to %s', async (entry, destination) => {
+    const aliases = routes.filter(route => ['membership', 'help/getting-started', 'help/plans-and-billing', 'help/plans-billing'].includes(route.path ?? ''));
+    expect(aliases).toHaveLength(4);
+    expect(aliases.every(route => route.pathMatch === 'full' && !route.canMatch)).toBe(true);
+    TestBed.configureTestingModule({ providers: [provideRouter([
+      ...aliases,
+      { path: 'pricing', component: ActivityRouteStub },
+      { path: 'help', component: ActivityRouteStub },
+    ])] });
+    await RouterTestingHarness.create(entry);
+    expect(TestBed.inject(Router).url).toBe(destination);
+  });
+
   it('should define a public help route with help metadata', () => {
     const helpRoute = routes.find(route => route.path === 'help');
 
