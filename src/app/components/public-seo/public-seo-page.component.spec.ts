@@ -97,6 +97,21 @@ describe('PublicSeoPageComponent', () => {
     guideFixture.destroy();
   });
 
+  it('renders the Garmin-to-Wahoo guide with a paid setup path and visible transfer limits', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.syncGarminToWahoo;
+    const guideFixture = TestBed.createComponent(PublicSeoPageComponent);
+    guideFixture.detectChanges();
+    const root = guideFixture.nativeElement as HTMLElement;
+    expect(root.querySelector('h1')?.textContent).toBe('Sync Garmin activities to Wahoo');
+    expect(root.textContent).toContain('activity sync require Pro');
+    expect(root.textContent).toContain('Preview sends nothing');
+    expect(root.textContent).toContain('Scheduling complete confirms queueing, not delivery');
+    expect(root.querySelectorAll('.how-to-list li')).toHaveLength(4);
+    expect(root.querySelector('.action-row a')?.getAttribute('href')).toBe('/pricing');
+    expect(root.querySelector('a[href="/services"]')).toBeTruthy();
+    guideFixture.destroy();
+  });
+
   it('uses the shared compact-row surface for every public feature-page section', () => {
     let setupLinkCount = 0;
     for (const page of Object.values(PUBLIC_SEO_PAGES)) {
@@ -120,7 +135,7 @@ describe('PublicSeoPageComponent', () => {
 
       pageFixture.destroy();
     }
-    expect(setupLinkCount).toBe(6);
+    expect(setupLinkCount).toBe(7);
   });
 
   it('renders the public MCP capabilities, boundaries, and setup links', () => {

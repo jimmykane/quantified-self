@@ -223,6 +223,9 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     closingTitle: 'Connect Garmin, then keep every workout in context',
     closingCopy: 'Start with Garmin, add route sending or Suunto and COROS workflows when needed, and keep sync, history, and analysis in one training dashboard.',
+    relatedGuideActions: [
+      { label: 'Garmin to Wahoo Activity Sync', routerLink: '/guides/sync-garmin-to-wahoo' },
+    ],
   },
   suunto: {
     slug: 'suunto',
@@ -697,6 +700,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     closingCopy: 'Send compatible planned workouts, import Wahoo FIT activities, sync retained activities to Suunto or COROS, deliver selected activities and routes to Wahoo, and analyze everything in the same archive.',
     relatedGuideActions: [
       { label: 'Import Activities to Wahoo', routerLink: '/guides/import-activities-to-wahoo' },
+      { label: 'Garmin to Wahoo Activity Sync', routerLink: '/guides/sync-garmin-to-wahoo' },
     ],
   },
 };
