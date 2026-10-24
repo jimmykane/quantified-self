@@ -42,7 +42,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/garmin</loc>
-    <lastmod>2026-08-03</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -57,7 +57,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/wahoo</loc>
-    <lastmod>2026-08-03</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -127,17 +127,22 @@
   </url>
   <url>
     <loc>https://quantified-self.io/guides</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/import-activities-to-suunto</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/import-activities-to-wahoo</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-10-24</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/sync-garmin-to-wahoo</loc>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -147,17 +152,17 @@
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-coros-to-suunto</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-wahoo-to-suunto</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-suunto-routes-to-garmin-courses</loc>
-    <lastmod>2026-06-26</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.7</priority>
   </url>
   <url>

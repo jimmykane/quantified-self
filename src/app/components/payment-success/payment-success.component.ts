@@ -1,4 +1,5 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +9,7 @@ import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService, SubscriptionPlan, SubscriptionStartStatus } from '../../services/app.analytics.service';
 import { AppPaymentService, StripeSubscription } from '../../services/app.payment.service';
-import { filter, firstValueFrom, map, take, timeout } from 'rxjs';
+import { catchError, defer, filter, firstValueFrom, map, of, take, timeout, timer } from 'rxjs';
 
 @Component({
   selector: 'app-payment-success',
@@ -22,11 +23,13 @@ export class PaymentSuccessComponent implements OnInit {
   private logger = inject(LoggerService);
   private analyticsService = inject(AppAnalyticsService);
   private paymentService = inject(AppPaymentService);
+  private readonly destroyRef = inject(DestroyRef);
   isRefreshing = true;
-  assignedRole: string | null = null;
+  assignedRole: SubscriptionPlan | null = null;
 
   async ngOnInit(): Promise<void> {
     this.isRefreshing = true;
+    this.assignedRole = null;
     const user = this.auth.currentUser;
 
     if (!user) {
@@ -36,38 +39,57 @@ export class PaymentSuccessComponent implements OnInit {
     }
 
     const maxAttempts = 10;
+    const deadline = Date.now() + 20_000;
     let attempt = 0;
     let hasPremiumClaim = false;
 
     this.logger.log('PaymentSuccess: Starting claim polling...');
 
-    while (!hasPremiumClaim && attempt < maxAttempts) {
+    while (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid) && Date.now() < deadline) {
       attempt++;
       try {
         this.logger.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
         // Force refresh
-        const tokenResult = await user.getIdTokenResult(true);
-        const role = tokenResult.claims['stripeRole'] as string;
+        const tokenResult = await firstValueFrom(defer(() => user.getIdTokenResult(true)).pipe(
+          timeout({ first: Math.max(0, deadline - Date.now()) }),
+          catchError(error => {
+            if (this.isCurrentUser(user.uid)) {
+              this.logger.error('PaymentSuccess: Error refreshing token:', error);
+            }
+            return of(null);
+          }),
+          takeUntilDestroyed(this.destroyRef),
+        ), { defaultValue: null });
+        if (!this.isCurrentUser(user.uid)) {
+          break;
+        }
+        const role = tokenResult?.claims['stripeRole'];
 
-        this.logger.log('PaymentSuccess: Claims:', tokenResult.claims);
-
-        if (role) {
+        if (this.isPaidSubscriptionPlan(role)) {
           this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
           hasPremiumClaim = true;
           this.assignedRole = role;
-          if (this.isPaidSubscriptionPlan(role)) {
-            void this.logSubscriptionStarted(role);
-          }
-        } else {
-          this.logger.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
-          // Wait 2 seconds before next try
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          void this.logSubscriptionStarted(role);
+        } else if (tokenResult) {
+          this.logger.warn(`PaymentSuccess: Paid-plan access not confirmed on attempt ${attempt}.`);
         }
       } catch (error) {
+        if (!this.isCurrentUser(user.uid)) {
+          break;
+        }
         this.logger.error('PaymentSuccess: Error refreshing token:', error);
-        // Wait even on error, so we don't spam
-        await new Promise(resolve => setTimeout(resolve, 2000));
       }
+
+      if (!hasPremiumClaim && attempt < maxAttempts && this.isCurrentUser(user.uid) && Date.now() < deadline) {
+        // Leave time for the server-owned subscription claim to arrive, including after errors.
+        await firstValueFrom(timer(Math.min(2000, deadline - Date.now())).pipe(
+          takeUntilDestroyed(this.destroyRef),
+        ), { defaultValue: 0 });
+      }
+    }
+
+    if (this.destroyRef.destroyed) {
+      return;
     }
 
     if (!hasPremiumClaim) {
@@ -77,7 +99,11 @@ export class PaymentSuccessComponent implements OnInit {
     this.isRefreshing = false;
   }
 
-  private isPaidSubscriptionPlan(role: string): role is SubscriptionPlan {
+  private isCurrentUser(uid: string): boolean {
+    return !this.destroyRef.destroyed && this.auth.currentUser?.uid === uid;
+  }
+
+  private isPaidSubscriptionPlan(role: unknown): role is SubscriptionPlan {
     return role === 'basic' || role === 'pro';
   }
 

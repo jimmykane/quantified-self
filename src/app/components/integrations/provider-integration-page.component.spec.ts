@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
@@ -7,11 +7,14 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { ProviderIntegrationPageComponent } from './provider-integration-page.component';
 import { AppEventService } from '../../services/app.event.service';
 import { IntegrationProviderKey } from './integration-pages.content';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('ProviderIntegrationPageComponent', () => {
   let routeStub: { snapshot: { data: { integrationProvider: IntegrationProviderKey } } };
+  const selection = vi.fn();
 
   beforeEach(async () => {
+    selection.mockClear();
     routeStub = {
       snapshot: {
         data: {
@@ -30,6 +33,7 @@ describe('ProviderIntegrationPageComponent', () => {
       providers: [
         { provide: ActivatedRoute, useValue: routeStub },
         { provide: AppEventService, useValue: { getEventMetaDataKeys: vi.fn() } },
+        { provide: AppHapticsService, useValue: { selection } },
       ],
     }).compileComponents();
   });
@@ -107,6 +111,16 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('Wahoo to COROS sync');
     expect(Array.from(fixture.nativeElement.querySelectorAll('a')).map((link: HTMLAnchorElement) => link.getAttribute('href')))
       .toContain('/guides/import-activities-to-wahoo');
+  });
+
+  it.each(['garmin', 'wahoo'] as const)('links %s visitors to the Garmin-to-Wahoo guide with one haptic on selection', provider => {
+    const fixture = renderProvider(provider);
+    const link = fixture.nativeElement.querySelector('a[href="/guides/sync-garmin-to-wahoo"]') as HTMLAnchorElement;
+    expect(link?.textContent).toContain('Garmin to Wahoo Activity Sync');
+    expect(selection).not.toHaveBeenCalled();
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    link.click();
+    expect(selection).toHaveBeenCalledTimes(1);
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

@@ -17,14 +17,14 @@
     <div class="action-row" aria-label="Primary actions">
       @for (action of page.actions; track action.label) {
       @if (action.variant === 'flat') {
-      <a mat-flat-button class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-flat-button appHapticTap class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
         }
       </a>
       } @else {
-      <a mat-stroked-button [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-stroked-button appHapticTap [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
@@ -106,14 +106,14 @@
     <div class="action-row closing-actions" aria-label="Closing actions">
       @for (action of page.closingActions; track action.label) {
       @if (action.variant === 'flat') {
-      <a mat-flat-button class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-flat-button appHapticTap class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
         }
       </a>
       } @else {
-      <a mat-stroked-button [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-stroked-button appHapticTap [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>

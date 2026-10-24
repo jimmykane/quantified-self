@@ -500,7 +500,11 @@ export const HELP_SECTIONS: HelpSection[] = [
 2. Complete onboarding and accept the required policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
 
+The sync guides' **Start Setup** action opens Connections. If sign-in or onboarding is required, complete it and choose **Continue to Connections** to resume setup. Provider connections require Pro. Opening setup does not connect a provider or enable automatic sync; you choose those actions in Connections.
+
 ## Explore before signing in
+
+- Moving recorded workouts from Garmin? The [Garmin to Wahoo guide](/guides/sync-garmin-to-wahoo) explains Pro setup, optional automatic FIT activity sync, and previewing past activities before sending.
 
 - [Membership](/pricing) shows current plans and offers. Read [Plans & Billing](/help#plans-and-billing) for plan limits and billing guidance.
 - Help topic cards are shareable links. Open a topic and copy its address, or open its link in a new tab. [Getting Started](/help#getting-started) links directly to this guide.
@@ -1174,6 +1178,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 
 - Choosing a paid plan on the public pricing page keeps that plan and billing option through sign-in and account setup. It is shown first with **Your selection** on the subscription page.
 - Review the current price and trial terms, then choose the plan to start checkout. Opening the page never starts checkout automatically. If the selected option is no longer available, choose a current option instead.
+- After checkout, the membership screen checks your access for up to 20 seconds. When Pro is ready, **Connect your devices** opens [Connections](/services), where you choose a provider and review its permissions. Opening Connections does not connect an account automatically.
+- A **Membership still syncing** message means paid-plan access has not been confirmed. Use **View membership** to check your status, or **Get help** if it remains unchanged; do not start another checkout while the result is unconfirmed.
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - During billing maintenance, new checkout and portal requests are temporarily paused. Existing subscriptions continue billing normally. Wait for billing to reopen before trying again.

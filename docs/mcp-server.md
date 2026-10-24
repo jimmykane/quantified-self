@@ -1577,6 +1577,11 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.7.1 accepts 13-digit Unix-millisecond GPX point times and rejects invalid times before stream allocation.
+Existing bounded original-file chart/sample hydration uses this parser without changing metrics, units, output schemas,
+privacy masks, scopes or consent. Persisted summaries remain authoritative; no historical reparse, derived refresh,
+registered-contract promotion, client rescan or plugin rebuild is required for this compatibility correction.
+
 Sports Lib 23.7.0 indexes existing constructors and aliases without changing catalog membership, canonical names/units,
 validators, persisted-only availability or sensitive-field exclusions. QS's dashboard/list readers use an explicit
 summary path while full event readers remain available. MCP selected-metric queries reuse the already validated

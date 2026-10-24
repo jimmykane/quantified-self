@@ -1128,14 +1128,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.hub,
     eyebrow: 'Guides',
     title: 'Training Data Sync Guides',
-    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one dashboard.',
+    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, Garmin to Wahoo activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one dashboard.',
     h1: 'Training data sync guides',
-    intro: 'Choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
-    chips: ['Import to Suunto', 'Import to Wahoo', 'Garmin to Suunto', 'COROS to Suunto', 'Wahoo to Suunto', 'Past activity sync'],
+    intro: 'Choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin activities to Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
+    chips: ['Import to Suunto', 'Import to Wahoo', 'Garmin to Wahoo', 'Garmin to Suunto', 'COROS to Suunto', 'Wahoo to Suunto', 'Past activity sync'],
     actions: [
       routeAction('Import to Suunto', '/guides/import-activities-to-suunto', 'flat', 'arrow_forward'),
       routeAction('Import to Wahoo', '/guides/import-activities-to-wahoo'),
       routeAction('Garmin to Suunto', '/guides/sync-garmin-to-suunto'),
+      routeAction('Garmin to Wahoo', '/guides/sync-garmin-to-wahoo'),
       routeAction('COROS to Suunto', '/guides/sync-coros-to-suunto'),
       routeAction('Wahoo to Suunto', '/guides/sync-wahoo-to-suunto'),
       routeAction('Suunto Routes to Garmin', '/guides/sync-suunto-routes-to-garmin-courses'),
@@ -1210,7 +1211,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Which guide should I use first?',
-        answer: 'Use an import-activities guide to send a selected FIT activity or activities from connected providers to Suunto or Wahoo. Use the Garmin to Suunto, COROS to Suunto, or Wahoo to Suunto guide for a source-specific Suunto sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for one dashboard across providers and uploaded files.',
+        answer: 'Use an import-activities guide to send a selected FIT activity or activities from connected providers to Suunto or Wahoo. Use the Garmin to Wahoo guide for Garmin activity delivery to Wahoo. Use the Garmin to Suunto, COROS to Suunto, or Wahoo to Suunto guide for a source-specific Suunto sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for one dashboard across providers and uploaded files.',
       },
       {
         question: 'Does automatic activity sync include old workouts?',
@@ -1240,7 +1241,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['Garmin', 'Suunto', 'Automatic activity sync', 'Past activity sync', 'Pro'],
     actions: [
       routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
-      routeAction('Start Setup', '/login'),
+      routeAction('Start Setup', '/services'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
@@ -1324,6 +1325,66 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       'For saved workouts, open Send past activities under Suunto, select Garmin imports and dates, preview, then confirm Send.',
     ],
   },
+  syncGarminToWahoo: {
+    key: 'syncGarminToWahoo',
+    path: PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
+    eyebrow: 'Garmin to Wahoo Guide',
+    title: 'How to Sync Garmin Activities to Wahoo Automatically',
+    description: 'Sync Garmin activities to Wahoo with Quantified Self Pro. Connect both accounts for automatic FIT activity sync, or preview and send older workouts by date.',
+    h1: 'Sync Garmin activities to Wahoo',
+    freeOfferDescription: 'Starter includes manual uploads and analysis in Quantified Self. Garmin-to-Wahoo connections and activity sync require Pro.',
+    intro: 'Send recorded Garmin FIT workouts to your Wahoo account. Choose automatic sync for new imports or a one-time transfer of saved activities.',
+    accessNote: 'Garmin and Wahoo connections and activity sync require Pro. Review current prices and any eligible trial before checkout.',
+    chips: ['Garmin', 'Wahoo', 'FIT activities', 'Pro'],
+    actions: [
+      routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services'),
+      routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Choose your workflow',
+        title: 'Automatic sync or a one-time history transfer',
+        copy: 'Connect Garmin and Wahoo in Connections with Pro access. Allow Activity Export for Garmin and workout access for Wahoo. Connecting an account does not turn on automatic sync.',
+        items: [
+          { icon: 'sync_alt', title: 'Send new Garmin activities automatically', copy: 'Under Garmin in Connections, enable Wahoo as an automatic activity destination. Eligible new Garmin imports are queued using their saved original FIT files.' },
+          { icon: 'history', title: 'Preview older Garmin workouts', copy: 'Import missing Garmin history first and wait for the activities to arrive. Under Wahoo in Connections, open Send past activities. Select Garmin imports and your dates, then run Preview. Preview sends nothing.' },
+          { icon: 'published_with_changes', title: 'Review before sending', copy: 'Review the ready-to-send and skipped counts, then choose Send. Scheduling complete confirms queueing, not delivery. Check Wahoo for the delivered workout after processing.' },
+        ],
+      },
+      {
+        eyebrow: 'Transfer limits',
+        title: 'Know what moves to Wahoo',
+        copy: 'This workflow sends recorded FIT activities to your Wahoo account. It keeps activity transfers separate from routes, planned workouts, Sleep, and Health.',
+        items: [
+          { icon: 'description', title: 'Keep the original FIT available', copy: 'Missing or unsupported original files, merged or derived activities, and activities already sent or queued are skipped. A Garmin device name on a manually uploaded file does not make it a Garmin import.' },
+          { icon: 'hourglass_top', title: 'Allow Wahoo to process the activity', copy: 'Wahoo processes FIT uploads asynchronously. Queueing an activity is not a delivery confirmation, and this workflow does not promise a download to an ELEMNT device.' },
+          { icon: 'vpn_key', title: 'Check connection permissions', copy: 'If a connection shows Reconnect required, reconnect before sending. After Garmin or Wahoo access is revoked, reconnect the provider and explicitly turn automatic activity sync back on when needed.' },
+        ],
+      },
+    ],
+    faqItems: [
+      { question: 'Can Garmin activities sync to Wahoo automatically?', answer: 'Yes. With Pro, connect Garmin and Wahoo and explicitly enable Wahoo as a Garmin activity destination. Eligible new Garmin FIT imports can then be sent to your Wahoo account automatically.' },
+      { question: 'Can I send older Garmin workouts to Wahoo?', answer: 'Yes. First import any missing Garmin history into Quantified Self. Under Wahoo in Connections, use Send past activities, choose Garmin imports and a date range, then Preview and review before Send. This one-time send does not enable future automatic sync.' },
+      { question: 'Does Garmin need to stay connected for a saved activity transfer?', answer: 'A saved Garmin import can be sent after Garmin is disconnected if its original FIT remains available. Wahoo must still be connected and you need Pro access. Automatic sync of new Garmin activities requires both connections.' },
+      { question: 'Will these uploads come back as Wahoo-recorded workouts?', answer: 'Wahoo does not expose completed workouts that it identifies as coming from third-party applications through its API. Those uploads are not re-imported as Wahoo-recorded activities.' },
+      { question: 'Does this move Garmin routes, training plans, Sleep, or Health?', answer: 'No. This guide covers recorded FIT activities. GPX and FIT routes, planned workouts, Sleep, and Health use separate workflows and permissions. Sending an activity to your Wahoo account is not a planned-workout or route download to an ELEMNT device.' },
+      { question: 'Can I use Starter for Garmin-to-Wahoo sync?', answer: 'Provider connections and cross-service activity sync require Pro. Starter includes manual uploads and analysis inside Quantified Self. Review current Pro prices and any trial eligibility before checkout.' },
+    ],
+    closingTitle: 'Keep your Garmin workouts in your Wahoo account',
+    closingCopy: 'Review Pro options, then connect the accounts and choose automatic delivery or a one-time history send.',
+    closingActions: [
+      routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
+      routeAction('Garmin Integration', '/integrations/garmin'),
+      routeAction('Wahoo Integration', '/integrations/wahoo'),
+    ],
+    howToSteps: [
+      'Review Pro options, then connect Garmin and Wahoo in Connections and approve the required activity permissions.',
+      'For future activity sync, enable Wahoo as an automatic activity destination under Garmin in Connections.',
+      'For a one-time history transfer, import missing Garmin activities first, then open Send past activities under Wahoo, select Garmin imports and dates, and run Preview.',
+      'Review the ready-to-send and skipped counts before Send. Scheduling is not delivery; check Wahoo after processing.',
+    ],
+  },
   syncCorosToSuunto: {
     key: 'syncCorosToSuunto',
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
@@ -1334,7 +1395,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Connect COROS and Suunto, then choose whether new COROS activities should be sent to Suunto automatically. You can also sync past activities from a date range.',
     chips: ['COROS', 'Suunto', 'Automatic sync', 'Recent history', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('COROS Integration', '/integrations/coros'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1421,7 +1482,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Connect Wahoo and Suunto, then choose whether new eligible Wahoo activities should be sent to Suunto automatically. You can also sync past retained Wahoo FIT activities from a date range whenever you need to.',
     chips: ['Wahoo', 'Suunto', 'FIT activities', 'Automatic activity sync', 'Past activity sync', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1513,7 +1574,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Use Quantified Self to send a selected FIT activity to Suunto, automatically deliver eligible new Garmin, COROS, or Wahoo activities, or choose a date range for activities already in your account archive.',
     chips: ['Suunto', 'FIT activities', 'Garmin', 'COROS', 'Wahoo', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1605,7 +1666,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Use Quantified Self to send a selected FIT activity to Wahoo, automatically deliver eligible new Garmin, COROS, or Suunto activities, or choose a date range for FIT-backed activities already in your account archive.',
     chips: ['Wahoo', 'FIT activities', 'Garmin', 'COROS', 'Suunto', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1697,7 +1758,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Quantified Self can send Suunto routes from your Routes library to Garmin Connect as courses after both accounts are connected and Course Import is allowed in Garmin.',
     chips: ['Suunto routes', 'Garmin courses', 'Course Import', 'Automatic route sending', 'Saved routes'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
       routeAction('Garmin Integration', '/integrations/garmin'),
       routeAction('Route Files', '/features/fit-gpx-route-files'),
@@ -1986,6 +2047,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),
   guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),
+  syncGarminToWahoo: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToWahoo),
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),
   syncWahooToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncWahooToSuunto),
   importActivitiesToSuunto: buildRouteData(PUBLIC_SEO_PAGES.importActivitiesToSuunto),

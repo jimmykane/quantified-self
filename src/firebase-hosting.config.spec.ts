@@ -357,16 +357,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
-  it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
-    const expectedLastmod = '2026-06-26';
-    const updatedUrls = [
-      `${siteOrigin}/features/fit-gpx-route-files`,
-      `${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`,
-    ];
-
-    for (const url of updatedUrls) {
-      expect(sitemapLastmodForUrl(url), url).toBe(expectedLastmod);
-    }
+  it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');
   });
 
   it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
@@ -385,6 +378,7 @@ describe('Firebase Hosting configuration', () => {
     // COROS history help also explains cross-client admission, partial scans and queued-work completion.
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
+    // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -393,18 +387,20 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-10');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-10-24');
     // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-10-09');

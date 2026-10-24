@@ -264,6 +264,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Garmin Health integration](docs/garmin-integration.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Stripe billing architecture, local testing and cutover](docs/stripe-billing.md)
+- [Stripe-backed first payments, trial conversion and paid retention](docs/paid-growth-measurement.md)
 - [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
