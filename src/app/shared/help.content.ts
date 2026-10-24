@@ -1168,6 +1168,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 
 ## Billing basics
 
+- Choosing a paid plan on the public pricing page keeps that plan and billing option through sign-in and account setup. It is shown first with **Your selection** on the subscription page.
+- Review the current price and trial terms, then choose the plan to start checkout. Opening the page never starts checkout automatically. If the selected option is no longer available, choose a current option instead.
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - During billing maintenance, new checkout and portal requests are temporarily paused. Existing subscriptions continue billing normally. Wait for billing to reopen before trying again.

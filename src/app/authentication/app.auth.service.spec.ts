@@ -439,6 +439,19 @@ describe('AppAuthService', () => {
             expect(mockLocalStorageService.setItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY, '/tools/compare/saved');
         });
 
+        it('keeps the selected membership price through an email sign-in link', async () => {
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+            const returnUrl = '/subscriptions?priceId=price_pro_yearly';
+
+            await service.sendEmailLink('member@example.com', returnUrl);
+
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(mockAuth, 'member@example.com', expect.objectContaining({
+                url: 'https://localhost:4200/login?returnUrl=%2Fsubscriptions%3FpriceId%3Dprice_pro_yearly',
+                handleCodeInApp: true,
+            }));
+            expect(mockLocalStorageService.setItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY, returnUrl);
+        });
+
         it('sendEmailLink should ignore unsafe return URLs and clear stale cached return URLs', async () => {
             const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'unsafe-return@example.com';

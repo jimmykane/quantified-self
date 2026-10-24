@@ -610,6 +610,18 @@ describe('OnboardingComponent', () => {
         expect(returningComponent.completionLabel).toBe('Subscriptions');
     });
 
+    it('preserves the chosen membership price after account setup without starting checkout', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions?priceId=price_pro_yearly&ignored=value' });
+        const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+
+        await returningComponent.finishOnboarding();
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions'], { queryParams: { priceId: 'price_pro_yearly' } });
+        expect(returningComponent.completionLabel).toBe('Subscriptions');
+        expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+    });
+
     it.each(['', 'request/other', 'request?scope=all', 'a'.repeat(257)])('rejects an invalid MCP return request ID: %s', async (request_id) => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;

@@ -116,7 +116,13 @@
     </mat-card>
   </div>
   } @else {
-  <div class="products-grid" *ngIf="products$ | async as products; else loading">
+  <ng-container *ngIf="products$ | async as products; else loading">
+  @if (selectedPriceId()) {
+  <p class="pricing-intro" role="status">Your selected plan is shown first. Review its current price and trial terms, then choose it to continue.</p>
+  } @else if (selectionUnavailable()) {
+  <p class="pricing-intro" role="status">That plan option is no longer available. Choose a current option below.</p>
+  }
+  <div class="products-grid">
     @for (product of products; track product.id) {
     <div class="product-card-shell">
       @if (product.metadata['role'] === 'pro') {
@@ -193,6 +199,9 @@
         <div class="card-spacer"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
         <div *ngFor="let price of product.prices; let isFirst = first" class="price-section plan-price-section">
+          @if (selectedPriceId() === price.id) {
+          <p class="selected-price-note"><mat-icon aria-hidden="true">check_circle</mat-icon>Your selection</p>
+          }
           @let trialDays = getEligibleTrialDays(product, price);
           @let yearlySavingsLabel = getYearlySavingsLabel(product, price);
           @let isPriceLoading = isLoading && loadingPriceId === price.id;
@@ -287,6 +296,7 @@
     </div>
     }
   </div>
+  </ng-container>
   <ng-template #loading>
     <div class="loading-state">
       <mat-spinner diameter="40"></mat-spinner>

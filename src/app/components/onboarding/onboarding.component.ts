@@ -18,6 +18,7 @@ import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
+import { membershipPriceIdFromReturnUrl } from '../../helpers/membership-selection.helper';
 
 @Component({
     selector: 'app-onboarding',
@@ -54,9 +55,11 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     private analyticsService = inject(AppAnalyticsService);
     private destroyRef = inject(DestroyRef);
     private readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+    private readonly selectedMembershipPriceId = membershipPriceIdFromReturnUrl(this.returnUrl);
     private readonly mcpRequestId = this.route.snapshot.queryParamMap.get('request_id') || '';
     // Keep destinations explicit; never accept an external/client OAuth callback here.
-    readonly completionPath = this.returnUrl === '/tools/compare' || this.returnUrl === '/subscriptions'
+    readonly completionPath = this.selectedMembershipPriceId ? '/subscriptions'
+        : this.returnUrl === '/tools/compare' || this.returnUrl === '/subscriptions'
         ? this.returnUrl
         : this.returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(this.mcpRequestId)
             ? '/mcp/authorize' : '/dashboard';
@@ -275,6 +278,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     }
 
     private navigateAfterOnboarding(): Promise<boolean> {
+        if (this.selectedMembershipPriceId) {
+            return this.router.navigate(['/subscriptions'], { queryParams: { priceId: this.selectedMembershipPriceId } });
+        }
         if (this.completionPath === '/mcp/authorize') {
             return this.router.navigate([this.completionPath], { queryParams: { request_id: this.mcpRequestId } });
         }
