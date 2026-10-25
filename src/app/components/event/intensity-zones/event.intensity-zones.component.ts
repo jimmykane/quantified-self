@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -264,7 +265,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         top: 0,
         bottom: 0,
         outerBoundsMode: 'same',
-        outerBoundsContain: 'axisLabel'
+        outerBoundsContain: 'axisLabel',
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement)
       },
       legend: {
         show: false,

@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiThemeColor, resolveDashboardKpiTrend, resolveDashboardKpiTrendDelta, usesDashboardKpiHistoryColumns, type KpiSparklineStyle } from '../../../helpers/dashboard-kpi-sparkline.helper';
 import { buildMetricHistoryChartOption } from '../../../helpers/metric-history-chart.helper';
 import {
@@ -945,6 +946,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         top: 4,
         bottom: 2,
         containLabel: false,
+        ...(!this.compactRow ? dashboardChartFrameGrid(this.chartDiv.nativeElement) : {}),
       },
       xAxis: {
         type: 'time',

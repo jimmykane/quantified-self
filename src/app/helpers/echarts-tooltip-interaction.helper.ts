@@ -11,6 +11,7 @@ export interface EChartsTooltipSurfaceConfig {
   position?: typeof getViewportConstrainedTooltipPosition;
 }
 export interface EChartsMobileTapFeedbackOptions {
+  legendScrollFeedback?: boolean;
   axisPointerFeedback?: EChartsAxisPointerHapticFeedback;
   clickFeedback?: EChartsClickHapticFeedback;
   surfaceClickFeedback?: boolean;

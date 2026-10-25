@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
@@ -206,6 +207,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         left: 6,
         right: 6,
         top: 8,
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
         ...trainingStateChartGrid(),
       },
       tooltip: {

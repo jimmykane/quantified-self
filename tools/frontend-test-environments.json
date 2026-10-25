@@ -207,6 +207,7 @@
   "dom": [
     "src/app/firebase/firestore-http-response-guard.spec.ts",
     "src/app/helpers/assistant-message-format.helper.spec.ts",
+    "src/app/helpers/dashboard-chart-layout.helper.spec.ts",
     "src/app/helpers/dashboard-echarts-style.helper.spec.ts",
     "src/app/helpers/dashboard-sleep-chart.helper.spec.ts",
     "src/app/helpers/echarts-horizontal-touch-gesture.controller.spec.ts",

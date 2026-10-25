@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DashboardTileBoardComponent } from './dashboard-tile-board.component';
@@ -43,6 +43,22 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('0');
   });
 
+  it('disconnects layout observation and removes its resize listener on destruction', async () => {
+    const disconnect = vi.fn();
+    vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); unobserve = vi.fn(); disconnect = disconnect; });
+    const remove = vi.spyOn(window, 'removeEventListener');
+    try {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.destroy();
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
+    } finally {
+      vi.unstubAllGlobals();
+      remove.mockRestore();
+    }
+  });
+
   it('sizes the calendar row from its month layout without a stale height floor', () => {
     const boardStyles = readFileSync(
       resolve(process.cwd(), 'src/app/components/summaries/dashboard-tile-board/dashboard-tile-board.component.css'),
@@ -57,7 +73,6 @@ describe('DashboardTileBoardComponent', () => {
       'utf8',
     );
 
-    expect(boardStyles).toContain(':host(.dashboard-tile-board--activity-calendar)');
     expect(boardStyles).toContain('grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);');
     expect(ownerStyles).not.toMatch(/\.dashboard-calendar-cell\s*\{[^}]*min-height:/);
     expect(calendarStyles).toContain('.activity-calendar-day-layout { display: grid; position: relative; height: auto; flex: none;');

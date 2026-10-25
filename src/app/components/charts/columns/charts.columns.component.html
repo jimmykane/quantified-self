@@ -1,5 +1,5 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="data && data.length === 0" [allowErrorPassthrough]="true" [errorMessage]="'No data yet'"
   [errorHint]="'Try a different date range or metric'" [errorIcon]="'bar_chart'" [showSkeleton]="false" height="100%"
   [style.height.%]="100">
-  <div #chartDiv [style.min-width.%]="100" [style.min-height.%]="100"></div>
+  <div #chartDiv data-dashboard-chart-canvas data-dashboard-chart-plot data-dashboard-chart-heading-height="54" [style.min-width.%]="100" [style.min-height.%]="100"></div>
 </app-loading-overlay>

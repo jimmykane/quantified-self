@@ -151,6 +151,20 @@ describe('ChartsPieComponent', () => {
     return mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
   };
 
+  it('keeps a long dashboard legend in its own bounded row below the donut', async () => {
+    fixture.nativeElement.classList.add('dashboard-chart-frame');
+    component.data = Array.from({ length: 14 }, (_, index) => ({
+      type: `Sport ${index}`, [ChartDataValueTypes.Total]: index + 1, count: 1,
+    }));
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    const option = getLastOption();
+    expect(option.legend).toMatchObject({ type: 'scroll', orient: 'horizontal', bottom: 0, left: 8, right: 8 });
+    expect(option.series[0].data).toHaveLength(14);
+    expect(component.chartDiv.nativeElement.style.getPropertyValue('--qs-dashboard-chart-extra-height')).toBe('32px');
+    expect(mockLoader.attachMobileSeriesTapFeedback.mock.calls.at(-1)?.[1]).toMatchObject({ legendScrollFeedback: true });
+  });
+
   it('should initialize ECharts and render pie option', async () => {
     component.data = [
       { type: 'Running', [ChartDataValueTypes.Total]: 60, count: 2 },

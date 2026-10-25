@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -112,6 +112,21 @@ describe('ChartsPowerCurveComponent', () => {
 
     component.title = 'Ski Touring Power Curve';
     expect(component.compactTitle).toBe('Ski Touring');
+  });
+
+  it('reserves a real comparison legend in the dashboard frame without shrinking its data area', async () => {
+    fixture.nativeElement.classList.add('dashboard-chart-frame');
+    component.powerCurve = makePowerCurveContext();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    const option = mockLoader.setOption.mock.calls.at(-1)![1];
+    expect(option.grid).toMatchObject({ top: 8, bottom: 56 });
+    expect(component.chartDiv.nativeElement.style.getPropertyValue('--qs-dashboard-chart-extra-height')).toBe('32px');
+    component.powerCurve = { ...makePowerCurveContext(), series: makePowerCurveContext().series.slice(0, 1) };
+    component.ngOnChanges({ powerCurve: new SimpleChange(null, component.powerCurve, false) });
+    await fixture.whenStable();
+    expect(component.chartDiv.nativeElement.style.getPropertyValue('--qs-dashboard-chart-extra-height')).toBe('0px');
   });
 
   it('shows no-data state when no usable power curve series exist', async () => {
