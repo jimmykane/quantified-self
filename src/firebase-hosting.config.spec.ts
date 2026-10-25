@@ -380,7 +380,8 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-23');
+    // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
