@@ -8,7 +8,6 @@ import { Subscription, combineLatest, from, of, catchError, take } from 'rxjs';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AppUserService } from '../../services/app.user.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -389,53 +388,37 @@ export class ServicesComponent implements OnInit, OnDestroy {
   constructor(private http: HttpClient, private fileService: AppFileService,
     private eventService: AppEventService,
     public authService: AppAuthService,
-    private userService: AppUserService,
     private router: Router,
     private route: ActivatedRoute,
     private windowService: AppWindowService,
     private snackBar: MatSnackBar) {
   }
 
-  async ngOnInit() {
+  ngOnInit() {
     this.isLoading = true;
 
     // Use resolver data if available
     const resolvedData = this.route.snapshot.data['userData'];
     if (resolvedData) {
-      // isAdmin is not in resolvedData currently, so we fetch it.
-      // We could update resolver, but for now let's just fetch it here.
-      // We accept that it might "pop" in a millisecond later.
+      this.isAdmin = resolvedData.user?.admin === true;
       this.processUser(resolvedData.user, resolvedData.isPro);
-      void this.userService.isAdmin()
-        .then(isAdmin => {
-          this.isAdmin = isAdmin;
-          // Re-process to update any dependent logic if necessary (though current processUser doesn't use isAdmin, UI does)
-        })
-        .catch(() => {
-          this.isAdmin = false;
-        });
       this.isLoading = false;
     }
 
-    this.userSubscription = this.authService.user$.subscribe((async (user) => {
-      // Re-check just in case, or if user changes session while on page (rare but possible)
-      // Note: isPro check is async, so we might want to skip it if we just got it from resolver?
-      // For simplicity, we can just re-run standard check if it's an update event.
-      // But efficiently:
+    this.userSubscription = this.authService.user$.subscribe(user => {
+      // user$ already contains verified claims. A separate async access check can
+      // finish for an older account or after teardown and restart billing reads.
+      this.isAdmin = user?.admin === true;
       if (!this.user || user?.uid !== this.user.uid) {
-        const isPro = await this.userService.isPro();
-        const isAdmin = await this.userService.isAdmin();
-        this.isAdmin = isAdmin;
-        this.processUser(user, isPro);
+        this.processUser(user, AppUserUtilities.hasProAccess(user, this.isAdmin));
       } else if (user) {
         this.user = user;
-        this.isAdmin = user.admin === true;
         this.hasProAccess = AppUserUtilities.hasProAccess(user, this.isAdmin);
         this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
         this.refreshDataFlowSummary();
         this.refreshProOffer();
       }
-    }));
+    });
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
       this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
@@ -537,7 +520,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   private refreshProOffer(): void {
     const key = this.user && !this.hasProAccess ? `${this.user.uid}:${this.user.stripeRole ?? ''}` : null;
-    if (key !== this.offerReadKey) {
+    if (!key || key !== this.offerReadKey) {
       this.offerReadSubscription?.unsubscribe();
       this.offerReadSubscription = null;
       this.offerReadKey = null;
@@ -566,6 +549,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
   processUser(user: AppUserInterface | null, isPro: boolean) {
     if (!user) {
       this.user = user;
+      this.hasProAccess = false;
+      this.isAdmin = false;
       this.refreshProOffer();
       this.automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
       this.dataFlowSummary = createEmptyProviderDataFlowSummary();
