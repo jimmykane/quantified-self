@@ -1,10 +1,10 @@
-import { Component, inject, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, TemplateRef, ViewChild, signal } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClient } from '@angular/common/http';
 import { AppFileService } from '../../services/app.file.service';
-import { Subscription } from 'rxjs';
+import { Subscription, combineLatest, from, of, catchError, take } from 'rxjs';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -20,6 +20,9 @@ import { getProviderDisplayName } from '@shared/provider-presentation';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
+import { AppPaymentService } from '../../services/app.payment.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { ProMembershipOffer, resolveProMembershipOffer } from '../../helpers/membership-selection.helper';
 import {
   PROVIDER_SECTION_BY_SERVICE,
   buildProviderDataFlowSummary,
@@ -39,6 +42,7 @@ interface ServiceSectionOption {
   providerId: ProviderServiceSectionId | null;
   serviceName: ServiceNames | null;
   requiresPro: boolean;
+  href: string;
 }
 
 interface ServiceToolLaunch {
@@ -162,6 +166,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public readonly serviceSectionOptions: readonly ServiceSectionOption[] = [
     {
       id: 'garmin',
+      href: '/services?serviceName=' + encodeURIComponent(ServiceNames.GarminAPI),
       label: this.serviceLabelBySection.garmin,
       providerId: 'garmin',
       serviceName: ServiceNames.GarminAPI,
@@ -169,6 +174,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     },
     {
       id: 'suunto',
+      href: '/services?serviceName=' + encodeURIComponent(ServiceNames.SuuntoApp),
       label: this.serviceLabelBySection.suunto,
       providerId: 'suunto',
       serviceName: ServiceNames.SuuntoApp,
@@ -176,6 +182,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     },
     {
       id: 'coros',
+      href: '/services?serviceName=' + encodeURIComponent(ServiceNames.COROSAPI),
       label: this.serviceLabelBySection.coros,
       providerId: 'coros',
       serviceName: ServiceNames.COROSAPI,
@@ -183,6 +190,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     },
     {
       id: 'wahoo',
+      href: '/services?serviceName=' + encodeURIComponent(ServiceNames.WahooAPI),
       label: this.serviceLabelBySection.wahoo,
       providerId: 'wahoo',
       serviceName: ServiceNames.WahooAPI,
@@ -190,6 +198,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     },
     {
       id: 'mcp',
+      href: '/services?serviceName=mcp',
       label: this.serviceLabelBySection.mcp,
       providerId: null,
       serviceName: null,
@@ -365,6 +374,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private serviceToolsDialogRef: MatDialogRef<unknown> | null = null;
   private readonly dialog = inject(MatDialog);
   private readonly analyticsService = inject(AppAnalyticsService);
+  private readonly paymentService = inject(AppPaymentService);
+  private readonly hapticsService = inject(AppHapticsService);
+  readonly proOffer = signal<ProMembershipOffer | null>(null);
+  private offerReadKey: string | null = null;
+  private offerReadSubscription: Subscription | null = null;
   private readonly serviceNameBySection: Record<ProviderServiceSectionId, ServiceNames> = {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
@@ -419,16 +433,21 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.hasProAccess = AppUserUtilities.hasProAccess(user, this.isAdmin);
         this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
         this.refreshDataFlowSummary();
+        this.refreshProOffer();
       }
     }));
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
       this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
+      this.refreshProOffer();
     });
   }
 
   async selectService(section: ServiceSectionId) {
+    if (section === this.activeSection) return;
     this.activeSection = section;
+    this.hapticsService.selection();
+    this.refreshProOffer();
 
     const serviceName = section === 'mcp'
       ? 'mcp'
@@ -443,6 +462,13 @@ export class ServicesComponent implements OnInit, OnDestroy {
       queryParams: { serviceName: serviceName },
       queryParamsHandling: 'merge',
     });
+  }
+
+  public onProviderTabClick(event: MouseEvent, section: ServiceSectionId): void {
+    // Preserve native open-in-new-tab/window behavior for these real provider links.
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    void this.selectService(section);
   }
 
   public openServiceTools(section: ProviderServiceSectionId, toolLaunch: ServiceToolLaunch): void {
@@ -503,6 +529,35 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.openProPlans(this.activeSection, 'data_flow', 'provider_data_flow');
   }
 
+  public onDataFlowToggle(expanded: boolean): void {
+    if (expanded === this.isDataFlowExpanded) return;
+    this.isDataFlowExpanded = expanded;
+    this.hapticsService.selection();
+  }
+
+  private refreshProOffer(): void {
+    const key = this.user && !this.hasProAccess ? `${this.user.uid}:${this.user.stripeRole ?? ''}` : null;
+    if (key !== this.offerReadKey) {
+      this.offerReadSubscription?.unsubscribe();
+      this.offerReadSubscription = null;
+      this.offerReadKey = null;
+      this.proOffer.set(key ? { priceId: null, trialDays: null } : null);
+    }
+    if (!key || this.activeSection === 'mcp' || key === this.offerReadKey) return;
+
+    this.offerReadKey = key;
+    this.proOffer.set({ priceId: null, trialDays: null });
+    const role = this.user.stripeRole;
+    this.offerReadSubscription = combineLatest([
+      this.paymentService.getProducts(),
+      from(this.paymentService.hasPaidSubscriptionHistory()).pipe(catchError(() => of(null))),
+    ]).pipe(take(1)).subscribe({
+      next: ([products, history]) => this.proOffer.set(resolveProMembershipOffer(products, role, history)),
+      // Unknown billing data must never advertise a trial or block connection controls.
+      error: () => this.proOffer.set({ priceId: null, trialDays: null }),
+    });
+  }
+
   public setServiceConnectionState(section: ProviderServiceSectionId, connected: boolean): void {
     this.serviceConnectionState[section] = connected;
     this.refreshDataFlowSummary();
@@ -510,6 +565,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   processUser(user: AppUserInterface | null, isPro: boolean) {
     if (!user) {
+      this.user = user;
+      this.refreshProOffer();
       this.automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
       this.dataFlowSummary = createEmptyProviderDataFlowSummary();
       this.isLoading = false;
@@ -526,10 +583,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
     // Initial check from snapshot if not already set by subscription
     this.activeSection = this.getSectionFromServiceName(this.route.snapshot.queryParamMap.get('serviceName'));
+    this.refreshProOffer();
     this.isLoading = false;
   }
 
   ngOnDestroy(): void {
+    this.offerReadSubscription?.unsubscribe();
     this.serviceToolsDialogRef?.close();
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();

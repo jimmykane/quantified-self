@@ -5,6 +5,33 @@
   [class.service-connection-status--attention]="statusTone === 'attention'"
   [class.service-connection-status--locked]="locked"
   [attr.aria-label]="serviceLabel + ' connection status'">
+  @if (proOffer() && proRequired && !loading && !connected && !showDetails && !statusLabelOverride && statusTone === 'default' && providerIcon) {
+  @let offer = proOffer();
+  <div class="service-connection-status__content membership-offer">
+    <div class="membership-offer__provider"><app-service-source-icon [sourceServiceName]="offerServices[providerIcon]" [iconWidth]="88" [iconHeight]="28" [showTooltip]="false"></app-service-source-icon><mat-chip-set aria-label="Pro feature"><mat-chip highlighted>PRO</mat-chip></mat-chip-set></div>
+    <div class="membership-offer__heading">
+      <h2>Bring your {{ offerProviderNames[providerIcon] }}{{ providerIcon === 'wahoo' ? '-recorded' : '' }} activities in automatically</h2>
+      <p>Spend less time moving files. Keep your training together in Quantified Self.</p>
+    </div>
+    <div class="membership-offer__preview" aria-label="Automatic provider imports into Quantified Self after connection">
+      <app-service-source-icon [sourceServiceName]="offerServices[providerIcon]" [iconWidth]="76" [iconHeight]="26" [showTooltip]="false"></app-service-source-icon>
+      <mat-icon aria-hidden="true">arrow_forward</mat-icon><mat-icon svgIcon="logo" aria-label="Quantified Self"></mat-icon><span>Automatic imports</span>
+    </div>
+    <div class="membership-offer__actions">
+      <a mat-flat-button class="qs-mat-primary" [routerLink]="['/subscriptions']" [queryParams]="{priceId: offer.priceId}" appHapticTap>
+        <mat-icon>arrow_forward</mat-icon>{{ offer.trialDays !== null ? 'Try Pro free for ' + offer.trialDays + (offer.trialDays === 1 ? ' day' : ' days') : 'Get Pro' }}
+      </a>
+      <p>{{ offer.trialDays !== null ? 'No card needed. Review billing terms before you start.' : 'Review current prices and billing terms.' }}</p>
+      <a mat-button routerLink="/dashboard" appHapticTap>{{ keepPlanLabel() }}</a>
+    </div>
+    <ul class="membership-offer__benefits">
+      <li><mat-icon aria-hidden="true">check</mat-icon><span>{{ providerIcon === 'wahoo' ? 'Eligible FIT-backed Wahoo workouts imported after you connect' : 'New activities imported after you connect' }}</span></li>
+      <li><mat-icon aria-hidden="true">check</mat-icon><span>History tools for your past workouts</span></li>
+      <li><mat-icon aria-hidden="true">check</mat-icon><span>Sync with compatible services after setup</span></li>
+    </ul>
+    <p class="membership-offer__starter">Manual file uploads and analysis stay available with Starter.</p>
+  </div>
+  } @else {
   <div class="service-connection-status__content">
     <div class="service-connection-status__summary">
       @if (providerIcon) {
@@ -57,4 +84,5 @@
     </div>
     }
   </div>
+  }
 </section>

@@ -2234,6 +2234,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('partial cleanup remains visible as pending');
     expect(serviceConnectionsSection?.content).toContain('an automated subscription check disconnects');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
+    expect(serviceConnectionsSection?.content).toContain('provider tabs keep their full labels');
+    expect(serviceConnectionsSection?.content).toContain('Both open Membership to review the selected price and current terms');
+    expect(serviceConnectionsSection?.content).toContain('without starting checkout or connecting a provider automatically');
+    expect(serviceConnectionsSection?.content).toContain('Existing disconnect, reconnect and recovery controls remain available');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');
     expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
     expect(serviceConnectionsSection?.content).toContain('unchanged overview');

@@ -28,6 +28,7 @@
   <app-service-connection-status
     serviceLabel="Garmin Connect"
     providerIcon="garmin"
+    [proOffer]="proOffer"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"

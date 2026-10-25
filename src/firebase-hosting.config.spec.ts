@@ -254,7 +254,7 @@ describe('Firebase Hosting configuration', () => {
       ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
       ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
     ]);
-    // Shareable topic cards and membership/billing entry guidance were updated together.
+    // Includes contextual provider offers, trial review and paginated Connections navigation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-25');
   });
 
