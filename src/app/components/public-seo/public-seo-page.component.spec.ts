@@ -112,6 +112,29 @@ describe('PublicSeoPageComponent', () => {
     guideFixture.destroy();
   });
 
+  it('renders the Wahoo-to-Suunto guide with explicit opt-in and setup actions', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.syncWahooToSuunto;
+    const guideFixture = TestBed.createComponent(PublicSeoPageComponent);
+    guideFixture.detectChanges();
+    const root = guideFixture.nativeElement as HTMLElement;
+    expect(root.querySelector('h1')?.textContent).toBe('Sync Wahoo activities to Suunto');
+    expect(root.querySelector('.hero-access-note')?.textContent).toContain('require Pro');
+    expect(root.textContent).toContain('Preview sends nothing');
+    expect(root.textContent).toContain('Wahoo API in Activity sources');
+    expect(root.querySelectorAll('.how-to-list li')).toHaveLength(5);
+    const actions = Array.from(root.querySelectorAll<HTMLAnchorElement>('.action-row a'));
+    const setupLinks = actions.filter(link => link.textContent?.includes('Get Started'));
+    expect(setupLinks.map(link => link.getAttribute('href'))).toEqual(['/services', '/services']);
+    expect(root.querySelector('a[href="/help#service-connections"]')).toBeTruthy();
+    expect(root.querySelector('a[href="/pricing"]')).toBeTruthy();
+    expect(selection).not.toHaveBeenCalled();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    setupLinks[0].click();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(selection).toHaveBeenCalledTimes(1);
+    guideFixture.destroy();
+  });
+
   it('uses the shared compact-row surface for every public feature-page section', () => {
     let setupLinkCount = 0;
     for (const page of Object.values(PUBLIC_SEO_PAGES)) {
@@ -135,7 +158,7 @@ describe('PublicSeoPageComponent', () => {
 
       pageFixture.destroy();
     }
-    expect(setupLinkCount).toBe(7);
+    expect(setupLinkCount).toBe(6);
   });
 
   it('renders the public MCP capabilities, boundaries, and setup links', () => {

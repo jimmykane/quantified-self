@@ -1816,6 +1816,8 @@ history dialog remains availability-aware and falls back to Sleep-only wording w
 
 Use `app-service-source-icon` and the shared presentation helpers. Imported activity surfaces use source attribution; connection and destination surfaces use destination branding. See [connected-provider attribution audit](connected-provider-attribution-audit.md).
 
+The Wahoo-to-Suunto public guide and Help distinguish Wahoo's opt-in **Activity sync settings → To Suunto** from **Send past activities** under the Suunto destination, which opens the recorded-activity sending workspace. Keep its source labels, preview/confirmation steps, FIT and third-party import limits, Pro boundary, and delivery-status wording aligned with that workspace. This content-only guidance leaves provider scopes, consent, workers, queues, retries and monitoring unchanged.
+
 ## 10. Admin and operational coverage
 
 Account cleanup and disconnect recovery monitoring (#836) is deployed and enabled in
