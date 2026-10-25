@@ -83,7 +83,7 @@
     <h2 id="included-heading">Included on every plan</h2>
     <p class="section-intro">Starter includes the tools below. Basic adds more history and customization; Pro adds connected services.</p>
     <div class="plan-capabilities">@for (feature of sharedFeatures; track feature.title) {
-      <article><mat-icon aria-hidden="true">{{ feature.icon }}</mat-icon><div><h3>{{ feature.title }}</h3><p>{{ feature.copy }}</p><a mat-button [routerLink]="feature.path" [attr.aria-label]="'Learn more about ' + feature.title">Learn more<mat-icon>arrow_forward</mat-icon></a></div></article>
+      <article><mat-icon aria-hidden="true">{{ feature.icon }}</mat-icon><div><h3>{{ feature.title }}</h3><p>{{ feature.copy }}</p><a mat-button [routerLink]="feature.path" [attr.aria-label]="'Learn more about ' + feature.title">Learn more<mat-icon iconPositionEnd>arrow_forward</mat-icon></a></div></article>
     }</div>
   </section>
   <section class="plan-details" aria-label="What paid plans add">
@@ -101,6 +101,6 @@
       </article>
     }
     <p class="membership-help">Your data stays yours. Original activity files can be exported, and existing activities and routes are retained when you downgrade.</p>
-    <a mat-button routerLink="/help" fragment="plans-and-billing">Read the membership guide<mat-icon>arrow_forward</mat-icon></a>
+    <a mat-button routerLink="/help" fragment="plans-and-billing">Read the membership guide<mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
   </section>
 </main>
