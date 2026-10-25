@@ -131,6 +131,11 @@
       flex-grow: 0;
       height: calc(var(--qs-dashboard-chart-canvas-height) + var(--qs-dashboard-chart-extra-height, 54px));
     }
+    // Match the desktop KPI selector's specificity so a tall phone viewport
+    // cannot stretch its sparkline into the saved row's remaining space.
+    .kpi-layout:not(.kpi-layout-row):not(.kpi-layout-no-trend):not(.kpi-layout-empty) .kpi-sparkline-shell {
+      flex-grow: 0;
+    }
   }
 }
 
