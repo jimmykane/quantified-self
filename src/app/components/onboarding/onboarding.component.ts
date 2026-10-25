@@ -16,6 +16,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
+import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { membershipPriceIdFromReturnUrl } from '../../helpers/membership-selection.helper';
@@ -48,6 +49,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     termsFormGroup!: FormGroup;
     isPro = false;
 
+    protected readonly navigationEffects = inject(ShellNavigationEffectsService);
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private router = inject(Router);

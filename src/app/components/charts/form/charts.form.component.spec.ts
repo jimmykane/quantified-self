@@ -13,6 +13,7 @@ import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper'
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
+  notify: () => void;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -99,10 +100,11 @@ describe('ChartsFormComponent', () => {
       public observe = vi.fn();
       public disconnect = vi.fn();
 
-      constructor(_: ResizeObserverCallback) {
+      constructor(callback: ResizeObserverCallback) {
         resizeObserverRecords.push({
           observe: this.observe,
           disconnect: this.disconnect,
+          notify: () => callback([], this as unknown as ResizeObserver),
         });
       }
     }
@@ -175,6 +177,46 @@ describe('ChartsFormComponent', () => {
       .find(([, option]) => Array.isArray((option as Record<string, unknown>)?.series));
     return (call?.[1] || {}) as Record<string, any>;
   };
+
+  it('resizes only dashboard panel geometry and ignores repeated or width-only notifications', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const flushFrames = () => { while (frames.length) frames.shift()!(0); };
+    const canvas = component.chartDiv.nativeElement;
+    let height = 440;
+    let width = 393;
+    fixture.nativeElement.classList.add('dashboard-chart-frame');
+    Object.defineProperty(canvas, 'clientHeight', { get: () => height });
+    Object.defineProperty(canvas, 'clientWidth', { get: () => width });
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    const fullOption = getLastFullChartOption();
+    expect(fullOption.grid[0]).toMatchObject({ top: 8, height: 196 });
+    expect(fullOption.grid[1]).toMatchObject({ bottom: 24, height: 196 });
+    mockLoader.setOption.mockClear();
+    flushFrames();
+    expect(mockLoader.setOption).not.toHaveBeenCalled();
+
+    height = 800;
+    resizeObserverRecords[0].notify();
+    flushFrames();
+    expect(mockLoader.setOption).toHaveBeenCalledOnce();
+    expect(mockLoader.setOption).toHaveBeenLastCalledWith(mockChart, {
+      grid: [{ top: 8, height: 376 }, { bottom: 24, height: 376 }],
+    }, { notMerge: false, lazyUpdate: false, silent: true });
+    expect(fullOption.series).toHaveLength(3);
+    expect(points[0].ctl).toBe(10.4);
+
+    resizeObserverRecords[0].notify();
+    flushFrames();
+    width = 700;
+    resizeObserverRecords[0].notify();
+    flushFrames();
+    expect(mockLoader.setOption).toHaveBeenCalledOnce();
+  });
 
   it('should initialize echarts with two panes and default same-day form series', async () => {
     fixture.detectChanges();
@@ -503,6 +545,9 @@ describe('ChartsFormComponent', () => {
     }
   });
 
+});
+
+describe('ChartsFormComponent styles', () => {
   it('should keep the mobile stat header compact above the two-pane chart', () => {
     const stylesPath = resolve(process.cwd(), 'src/app/components/charts/form/charts.form.component.css');
     const styles = readFileSync(stylesPath, 'utf8');

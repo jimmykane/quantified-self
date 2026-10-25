@@ -17,6 +17,7 @@ import { AppPaymentService } from '../../services/app.payment.service';
 import { MatDialog } from '@angular/material/dialog';
 import { By } from '@angular/platform-browser';
 import { PricingComponent } from '../pricing/pricing.component';
+import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 
 describe('OnboardingComponent', () => {
     let component: OnboardingComponent;
@@ -28,6 +29,7 @@ describe('OnboardingComponent', () => {
     let mockAnalyticsService: any;
     let mockPaymentService: any;
     let mockDialog: any;
+    let navigationEffects: { scrollToTop: ReturnType<typeof vi.fn> };
     let routeSnapshot: { queryParamMap: ReturnType<typeof convertToParamMap> };
     let routeStub: { snapshot: typeof routeSnapshot; queryParamMap?: BehaviorSubject<ReturnType<typeof convertToParamMap>> };
 
@@ -91,6 +93,7 @@ describe('OnboardingComponent', () => {
         mockDialog = {
             open: vi.fn()
         };
+        navigationEffects = { scrollToTop: vi.fn() };
 
         await TestBed.configureTestingModule({
             imports: [
@@ -99,6 +102,7 @@ describe('OnboardingComponent', () => {
             ],
             providers: [
                 { provide: AppUserService, useValue: mockUserService },
+                { provide: ShellNavigationEffectsService, useValue: navigationEffects },
                 { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: Router, useValue: mockRouter },
@@ -164,6 +168,42 @@ describe('OnboardingComponent', () => {
         expect(mockLoggerService.error).not.toHaveBeenCalled();
         expect(freshUser.acceptedTrackingPolicy).toBe(false);
         expect(freshUser.acceptedMarketingPolicy).toBe(false);
+    });
+
+    it('resets scroll after advancing to Plan and returning to Legal consent', async () => {
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.stepper.selectedIndex).toBe(1);
+        expect(navigationEffects.scrollToTop).toHaveBeenCalledOnce();
+        navigationEffects.scrollToTop.mockClear();
+
+        component.onPricingLoadingChange(true);
+        fixture.detectChanges();
+        component.onPricingLoadingChange(false);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(navigationEffects.scrollToTop).not.toHaveBeenCalled();
+
+        const back = fixture.debugElement.query(By.css('button[matStepperPrevious]')).nativeElement as HTMLButtonElement;
+        back.click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.stepper.selectedIndex).toBe(0);
+        expect(navigationEffects.scrollToTop).toHaveBeenCalledOnce();
+    });
+
+    it('resets scroll on entry and when saved consent automatically advances to Plan', async () => {
+        const localFixture = TestBed.createComponent(OnboardingComponent);
+        localFixture.componentInstance.user = {
+            ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true,
+        } as unknown as typeof component.user;
+        localFixture.detectChanges();
+        await localFixture.whenStable();
+
+        await vi.waitFor(() => expect(localFixture.componentInstance.stepper.selectedIndex).toBe(1));
+        expect(navigationEffects.scrollToTop).toHaveBeenCalledTimes(2);
     });
 
     it('should create', () => {
