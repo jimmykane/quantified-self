@@ -1,0 +1,101 @@
+// Saved dashboard tiles only. Previews, thumbnails, Health and Training keep
+// their own sizing. A shared canvas floor includes room for axes and labels.
+.dashboard-chart-frame:not(.dashboard-calendar-chart) {
+  --qs-dashboard-chart-canvas-height: 252px;
+  --qs-dashboard-chart-extra-height: 0px;
+  --qs-dashboard-chart-grow: 1;
+  --qs-dashboard-chart-content-inset: 8px;
+  --qs-dashboard-chart-outer-inset: 0px;
+
+  // Keep every wrapper in the height chain flexible. The existing ECharts host
+  // observes the final plot size; the previous canvas must not size its parent.
+  > section,
+  > section > :not(.tile-header-controls),
+  app-loading-overlay,
+  .loading-overlay-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
+    height: auto !important; // LoadingOverlay's public height input is inline.
+    min-height: 100%;
+    min-width: 0;
+  }
+
+  :is(.form-chart-layout, .forecast-layout, .intensity-layout,
+      .efficiency-layout, .power-curve-layout, .sleep-layout, .hrv-layout,
+      .health-tile, .intensity-zones-container, .kpi-layout:not(.kpi-layout-row)) {
+    flex: 1 0 auto;
+    height: auto;
+    min-height: 100%;
+    gap: 8px;
+    padding-block: 8px;
+  }
+
+  // Plot markers are the sizing contract for every renderer, including KPI
+  // sparklines. The growth variable handles the phone breakpoint in one place.
+  [data-dashboard-chart-plot],
+  [data-dashboard-chart-canvas] {
+    contain: size;
+    flex: var(--qs-dashboard-chart-grow) 0 calc(var(--qs-dashboard-chart-canvas-height) + var(--qs-dashboard-chart-extra-height));
+    height: auto;
+    min-height: calc(var(--qs-dashboard-chart-canvas-height) + var(--qs-dashboard-chart-extra-height));
+    max-height: none;
+    min-width: 0;
+    width: 100%;
+  }
+
+  [data-dashboard-chart-plot] {
+    margin-block-start: var(--qs-dashboard-chart-header-offset, 0px);
+    margin-block-end: var(--qs-dashboard-chart-footer-offset, 0px);
+  }
+
+  // Generic canvas templates also serve standalone charts and have inline 100% minimums.
+  [data-dashboard-chart-canvas] {
+    min-height: calc(var(--qs-dashboard-chart-canvas-height) + var(--qs-dashboard-chart-extra-height)) !important;
+  }
+
+  // Sleep's nested renderer has its own stats. Give those their natural space,
+  // then apply the same floor to the actual canvas as to scalar Health plots.
+  app-sleep-trend-chart {
+    flex: 1 0 auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  .sleep-layout.sleep-layout-embedded { padding-block: 0; }
+
+  // Form/TSS has two independent panels instead of one compressed canvas.
+  [data-dashboard-chart-layout="double"] {
+    --qs-dashboard-chart-canvas-height: 440px;
+  }
+
+  // Generic charts draw the title and aggregate inside ECharts. Reserve their
+  // existing heading above the same usable canvas, including horizontal bars.
+  :is(app-xy-chart, app-columns-chart) [data-dashboard-chart-canvas] {
+    --qs-dashboard-chart-extra-height: 54px;
+  }
+
+  :is(app-xy-chart, app-columns-chart, app-pie-chart) {
+    box-sizing: border-box;
+    padding-block: 8px;
+  }
+
+  :is(app-pie-chart, app-event-intensity-zones) {
+    min-height: var(--qs-dashboard-chart-canvas-height);
+  }
+
+  .kpi-layout:not(.kpi-layout-row) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  // Phones keep one consistent canvas; extra text grows the card, not the plot.
+  @media (max-width: 859px) {
+    --qs-dashboard-chart-grow: 0;
+  }
+}
+
+// Collapse the visual row span on phones, retaining the saved desktop span.
+@media (max-width: 859px) {
+  app-dashboard-tile-cell.dashboard-chart-cell { grid-row: span 1 !important; }
+}

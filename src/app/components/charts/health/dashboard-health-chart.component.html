@@ -68,7 +68,7 @@
           @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
         </div>
       }
-      <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
+      <app-health-metric-series-chart data-dashboard-chart-plot [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
         [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [compact]="overview()" [thumbnail]="thumbnail()"
         [timelineNotes]="thumbnail() || showingExample() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
     } @else if (settings().metric === 'sleep' && view.hasData) {

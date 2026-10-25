@@ -73,7 +73,7 @@
       }
       }
     </header>
-    <div class="kpi-sparkline-shell">
+    <div class="kpi-sparkline-shell" [attr.data-dashboard-chart-plot]="!compactRow && hasTrendData ? '' : null">
       <div #chartDiv class="kpi-sparkline"></div>
     </div>
   </section>

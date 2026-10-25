@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
@@ -232,6 +233,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         right: 6,
         top: 6,
         ...trainingStateChartGrid(),
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
       },
       tooltip: {
         show: true,

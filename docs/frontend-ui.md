@@ -1391,7 +1391,34 @@ commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
-At phone widths (up to 767px), dashboard boards containing Health charts treat the configured row height as a minimum. Health chart wrappers grow with their reading/source controls, notices and metadata, retaining at least 180px for scalar metric plots. Sleep overview grows with its own stats and averages, reserving at least 220px for its canvas, legend and axes through the scoped `--sleep-trend-plot-min-height` variable. Its canvas uses size containment so a previous ECharts resize cannot inflate the next flex layout. Page scrolling exposes the complete chart and date axis; shorter cards still fill their row. Desktop grids, picker previews, 42px thumbnails and Health overview cards retain their configured sizing. Dashboard reading pickers use the existing compact presentation, with full accessible measurement names and source details available in the menu/tooltip. This layout does not rewrite saved rows, source choices or ranges, and does not change Health reads or MCP contracts.
+All saved dashboard chart tiles opt into `styles/_dashboard-charts.scss` through `dashboard-chart-frame`.
+The single-panel data area has a 220px floor, with a 252px base canvas reserving 8px above and 24px below
+for axes. Actual legends and built-in generic headings add their own slots; charts with no legend
+reserve none. Summaries, notices and controls retain their natural height and stay visible. All board rows use
+saved row heights as minimums rather than clipping or shrinking their plots. At the one-column phone breakpoint
+(below 860px), canvas heights stay consistent and extra copy grows the card. The visual row span collapses to one on phones; the saved desktop span is retained. Larger desktop tiles allocate their
+remaining space to the plot without rewriting saved rows or columns.
+Plot/canvas markers share one sizing rule and one responsive growth value; the double-panel marker only changes
+the base canvas height. Compact KPI rows live outside this frame. Axis defaults reuse `trainingStateChartGrid`.
+
+`DashboardTileBoardComponent` observes layout only. The DOM helper groups neighbouring plots by their physical
+row and saved row span, subtracts previous offsets, and aligns their content starts and legend baselines. Updates
+coalesce before paint and observers/listeners are disposed with the board. A changed summary, source, theme,
+viewport or tile arrangement can reflow without accumulating blank space. Existing ECharts host controllers
+retain resize, tooltip, note and interaction ownership; there are no new data reads, settings writes or background haptics.
+Canvas and plot subtrees are size-contained: their tooltip/rendering DOM changes do not schedule board alignment.
+Header text, tile mounting/removal, plot participation (including a KPI trend disappearing/returning) and explicit heading/legend slot changes still invalidate layout. Each alignment
+pass batches one rectangle read per visible cell/plot before writing offsets. A half-pixel tolerance prevents fractional
+flex-layout rounding from feeding an idle ResizeObserver loop; real header changes still realign. Observers and queued frames are torn down with the board.
+Window resize listening is a fallback only when `ResizeObserver` is unavailable.
+Generic XY/column charts retain their ECharts heading and aggregate. Form/TSS deliberately keeps two panels with
+a 440px canvas floor; compact KPI rows keep their small sparklines, and Calendar and maps keep their own layouts.
+Pie/donut charts use the common minimum without Cartesian header alignment. Their saved-tile legend stays in a bounded footer row with ECharts paging when needed; all categories remain available. The shared `legendScrollFeedback` option owns selection feedback for accepted paging events and ignores synchronized changes; setup and layout remain silent. Size containment prevents old canvas
+dimensions from determining the next flex layout. Embedded Sleep removes its duplicate inner vertical padding.
+
+The frame class is applied only to saved board tiles. Chart-library previews, 42px thumbnails, Health overview,
+Training and Event Details retain their own sizes and axis defaults. Metric values, benchmarks, source/range
+choices, read scopes, persisted settings and MCP contracts are unchanged.
 
 Sleep retains ECharts label-collision protection even when a wide 14-day view initially offers every date. A later
 resize can hide colliding labels without waiting for a data/theme update; recorded bars and values remain unchanged.

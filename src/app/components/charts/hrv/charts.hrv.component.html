@@ -41,7 +41,7 @@
         <div class="hrv-context">{{ status.detailText }}</div>
       }
     </div>
-    <app-health-metric-series-chart [fillHeight]="true" [model]="selected.model" [startTimeMs]="context()!.window.startTimeMs"
+    <app-health-metric-series-chart data-dashboard-chart-plot [fillHeight]="true" [model]="selected.model" [startTimeMs]="context()!.window.startTimeMs"
       [endTimeMs]="context()!.window.endTimeMs" [darkTheme]="darkTheme()" [unitSettings]="unitSettings()"
       [timelineNotes]="timelineNotes()" [statusOverlay]="selected.statusOverlay" [statusDescription]="selected.statusDescription" />
   } @else if (missingSource()) {

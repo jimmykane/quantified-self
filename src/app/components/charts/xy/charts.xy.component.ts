@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import { DASHBOARD_CATEGORY_PALETTE } from '../../../helpers/dashboard-chart-series.helper';
 import {
   AfterViewInit,
@@ -321,7 +322,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         top: 62,
         bottom: isCompactLayout ? 16 : 10,
         outerBoundsMode: 'same',
-        outerBoundsContain: 'axisLabel'
+        outerBoundsContain: 'axisLabel',
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement, { heading: 54 })
       },
       tooltip: {
         show: true,

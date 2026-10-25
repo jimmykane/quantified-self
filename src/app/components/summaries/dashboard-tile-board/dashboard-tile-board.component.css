@@ -2,19 +2,9 @@
   box-sizing: border-box;
   display: grid;
   gap: 0;
-  grid-auto-rows: var(--dashboard-tile-board-row-height, 150px);
+  /* Saved sizes are minimums: summaries must never squeeze or cover a plot. */
+  grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
   grid-template-columns: repeat(var(--dashboard-tile-board-cols, 1), minmax(0, 1fr));
   min-width: 0;
   overflow: hidden;
-}
-
-:host(.dashboard-tile-board--activity-calendar) {
-  /* Only the calendar's own row grows; charts in adjacent rows keep their height. */
-  grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
-}
-
-@media (max-width: 767px) {
-  :host(.dashboard-tile-board--health) {
-    grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
-  }
 }

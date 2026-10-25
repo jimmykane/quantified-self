@@ -484,6 +484,25 @@ describe('EChartsLoaderService', () => {
     expect(chart.off).toHaveBeenCalledWith('updateAxisPointer', axisPointerHandler);
   });
 
+  it('opts into legend paging feedback without vibrating during setup or synchronized changes', () => {
+    const handlers = new Map<string, (params: unknown) => void>();
+    const chart = {
+      on: vi.fn((name: string, handler: (params: unknown) => void) => handlers.set(name, handler)),
+      off: vi.fn((name: string) => handlers.delete(name)),
+    } as unknown as Parameters<EChartsLoaderService['attachMobileSeriesTapFeedback']>[0];
+    const unsubscribe = service.attachMobileSeriesTapFeedback(chart, { legendScrollFeedback: true });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    handlers.get('legendscroll')?.({ scrollDataIndex: 3, $from: 'dashboard-sync' });
+    handlers.get('legendscroll')?.({ scrollDataIndex: -1 });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    handlers.get('legendscroll')?.({ scrollDataIndex: 3 });
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    unsubscribe();
+    expect(handlers.has('legendscroll')).toBe(false);
+    service.attachMobileSeriesTapFeedback(chart);
+    expect(handlers.has('legendscroll')).toBe(false);
+  });
+
   it('should gate axis-pointer haptics until the first intentional chart interaction when requested', () => {
     let nowMs = 1000;
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);

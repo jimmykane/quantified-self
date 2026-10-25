@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -210,6 +211,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         bottom: 6,
         outerBoundsMode: 'same',
         outerBoundsContain: 'axisLabel',
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
       },
       tooltip: {
         show: true,

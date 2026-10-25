@@ -1,4 +1,5 @@
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
+import { dashboardChartFrameGrid } from '../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -121,6 +122,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
         this.statusOverlay,
         this.comparisonWindow,
       );
+    if (!this.thumbnail) Object.assign(option.grid, dashboardChartFrameGrid(this.chartDiv.nativeElement));
     if (this.thumbnail) {
       Object.assign(option, { grid:{left:2,right:2,top:3,bottom:3}, tooltip:{show:false}, legend:{show:false}, dataZoom:[] });
       // A sparkline has no date axis: fit the recorded span so sparse history is
