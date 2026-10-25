@@ -89,6 +89,15 @@ export interface GarminHealthResult {
   observedAtMs: number;
 }
 
+// Internal normalization telemetry only; never persisted or included in content digests.
+export interface GarminHealthSampleBoundsDiagnostic {
+  summaryType: 'dailies';
+  field: 'timeOffsetHeartRateSamples';
+  reason: 'samples_outside_summary_interval';
+  affectedSummaryCount: number;
+  discardedSampleCount: number;
+}
+
 interface ParsedInterval {
   summary: ExternalRecord;
   summaryId: string;
@@ -590,6 +599,7 @@ function mapDaily(
   revisionOrder: number,
   receivedAtMs: number,
   index: number,
+  reportDiscardedSamples?: (count: number) => void,
 ): GarminHealthResult | null {
   const field = `dailies[${index}]`;
   const interval = parseInterval(value, field, { calendarDateRequired: true });
@@ -768,13 +778,18 @@ function mapDaily(
     }));
   }
 
-  const heartRatePoints = numericMap(
+  const rawHeartRatePoints = numericMap(
     interval.summary.timeOffsetHeartRateSamples,
     `${field}.timeOffsetHeartRateSamples`,
     1,
     300,
   );
-  assertPointsWithinInterval(heartRatePoints, interval.durationSeconds, `${field}.timeOffsetHeartRateSamples`);
+  // Garmin can append HR samples beyond its declared monitoring duration. Validate
+  // every raw sample first, then preserve the valid daily content without extending
+  // the interval, moving sample timestamps, or weakening other summary families.
+  const heartRatePoints = rawHeartRatePoints.filter(point => point.offsetSeconds <= interval.durationSeconds);
+  const discardedCount = rawHeartRatePoints.length - heartRatePoints.length;
+  if (discardedCount > 0) reportDiscardedSamples?.(discardedCount);
   const coverage = dailyCoverage(interval, heartRatePoints.length);
   const series = numericSeries({
     seriesKey: 'heart_rate_15_second_representative',
@@ -1603,6 +1618,7 @@ const SUMMARY_MAPPERS: Readonly<Record<GarminHealthSummaryType, (
   revisionOrder: number,
   receivedAtMs: number,
   index: number,
+  reportDiscardedSamples?: (count: number) => void,
 ) => GarminHealthResult | null>> = Object.freeze({
   dailies: mapDaily,
   stressDetails: mapStressDetails,
@@ -1622,6 +1638,7 @@ export function mapGarminHealthSummaries(
   providerAccountId: string,
   revisionOrder: number,
   receivedAtMs = Date.now(),
+  onSampleBoundsDiagnostic?: (diagnostic: GarminHealthSampleBoundsDiagnostic) => void,
 ): GarminHealthResult[] {
   if (!Array.isArray(payload)) {
     throw new GarminHealthValidationError(`${summaryType} response must be an array.`);
@@ -1633,6 +1650,12 @@ export function mapGarminHealthSummaries(
   requiredNumber(revisionOrder, 'revisionOrder', 0, Number.MAX_SAFE_INTEGER, true);
   requiredNumber(receivedAtMs, 'receivedAtMs', 0, Number.MAX_SAFE_INTEGER, true);
   const byIdentity = new Map<string, GarminHealthResult>();
+  let affectedSummaryCount = 0;
+  let discardedSampleCount = 0;
+  const reportDiscardedSamples = (count: number): void => {
+    affectedSummaryCount++;
+    discardedSampleCount += count;
+  };
   payload.forEach((value, index) => {
     const result = SUMMARY_MAPPERS[summaryType](
       value,
@@ -1640,6 +1663,7 @@ export function mapGarminHealthSummaries(
       revisionOrder,
       receivedAtMs,
       index,
+      reportDiscardedSamples,
     );
     if (!result) return;
     const identity = `${result.input.sourceRecordType}:${result.input.sourceRecordKey}`;
@@ -1647,5 +1671,15 @@ export function mapGarminHealthSummaries(
     // identities inside the same upload range; only the last row is written.
     byIdentity.set(identity, result);
   });
+  if (discardedSampleCount > 0) {
+    try {
+      // At most one diagnostic per bounded callback, including empty/duplicate
+      // summaries. Counts are bounded by the existing summary and raw sample caps.
+      onSampleBoundsDiagnostic?.({
+        summaryType: 'dailies', field: 'timeOffsetHeartRateSamples', reason: 'samples_outside_summary_interval',
+        affectedSummaryCount, discardedSampleCount,
+      });
+    } catch { /* Diagnostic logging must not change ingestion or queue retries. */ }
+  }
   return [...byIdentity.values()];
 }

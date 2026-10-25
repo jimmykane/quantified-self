@@ -717,9 +717,9 @@ describe('Garmin Health API summary mapping', () => {
       summaryId: 'daily-1', userId: 'other-account', calendarDate: '2025-10-09',
       startTimeInSeconds: 1_760_000_000, durationInSeconds: 1,
     }]],
-    ['out-of-range Daily sample', 'dailies', [{
-      summaryId: 'daily-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
-      durationInSeconds: 60, timeOffsetHeartRateSamples: { 61: 70 },
+    ['out-of-range Stress sample', 'stressDetails', [{
+      summaryId: 'stress-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
+      durationInSeconds: 60, timeOffsetStressLevelValues: { 61: 70 },
     }]],
     ['unsupported stress code', 'stressDetails', [{
       summaryId: 'stress-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,

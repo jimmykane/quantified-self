@@ -152,6 +152,16 @@ Garmin Sleep and Health history recovery must account for a moving provider mini
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. Garmin workout, Sleep, and Health failed jobs retain original callback URLs under the existing admin-only 30-day expiry for separately authorized recovery; successful/skipped queue rows still clear them. Never log or project those credentials. Legacy DLQ callbacks with removed credentials or expired URLs require bounded Summary Resender recovery. Verify actual ingestion, not merely replay submission. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
 
+Garmin Daily HR samples beyond the declared monitoring duration are discarded after complete raw-map validation,
+preserving valid samples and scalar metrics within the unchanged interval. Invalid values, shapes and raw input
+caps remain terminal; other summary families retain strict interval validation. One bounded callback WARNING
+reports only fixed categories and discarded/affected counts, without identities, dates, health values or raw offsets.
+Diagnostics do not alter content digests or resume cursors. Monitoring is **unchanged**: the existing #830 worker,
+committed outcomes, backlog and unavailable-observation filters cover the same guarded ingestion path. No schema,
+MCP/Training contract, consent, queue policy or Help change is required. See
+[Garmin Health worker diagnostics](garmin-integration.md#health-worker-diagnostics) for semantics, verification,
+Function-only release/rollback and separately authorized failed-job recovery.
+
 ### Inbound prescription access is separate from delivery (#708)
 
 The October 6, 2026 investigation does **not** approve a cloud workout-library importer. See the

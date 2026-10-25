@@ -358,7 +358,7 @@ import {
     resolveGarminPingFirebaseUserIDs,
 } from './queue';
 import { GarminHealthPermissionError, GarminHealthRequestError } from '../garmin/health-sync';
-import { GarminHealthValidationError } from '../garmin/health';
+import { GarminHealthValidationError, mapGarminHealthSummaries } from '../garmin/health';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
 
@@ -1834,19 +1834,15 @@ describe('sleep queue', () => {
                 }],
                 empty: false,
             });
-            const healthInput = {
-                provider: 'GarminAPI',
-                providerAccountId: 'garmin-user-1',
-                sourceRecordKey: 'source-key',
-                sourceRecordKind: 'daily_summary',
+            const [{ input: healthInput }] = mapGarminHealthSummaries('dailies', [{
+                summaryId: 'synthetic-daily',
                 calendarDate: '2026-04-29',
-                startTimeMs: 1_777_424_400_000,
-                endTimeMs: 1_777_510_800_000,
-                observedAtMs: 1_777_424_400_000,
-                timezoneOffsetSeconds: 0,
-                metrics: [],
-                sourceRevision: { order: 1, token: 'revision' },
-            };
+                startTimeInSeconds: 1_777_424_400,
+                durationInSeconds: 60,
+                steps: 123,
+                timeOffsetHeartRateSamples: { 15: 70, 60: 72, 72: 80 },
+            }], 'garmin-user-1', 1_777_424_460_000, Date.now());
+            expect(healthInput.sampleSeries[0].offsetMs).toEqual([15_000, 60_000]);
             hoisted.processGarminHealthQueueItem.mockResolvedValue({
                 healthResults: [{ input: healthInput, observedAtMs: 1_777_424_400_000 }],
                 lifecycleGuards: await hoisted.captureActiveGarminHealthWriteLifecycleGuards(),
@@ -1889,6 +1885,10 @@ describe('sleep queue', () => {
             );
             expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
             expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalledWith(
+                expect.objectContaining({ parent: { id: 'failed_jobs' } }), expect.anything(),
+            );
             expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
                 'test-user-uid',
                 'GarminAPI',
