@@ -1,23 +1,25 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DashboardTileBoardComponent } from './dashboard-tile-board.component';
+import { CoalescedFrameTask } from '../../../helpers/coalesced-frame-task';
 
 describe('DashboardTileBoardComponent', () => {
   let fixture: ComponentFixture<DashboardTileBoardComponent>;
   let component: DashboardTileBoardComponent;
 
-  beforeEach(async () => {
+  async function createBoardFixture() {
     await TestBed.configureTestingModule({
       declarations: [DashboardTileBoardComponent],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DashboardTileBoardComponent);
     component = fixture.componentInstance;
-  });
+  }
 
-  it('should expose dashboard grid sizing through host CSS variables', () => {
+  it('should expose dashboard grid sizing through host CSS variables', async () => {
+    await createBoardFixture();
     component.cols = 3;
     component.rowHeight = '180px';
 
@@ -31,7 +33,8 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('var(--dashboard-tile-board-divider)');
   });
 
-  it('should fall back to a single column and default row height for invalid inputs', () => {
+  it('should fall back to a single column and default row height for invalid inputs', async () => {
+    await createBoardFixture();
     component.cols = 0;
     component.rowHeight = null;
 
@@ -45,17 +48,44 @@ describe('DashboardTileBoardComponent', () => {
 
   it('disconnects layout observation and removes its resize listener on destruction', async () => {
     const disconnect = vi.fn();
+    const disconnectMutations = vi.fn();
     vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); unobserve = vi.fn(); disconnect = disconnect; });
+    vi.stubGlobal('MutationObserver', class { observe = vi.fn(); disconnect = disconnectMutations; });
     const remove = vi.spyOn(window, 'removeEventListener');
     try {
+      await createBoardFixture();
       fixture.detectChanges();
       await fixture.whenStable();
       fixture.destroy();
       expect(disconnect).toHaveBeenCalledOnce();
+      expect(disconnectMutations).toHaveBeenCalledOnce();
       expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
     } finally {
       vi.unstubAllGlobals();
       remove.mockRestore();
+    }
+  });
+
+  it('does not schedule alignment for chart tooltips but still schedules summary changes', async () => {
+    const request = vi.spyOn(CoalescedFrameTask.prototype, 'request').mockImplementation(() => {});
+    try {
+      await createBoardFixture();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const host = fixture.nativeElement as HTMLElement;
+      host.innerHTML = '<header>Source</header><div data-dashboard-chart-plot><div>Tooltip</div></div>';
+      await Promise.resolve();
+      request.mockClear();
+      const tooltip = host.querySelector('[data-dashboard-chart-plot] div')!;
+      for (let i = 0; i < 60; i++) tooltip.textContent = `Reading ${i}`;
+      await Promise.resolve();
+      expect(request).not.toHaveBeenCalled();
+      host.querySelector('header')!.textContent = 'A longer source';
+      await Promise.resolve();
+      expect(request).toHaveBeenCalledOnce();
+    } finally {
+      fixture.destroy();
+      request.mockRestore();
     }
   });
 

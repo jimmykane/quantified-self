@@ -1,5 +1,5 @@
 import { afterNextRender, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostBinding, inject, Input } from '@angular/core';
-import { alignDashboardChartPlots } from '../../../helpers/dashboard-chart-layout.helper';
+import { alignDashboardChartPlots, hasDashboardChartLayoutChanges } from '../../../helpers/dashboard-chart-layout.helper';
 import { CoalescedFrameTask } from '../../../helpers/coalesced-frame-task';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 
@@ -31,7 +31,9 @@ export class DashboardTileBoardComponent {
       });
       const resize = BrowserCompatibilityService.checkResizeObserverSupport()
         ? new ResizeObserver(() => task.request()) : null;
-      const mutations = new MutationObserver(() => task.request());
+      const mutations = new MutationObserver(records => {
+        if (hasDashboardChartLayoutChanges(board, records)) task.request();
+      });
       mutations.observe(board, { childList: true, subtree: true, characterData: true,
         attributes: true, attributeFilter: ['data-dashboard-chart-heading-height', 'data-dashboard-chart-footer-height'] });
       const onResize = () => task.request();

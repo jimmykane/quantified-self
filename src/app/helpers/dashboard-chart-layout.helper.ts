@@ -1,5 +1,22 @@
 const OFFSET_PROPERTY = '--qs-dashboard-chart-header-offset';
 const FOOTER_PROPERTY = '--qs-dashboard-chart-footer-offset';
+// Flex layout quantizes fractional pixels. Do not feed that rounding back into
+// ResizeObserver by repeatedly rewriting visually identical alignment offsets.
+const ALIGNMENT_EPSILON_PX = 0.5;
+
+/** Canvas rendering and touch tooltips cannot change their size-contained frame. */
+export function hasDashboardChartLayoutChanges(board: HTMLElement, mutations: readonly MutationRecord[]): boolean {
+  return mutations.some(mutation => {
+    // A removal is covered by its parent's childList record. Ignore subsequent
+    // chart/tooltip edits in the detached subtree delivered in the same batch.
+    if (!board.contains(mutation.target)) return false;
+    // The observer only subscribes to explicit heading/legend slot attributes.
+    if (mutation.type === 'attributes') return true;
+    const target = mutation.target.nodeType === Node.ELEMENT_NODE
+      ? mutation.target as Element : mutation.target.parentElement;
+    return !target?.closest('[data-dashboard-chart-plot], [data-dashboard-chart-canvas]');
+  });
+}
 
 /** Match the data rectangle while reserving only a chart's actual legend. */
 export function dashboardChartFrameGrid(
@@ -43,10 +60,12 @@ export function alignDashboardChartPlots(board: HTMLElement, enabled: boolean): 
     const cell = plot.closest<HTMLElement>('app-dashboard-tile-cell');
     if (!cell) continue;
     const cellRect = cell.getBoundingClientRect();
-    if (!cellRect.width || !plot.getBoundingClientRect().height) continue;
+    if (!cellRect.width) continue;
+    const plotRect = plot.getBoundingClientRect();
+    if (!plotRect.height) continue;
     const offset = parseFloat(plot.style.getPropertyValue(OFFSET_PROPERTY)) || 0;
     const heading = Number(plot.dataset.dashboardChartHeadingHeight) || 0;
-    const start = plot.getBoundingClientRect().top - cellRect.top - offset + heading;
+    const start = plotRect.top - cellRect.top - offset + heading;
     const key = `${Math.round(cellRect.top)}:${cell.style.gridRow}:${plot.dataset.dashboardChartLayout || 'single'}`;
     const group = groups.get(key) || [];
     group.push({ plot, start, footer: Number(plot.dataset.dashboardChartFooterHeight) || 0 });
@@ -57,7 +76,10 @@ export function alignDashboardChartPlots(board: HTMLElement, enabled: boolean): 
     const maxFooter = Math.max(...group.map(item => item.footer));
     for (const { plot, start, footer } of group) {
       const value = `${Math.max(0, Math.round((maxStart - start) * 100) / 100)}px`;
-      if (plot.style.getPropertyValue(OFFSET_PROPERTY) !== value) plot.style.setProperty(OFFSET_PROPERTY, value);
+      const previous = parseFloat(plot.style.getPropertyValue(OFFSET_PROPERTY));
+      if (!Number.isFinite(previous) || Math.abs(previous - parseFloat(value)) > ALIGNMENT_EPSILON_PX) {
+        plot.style.setProperty(OFFSET_PROPERTY, value);
+      }
       const footerValue = `${maxFooter - footer}px`;
       if (plot.style.getPropertyValue(FOOTER_PROPERTY) !== footerValue) plot.style.setProperty(FOOTER_PROPERTY, footerValue);
     }

@@ -1404,6 +1404,10 @@ row and saved row span, subtracts previous offsets, and aligns their content sta
 coalesce before paint and observers/listeners are disposed with the board. A changed summary, source, theme,
 viewport or tile arrangement can reflow without accumulating blank space. Existing ECharts host controllers
 retain resize, tooltip, note and interaction ownership; there are no new data reads, settings writes or background haptics.
+Canvas and plot subtrees are size-contained: their tooltip/rendering DOM changes do not schedule board alignment.
+Header text, tile mounting/removal and explicit heading/legend slot changes still invalidate layout. Each alignment
+pass batches one rectangle read per visible cell/plot before writing offsets. A half-pixel tolerance prevents fractional
+flex-layout rounding from feeding an idle ResizeObserver loop; real header changes still realign. Observers and queued frames are torn down with the board.
 Generic XY/column charts retain their ECharts heading and aggregate. Form/TSS deliberately keeps two panels with
 a 440px canvas floor; compact KPI rows keep their small sparklines, and Calendar and maps keep their own layouts.
 Pie/donut charts use the common minimum without Cartesian header alignment. Their saved-tile legend stays in a bounded footer row with ECharts paging when needed; all categories remain available. The shared `legendScrollFeedback` option owns selection feedback for accepted paging events and ignores synchronized changes; setup and layout remain silent. Size containment prevents old canvas

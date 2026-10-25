@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { alignDashboardChartPlots, dashboardChartFrameGrid } from './dashboard-chart-layout.helper';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { alignDashboardChartPlots, dashboardChartFrameGrid, hasDashboardChartLayoutChanges } from './dashboard-chart-layout.helper';
 
 afterEach(() => document.body.replaceChildren());
 
@@ -71,6 +71,42 @@ describe('dashboard plot alignment', () => {
     expect(offset(long)).toBe('0px');
   });
 
+  it('reads each visible cell and plot once and completes reads before any layout writes', () => {
+    const board = createBoard();
+    const plots = [addPlot(board, 0, 60), addPlot(board, 0, 180)];
+    const reads = plots.flatMap(plot => [
+      vi.spyOn(plot.closest('app-dashboard-tile-cell')!, 'getBoundingClientRect'),
+      vi.spyOn(plot, 'getBoundingClientRect'),
+    ]);
+    const writes = plots.map(plot => vi.spyOn(plot.style, 'setProperty'));
+    alignDashboardChartPlots(board, true);
+    for (const read of reads) expect(read).toHaveBeenCalledOnce();
+    expect(Math.max(...reads.flatMap(read => read.mock.invocationCallOrder)))
+      .toBeLessThan(Math.min(...writes.flatMap(write => write.mock.invocationCallOrder)));
+  });
+
+  it('settles despite fractional layout jitter but still responds to real header changes', () => {
+    const board = createBoard();
+    const short = addPlot(board, 0, 60);
+    const long = addPlot(board, 0, 100);
+    let header = 60;
+    let reads = 0;
+    short.getBoundingClientRect = () => ({
+      top: header + (parseFloat(offset(short)) || 0) + (++reads % 2 ? 1 / 64 : 0), height: 252,
+    } as DOMRect);
+    const shortWrites = vi.spyOn(short.style, 'setProperty');
+    const longWrites = vi.spyOn(long.style, 'setProperty');
+    alignDashboardChartPlots(board, true);
+    shortWrites.mockClear(); longWrites.mockClear();
+    for (let i = 0; i < 100; i++) alignDashboardChartPlots(board, true);
+    expect(shortWrites).not.toHaveBeenCalled();
+    expect(longWrites).not.toHaveBeenCalled();
+    header = 80;
+    alignDashboardChartPlots(board, true);
+    expect(parseFloat(offset(short))).toBeCloseTo(20, 1);
+    expect(shortWrites).toHaveBeenCalledOnce();
+  });
+
   it('keeps separate rows and different saved spans independent', () => {
     const board = createBoard();
     const first = addPlot(board, 0, 60);
@@ -115,5 +151,50 @@ describe('dashboard plot alignment', () => {
     expect(alignDashboardChartPlots(board, true)).toEqual([visible, hidden]);
     expect(offset(visible)).toBe('0px');
     expect(offset(preview)).toBe('');
+  });
+});
+
+describe('dashboard layout invalidation', () => {
+  it('ignores repeated tooltip and canvas updates while accepting headers and explicit legend slots', () => {
+    const board = createBoard();
+    const plot = addPlot(board, 0, 60);
+    const header = document.createElement('header');
+    header.textContent = 'Source';
+    plot.before(header);
+    const observer = new MutationObserver(() => {});
+    observer.observe(board, { childList: true, subtree: true, characterData: true,
+      attributes: true, attributeFilter: ['data-dashboard-chart-heading-height', 'data-dashboard-chart-footer-height'] });
+    try {
+      const tooltip = document.createElement('div');
+      plot.append(tooltip);
+      for (let i = 0; i < 60; i++) tooltip.textContent = `Reading ${i}`;
+      expect(hasDashboardChartLayoutChanges(board, observer.takeRecords())).toBe(false);
+      header.firstChild!.textContent = 'A longer source and reading';
+      expect(hasDashboardChartLayoutChanges(board, observer.takeRecords())).toBe(true);
+      plot.dataset.dashboardChartFooterHeight = '32';
+      expect(hasDashboardChartLayoutChanges(board, observer.takeRecords())).toBe(true);
+      plot.closest('app-dashboard-tile-cell')!.remove();
+      tooltip.textContent = 'Detached tooltip';
+      expect(hasDashboardChartLayoutChanges(board, observer.takeRecords())).toBe(true);
+      expect(hasDashboardChartLayoutChanges(board, [])).toBe(false);
+    } finally { observer.disconnect(); }
+  });
+
+  it('also ignores paged pie canvas internals and detached chart mutations', () => {
+    const board = createBoard();
+    const canvas = document.createElement('div');
+    canvas.dataset.dashboardChartCanvas = '';
+    board.append(canvas);
+    const observer = new MutationObserver(() => {});
+    observer.observe(board, { childList: true, subtree: true, characterData: true });
+    try {
+      canvas.innerHTML = '<div>Tooltip</div>';
+      expect(hasDashboardChartLayoutChanges(board, observer.takeRecords())).toBe(false);
+      const text = canvas.firstElementChild!.firstChild!;
+      canvas.remove();
+      observer.takeRecords();
+      text.textContent = 'Detached';
+      expect(hasDashboardChartLayoutChanges(board, observer.takeRecords())).toBe(false);
+    } finally { observer.disconnect(); }
   });
 });
