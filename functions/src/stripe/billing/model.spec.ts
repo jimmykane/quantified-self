@@ -4,6 +4,7 @@ import { assertLocalBillingEnvironment, billingControl, billingEvent, checkoutRe
 import { invoiceProjection, priceProjections, subscriptionProjection } from './projections';
 import type Stripe from 'stripe';
 import { Decimal } from 'stripe';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 
 const request = { price: 'price_test', mode: 'subscription', success_url: 'https://quantified-self.io/subscriptions?success=true',
   cancel_url: 'https://beta.quantified-self.io/subscriptions', allow_promotion_codes: true,
@@ -16,12 +17,18 @@ describe('billing trust boundaries', () => {
     expect(checkoutRequest(request, 'owner').price).toBe('price_test');
     expect(checkoutRequest({ ...request, mode: 'payment' }, 'owner').mode).toBe('payment');
   });
+  it('retains only the supported checkout terms acknowledgement', () => {
+    expect(checkoutRequest({ ...request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION }, 'owner').checkout_terms_version)
+      .toBe(STRIPE_CHECKOUT_TERMS_VERSION);
+    expect(checkoutRequest(request, 'owner').checkout_terms_version).toBeUndefined();
+  });
   it.each([
     { customer: 'cus_foreign' }, { line_items: [] }, { sessionId: 'cs_forged' }, { url: 'https://evil.example' },
     { metadata: { firebaseUID: 'other' } }, { metadata: { firebaseUID: 'owner', role: 'pro' } },
     { trial_period_days: -1 }, { trial_period_days: 731 }, { trial_period_days: 1.5 },
     { mode: 'payment', trial_period_days: 7 }, { automatic_tax: { enabled: false } },
     { promotion_code: 'promo_arbitrary' }, { allow_promotion_codes: false }, { price: 'price_a/path' },
+    { checkout_terms_version: 'future' }, { checkout_terms_version: null }, { payment_method_collection: 'always' },
   ])('rejects forged or unsupported request fields %j', change => {
     expect(() => checkoutRequest({ ...request, ...change }, 'owner')).toThrow();
   });

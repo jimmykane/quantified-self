@@ -16,6 +16,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    for (const phrase of ['New Pro trials require a payment method', 'no subscription charge during the free trial',
+      'first payment date', 'before the trial ends to avoid the first payment', 'Existing trials keep the terms',
+      'Starter stays free', 'earlier open trial checkout may need to expire']) expect(copy).toContain(phrase);
+  });
   it('explains the checkout handoff and recovery before another payment', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     expect(copy).toContain('checks your access for up to 20 seconds');

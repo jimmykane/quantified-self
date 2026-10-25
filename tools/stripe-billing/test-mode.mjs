@@ -66,15 +66,25 @@ async function seed() {
     const promotion = await stripe.promotionCodes.create({ promotion: { type: 'coupon', coupon: coupon.id }, code: `QSTEST${state.run.slice(0, 10)}` });
     state.prices = { monthly, yearly, once }; state.products = [basic, pro]; state.promotion = promotion.code; save();
   }
+  if (!state.prices.proTrial) {
+    const pro = state.products.find(product => product.metadata.firebaseRole === 'pro');
+    assert.ok(pro, 'Seed a synthetic Pro product first.');
+    state.prices.proTrial = await stripe.prices.create({ product: pro.id, unit_amount: 1000, currency: 'eur',
+      recurring: { interval: 'month' }, tax_behavior: 'exclusive', metadata: { trial_days: '7' } });
+    save();
+  }
   const { priceProjections, productProjection } = require('./lib/functions/src/stripe/billing/projections');
   for (const projection of [...state.products.map(productProjection), ...Object.values(state.prices).flatMap(priceProjections)]) await db.doc(projection.path).set(projection.data);
   console.log('Synthetic test catalog and local admission seeded.');
 }
 async function checkout(label, mode, trial) {
+  assert.ok(!trial || mode === 'subscription', 'A trial requires subscription mode.');
+  assert.ok(!trial || state.prices.proTrial, 'Run seed to create the Pro trial fixture.');
   const fixture = await user(label); const requestId = randomUUID().replaceAll('-', '');
-  const data = { price: mode === 'payment' ? state.prices.once.id : state.prices.monthly.id, mode,
+  const data = { price: mode === 'payment' ? state.prices.once.id : trial ? state.prices.proTrial.id : state.prices.monthly.id, mode,
     success_url: 'http://127.0.0.1:4210/payment/success', cancel_url: 'http://127.0.0.1:4210/payment/cancel',
     allow_promotion_codes: true, automatic_tax: { enabled: true }, metadata: { firebaseUID: fixture.uid },
+    checkout_terms_version: 'pro-trial-payment-method-v1',
     ...(trial ? { trial_period_days: 7, payment_method_collection: 'if_required' } : {}) };
   // Authenticated REST create exercises the deployed emulator Rules as a cached client would.
   const field = value => typeof value === 'string' ? { stringValue: value } : typeof value === 'boolean' ? { booleanValue: value }
@@ -85,7 +95,7 @@ async function checkout(label, mode, trial) {
   if (!response.ok) throw new Error(`Checkout request rejected: ${response.status}`);
   const result = await until(async () => (await db.doc(`customers/${fixture.uid}/checkout_sessions/${requestId}`).get()).data(), value => value?.url || value?.error, 'checkout');
   if (result.error) throw new Error(`Checkout failed: ${result.error.code}`);
-  fixture.checkout = { requestId, sessionId: result.sessionId, url: result.url };
+  fixture.checkout = { requestId, sessionId: result.sessionId, url: result.url, proTrial: trial };
   fixture.customerId = (await db.doc(`customers/${fixture.uid}`).get()).get('stripeId'); save();
   console.log(`Checkout ready for ${label}; open its URL from the ignored fixtures file.`);
 }
@@ -97,8 +107,18 @@ async function verify(label) {
     assert.equal(payment.prices.length, 1); assert.equal(payment.items.length, 1);
   } else {
     const sub = await until(async () => (await db.doc(`customers/${fixture.uid}/subscriptions/${session.subscription}`).get()).data(), value => ['active', 'trialing'].includes(value?.status), 'subscription synchronization');
-    assert.equal(sub.role, 'basic'); assert.ok(sub.current_period_end?.toMillis() > 0);
-    await until(async () => (await app.auth().getUser(fixture.uid)).customClaims, value => value?.stripeRole === 'basic', 'claim reconciliation');
+    const role = fixture.checkout.proTrial ? 'pro' : 'basic';
+    assert.equal(sub.role, role); assert.ok(sub.current_period_end?.toMillis() > 0);
+    if (fixture.checkout.proTrial) {
+      assert.equal(session.payment_method_collection, 'always');
+      const subscription = await stripe.subscriptions.retrieve(session.subscription);
+      assert.equal(subscription.status, 'trialing');
+      const customer = await stripe.customers.retrieve(fixture.customerId);
+      assert.ok(subscription.default_payment_method || customer.invoice_settings.default_payment_method, 'Trial must retain a payment method.');
+      const invoice = await stripe.invoices.retrieve(subscription.latest_invoice);
+      assert.equal(invoice.amount_paid, 0, 'The free trial must not charge a subscription payment.');
+    }
+    await until(async () => (await app.auth().getUser(fixture.uid)).customClaims, value => value?.stripeRole === role, 'claim reconciliation');
     await until(async () => (await db.doc(`mail/welcome_email_${session.subscription}`).get()).exists, value => value, 'welcome email outbox');
   }
   const portal = await callable('createStripePortalLink', fixture, { returnUrl: 'http://127.0.0.1:4210/subscriptions' });

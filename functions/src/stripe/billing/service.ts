@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 import { guardedBillingStripe } from './guarded-client';
 import type Stripe from 'stripe';
 import type { Auth } from 'firebase-admin/auth';
@@ -167,6 +168,10 @@ async function checkoutParameters(ctx: BillingDependencies, lease: BillingLease,
       trialDays = offeredDays;
     }
   }
+  const requiresPaymentMethod = !!trialDays && (product.metadata.firebaseRole ?? product.metadata.role) === 'pro';
+  if (requiresPaymentMethod && request.checkout_terms_version !== STRIPE_CHECKOUT_TERMS_VERSION) {
+    throw new BillingError('checkout_terms_changed');
+  }
   const params: Stripe.Checkout.SessionCreateParams = {
     customer, mode: request.mode, line_items: [{ price: price.id, quantity: 1 }],
     success_url: request.success_url, cancel_url: request.cancel_url,
@@ -175,7 +180,7 @@ async function checkoutParameters(ctx: BillingDependencies, lease: BillingLease,
     metadata: { firebaseUID: uid },
     // Expiry and every other POST argument are frozen in the operation journal.
     expires_at: Math.floor(now(ctx) / 1000) + 3600,
-    ...(request.mode === 'subscription' ? { payment_method_collection: 'if_required' as const,
+    ...(request.mode === 'subscription' ? { payment_method_collection: requiresPaymentMethod ? 'always' as const : 'if_required' as const,
       // Gifts extend classic subscriptions; the pinned API otherwise defaults to flexible.
       subscription_data: { billing_mode: { type: 'classic' as const }, metadata: { firebaseUID: uid }, ...(trialDays ? { trial_period_days: trialDays } : {}) } }
       : { payment_intent_data: { metadata: { firebaseUID: uid } } }),
@@ -200,6 +205,20 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
       if (session.status === 'open') {
         const lineItems = previous.params.line_items as { price: string }[];
         if (previous.params.mode !== request.mode || lineItems[0]?.price !== request.price) throw new BillingError('operation_uncertain');
+        if (previous.params.subscription_data?.trial_period_days) {
+          if (previous.params.payment_method_collection === 'always' && !request.checkout_terms_version) {
+            throw new BillingError('checkout_terms_changed');
+          }
+          if (previous.params.payment_method_collection !== 'always' && request.checkout_terms_version) {
+            // Preserve old operation parameters/keys, but do not reuse an offer
+            // that differs from the updated Pro terms the browser just showed.
+            const price = await ctx.stripe.prices.retrieve(request.price);
+            const productId = stripeId(price.product);
+            if (!productId) throw new BillingError('operation_uncertain');
+            const product = await ctx.stripe.products.retrieve(productId);
+            if ((product.metadata.firebaseRole ?? product.metadata.role) === 'pro') throw new BillingError('checkout_offer_pending');
+          }
+        }
         if (!session.url) throw new BillingError('operation_uncertain');
         await assertBillingAuthority(ctx, lease, uid, customer);
         return { sessionId: session.id, url: session.url, customerId: customer };

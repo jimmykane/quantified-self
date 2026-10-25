@@ -14,6 +14,7 @@ import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { getBillingStripe } from '../client';
 import { processStripeBillingTask } from './handlers';
 import { onSubscriptionUpdated } from '../subscriptions';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 
 vi.unmock('firebase-admin');
 vi.mock('../client', () => ({ getBillingStripe: vi.fn() }));
@@ -84,9 +85,86 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect(f.stripe.customers.create).toHaveBeenCalledTimes(1);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
     expect(f.stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ customer: f.customerId, allow_promotion_codes: true,
-      automatic_tax: { enabled: true }, subscription_data: { billing_mode: { type: 'classic' }, trial_period_days: 7 }, line_items: [{ price: f.price.id, quantity: 1 }] });
+      automatic_tax: { enabled: true }, payment_method_collection: 'if_required', subscription_data: { billing_mode: { type: 'classic' }, trial_period_days: 7 }, line_items: [{ price: f.price.id, quantity: 1 }] });
     expect((await f.ref.get()).data()).toMatchObject({ sessionId: expect.stringMatching(/^cs_/), url: expect.stringContaining('checkout.stripe.com'), error: null });
     expect((await db.doc(`customers/${f.uid}`).get()).get('stripeId')).toBe(f.customerId);
+  });
+  it.each(['firebaseRole', 'role'])('requires a payment method for new Pro trials using trusted product %s', async roleKey => {
+    const f = await fixture(); f.product.metadata = { [roleKey]: 'pro' } as any;
+    const data = { ...f.request, trial_period_days: 7, payment_method_collection: 'if_required', checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    const params = f.stripe.checkout.sessions.create.mock.calls[0][0];
+    expect(params).toMatchObject({ payment_method_collection: 'always', automatic_tax: { enabled: true }, allow_promotion_codes: true,
+      subscription_data: { trial_period_days: 7, billing_mode: { type: 'classic' } } });
+    expect(params.payment_method_types).toBeUndefined();
+    expect(params.checkout_terms_version).toBeUndefined();
+    expect((await f.ref.get()).get('error')).toBeNull();
+  });
+  it('asks a cached no-card client to refresh before creating a new Pro trial session', async () => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, trial_period_days: 7 };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    expect((await f.ref.get()).get('error.code')).toBe('checkout_terms_changed');
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).exists).toBe(false);
+  });
+  it('keeps a Basic trial unchanged even when its price claims a Pro role', async () => {
+    const f = await fixture(); Object.assign(f.price.metadata, { firebaseRole: 'pro' });
+    const data = { ...f.request, trial_period_days: 7, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    expect(f.stripe.checkout.sessions.create.mock.calls[0][0].payment_method_collection).toBe('if_required');
+  });
+  it('does not introduce a trial or change a returning Pro payment', async () => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    f.stripe.subscriptions.list.mockResolvedValue({ data: [{ status: 'canceled' }], has_more: false });
+    await f.run((await f.admit())!);
+    expect(f.stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ payment_method_collection: 'if_required' });
+    expect(f.stripe.checkout.sessions.create.mock.calls[0][0].subscription_data.trial_period_days).toBeUndefined();
+  });
+  it.each([true, false])('does not cross trial offer versions when reusing an open session (card required=%s)', async modern => {
+    const f = await fixture();
+    if (modern) f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, trial_period_days: 7, ...(modern ? { checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION } : {}) };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    // The legacy operation is immutable even after the product becomes Pro.
+    f.product.metadata.firebaseRole = 'pro';
+    const operation = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const frozen = (await operation.get()).data();
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    const other = { ...f.request, trial_period_days: 7, ...(!modern ? { checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION } : {}) };
+    await ref.set(other); await f.run((await admitBillingCheckout(db, f.uid, next, other, Timestamp.now()))!);
+    expect((await ref.get()).get('error.code')).toBe(modern ? 'checkout_terms_changed' : 'checkout_offer_pending');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect((await operation.get()).data()).toEqual(frozen);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it.each([true, false])('retries the original trial operation unchanged across a policy rollout (new offer=%s)', async modern => {
+    const f = await fixture();
+    if (modern) f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, trial_period_days: 7, ...(modern ? { checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION } : {}) };
+    await f.ref.set(data);
+    const create = f.stripe.checkout.sessions.create.getMockImplementation()!;
+    f.stripe.checkout.sessions.create.mockImplementationOnce(async (...args) => { await create(...args); throw new Error('lost response'); });
+    const id = (await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!;
+    await expect(f.run(id)).rejects.toThrow();
+    const ref = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const original = (await ref.get()).data();
+    f.product.metadata.firebaseRole = 'pro';
+    await f.readyRetry(id); await f.run(id);
+    expect(f.stripe.checkout.sessions.create.mock.calls[0]).toEqual(f.stripe.checkout.sessions.create.mock.calls[1]);
+    expect(f.stripe.checkout.sessions.create.mock.calls[1][0].payment_method_collection).toBe(modern ? 'always' : 'if_required');
+    expect((await ref.get()).get('params')).toEqual(original!.params);
+    expect((await ref.get()).get('key')).toBe(original!.key);
+    expect((await f.ref.get()).get('sessionId')).toBeTruthy();
+  });
+  it.each(['basic', 'pro'])('reuses the same modern %s trial offer without another Stripe create', async role => {
+    const f = await fixture(); f.product.metadata.firebaseRole = role;
+    const data = { ...f.request, trial_period_days: 7, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!);
+    expect((await ref.get()).get('url')).toBeTruthy();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
   });
   it('reuses a returning customer and supports one-time payment checkout', async () => {
     const f = await fixture('payment');
