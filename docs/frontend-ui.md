@@ -1398,6 +1398,8 @@ reserve none. Summaries, notices and controls retain their natural height and st
 saved row heights as minimums rather than clipping or shrinking their plots. At the one-column phone breakpoint
 (below 860px), canvas heights stay consistent and extra copy grows the card. The visual row span collapses to one on phones; the saved desktop span is retained. Larger desktop tiles allocate their
 remaining space to the plot without rewriting saved rows or columns.
+Plot/canvas markers share one sizing rule and one responsive growth value; the double-panel marker only changes
+the base canvas height. Compact KPI rows live outside this frame. Axis defaults reuse `trainingStateChartGrid`.
 
 `DashboardTileBoardComponent` observes layout only. The DOM helper groups neighbouring plots by their physical
 row and saved row span, subtracts previous offsets, and aligns their content starts and legend baselines. Updates
@@ -1408,6 +1410,7 @@ Canvas and plot subtrees are size-contained: their tooltip/rendering DOM changes
 Header text, tile mounting/removal, plot participation (including a KPI trend disappearing/returning) and explicit heading/legend slot changes still invalidate layout. Each alignment
 pass batches one rectangle read per visible cell/plot before writing offsets. A half-pixel tolerance prevents fractional
 flex-layout rounding from feeding an idle ResizeObserver loop; real header changes still realign. Observers and queued frames are torn down with the board.
+Window resize listening is a fallback only when `ResizeObserver` is unavailable.
 Generic XY/column charts retain their ECharts heading and aggregate. Form/TSS deliberately keeps two panels with
 a 440px canvas floor; compact KPI rows keep their small sparklines, and Calendar and maps keep their own layouts.
 Pie/donut charts use the common minimum without Cartesian header alignment. Their saved-tile legend stays in a bounded footer row with ECharts paging when needed; all categories remain available. The shared `legendScrollFeedback` option owns selection feedback for accepted paging events and ignores synchronized changes; setup and layout remain silent. Size containment prevents old canvas

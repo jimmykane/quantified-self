@@ -46,12 +46,13 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('0');
   });
 
-  it('disconnects layout observation and removes its resize listener on destruction', async () => {
+  it('disconnects layout observation without adding a duplicate window resize listener', async () => {
     const disconnect = vi.fn();
     const disconnectMutations = vi.fn();
     vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); unobserve = vi.fn(); disconnect = disconnect; });
     vi.stubGlobal('MutationObserver', class { observe = vi.fn(); disconnect = disconnectMutations; });
     const remove = vi.spyOn(window, 'removeEventListener');
+    const add = vi.spyOn(window, 'addEventListener');
     try {
       await createBoardFixture();
       fixture.detectChanges();
@@ -59,10 +60,36 @@ describe('DashboardTileBoardComponent', () => {
       fixture.destroy();
       expect(disconnect).toHaveBeenCalledOnce();
       expect(disconnectMutations).toHaveBeenCalledOnce();
-      expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
+      expect(add).not.toHaveBeenCalledWith('resize', expect.any(Function));
+      expect(remove).not.toHaveBeenCalledWith('resize', expect.any(Function));
     } finally {
       vi.unstubAllGlobals();
       remove.mockRestore();
+      add.mockRestore();
+    }
+  });
+
+  it('uses and removes the window resize fallback when ResizeObserver is unavailable', async () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const request = vi.spyOn(CoalescedFrameTask.prototype, 'request').mockImplementation(() => {});
+    try {
+      await createBoardFixture();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const listener = add.mock.calls.find(([name]) => name === 'resize')?.[1];
+      expect(listener).toEqual(expect.any(Function));
+      request.mockClear();
+      window.dispatchEvent(new Event('resize'));
+      expect(request).toHaveBeenCalledOnce();
+      fixture.destroy();
+      expect(remove).toHaveBeenCalledWith('resize', listener);
+      request.mockClear();
+      window.dispatchEvent(new Event('resize'));
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals(); add.mockRestore(); remove.mockRestore(); request.mockRestore();
     }
   });
 

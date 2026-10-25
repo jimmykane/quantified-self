@@ -1,3 +1,5 @@
+import { trainingStateChartGrid, TRAINING_STATE_PLOT_BOTTOM } from './training-state-chart-layout.helper';
+
 const OFFSET_PROPERTY = '--qs-dashboard-chart-header-offset';
 const FOOTER_PROPERTY = '--qs-dashboard-chart-footer-offset';
 // Flex layout quantizes fractional pixels. Do not feed that rounding back into
@@ -33,11 +35,9 @@ export function dashboardChartFrameGrid(
     canvas.style.setProperty('--qs-dashboard-chart-extra-height', extra);
   }
   return {
+    ...trainingStateChartGrid(),
     top: 8 + heading,
-    bottom: 24 + footer,
-    outerBoundsMode: 'auto' as const,
-    outerBounds: { left: 6, right: 6, top: 0, bottom: 6 },
-    outerBoundsContain: 'axisLabel' as const,
+    bottom: TRAINING_STATE_PLOT_BOTTOM + footer,
   };
 }
 
