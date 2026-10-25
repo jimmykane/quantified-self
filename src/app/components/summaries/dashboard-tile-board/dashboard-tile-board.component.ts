@@ -35,7 +35,7 @@ export class DashboardTileBoardComponent {
         if (hasDashboardChartLayoutChanges(board, records)) task.request();
       });
       mutations.observe(board, { childList: true, subtree: true, characterData: true,
-        attributes: true, attributeFilter: ['data-dashboard-chart-heading-height', 'data-dashboard-chart-footer-height'] });
+        attributes: true, attributeFilter: ['data-dashboard-chart-plot', 'data-dashboard-chart-heading-height', 'data-dashboard-chart-footer-height'] });
       const onResize = () => task.request();
       window.addEventListener('resize', onResize);
       task.request();

@@ -10,7 +10,7 @@ export function hasDashboardChartLayoutChanges(board: HTMLElement, mutations: re
     // A removal is covered by its parent's childList record. Ignore subsequent
     // chart/tooltip edits in the detached subtree delivered in the same batch.
     if (!board.contains(mutation.target)) return false;
-    // The observer only subscribes to explicit heading/legend slot attributes.
+    // The observer only subscribes to plot participation and heading/legend slots.
     if (mutation.type === 'attributes') return true;
     const target = mutation.target.nodeType === Node.ELEMENT_NODE
       ? mutation.target as Element : mutation.target.parentElement;

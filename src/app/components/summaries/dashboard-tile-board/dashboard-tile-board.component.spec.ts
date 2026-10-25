@@ -66,7 +66,7 @@ describe('DashboardTileBoardComponent', () => {
     }
   });
 
-  it('does not schedule alignment for chart tooltips but still schedules summary changes', async () => {
+  it('ignores tooltips but observes summaries and plots disappearing or returning without a resize', async () => {
     const request = vi.spyOn(CoalescedFrameTask.prototype, 'request').mockImplementation(() => {});
     try {
       await createBoardFixture();
@@ -81,6 +81,15 @@ describe('DashboardTileBoardComponent', () => {
       await Promise.resolve();
       expect(request).not.toHaveBeenCalled();
       host.querySelector('header')!.textContent = 'A longer source';
+      await Promise.resolve();
+      expect(request).toHaveBeenCalledOnce();
+      request.mockClear();
+      const plot = tooltip.parentElement!;
+      plot.removeAttribute('data-dashboard-chart-plot');
+      await Promise.resolve();
+      expect(request).toHaveBeenCalledOnce();
+      request.mockClear();
+      plot.setAttribute('data-dashboard-chart-plot', '');
       await Promise.resolve();
       expect(request).toHaveBeenCalledOnce();
     } finally {

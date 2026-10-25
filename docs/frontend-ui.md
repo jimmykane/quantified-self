@@ -1405,7 +1405,7 @@ coalesce before paint and observers/listeners are disposed with the board. A cha
 viewport or tile arrangement can reflow without accumulating blank space. Existing ECharts host controllers
 retain resize, tooltip, note and interaction ownership; there are no new data reads, settings writes or background haptics.
 Canvas and plot subtrees are size-contained: their tooltip/rendering DOM changes do not schedule board alignment.
-Header text, tile mounting/removal and explicit heading/legend slot changes still invalidate layout. Each alignment
+Header text, tile mounting/removal, plot participation (including a KPI trend disappearing/returning) and explicit heading/legend slot changes still invalidate layout. Each alignment
 pass batches one rectangle read per visible cell/plot before writing offsets. A half-pixel tolerance prevents fractional
 flex-layout rounding from feeding an idle ResizeObserver loop; real header changes still realign. Observers and queued frames are torn down with the board.
 Generic XY/column charts retain their ECharts heading and aggregate. Form/TSS deliberately keeps two panels with
