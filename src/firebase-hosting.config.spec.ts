@@ -398,7 +398,8 @@ describe('Firebase Hosting configuration', () => {
     // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-24');
+    // COROS guide clarifies the history limit and keeps its setup tab through signup.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
     // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.

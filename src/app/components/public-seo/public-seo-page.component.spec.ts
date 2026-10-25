@@ -113,21 +113,24 @@ describe('PublicSeoPageComponent', () => {
     guideFixture.destroy();
   });
 
-  it('renders the Wahoo-to-Suunto guide with explicit opt-in and setup actions', () => {
-    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.syncWahooToSuunto;
+  it.each([
+    { page: PUBLIC_SEO_PAGES.syncWahooToSuunto, provider: 'Wahoo', serviceName: ServiceNames.WahooAPI },
+    { page: PUBLIC_SEO_PAGES.syncCorosToSuunto, provider: 'COROS', serviceName: ServiceNames.COROSAPI },
+  ])('renders the $provider-to-Suunto guide with explicit opt-in and setup actions', ({ page, provider, serviceName }) => {
+    routeStub.snapshot.data.publicSeoPage = page;
     const guideFixture = TestBed.createComponent(PublicSeoPageComponent);
     guideFixture.detectChanges();
     const root = guideFixture.nativeElement as HTMLElement;
-    expect(root.querySelector('h1')?.textContent).toBe('Sync Wahoo activities to Suunto');
+    expect(root.querySelector('h1')?.textContent).toBe(`Sync ${provider} activities to Suunto`);
     expect(root.querySelector('.hero-access-note')?.textContent).toContain('require Pro');
     expect(root.textContent).toContain('Preview sends nothing');
-    expect(root.textContent).toContain('Wahoo API in Activity sources');
+    expect(root.textContent).toContain(`${serviceName} in Activity sources`);
     expect(root.querySelectorAll('.how-to-list li')).toHaveLength(5);
     const actions = Array.from(root.querySelectorAll<HTMLAnchorElement>('.action-row a'));
     const setupLinks = actions.filter(link => link.textContent?.includes('Get Started'));
     expect(setupLinks.map(link => link.getAttribute('href'))).toEqual([
-      `/services?serviceName=${encodeURIComponent(ServiceNames.WahooAPI)}`,
-      `/services?serviceName=${encodeURIComponent(ServiceNames.WahooAPI)}`,
+      `/services?serviceName=${encodeURIComponent(serviceName)}`,
+      `/services?serviceName=${encodeURIComponent(serviceName)}`,
     ]);
     expect(root.querySelector('a[href="/help#service-connections"]')).toBeTruthy();
     expect(root.querySelector('a[href="/pricing"]')).toBeTruthy();
@@ -162,7 +165,7 @@ describe('PublicSeoPageComponent', () => {
 
       pageFixture.destroy();
     }
-    expect(setupLinkCount).toBe(6);
+    expect(setupLinkCount).toBe(5);
   });
 
   it('renders the public MCP capabilities, boundaries, and setup links', () => {

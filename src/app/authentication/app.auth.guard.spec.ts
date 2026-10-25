@@ -113,15 +113,15 @@ describe('authGuard', () => {
         });
     });
 
-    it('preserves the Wahoo setup tab through sign-in', async () => {
+    it.each(['Wahoo%20API', 'COROS%20API'])('preserves the %s setup tab through sign-in', async service => {
         vi.mocked(router.getCurrentNavigation).mockReturnValue({
-            extractedUrl: { toString: () => '/services?serviceName=Wahoo%20API' },
+            extractedUrl: { toString: () => `/services?serviceName=${service}` },
         } as any);
         const result = await runGuard(null, 'services');
         expect(result).not.toBe(true);
-        expect(authServiceStub.redirectUrl).toBe('/services?serviceName=Wahoo%20API');
+        expect(authServiceStub.redirectUrl).toBe(`/services?serviceName=${service}`);
         expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
-            queryParams: { returnUrl: '/services?serviceName=Wahoo%20API' },
+            queryParams: { returnUrl: `/services?serviceName=${service}` },
         });
     });
 
