@@ -2421,6 +2421,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin Sleep and Health history import is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep history**');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('keeps COROS selected through sign-in and required onboarding');
+    expect(serviceConnectionsSection?.content).toContain('select **COROS API** in **Activity sources**');
+    expect(serviceConnectionsSection?.content).toContain('older saved activities can still be sent');
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
     expect(serviceConnectionsSection?.content).toContain('Background activity delivery retries a confirmed COROS processing failure');
     expect(serviceConnectionsSection?.content).toContain('Pending uploads are checked without sending the file again');
@@ -2456,7 +2459,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('cycling-family routes use bike');
     expect(serviceConnectionsSection?.content).toContain('exact-file and semantic FIT fingerprints');
     expect(serviceConnectionsSection?.content).toContain('expire after about 120 days');
-    expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('**Activity sync settings → To Suunto** under COROS in **Connections**');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
     expect(serviceConnectionsSection?.content).toContain('**Send past activities** is available under the Suunto or Wahoo destination card');
     expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');

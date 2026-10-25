@@ -139,14 +139,14 @@ describe('onboardingGuard', () => {
         expect((result as any).toString()).toContain('/onboarding');
     });
 
-    it('keeps Wahoo setup selected while still requiring onboarding', async () => {
+    it.each(['Wahoo%20API', 'COROS%20API'])('keeps %s setup selected while still requiring onboarding', async service => {
         mockRouter.getCurrentNavigation.mockReturnValue({
-            extractedUrl: { toString: () => '/services?serviceName=Wahoo%20API' },
+            extractedUrl: { toString: () => `/services?serviceName=${service}` },
         });
         const result = await firstValueFrom(runGuard({ uid: '123' }, [{ path: 'services' }]) as Observable<unknown>);
         expect(result).not.toBe(true);
         expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/onboarding'], {
-            queryParams: { returnUrl: '/services?serviceName=Wahoo%20API' },
+            queryParams: { returnUrl: `/services?serviceName=${service}` },
         });
     });
 
@@ -278,6 +278,7 @@ describe('onboardingGuard', () => {
     it.each([
         { path: 'dashboard', returnUrl: '/dashboard' },
         { path: 'services', returnUrl: '/services?serviceName=Wahoo%20API' },
+        { path: 'services', returnUrl: '/services?serviceName=COROS%20API' },
     ])('routes a profile failure on $path to recovery with its setup context', async ({ path, returnUrl }) => {
         mockRouter.getCurrentNavigation.mockReturnValue({ extractedUrl: { toString: () => returnUrl } });
         const users$ = new BehaviorSubject<any>({

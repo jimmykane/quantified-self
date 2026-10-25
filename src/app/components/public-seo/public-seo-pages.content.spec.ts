@@ -429,6 +429,17 @@ describe('public-seo-pages.content', () => {
     expect(garminGuideCopy).toContain('Garmin does not need to remain connected');
     expect(garminGuideCopy).not.toContain('Sync past activities');
 
+    const corosGuide = PUBLIC_SEO_PAGES.syncCorosToSuunto;
+    expect(corosGuide.h1).toBe('Sync COROS activities to Suunto');
+    expect(corosGuide.howToSteps).toHaveLength(5);
+    expect(corosGuide.freeOfferDescription).toContain('require Pro');
+    const corosGuideCopy = JSON.stringify(corosGuide);
+    expect(corosGuideCopy).toContain('latest rolling 3 months');
+    expect(corosGuideCopy).toContain('Older activities already saved');
+    expect(corosGuideCopy).toContain('Under Suunto in Connections, open Send past activities');
+    expect(corosGuideCopy).toContain('Preview sends nothing');
+    expect(corosGuideCopy).not.toContain('date range in COROS Services');
+
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('Sync Wahoo activities to Suunto');
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.description).toContain('Wahoo FIT activities');
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(5);

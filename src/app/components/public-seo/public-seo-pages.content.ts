@@ -7,7 +7,7 @@ import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
-import { WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
+import { COROS_SETUP_QUERY_PARAMS, WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -1392,57 +1392,80 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
     eyebrow: 'COROS to Suunto Guide',
     title: 'How to Sync COROS Workouts to Suunto Automatically',
-    description: 'Learn how to sync COROS activities to Suunto automatically, connect both accounts, and sync past COROS activities by date with Quantified Self.',
-    h1: 'How to sync COROS workouts to Suunto automatically',
-    intro: 'Connect COROS and Suunto, then choose whether new COROS activities should be sent to Suunto automatically. You can also sync past activities from a date range.',
-    chips: ['COROS', 'Suunto', 'Automatic sync', 'Recent history', 'Pro'],
+    description: 'Sync COROS FIT activities to Suunto with Quantified Self Pro. Set up automatic sync, import recent COROS history, or preview and send saved workouts by date.',
+    h1: 'Sync COROS activities to Suunto',
+    intro: 'Bring your COROS workouts into Suunto. Set up automatic sync for new eligible FIT imports, or review and send activities already saved in Quantified Self.',
+    accessNote: 'Provider connections and activity sync require Pro. Review current pricing and any eligible trial before checkout.',
+    freeOfferDescription: 'Starter includes manual uploads and analysis in Quantified Self. COROS-to-Suunto connections and activity sync require Pro.',
+    chips: ['COROS', 'Suunto', 'FIT activities', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
-      routeAction('COROS Integration', '/integrations/coros'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: COROS_SETUP_QUERY_PARAMS },
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
       {
-        eyebrow: 'Setup',
-        title: 'Connect COROS and Suunto before turning on activity sync',
-        copy: 'Both accounts must be connected before Quantified Self can send COROS activities to Suunto.',
+        eyebrow: 'New activities',
+        title: 'Set up automatic COROS to Suunto sync',
+        copy: 'Start with Pro, then open Connections. Connecting accounts imports eligible activities into Quantified Self; sending them to Suunto is a separate opt-in.',
         items: [
           {
             icon: 'login',
-            title: 'Connect both providers',
-            copy: 'Connect COROS and Suunto, then confirm both connections are active before enabling cross-service sync.',
+            title: 'Connect COROS and Suunto',
+            copy: 'Choose COROS and Suunto in Connections and authorize both accounts. Review the optional history-import checkbox and range before connecting.',
           },
           {
             icon: 'toggle_on',
-            title: 'Turn on automatic activity sync',
-            copy: 'Open COROS Services and turn on automatic activity sync so new COROS activities can be sent to Suunto.',
+            title: 'Enable Suunto as the destination',
+            copy: 'Under COROS, open Activity sync settings, choose To Suunto, and enable automatic activity sync. Both connections must stay active for new eligible COROS imports to be sent.',
           },
           {
-            icon: 'history',
-            title: 'Import recent COROS history',
-            copy: 'COROS history import is currently limited to the last 3 months by provider API restrictions.',
+            icon: 'check_circle',
+            title: 'Check the workout in Suunto',
+            copy: 'Allow time for import and delivery, then check Suunto for the workout. Enabling automatic sync does not send activities already saved in Quantified Self.',
           },
         ],
       },
       {
-        eyebrow: 'Past Activities',
-        title: 'Sync existing activities by date',
-        copy: 'Syncing past activities is separate from automatic sync and lets you choose the date range.',
+        eyebrow: 'Past activities',
+        title: 'Preview saved COROS workouts before sending',
+        copy: 'Use a one-time send for eligible activities already saved in Quantified Self. Automatic sync can stay off.',
         items: [
           {
+            icon: 'history',
+            title: 'Import missing recent COROS history first',
+            copy: 'If a recent workout is missing from Quantified Self, use History import under COROS in Connections. COROS API history is limited to the latest rolling 3 months. Choose your dates and wait for the eligible activities to arrive before preparing a send.',
+          },
+          {
+            icon: 'preview',
+            title: 'Choose Suunto, dates and COROS imports',
+            copy: 'Under Suunto in Connections, open Send past activities. In the sending workspace, choose Saved activities, select COROS API in Activity sources, set your dates, and choose Preview saved activities. Preview sends nothing.',
+          },
+          {
             icon: 'published_with_changes',
-            title: 'Sync past COROS activities',
-            copy: 'Choose a date range in COROS Services to send activities already stored in Quantified Self to Suunto.',
+            title: 'Review the results, then confirm Send',
+            copy: 'Review the ready and excluded activities before choosing Send. Follow progress in Recent sends; Queued and Waiting for provider do not mean Delivered. Confirmed sends continue after you leave the page.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Transfer limits',
+        title: 'Know which activities can reach Suunto',
+        copy: 'This workflow transfers recorded activities using retained original FIT files.',
+        items: [
+          {
+            icon: 'date_range',
+            title: 'Recent imports and older saved workouts',
+            copy: 'The rolling 3-month limit applies to fetching history from COROS. Older activities already saved in Quantified Self can still be selected for a past send when their eligible original FIT files remain available.',
+          },
+          {
+            icon: 'filter_alt',
+            title: 'Keep the original recording available',
+            copy: 'Saved-activity preview excludes unsupported or missing originals, merged or derived activities, and previous deliveries. GPX routes and TCX files are not eligible for this FIT activity transfer.',
           },
           {
             icon: 'sync_problem',
-            title: 'Reconnect when tokens fail',
-            copy: 'If COROS or Suunto shows Reconnect required, reconnect before trying automatic activity sync again.',
-          },
-          {
-            icon: 'dashboard_customize',
-            title: 'Keep analysis centralized',
-            copy: 'Review COROS, Suunto, Garmin, uploaded files, maps, and benchmark reports from the same dashboard.',
+            title: 'Review connection and delivery issues',
+            copy: 'Use Connections if a provider shows Reconnect required. For a past send, review excluded activities and its result in Recent sends. If acceptance is unknown, check Suunto before attempting another transfer.',
           },
         ],
       },
@@ -1450,28 +1473,42 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can COROS workouts sync to Suunto automatically?',
-        answer: 'Yes. Connect COROS and Suunto and turn on automatic activity sync. New COROS activities can then be sent to Suunto automatically.',
+        answer: 'Yes. With Pro, connect both accounts in Connections. Under COROS, open Activity sync settings, choose To Suunto, and enable automatic activity sync. Only new eligible COROS FIT imports are sent; connecting the accounts alone does not enable this.',
       },
       {
         question: 'How much COROS history can I import?',
-        answer: 'COROS history import is currently limited to the last 3 months because of provider API restrictions.',
+        answer: 'COROS API history import is limited to the latest rolling 3 months. This limit applies to fetching missing history from COROS, not to selecting older saved activities whose eligible FIT originals are still available in Quantified Self.',
       },
       {
-        question: 'Does syncing past activities turn on automatic COROS sync?',
-        answer: 'No. Sync past activities only sends activities from the date range you choose. It does not turn on automatic sync for future activities.',
+        question: 'Can I send older COROS activities already saved in Quantified Self?',
+        answer: 'Yes. Under Suunto in Connections, open Send past activities, choose Saved activities, select COROS API and your dates, then preview and confirm Send. Preview sends nothing. Older saved workouts remain eligible when their original FIT files are available and the preview checks pass.',
+      },
+      {
+        question: 'Does sending past activities turn on automatic COROS sync?',
+        answer: 'No. Send past activities opens a separate review for your selected saved workouts. Only confirming Send starts that transfer, and it does not enable automatic sync for future imports.',
+      },
+      {
+        question: 'Is COROS to Suunto sync free?',
+        answer: 'Provider connections and activity sync require Pro. Review current pricing and any trial offer before checkout; trial eligibility is checked after sign-in. Starter includes manual file uploads and analysis inside Quantified Self, not delivery to Suunto.',
+      },
+      {
+        question: 'What if my workout does not appear in Suunto?',
+        answer: 'Check the COROS and Suunto connections and confirm that the activity has an eligible retained FIT original. For a past send, review excluded activities and Recent sends. Queued, sending, or waiting for the provider is not confirmed delivery. Use Check status when offered for an accepted operation; if acceptance is unknown, check Suunto before attempting another transfer.',
       },
     ],
-    closingTitle: 'Keep COROS and Suunto connected without losing the archive',
-    closingCopy: 'Use Quantified Self as the integration hub for COROS to Suunto activity sync, recent history imports, and training analysis.',
+    closingTitle: 'Ready to bring your COROS workouts into Suunto?',
+    closingCopy: 'Get started in Connections, review Pro pricing and terms, then choose automatic sync or a reviewed one-time send.',
     closingActions: [
-      routeAction('COROS Integration', '/integrations/coros', 'flat', 'arrow_forward'),
-      routeAction('All Integrations', '/integrations'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: COROS_SETUP_QUERY_PARAMS },
+      routeAction('View Pricing', '/pricing'),
+      routeAction('COROS Integration', '/integrations/coros'),
     ],
     howToSteps: [
-      'Connect COROS to Quantified Self.',
-      'Connect Suunto to Quantified Self.',
-      'Turn on automatic activity sync in COROS Services.',
-      'Use Sync past activities for already imported COROS activities when needed.',
+      'Get Pro, open Connections, and authorize COROS and Suunto. Review any optional history-import checkbox and range before connecting.',
+      'For future eligible COROS imports, open Activity sync settings under COROS, choose To Suunto, and enable automatic activity sync.',
+      'If recent COROS history is missing, import it first using History import under COROS. The provider API limits history imports to the latest rolling 3 months.',
+      'For saved workouts, open Send past activities under Suunto, choose Saved activities, select COROS API and your dates, then choose Preview saved activities.',
+      'Review ready and excluded activities, then confirm Send. Follow Recent sends and check Suunto for delivery; preview and queueing alone do not confirm delivery.',
     ],
   },
   syncWahooToSuunto: {

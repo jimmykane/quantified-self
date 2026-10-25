@@ -671,8 +671,13 @@ describe('OnboardingComponent', () => {
         },
     );
 
-    it.each([false, true])('keeps the Wahoo guide destination after required onboarding (previously complete: %s)', async onboardingCompleted => {
-        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/services?serviceName=Wahoo%20API' });
+    it.each([
+        { serviceName: 'Wahoo API', onboardingCompleted: false },
+        { serviceName: 'Wahoo API', onboardingCompleted: true },
+        { serviceName: 'COROS API', onboardingCompleted: false },
+        { serviceName: 'COROS API', onboardingCompleted: true },
+    ])('keeps $serviceName setup after required onboarding (previously complete: $onboardingCompleted)', async ({ serviceName, onboardingCompleted }) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: `/services?serviceName=${encodeURIComponent(serviceName)}` });
         const returnFixture = TestBed.createComponent(OnboardingComponent);
         const returningComponent = returnFixture.componentInstance;
         returningComponent.user = { ...mockUser, onboardingCompleted } as any;
@@ -688,7 +693,7 @@ describe('OnboardingComponent', () => {
             await returningComponent.onTermsSubmit();
         }
         await returningComponent.finishOnboarding();
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: 'Wahoo API' } });
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName } });
         expect(returningComponent.completionLabel).toBe('Connections');
         expect(mockDialog.open).not.toHaveBeenCalled();
     });
