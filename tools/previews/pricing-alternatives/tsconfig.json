@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "../../../tmp/pricing-alternatives-tsc", "types": ["node"] },
+  "angularCompilerOptions": { "strictTemplates": true },
+  "files": ["main.ts"],
+  "include": ["../../../src/**/*.d.ts"]
+}
