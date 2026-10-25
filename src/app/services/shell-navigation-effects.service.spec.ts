@@ -45,6 +45,22 @@ describe('ShellNavigationEffectsService', () => {
     service = TestBed.inject(ShellNavigationEffectsService);
   });
 
+  it('resets shell and window scroll without navigation or additional haptics', () => {
+    const scrollSpy = vi.mocked(window.scrollTo);
+    const drawerContent = document.createElement('div');
+    drawerContent.scrollTop = 120;
+    drawerContent.scrollLeft = 30;
+    service.setShellScroller(drawerContent);
+
+    service.scrollToTop();
+
+    expect(drawerContent.scrollTop).toBe(0);
+    expect(drawerContent.scrollLeft).toBe(0);
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' });
+    expect(service.animationState()).toBeNull();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
   it('starts with null animation state', () => {
     expect(service.animationState()).toBeNull();
   });
