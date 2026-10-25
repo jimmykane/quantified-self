@@ -7,6 +7,7 @@ import { REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES } from '../shared/policy-con
 
 import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LoggerService } from '../services/logger.service';
+import { serviceSetupFromReturnUrl } from '../helpers/service-setup-redirect.helper';
 
 /**
  * Guard to ensure user has completed onboarding (terms + subscription).
@@ -24,6 +25,9 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
     };
 
     const url = '/' + segments.map(segment => segment.path).join('/');
+    const serviceSetup = url === '/services'
+        ? serviceSetupFromReturnUrl(router.getCurrentNavigation()?.extractedUrl?.toString() ?? url)
+        : null;
 
     return combineLatest([
         authService.authState$,
@@ -61,9 +65,10 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 && profileReadState.uid === firebaseUser.uid
                 && isActionableProfileReadState(profileReadState);
             if (hasActionableProfileFailure) {
-                authService.redirectUrl = url;
+                const returnUrl = serviceSetup?.returnUrl ?? url;
+                authService.redirectUrl = returnUrl;
                 return router.createUrlTree(['/login'], {
-                    queryParams: { returnUrl: url },
+                    queryParams: { returnUrl },
                 });
             }
 
@@ -106,7 +111,7 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 logger.log(`[OnboardingGuard] Redirecting from /${path} to /onboarding because onboarding is NOT completed.`);
                 if (url === '/services') {
                     return router.createUrlTree(['/onboarding'], {
-                        queryParams: { returnUrl: '/services' },
+                        queryParams: { returnUrl: serviceSetup?.returnUrl ?? '/services' },
                     });
                 }
                 return router.createUrlTree(['/onboarding']);

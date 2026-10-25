@@ -631,6 +631,28 @@ describe('OnboardingComponent', () => {
         },
     );
 
+    it.each([false, true])('keeps the Wahoo guide destination after required onboarding (previously complete: %s)', async onboardingCompleted => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/services?serviceName=Wahoo%20API' });
+        const returnFixture = TestBed.createComponent(OnboardingComponent);
+        const returningComponent = returnFixture.componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted } as any;
+        returnFixture.detectChanges();
+        await returnFixture.whenStable();
+        if (!onboardingCompleted) {
+            await returningComponent.onTermsSubmit();
+            expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            for (const field of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+                returningComponent.termsFormGroup.get(field)!.setValue(true);
+            }
+            await returningComponent.onTermsSubmit();
+        }
+        await returningComponent.finishOnboarding();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: 'Wahoo API' } });
+        expect(returningComponent.completionLabel).toBe('Connections');
+        expect(mockDialog.open).not.toHaveBeenCalled();
+    });
+
     it.each([false, true])('returns to the same MCP request after setup (previously complete: %s)', async (onboardingCompleted) => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id: 'request-1' });
         const returnFixture = TestBed.createComponent(OnboardingComponent);

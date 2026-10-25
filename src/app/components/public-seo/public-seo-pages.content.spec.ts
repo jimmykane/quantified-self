@@ -10,6 +10,21 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('keeps Wahoo-to-Suunto access, setup and search offers consistent', () => {
+    const page = PUBLIC_SEO_PAGES.syncWahooToSuunto;
+    expect(page.actions[0]).toMatchObject({ label: 'Get Started', routerLink: '/services', variant: 'flat' });
+    expect(page.closingActions[0]).toMatchObject({ label: 'Get Started', routerLink: '/services', variant: 'flat' });
+    expect(page.accessNote).toContain('activity sync require Pro');
+    const entities = PUBLIC_SEO_ROUTE_DATA.syncWahooToSuunto.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const application = entities.find(entity => entity['@type'] === 'SoftwareApplication');
+    expect(application?.['offers']).toMatchObject({ description: page.freeOfferDescription });
+    expect(page.freeOfferDescription).toContain('activity sync require Pro');
+    const history = page.sections.find(section => section.eyebrow === 'Past activities')!;
+    expect(history.items[1].copy).toContain('Under Suunto in Connections');
+    expect(history.items[1].copy).toContain('Wahoo API in Activity sources');
+    expect(history.items[1].copy).toContain('Preview sends nothing');
+    expect(history.items[2].copy).toContain('do not mean Delivered');
+  });
   it('keeps Garmin-to-Wahoo pricing and setup actions explicit in page and search metadata', () => {
     const page = PUBLIC_SEO_PAGES.syncGarminToWahoo;
     expect(page.actions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
@@ -414,9 +429,9 @@ describe('public-seo-pages.content', () => {
     expect(garminGuideCopy).toContain('Garmin does not need to remain connected');
     expect(garminGuideCopy).not.toContain('Sync past activities');
 
-    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('How to sync Wahoo activities to Suunto automatically');
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('Sync Wahoo activities to Suunto');
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.description).toContain('Wahoo FIT activities');
-    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(4);
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(5);
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.faqItems.some(item => item.question === 'Will activities sent to Wahoo come back as Wahoo imports?')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.importActivitiesToSuunto.h1).toBe('How to import activities to Suunto');

@@ -19,6 +19,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { membershipPriceIdFromReturnUrl } from '../../helpers/membership-selection.helper';
+import { serviceSetupFromReturnUrl } from '../../helpers/service-setup-redirect.helper';
 import { of } from 'rxjs';
 
 @Component({
@@ -63,10 +64,12 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
         const params = this.completionQueryParams();
         const returnUrl = params.get('returnUrl');
         const priceId = membershipPriceIdFromReturnUrl(returnUrl);
+        const serviceSetup = serviceSetupFromReturnUrl(returnUrl);
         const requestId = params.get('request_id') || '';
         // Keep destinations explicit; never accept an external/client OAuth callback here.
         const path = priceId ? '/subscriptions'
-            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions' || returnUrl === '/services'
+            : serviceSetup ? '/services'
+            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions'
                 ? returnUrl
                 : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
                     ? '/mcp/authorize' : '/dashboard';
@@ -74,7 +77,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             : path === '/subscriptions' ? 'Subscriptions'
                 : path === '/services' ? 'Connections'
                     : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
-        return { path, label, priceId, requestId };
+        return { path, label, priceId, requestId, serviceName: serviceSetup?.serviceName ?? null };
     });
 
     get completionPath(): string { return this.completionTarget().path; }
@@ -297,6 +300,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
         }
         if (target.path === '/mcp/authorize') {
             return this.router.navigate([target.path], { queryParams: { request_id: target.requestId } });
+        }
+        if (target.serviceName) {
+            return this.router.navigate(['/services'], { queryParams: { serviceName: target.serviceName } });
         }
         return this.router.navigate([target.path]);
     }

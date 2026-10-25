@@ -401,7 +401,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-24');
+    // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-10-09');
