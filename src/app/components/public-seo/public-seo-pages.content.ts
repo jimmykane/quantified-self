@@ -7,6 +7,7 @@ import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
+import { WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -19,6 +20,7 @@ export interface PublicSeoAction {
   routerLink: string;
   icon?: string;
   fragment?: string;
+  queryParams?: Readonly<Record<string, string>>;
   variant: 'flat' | 'stroked';
 }
 
@@ -1484,7 +1486,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     freeOfferDescription: 'Starter includes manual uploads and analysis in Quantified Self. Wahoo-to-Suunto connections and activity sync require Pro.',
     chips: ['Wahoo', 'Suunto', 'FIT activities', 'Pro'],
     actions: [
-      routeAction('Get Started', '/services', 'flat', 'arrow_forward'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: WAHOO_SETUP_QUERY_PARAMS },
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
@@ -1584,7 +1586,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingTitle: 'Ready to bring your Wahoo workouts into Suunto?',
     closingCopy: 'Get started in Connections, review Pro pricing and terms, then choose automatic sync or a reviewed one-time send. Opening setup does not connect an account or send activities for you.',
     closingActions: [
-      routeAction('Get Started', '/services', 'flat', 'arrow_forward'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: WAHOO_SETUP_QUERY_PARAMS },
       routeAction('View Pricing', '/pricing'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
     ],

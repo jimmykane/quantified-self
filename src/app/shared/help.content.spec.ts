@@ -2342,6 +2342,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('**Send past activities** under **Suunto**');
+    expect(serviceConnectionsSection?.content).toContain('keeps Wahoo selected through sign-in and required onboarding');
     expect(serviceConnectionsSection?.content).toContain('Preview sends nothing; review delivery in **Recent sends**');
     expect(serviceConnectionsSection?.content).toContain('[import activities to Suunto guide](/guides/import-activities-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[import activities to Wahoo guide](/guides/import-activities-to-wahoo)');

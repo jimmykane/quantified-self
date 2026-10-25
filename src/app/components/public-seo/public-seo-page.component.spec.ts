@@ -10,6 +10,7 @@ import { PUBLIC_SEO_PAGES, PublicSeoPage } from './public-seo-pages.content';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 describe('PublicSeoPageComponent', () => {
   let routeStub: { snapshot: { data: { publicSeoPage: PublicSeoPage } } };
@@ -124,7 +125,10 @@ describe('PublicSeoPageComponent', () => {
     expect(root.querySelectorAll('.how-to-list li')).toHaveLength(5);
     const actions = Array.from(root.querySelectorAll<HTMLAnchorElement>('.action-row a'));
     const setupLinks = actions.filter(link => link.textContent?.includes('Get Started'));
-    expect(setupLinks.map(link => link.getAttribute('href'))).toEqual(['/services', '/services']);
+    expect(setupLinks.map(link => link.getAttribute('href'))).toEqual([
+      `/services?serviceName=${encodeURIComponent(ServiceNames.WahooAPI)}`,
+      `/services?serviceName=${encodeURIComponent(ServiceNames.WahooAPI)}`,
+    ]);
     expect(root.querySelector('a[href="/help#service-connections"]')).toBeTruthy();
     expect(root.querySelector('a[href="/pricing"]')).toBeTruthy();
     expect(selection).not.toHaveBeenCalled();
