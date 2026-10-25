@@ -406,6 +406,9 @@ describe('help.content', () => {
     expect(copy).toContain('fictional sample data');
     expect(copy).toContain('nothing is saved');
     expect(copy).toContain('Provider connections and history imports require Pro');
+    expect(copy).toContain("homepage's **Get Started** actions");
+    expect(copy).toContain('pricing and eligible trial offers in the membership section');
+    expect(copy).toContain('Opening pricing does not start checkout or connect a provider');
     expect(copy).toContain('jump links below its introduction');
     expect(copy).toContain('every feature section visible');
     expect(copy).not.toContain('dropdown');
@@ -2231,6 +2234,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('partial cleanup remains visible as pending');
     expect(serviceConnectionsSection?.content).toContain('an automated subscription check disconnects');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
+    expect(serviceConnectionsSection?.content).toContain('provider tabs keep their full labels');
+    expect(serviceConnectionsSection?.content).toContain('Both open Membership to review the selected price and current terms');
+    expect(serviceConnectionsSection?.content).toContain('without starting checkout or connecting a provider automatically');
+    expect(serviceConnectionsSection?.content).toContain('Existing disconnect, reconnect and recovery controls remain available');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');
     expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
     expect(serviceConnectionsSection?.content).toContain('unchanged overview');
@@ -2282,6 +2289,9 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
     expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
     expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
+    expect(plansSection?.content).toContain('**Monthly** or **Yearly**');
+    expect(plansSection?.content).toContain('**Compare all features**');
+    expect(plansSection?.content).toContain('Yearly prices show the full yearly total');
     expect(plansSection?.content).toContain('keeps that plan and billing option through sign-in and account setup');
     expect(plansSection?.content).toContain('**Your selection**');
     expect(plansSection?.content).toContain('Opening the page never starts checkout automatically');
@@ -2331,6 +2341,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('**Send past activities** under **Suunto**');
+    expect(serviceConnectionsSection?.content).toContain('keeps Wahoo selected through sign-in and required onboarding');
+    expect(serviceConnectionsSection?.content).toContain('Preview sends nothing; review delivery in **Recent sends**');
     expect(serviceConnectionsSection?.content).toContain('[import activities to Suunto guide](/guides/import-activities-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[import activities to Wahoo guide](/guides/import-activities-to-wahoo)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');

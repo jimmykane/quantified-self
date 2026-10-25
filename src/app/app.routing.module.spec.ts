@@ -663,7 +663,7 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
-        h1: 'How to sync Wahoo activities to Suunto automatically',
+        h1: 'Sync Wahoo activities to Suunto',
       },
       {
         path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,

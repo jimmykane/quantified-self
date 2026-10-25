@@ -1,3 +1,4 @@
+import { User } from '@sports-alliance/sports-lib';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -139,6 +140,53 @@ describe('PricingComponent', () => {
         expect(haptics.error).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])('puts Pro and its billing choices first by default (onboarding: %s)', async isOnboarding => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map(role => ({
+            id: `product_${role}`, active: true, name: role, description: role, role, images: [], metadata: { role },
+            prices: [{ id: `price_${role}_monthly`, active: true, currency: 'eur', unit_amount: 299,
+                description: 'Monthly', type: 'recurring', interval: 'month', interval_count: 1,
+                trial_period_days: null, recurring: { interval: 'month' } }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+        const checkout = vi.spyOn(paymentService, 'appendCheckoutSession');
+        component.isOnboarding = isOnboarding;
+        await component.ngOnInit();
+        fixture.detectChanges();
+        expect(Array.from(fixture.nativeElement.querySelectorAll('.plan-title') as NodeListOf<HTMLElement>)
+            .map(heading => heading.textContent?.trim())).toEqual(['Pro', 'Basic', 'Starter']);
+        const firstCard = fixture.nativeElement.querySelector('.product-card') as HTMLElement;
+        const billing = firstCard.querySelector('.plan-billing')!;
+        const features = firstCard.querySelector('.features-list')!;
+        expect(billing.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(billing.querySelector('button')?.textContent).toContain('Choose Monthly');
+        expect(features.textContent).toContain('Unlimited saved routes');
+        expect(products.map(product => product.role)).toEqual(['basic', 'pro']);
+        expect(checkout).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('preserves an explicit Basic selection ahead of the default Pro recommendation', async () => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map(role => ({
+            id: `product_${role}`, active: true, name: role, description: role, role, images: [], metadata: { role },
+            prices: [{ id: `price_${role}_monthly`, active: true, currency: 'eur', unit_amount: 299,
+                description: 'Monthly', type: 'recurring', interval: 'month', interval_count: 1,
+                trial_period_days: null, recurring: { interval: 'month' } }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+        routeParams.next(convertToParamMap({ priceId: 'price_basic_monthly' }));
+        await component.ngOnInit();
+        fixture.detectChanges();
+        const headings = Array.from(fixture.nativeElement.querySelectorAll('.plan-title') as NodeListOf<HTMLElement>);
+        expect(headings.map(heading => heading.textContent?.trim())).toEqual(['Basic', 'Pro', 'Starter']);
+        expect(component.selectedPriceId()).toBe('price_basic_monthly');
+        expect(headings[0].closest('mat-card')?.textContent).toContain('Your selection');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
     it.each([
         { priceId: 'price_pro_yearly' },
         { returnUrl: '/subscriptions?priceId=price_pro_yearly' },
@@ -165,6 +213,11 @@ describe('PricingComponent', () => {
         const firstPrice = cards[0].querySelector('.plan-price-section');
         expect(cards[0].textContent).toContain('Pro');
         expect(firstPrice.textContent).toContain('Your selection');
+        const selectionNote = firstPrice.querySelector('.selected-price-note')!;
+        const priceHeading = firstPrice.querySelector('.price')!;
+        const action = firstPrice.querySelector('button')!;
+        expect(selectionNote.compareDocumentPosition(priceHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(priceHeading.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(firstPrice.textContent).toContain('Choose Yearly');
         expect(fixture.nativeElement.querySelectorAll('.selected-price-note')).toHaveLength(1);
         expect(component.selectedPriceId()).toBe('price_pro_yearly');
@@ -948,6 +1001,20 @@ describe('PricingComponent', () => {
         expect(setFreeTierSpy).not.toHaveBeenCalled();
         expect(selectFreeTierSpy).not.toHaveBeenCalled();
         expect(component.isLoading).toBe(false);
+    });
+
+    it.each(['acceptedPrivacyPolicy', 'acceptedDataPolicy', 'acceptedTos'] as const)('blocks checkout and free completion when the supplied onboarding profile lacks %s', async missingPolicy => {
+        await fixture.whenStable();
+        component.isOnboarding = true;
+        component.onboardingUser = Object.assign(new User('test-uid'), acceptedPoliciesUser, { [missingPolicy]: false });
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        const free = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier');
+        await component.subscribe({ id: 'price_test', currency: 'eur', unit_amount: 299 });
+        await component.selectFreeTier();
+        expect(checkout).not.toHaveBeenCalled();
+        expect(free).not.toHaveBeenCalled();
+        expect(component.isLoading).toBe(false);
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should stay on onboarding and skip free-tier selection when required legal policies are missing in onboarding mode', async () => {

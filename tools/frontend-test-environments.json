@@ -149,6 +149,7 @@
     "src/app/helpers/route-preview-map.helper.spec.ts",
     "src/app/helpers/route-provenance.helper.spec.ts",
     "src/app/helpers/route-waypoint-presentation.helper.spec.ts",
+    "src/app/helpers/service-setup-redirect.helper.spec.ts",
     "src/app/helpers/sports-lib-metric-semantics.spec.ts",
     "src/app/helpers/stat-label.helper.spec.ts",
     "src/app/helpers/stats-diff.helper.spec.ts",
@@ -207,6 +208,7 @@
   "dom": [
     "src/app/firebase/firestore-http-response-guard.spec.ts",
     "src/app/helpers/assistant-message-format.helper.spec.ts",
+    "src/app/helpers/dashboard-chart-layout.helper.spec.ts",
     "src/app/helpers/dashboard-echarts-style.helper.spec.ts",
     "src/app/helpers/dashboard-sleep-chart.helper.spec.ts",
     "src/app/helpers/echarts-horizontal-touch-gesture.controller.spec.ts",

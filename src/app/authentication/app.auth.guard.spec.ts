@@ -113,6 +113,18 @@ describe('authGuard', () => {
         });
     });
 
+    it('preserves the Wahoo setup tab through sign-in', async () => {
+        vi.mocked(router.getCurrentNavigation).mockReturnValue({
+            extractedUrl: { toString: () => '/services?serviceName=Wahoo%20API' },
+        } as any);
+        const result = await runGuard(null, 'services');
+        expect(result).not.toBe(true);
+        expect(authServiceStub.redirectUrl).toBe('/services?serviceName=Wahoo%20API');
+        expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
+            queryParams: { returnUrl: '/services?serviceName=Wahoo%20API' },
+        });
+    });
+
     it('should treat Firebase sign-out as authoritative over a replayed app user', async () => {
         authServiceStub.authState$ = of(null);
         authServiceStub.user$ = of({ uid: 'stale-user' });

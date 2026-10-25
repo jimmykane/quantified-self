@@ -115,10 +115,9 @@ describe('PublicPricingComponent', () => {
             fixture.nativeElement.querySelectorAll('h2.plan-title') as NodeListOf<HTMLHeadingElement>,
         ).map((heading) => heading.textContent?.trim());
         const planBadge = fixture.nativeElement.querySelector('.plan-badge') as HTMLElement;
-        expect(planHeadings).toEqual(['Starter', 'Basic', 'Pro']);
+        expect(planHeadings).toEqual(['Pro', 'Basic', 'Starter']);
         expect(planBadge.textContent?.trim()).toBe('Recommended');
-        expect(planBadge.parentElement?.classList.contains('product-card-shell')).toBe(true);
-        expect(planBadge.closest('mat-card')).toBeNull();
+        expect(planBadge.closest('mat-card')?.getAttribute('data-plan')).toBe('pro');
     });
 
     it('keeps the loading state independent from membership verification', () => {
@@ -135,52 +134,113 @@ describe('PublicPricingComponent', () => {
         expect(loadingState.attributes['aria-live']).toBe('polite');
     });
 
-    it('preserves each paid price through login while Starter keeps its free onboarding destination', () => {
+    it('keeps monthly prices and Starter destinations through login, then selects the exact yearly price', () => {
         fixture.detectChanges();
         const buttons = fixture.debugElement.queryAll(By.css('button[data-plan-role]'));
-
-        expect(buttons).toHaveLength(4);
-        expect(buttons.map((button) => button.attributes['aria-label'])).toEqual([
-            'Starter: Start Free',
-            'Basic: Choose Monthly',
-            'Basic: Choose Yearly',
-            'Pro: Choose Monthly',
+        expect(buttons.map(button => button.attributes['aria-label'])).toEqual([
+            'Pro: Get Started, Choose Monthly', 'Basic: Choose Basic, Choose Monthly', 'Starter: Start Free',
         ]);
-        for (const button of buttons) {
-            button.triggerEventHandler('click');
-        }
-
-        expect(router.navigate).toHaveBeenCalledTimes(4);
-        for (const [index, returnUrl] of ['/dashboard', '/subscriptions?priceId=price_basic_monthly', '/subscriptions?priceId=price_basic_yearly', '/subscriptions?priceId=price_pro_monthly'].entries()) {
+        for (const button of buttons) button.triggerEventHandler('click');
+        for (const [index, returnUrl] of ['/subscriptions?priceId=price_pro_monthly', '/subscriptions?priceId=price_basic_monthly', '/dashboard'].entries()) {
             expect(router.navigate).toHaveBeenNthCalledWith(index + 1, ['/login'], { queryParams: { returnUrl } });
         }
-        // The shell owns feedback after a successful route change.
+        // Route feedback belongs to the shell, not to the pricing action.
         expect(haptics.selection).not.toHaveBeenCalled();
+
+        const yearlyToggle = fixture.nativeElement.querySelector('mat-button-toggle[value="year"] button') as HTMLButtonElement;
+        yearlyToggle.click();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[data-price-id="price_basic_monthly"]')).toBeNull();
+        const yearlyButton = fixture.nativeElement.querySelector('button[data-price-id="price_basic_yearly"]') as HTMLButtonElement;
+        expect(yearlyButton.closest('.plan-price-section')?.textContent).toContain('$48');
+        expect(yearlyButton.closest('.plan-price-section')?.textContent).toContain('/ year');
+        yearlyButton.click();
+        expect(router.navigate).toHaveBeenLastCalledWith(['/login'], { queryParams: { returnUrl: '/subscriptions?priceId=price_basic_yearly' } });
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        fixture.componentInstance.changeBilling('year');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
     });
 
-    it('preserves all catalog features and original controls with billing above the features', () => {
+    it('switches Pro between monthly and yearly totals without reloading products or starting checkout', () => {
+        const proMonthly = PAID_PRODUCTS[1].prices![0];
+        paymentService.getProducts.mockReturnValue(of([{
+            ...PAID_PRODUCTS[1],
+            prices: [proMonthly, { ...proMonthly, id: 'price_pro_yearly', unit_amount: 10000,
+                interval: 'year', recurring: { interval: 'year', interval_count: 1 }, metadata: { trial_days: '30' } }],
+        }]));
         fixture.detectChanges();
-        const cards = fixture.nativeElement.querySelectorAll('mat-card') as NodeListOf<HTMLElement>;
-        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
-
-        for (const [index, card] of Array.from(cards).entries()) {
-            const plan = catalog.plans[index];
-            const billing = card.querySelector('.plan-billing')!;
-            const features = card.querySelector('.features-list')!;
-            expect(billing.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-            expect(Array.from(features.querySelectorAll('li')).map(row => row.textContent?.replace(/\s+/g, ' ').trim()))
-                .toEqual(plan.features.map(feature => `${feature.icon} ${feature.label}`));
-            expect(Array.from(billing.querySelectorAll('button')).map(button => button.textContent?.trim()))
-                .toEqual(plan.prices.map(price => price.ctaLabel));
-            for (const button of billing.querySelectorAll('button')) {
-                expect(button.querySelector('.price')).toBeNull();
-                if (plan.role !== 'free') {
-                    expect(button.classList.contains('subscribe-btn')).toBe(true);
-                    expect(button.classList.contains('qs-mat-primary')).toBe(true);
-                }
-            }
-        }
         expect(haptics.selection).not.toHaveBeenCalled();
+        const yearly = fixture.nativeElement.querySelector('mat-button-toggle[value="year"] button') as HTMLButtonElement;
+        yearly.click();
+        fixture.detectChanges();
+        const pro = fixture.nativeElement.querySelector('[data-plan="pro"]') as HTMLElement;
+        expect(pro.querySelector('.price')?.textContent).toContain('€100');
+        expect(pro.querySelector('.price')?.textContent).toContain('/ year');
+        expect(pro.textContent).toContain('Save 17% vs monthly');
+        expect(pro.textContent).toContain('30-day free trial for eligible new members');
+        expect(pro.querySelector('button')?.getAttribute('data-price-id')).toBe('price_pro_yearly');
+        expect(router.navigate).not.toHaveBeenCalled();
+        expect(paymentService.getProducts).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        pro.querySelector('button')!.click();
+        expect(router.navigate).toHaveBeenLastCalledWith(['/login'], { queryParams: { returnUrl: '/subscriptions?priceId=price_pro_yearly' } });
+        const monthly = fixture.nativeElement.querySelector('mat-button-toggle[value="month"] button') as HTMLButtonElement;
+        monthly.click();
+        fixture.detectChanges();
+        expect(pro.querySelector('.price')?.textContent).toContain('/ month');
+        expect(pro.querySelector('button')?.getAttribute('data-price-id')).toBe('price_pro_monthly');
+        expect(pro.querySelector('.yearly-savings-label')).toBeNull();
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('retains the actual available price when a plan lacks the selected billing period', () => {
+        fixture.detectChanges();
+        fixture.componentInstance.changeBilling('year');
+        fixture.detectChanges();
+        const pro = fixture.nativeElement.querySelector('[data-plan="pro"]') as HTMLElement;
+        expect(pro.textContent).toContain('Yearly billing is unavailable for this plan');
+        expect(pro.querySelector('.interval')?.textContent).toContain('/ month');
+        expect(pro.querySelector('button')?.getAttribute('data-price-id')).toBe('price_pro_monthly');
+    });
+
+    it('shows short highlights after billing and preserves every feature in the accessible disclosure', () => {
+        fixture.detectChanges();
+        const root = fixture.nativeElement as HTMLElement;
+        const cards = root.querySelectorAll('mat-card');
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+        for (const card of cards) {
+            const billing = card.querySelector('.plan-billing')!;
+            const highlights = card.querySelector('.highlights')!;
+            expect(billing.compareDocumentPosition(highlights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(highlights.querySelectorAll('li').length).toBeLessThanOrEqual(4);
+            expect(billing.querySelector('button .price')).toBeNull();
+        }
+        const details = root.querySelector<HTMLElement>('#all-plan-features')!;
+        const toggle = root.querySelector<HTMLButtonElement>('.feature-disclosure')!;
+        expect(details.hidden).toBe(true);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        toggle.click();
+        fixture.detectChanges();
+        expect(details.hidden).toBe(false);
+        expect(toggle.getAttribute('aria-controls')).toBe(details.id);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        for (const [index, section] of Array.from(details.querySelectorAll('section')).entries()) {
+            expect(Array.from(section.querySelectorAll('li')).map(item => item.textContent?.trim()))
+                .toEqual(catalog.plans[index].features.map(feature => feature.label));
+        }
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        toggle.click();
+        fixture.detectChanges();
+        expect(details.hidden).toBe(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('omits the selector when only one paid billing period exists', () => {
+        paymentService.getProducts.mockReturnValue(of([PAID_PRODUCTS[1]]));
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('mat-button-toggle-group')).toBeNull();
+        expect(fixture.nativeElement.querySelector('button[data-price-id="price_pro_monthly"]')).not.toBeNull();
     });
 
     it('shows shared and paid feature explanations below the existing cards with feature and help links', () => {
@@ -305,6 +365,10 @@ describe('Public pricing navigation feedback', () => {
 
     it.each(navigationActions)('emits one shell-owned haptic when $name navigation succeeds', async action => {
         expect(haptics.selection).not.toHaveBeenCalled();
+        if (action.name === 'price_basic_yearly') {
+            (harness.routeDebugElement!.componentInstance as PublicPricingComponent).billing.set('year');
+            harness.detectChanges();
+        }
         harness.routeNativeElement!.querySelector<HTMLElement>(action.selector)!.click();
         await harness.fixture.whenStable();
 
@@ -355,10 +419,22 @@ describe('buildPublicPricingCatalog', () => {
         const basicPlan = catalog.plans.find((plan) => plan.id === 'membership_basic');
         const yearlyPrice = basicPlan?.prices.find((price) => price.id === 'price_basic_yearly');
 
-        expect(catalog.plans.map((plan) => plan.role)).toEqual(['free', 'basic', 'pro']);
+        expect(catalog.plans.map((plan) => plan.role)).toEqual(['pro', 'basic', 'free']);
         expect(yearlyPrice?.yearlySavingsLabel).toBe('Save 20% vs monthly');
         expect(catalog.plans.find((plan) => plan.id === 'invalid')).toBeUndefined();
         expect(catalog.plans.find((plan) => plan.id === 'inactive')).toBeUndefined();
+    });
+
+    it('preserves currency variants and nonstandard recurring prices under both billing choices', () => {
+        const monthly = PAID_PRODUCTS[0].prices![0];
+        const quarterly = { ...monthly, id: 'quarterly', interval_count: 3, recurring: { interval: 'month' as const, interval_count: 3 } };
+        const gbp = { ...monthly, id: 'gbp_monthly', currency: 'gbp' };
+        const catalog = buildPublicPricingCatalog([{ ...PAID_PRODUCTS[0], prices: [...PAID_PRODUCTS[0].prices!, gbp, quarterly] }]);
+        const basic = catalog.plans.find(plan => plan.role === 'basic')!;
+        expect(basic.billingChoices.month.prices.map(price => price.id)).toEqual(['price_basic_monthly', 'gbp_monthly', 'quarterly']);
+        expect(basic.billingChoices.year.prices.map(price => price.id)).toEqual(['price_basic_yearly', 'quarterly']);
+        const reachable = new Set([...basic.billingChoices.month.prices, ...basic.billingChoices.year.prices].map(price => price.id));
+        expect([...reachable].sort()).toEqual(basic.prices.map(price => price.id).sort());
     });
 
     it('includes permission-scoped MCP access in every plan', () => {
@@ -422,7 +498,7 @@ describe('buildPublicPricingCatalog', () => {
             metadata: { role: 'basic' },
         }]);
 
-        expect(catalog.plans.map((plan) => plan.role)).toEqual(['free', 'basic']);
+        expect(catalog.plans.map((plan) => plan.role)).toEqual(['basic', 'free']);
         expect(catalog.paidPlansUnavailable).toBe(false);
     });
 

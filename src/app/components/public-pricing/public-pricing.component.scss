@@ -1,27 +1,42 @@
-:host {
-  display: block;
-}
+:host { display: block; min-width: 0; }
+.pricing-container { box-sizing: border-box; width: 100%; max-width: 1160px; margin: auto; padding: 32px 24px; }
+.pricing-heading { text-align: center; margin-bottom: 24px; }
+.pricing-heading h1 { margin: 0 0 10px; font: var(--mat-sys-headline-large); font-weight: 300; }
+.pricing-heading p { margin: 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.billing-control { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 24px; }
+.products-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.product-card { padding: 24px; min-width: 0; }
+.pro-card { border-color: var(--mat-sys-primary); }
+mat-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; }
+mat-card-content { padding: 0; }
+mat-card-content:last-child { padding-bottom: 0; }
+.plan-title { font: var(--mat-sys-headline-medium); font-weight: 650; margin: 0; }
+.plan-badge { font: var(--mat-sys-label-small); color: var(--mat-sys-primary); }
+.plan-subtitle { min-height: 60px; margin: 10px 0 14px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.price { margin: 0 0 12px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.price-amount { font: var(--mat-sys-display-small); font-weight: 650; }
+.interval { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.billing-note { margin: 4px 0 12px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.trial-offer-copy { min-height: 36px; margin: 0 0 16px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.plan-cta { width: 100%; }
+.highlights { display: grid; list-style: none; gap: 12px; padding: 0; margin: 24px 0 0; font: var(--mat-sys-body-medium); }
+.highlights li { display: flex; gap: 10px; align-items: flex-start; }
+.highlights mat-icon { flex: 0 0 auto; width: 20px; height: 20px; font-size: 20px; color: var(--mat-sys-primary); }
+.included-note { margin: 28px auto 8px; max-width: 860px; text-align: center; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.feature-disclosure { display: flex; margin: 4px auto; }
+.provider-note { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); text-align: center; margin: 10px 0 0; }
+.all-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding-block: 24px; font: var(--mat-sys-body-medium); }
+.all-features[hidden] { display: none; }
+.all-features h2 { font: var(--mat-sys-title-large); }
+.all-features ul { padding-left: 18px; }
+.all-features li { margin-bottom: 8px; }
 
-.catalog-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 640px;
-  margin: 0 0 24px;
-  color: var(--mat-sys-on-surface-variant);
-
-  mat-icon {
-    flex: 0 0 auto;
-  }
-}
-
-.pricing-container.public-pricing {
-  .loading-state { box-sizing: border-box; }
-  .products-grid { align-items: start; }
-  .product-card-shell { height: 100%; }
-  .products-grid .product-card mat-card-content { grid-template-rows: auto minmax(0, 1fr); }
-  .plan-billing { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
-  .provider-note { max-width: 760px; margin: 20px 0 0; text-align: center; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.yearly-savings-label { margin: 0 0 12px; color: var(--mat-sys-primary); font: var(--mat-sys-label-medium); }
+.plan-price-section + .plan-price-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.catalog-status { display: flex; align-items: center; gap: 8px; margin-block: 24px; font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
+.catalog-status mat-icon { flex: 0 0 auto; }
+.loading-state { display: grid; justify-items: center; gap: 16px; padding-block: 60px; }
+.public-pricing {
   .plan-details { width: 100%; max-width: 1120px; margin-top: 36px; }
   .plan-details h2, .plan-faq > h2 { font: var(--mat-sys-headline-small); font-weight: 400; text-align: center; margin: 0 0 10px; }
   .section-intro { max-width: 720px; margin: 0 auto 24px; text-align: center; font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
@@ -32,7 +47,7 @@
   .plan-capabilities h3 { font: var(--mat-sys-title-medium); font-weight: 400; margin: 0 0 6px; }
   .plan-capabilities p { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin: 0; }
   .plan-capabilities a { margin: 4px 0 0 -12px; }
-  .plan-faq { width: 100%; max-width: 820px; margin-top: 36px; }
+  .plan-faq { width: 100%; max-width: 820px; margin: 36px auto 0; }
   .plan-faq article { border-bottom: 1px solid var(--mat-sys-outline-variant); }
   .plan-faq h3 { margin: 0; }
   .plan-faq button { width: 100%; min-height: 48px; height: auto; padding: 12px 0; text-align: left; white-space: normal; display: block; }
@@ -41,18 +56,22 @@
   .plan-faq article p, .membership-help { font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); margin: 0 0 16px; }
   .membership-help { margin-top: 24px; }
 }
-@media (max-width: 800px) {
-  .pricing-container.public-pricing {
-    .plan-capabilities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  }
+@media (max-width: 959px) {
+  .pricing-container { padding: 24px 16px; }
+  .pricing-heading h1 { font: var(--mat-sys-headline-medium); font-weight: 400; margin-bottom: 8px; }
+  .pricing-heading p { max-width: 340px; margin-inline: auto; }
+  .pricing-heading { margin-bottom: 20px; }
+  .billing-control { margin: 0 0 20px; }
+  .products-grid { grid-template-columns: minmax(0, 560px); justify-content: center; gap: 16px; }
+  .product-card { padding: 20px; }
+  .plan-subtitle { min-height: 0; margin: 8px 0 14px; }
+  .trial-offer-copy { min-height: 0; margin-bottom: 14px; }
+  .highlights { gap: 10px; margin-top: 20px; }
+  .included-note { margin-top: 20px; }
+  .all-features { grid-template-columns: minmax(0, 1fr); }
+  .public-pricing .plan-capabilities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 480px) {
-  .pricing-container.public-pricing {
-    .plan-capabilities { grid-template-columns: 1fr; gap: 18px; }
-    .plan-details, .plan-faq { margin-top: 28px; }
-  }
-}
-
-@container pricing-card (max-width: 349.98px) {
-  .pricing-container.public-pricing .plan-billing { grid-template-columns: minmax(0, 1fr); }
+  .public-pricing .plan-capabilities { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .public-pricing .plan-details, .public-pricing .plan-faq { margin-top: 28px; }
 }

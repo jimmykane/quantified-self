@@ -1,5 +1,34 @@
 import type { StripeProduct } from '../services/app.payment.service';
 
+export interface ProMembershipOffer {
+  priceId: string | null;
+  trialDays: number | null;
+}
+
+/** Display-only offer. Checkout still rechecks the catalog and subscription history. */
+export function resolveProMembershipOffer(
+  products: StripeProduct[],
+  currentRole: string | null | undefined,
+  hasPaidHistory: boolean | null,
+): ProMembershipOffer {
+  const prices = products.filter(product => product.active && (product.metadata?.role ?? product.role) === 'pro')
+    .flatMap(product => product.prices ?? [])
+    .filter(price => price.active && price.type === 'recurring' && price.recurring
+      && typeof price.unit_amount === 'number' && price.unit_amount > 0 && membershipPriceId(price.id))
+    .sort((left, right) => Number(right.recurring.interval === 'month') - Number(left.recurring.interval === 'month'));
+  const trialDays = (value: unknown): number | null => {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    const days = Number(normalized);
+    return /^[1-9]\d*$/.test(normalized) && Number.isSafeInteger(days) ? days : null;
+  };
+  const eligible = hasPaidHistory === false && (!currentRole || currentRole === 'free');
+  const selected = (eligible ? prices.find(price => trialDays(price.metadata?.trial_days) !== null) : null) ?? prices[0];
+  return {
+    priceId: selected?.id ?? null,
+    trialDays: eligible && selected ? trialDays(selected.metadata?.trial_days) : null,
+  };
+}
+
 export function membershipPriceId(value: unknown): string | null {
   return typeof value === 'string' && /^price_[A-Za-z0-9_]{1,180}$/.test(value) ? value : null;
 }

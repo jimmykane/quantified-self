@@ -10,6 +10,7 @@
 @use 'styles/icons';
 @use 'styles/app-loader';
 @use 'styles/scrollbars';
+@use 'styles/dashboard-charts';
 
 /* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
 @import '@fontsource/inter/300.css';

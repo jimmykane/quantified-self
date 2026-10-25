@@ -912,6 +912,12 @@ deletion; recovery commands use the retained server-owned identity, never re-enr
 the exact account and explicit-disconnect epoch. Pausing a provider hides new Send actions, not existing status/removal controls. Neither a
 connected service nor a capability fixture grants readiness, scopes or user consent. No production setting selects the fake.
 
+### Contextual membership offers in Connections
+
+Non-Pro accounts can review provider benefits on a clean disconnected connection overview. The offer uses the existing Stripe catalog and owner subscription-history reads, once per account/role after selecting a provider; the free MCP tab does not initiate those billing reads. Only an active, positive recurring Pro price with configured trial metadata and confirmed eligible history can advertise a trial. Unknown reads fall back to Get Pro, and a supplied price only selects a Membership review option. It neither starts checkout nor grants provider access or sync consent. Wahoo copy stays limited to eligible FIT-backed Wahoo-recorded activities. Existing connected, loading, detailed, reconnect and pending-disconnect controls take precedence over the offer, including after Pro lapse. Material tab pagination preserves full labels and query selection on phones.
+
+Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Release is frontend-only after separate deployment approval; there is no Functions, Rules, index, cloud configuration or migration step. Reverting the frontend commit restores the prior prompt and selector.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:
@@ -1809,6 +1815,8 @@ Provider overview cards must name combined history imports consistently with the
 history dialog remains availability-aware and falls back to Sleep-only wording when the independent Health switch is off.
 
 Use `app-service-source-icon` and the shared presentation helpers. Imported activity surfaces use source attribution; connection and destination surfaces use destination branding. See [connected-provider attribution audit](connected-provider-attribution-audit.md).
+
+The Wahoo-to-Suunto public guide and Help distinguish Wahoo's opt-in **Activity sync settings → To Suunto** from **Send past activities** under the Suunto destination, which opens the recorded-activity sending workspace. Its Get Started action preserves the curated Wahoo tab through sign-in, profile recovery and required onboarding; only that explicit local query and plain Connections are accepted by the setup-return helper. Keep source labels, preview/confirmation steps, FIT and third-party import limits, Pro boundary, and delivery-status wording aligned with that workspace. This guidance and setup navigation leave provider scopes, consent, workers, queues, retries and monitoring unchanged.
 
 ## 10. Admin and operational coverage
 

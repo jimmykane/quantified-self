@@ -6,6 +6,7 @@ import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BehaviorSubject, of, Subject } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -98,6 +99,7 @@ describe('OnboardingComponent', () => {
             ],
             providers: [
                 { provide: AppUserService, useValue: mockUserService },
+                { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: routeStub },
@@ -118,6 +120,50 @@ describe('OnboardingComponent', () => {
         await fixture.whenStable();
 
         vi.clearAllMocks();
+    });
+
+    it.each(['paid', 'free'])('uses the just-saved onboarding consent for the %s choice while the auth profile is stale', async choice => {
+        const freshUser = { ...mockUser };
+        const staleAuthUser = { ...mockUser };
+        mockAuthService.user$ = of(staleAuthUser);
+        mockPaymentService.getProducts.mockReturnValue(of([{
+            id: 'prod_pro', name: 'Pro', role: 'pro', active: true, metadata: { role: 'pro' }, images: [],
+            prices: [{ id: 'price_pro_monthly', active: true, currency: 'eur', unit_amount: 299,
+                type: 'recurring', interval: 'month', interval_count: 1, recurring: { interval: 'month' } }],
+        }]));
+        mockPaymentService.appendCheckoutSession = vi.fn().mockResolvedValue(undefined);
+        mockAnalyticsService.logBeginCheckout = vi.fn();
+        mockAnalyticsService.logSelectFreeTier = vi.fn();
+        const localFixture = TestBed.createComponent(OnboardingComponent);
+        const local = localFixture.componentInstance;
+        local.user = freshUser as unknown as typeof local.user;
+        localFixture.detectChanges();
+        await localFixture.whenStable();
+        for (const name of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+            local.termsFormGroup.get(name)!.setValue(true);
+        }
+        await local.onTermsSubmit();
+        localFixture.detectChanges();
+        await localFixture.whenStable();
+        expect(local.stepper.selectedIndex).toBe(1);
+        expect(staleAuthUser.acceptedPrivacyPolicy).toBe(false);
+        expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        const selector = choice === 'paid' ? '.pro-card .subscribe-btn' : '.continue-free-button';
+        (localFixture.nativeElement.querySelector(selector) as HTMLButtonElement).click();
+        await localFixture.whenStable();
+        if (choice === 'paid') {
+            expect(mockPaymentService.appendCheckoutSession).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'price_pro_monthly' }), undefined, undefined, expect.any(Function),
+            );
+            expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        } else {
+            expect(mockUserService.setFreeTier).toHaveBeenCalledWith(freshUser);
+            await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']));
+        }
+        expect(mockLoggerService.error).not.toHaveBeenCalled();
+        expect(freshUser.acceptedTrackingPolicy).toBe(false);
+        expect(freshUser.acceptedMarketingPolicy).toBe(false);
     });
 
     it('should create', () => {
@@ -584,6 +630,28 @@ describe('OnboardingComponent', () => {
             expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
         },
     );
+
+    it.each([false, true])('keeps the Wahoo guide destination after required onboarding (previously complete: %s)', async onboardingCompleted => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/services?serviceName=Wahoo%20API' });
+        const returnFixture = TestBed.createComponent(OnboardingComponent);
+        const returningComponent = returnFixture.componentInstance;
+        returningComponent.user = { ...mockUser, onboardingCompleted } as any;
+        returnFixture.detectChanges();
+        await returnFixture.whenStable();
+        if (!onboardingCompleted) {
+            await returningComponent.onTermsSubmit();
+            expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            for (const field of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+                returningComponent.termsFormGroup.get(field)!.setValue(true);
+            }
+            await returningComponent.onTermsSubmit();
+        }
+        await returningComponent.finishOnboarding();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: 'Wahoo API' } });
+        expect(returningComponent.completionLabel).toBe('Connections');
+        expect(mockDialog.open).not.toHaveBeenCalled();
+    });
 
     it.each([false, true])('returns to the same MCP request after setup (previously complete: %s)', async (onboardingCompleted) => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id: 'request-1' });

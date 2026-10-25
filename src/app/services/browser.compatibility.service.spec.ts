@@ -46,6 +46,18 @@ describe('BrowserCompatibilityService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('allows layout observation only when the browser supplies ResizeObserver', () => {
+        const original = globalThis.ResizeObserver;
+        try {
+            Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: undefined });
+            expect(BrowserCompatibilityService.checkResizeObserverSupport()).toBe(false);
+            Object.defineProperty(globalThis, 'ResizeObserver', { value: class {} });
+            expect(BrowserCompatibilityService.checkResizeObserverSupport()).toBe(true);
+        } finally {
+            Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: original });
+        }
+    });
+
     it.each([false, true])('detects a complete fullscreen API and respects its policy flag (prefixed: %s)', legacy => {
         const documentRef = document.implementation.createHTMLDocument('Fullscreen support');
         const element = documentRef.createElement('section');

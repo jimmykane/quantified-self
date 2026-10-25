@@ -37,15 +37,6 @@ app-health-metric-series-chart, app-sleep-trend-chart { flex:1; min-height:120px
 .health-thumbnail-empty,.health-sleep-thumbnail { margin:auto; color:var(--mat-sys-on-surface-variant); font-size:12px; }
 @media(max-width:640px) { .health-tile-controls { flex-wrap:wrap; } .health-tile-window { flex:1; min-width:120px; } }
 
-/* Mobile dashboard rows grow with their labels; the page remains the scroll owner. */
-@media (max-width: 767px) {
-  :host(.health-dashboard-tile) { display:flex; flex-direction:column; flex:1 0 auto; height:auto; min-height:0; }
-  :host(.health-dashboard-tile) .health-tile { flex:1 0 auto; height:auto; min-height:0; }
-  :host(.health-dashboard-tile) app-health-metric-series-chart { flex:1 0 180px; min-height:180px; }
-  /* Sleep also needs room for its own stats and legend above the plotted data. */
-  :host(.health-dashboard-tile) app-sleep-trend-chart { flex:1 0 auto; height:auto; --sleep-trend-plot-min-height:220px; }
-}
-
 .health-preview { padding:0; gap:8px; }
 .health-preview-source { display:flex; flex-direction:column; gap:4px; font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }
 .health-preview-source strong { color:var(--mat-sys-on-surface); font:var(--mat-sys-label-large); }

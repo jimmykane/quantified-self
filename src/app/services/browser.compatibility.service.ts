@@ -6,6 +6,10 @@ import { AppWindowService } from './app.window.service';
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
+    public static checkResizeObserverSupport(): boolean {
+        return typeof ResizeObserver !== 'undefined';
+    }
+
     public static checkFullscreenSupport(element: HTMLElement | null | undefined): boolean {
         if (!element) return false;
         const host = element as HTMLElement & { webkitRequestFullscreen?: () => void };

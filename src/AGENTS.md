@@ -20,6 +20,8 @@ Frontend-only rules:
   exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - When changing public content or sitemap `lastmod` values, update and run `src/firebase-hosting.config.spec.ts` in
   the same change. Retain specific expected dates for each updated page.
+  For public SEO title/heading changes, update route, content and template expectations together; run
+  `src/app/app.routing.module.spec.ts` plus the affected content/component specs to cover lazy route-data resolution.
 - Authenticated product workspace routes, except Settings, must apply the shared `qs-workspace-page` class to their route
   root. Do not add route-local outer width, margin, or padding rules. Settings intentionally uses a centered 800px
   overview layout with one column on desktop and phones. See `docs/frontend-ui.md` for the shell contract.

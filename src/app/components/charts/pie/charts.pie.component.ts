@@ -1,4 +1,5 @@
 import { DASHBOARD_CATEGORY_PALETTE } from '../../../helpers/dashboard-chart-series.helper';
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -136,7 +137,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       onContainerResize: size => {
         if (this.layoutSize?.width !== size.width || this.layoutSize.height !== size.height) void this.refreshChart();
       },
-      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      mobileTapFeedbackOptions: () => ({ ...this.mobileTapFeedbackOptions,
+        legendScrollFeedback: !!this.chartDiv?.nativeElement?.closest('.dashboard-chart-frame') }),
     });
   }
 
@@ -241,7 +243,11 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       }
     }));
     const showLegend = seriesData.length > 1;
-    const pieCenterY = isCompactLayout ? (showLegend ? '44%' : '50%') : '50%';
+    const frame = dashboardChartFrameGrid(this.chartDiv.nativeElement, { legendBottom: showLegend ? 32 : 0 });
+    const framed = 'top' in frame;
+    const pieCenterY = framed
+      ? Math.max(0, (this.chartDiv.nativeElement.clientHeight - (showLegend ? 32 : 0)) / 2)
+      : isCompactLayout ? (showLegend ? '44%' : '50%') : '50%';
 
     if (!seriesData.length) {
       return {
@@ -326,7 +332,8 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: isCompactLayout ? 12 : 13
         },
-        itemGap: isCompactLayout ? 10 : 8
+        itemGap: isCompactLayout ? 10 : 8,
+        ...(framed ? { type: 'scroll', left: 8, right: 8, top: undefined, bottom: 0, orient: 'horizontal' } : {}),
       },
       series: [
         {

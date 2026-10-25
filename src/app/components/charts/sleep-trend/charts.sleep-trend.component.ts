@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import { DASHBOARD_SLEEP_STAGE_SERIES as STAGE_SERIES } from '../../../helpers/dashboard-chart-series.helper';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
@@ -393,6 +394,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         right: hasVitalsSeries ? 32 : 8,
         top: style.isCompactLayout ? 8 : 32,
         ...trainingStateChartGrid(),
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement, { legendTop: style.isCompactLayout ? 0 : 24 }),
       },
       tooltip: {
         show: true,

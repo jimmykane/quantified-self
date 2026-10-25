@@ -13,7 +13,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppFileService } from '../../services/app.file.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
@@ -24,6 +24,8 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
+import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -36,15 +38,17 @@ describe('ServicesComponent', () => {
     let mockDialog: any;
     let mockAnalyticsService: any;
     let dialogClosed$: Subject<void>;
+    let mockPaymentService: { getProducts: ReturnType<typeof vi.fn>; hasPaidSubscriptionHistory: ReturnType<typeof vi.fn>; appendCheckoutSession: ReturnType<typeof vi.fn> };
+    let mockHapticsService: { selection: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
         mockUserService = {
-            isPro: vi.fn(),
-            isAdmin: vi.fn()
+            isPro: vi.fn(async () => false),
+            isAdmin: vi.fn(async () => false)
         };
 
         mockAuthService = {
-            user$: of(null)
+            user$: new Subject<User | null>()
         };
 
         mockRouter = {
@@ -82,6 +86,8 @@ describe('ServicesComponent', () => {
         mockAnalyticsService = {
             logEvent: vi.fn(),
         };
+        mockPaymentService = { getProducts: vi.fn(() => of([])), hasPaidSubscriptionHistory: vi.fn(async () => false), appendCheckoutSession: vi.fn() };
+        mockHapticsService = { selection: vi.fn() };
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
@@ -103,6 +109,8 @@ describe('ServicesComponent', () => {
                 { provide: AppWindowService, useValue: {} },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
+                { provide: AppPaymentService, useValue: mockPaymentService },
+                { provide: AppHapticsService, useValue: mockHapticsService },
                 { provide: MatIconRegistry, useValue: mockIconRegistry }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -119,30 +127,155 @@ describe('ServicesComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should set isAdmin to true when userService returns true', async () => {
-        mockUserService.isAdmin.mockReturnValue(Promise.resolve(true));
-        mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123' }, isPro: true };
+    function setStarterCatalog() {
+        const product: StripeProduct = { id: 'pro', name: 'Pro', active: true, role: 'pro', metadata: { role: 'pro' }, description: null, images: [], prices: [{
+            id: 'price_pro_month', active: true, type: 'recurring', recurring: { interval: 'month' }, interval: 'month', interval_count: 1,
+            unit_amount: 299, currency: 'eur', description: null, trial_period_days: null, metadata: { trial_days: '30' },
+        }] };
+        mockPaymentService.getProducts.mockReturnValue(of([product]));
+        component.processUser({ uid: 'starter', stripeRole: 'free' } as User, false);
+    }
 
-        // Trigger ngOnInit
-        await component.ngOnInit();
-
-        // Wait for async operations
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        expect(component.isAdmin).toBe(true);
+    it('does not read billing on the free MCP tab and loads once across provider changes', async () => {
+        setStarterCatalog();
+        expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+        expect(mockPaymentService.hasPaidSubscriptionHistory).not.toHaveBeenCalled();
+        await component.selectService('garmin');
+        await vi.waitFor(() => expect(component.proOffer()).toEqual({ priceId: 'price_pro_month', trialDays: 30 }));
+        await component.selectService('suunto');
+        expect(mockPaymentService.getProducts).toHaveBeenCalledTimes(1);
+        expect(mockPaymentService.hasPaidSubscriptionHistory).toHaveBeenCalledTimes(1);
+        expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
     });
 
-    it('should set isAdmin to false when userService returns false', async () => {
-        mockUserService.isAdmin.mockReturnValue(Promise.resolve(false));
-        mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123' }, isPro: true };
+    it.each([true, null])('uses a paid offer when prior history is %s', async history => {
+        setStarterCatalog();
+        mockPaymentService.hasPaidSubscriptionHistory.mockResolvedValue(history);
+        await component.selectService('garmin');
+        await vi.waitFor(() => expect(component.proOffer()).toEqual({ priceId: 'price_pro_month', trialDays: null }));
+    });
 
+    it('keeps plan review available when the catalog fails', async () => {
+        setStarterCatalog();
+        mockPaymentService.getProducts.mockReturnValue(throwError(() => new Error('offline')));
+        await component.selectService('garmin');
+        expect(component.proOffer()).toEqual({ priceId: null, trialDays: null });
+    });
+
+    it('discards an in-flight offer when access changes and on teardown', async () => {
+        setStarterCatalog();
+        let finishHistory: (value: boolean) => void;
+        mockPaymentService.hasPaidSubscriptionHistory.mockReturnValue(new Promise<boolean>(resolve => { finishHistory = resolve; }));
+        await component.selectService('garmin');
+        component.processUser({ uid: 'starter', stripeRole: 'pro' } as User, true);
+        finishHistory(false);
+        await Promise.resolve();
+        expect(component.proOffer()).toBeNull();
+        component.ngOnDestroy();
+        expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('discards the previous account billing result after an account change', async () => {
+        setStarterCatalog();
+        let finishHistory: (value: boolean) => void;
+        mockPaymentService.hasPaidSubscriptionHistory.mockReturnValueOnce(new Promise<boolean>(resolve => { finishHistory = resolve; }));
+        await component.selectService('garmin');
+        component.processUser({ uid: 'other', stripeRole: 'basic' } as User, false);
+        await component.selectService('suunto');
+        await vi.waitFor(() => expect(component.proOffer()).toEqual({ priceId: 'price_pro_month', trialDays: null }));
+        finishHistory(false);
+        await Promise.resolve();
+        expect(component.proOffer()?.trialDays).toBeNull();
+    });
+
+    it('gives one selection haptic for changed tabs and disclosures, and stays silent on no-ops', async () => {
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        await component.selectService('garmin');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        await component.selectService('mcp');
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+        component.onDataFlowToggle(true);
+        component.onDataFlowToggle(true);
+        component.onDataFlowToggle(false);
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(3);
+    });
+
+    it.each([{ctrlKey:true}, {metaKey:true}, {shiftKey:true}, {altKey:true}, {button:1}])('preserves native modified provider links: %j', options => {
+        const event = new MouseEvent('click', {cancelable:true, ...options});
+        component.onProviderTabClick(event, 'mcp');
+        expect(event.defaultPrevented).toBe(false);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('selects a provider from an ordinary tab activation', () => {
+        const event = new MouseEvent('click', {cancelable:true});
+        component.onProviderTabClick(event, 'mcp');
+        expect(event.defaultPrevented).toBe(true);
+        expect(component.activeSection).toBe('mcp');
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([true, false])('uses the verified admin claim from resolver data: %s', async admin => {
+        mockAuthService.user$ = new Subject();
+        mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123', admin }, isPro: admin };
         await component.ngOnInit();
-        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(component.isAdmin).toBe(admin);
+    });
 
+    it('uses the latest verified account without waiting for a second access lookup', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        mockUserService.isPro.mockReturnValue(new Promise(() => {}));
+        await component.ngOnInit();
+
+        userUpdates$.next({ uid: 'basic-owner', stripeRole: 'basic' } as User);
+        userUpdates$.next({ uid: 'pro-owner', stripeRole: 'pro' } as User);
+        expect(component.user?.uid).toBe('pro-owner');
+        expect(component.hasProAccess).toBe(true);
+        expect(component.proOffer()).toBeNull();
+
+        userUpdates$.next({ uid: 'admin-owner', stripeRole: 'free', admin: true } as unknown as User);
+        expect(component.isAdmin).toBe(true);
+        expect(component.hasProAccess).toBe(true);
+        userUpdates$.next({ uid: 'admin-owner', stripeRole: 'free', admin: false } as unknown as User);
+        expect(component.isAdmin).toBe(false);
+        expect(component.hasProAccess).toBe(false);
+    });
+
+    it('clears trial messaging and access immediately when the verified profile signs out', async () => {
+        setStarterCatalog();
+        await component.selectService('garmin');
+        await vi.waitFor(() => expect(component.proOffer()?.trialDays).toBe(30));
+        const userUpdates$ = new Subject<User | null>();
+        mockAuthService.user$ = userUpdates$;
+        await component.ngOnInit();
+
+        userUpdates$.next(null);
+        expect(component.user).toBeNull();
+        expect(component.proOffer()).toBeNull();
+        expect(component.hasProAccess).toBe(false);
         expect(component.isAdmin).toBe(false);
     });
 
+    it('does not start another billing read after teardown while an access check was pending', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        mockActivatedRoute.snapshot.queryParamMap.get.mockReturnValue(ServiceNames.GarminAPI);
+        let finishAccess: (value: boolean) => void;
+        mockUserService.isPro.mockReturnValue(new Promise<boolean>(resolve => { finishAccess = resolve; }));
+        mockUserService.isAdmin.mockResolvedValue(false);
+        await component.ngOnInit();
+        userUpdates$.next({ uid: 'starter', stripeRole: 'free' } as User);
+        const readsBeforeDestroy = mockPaymentService.getProducts.mock.calls.length;
+        component.ngOnDestroy();
+        finishAccess(false);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(mockPaymentService.getProducts).toHaveBeenCalledTimes(readsBeforeDestroy);
+    });
+
     it('should navigate with correct query params when selectService is called', async () => {
+        component.activeSection = 'mcp';
         await component.selectService('garmin');
         expect(component.activeSection).toBe('garmin');
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
@@ -239,14 +372,14 @@ describe('ServicesComponent', () => {
         expect((component as any).getSectionFromServiceName('mcp')).toBe('mcp');
     });
 
-    it('renders the mobile connection selector as a compact Material toggle group', () => {
+    it('keeps full provider labels in the shared Material tab selector', () => {
         fixture.detectChanges();
 
-        const providerSelector = fixture.nativeElement.querySelector('.provider-selector--mobile');
-        const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__mobile-option > span:first-child'))
+        const providerSelector = fixture.nativeElement.querySelector('.provider-selector');
+        const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__name'))
             .map((label: Element) => label.textContent?.trim());
 
-        expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
+        expect(providerSelector.tagName.toLowerCase()).toBe('nav');
         expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo', 'MCP']);
         expect(providerSelector.querySelectorAll('app-service-source-icon')).toHaveLength(0);
         expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
@@ -256,10 +389,10 @@ describe('ServicesComponent', () => {
         component.hasProAccess = false;
         fixture.detectChanges();
 
-        const selector = fixture.nativeElement.querySelector('.provider-selector--mobile');
+        const selector = fixture.nativeElement.querySelector('.provider-selector');
         const entitlementLabels = Array.from(selector.querySelectorAll('.provider-selector__entitlement mat-chip'))
             .map((chip: Element) => chip.textContent?.trim());
-        const ariaLabels = Array.from(selector.querySelectorAll('mat-button-toggle button'))
+        const ariaLabels = Array.from(selector.querySelectorAll('a[mat-tab-link]'))
             .map((button: Element) => button.getAttribute('aria-label'));
 
         expect(entitlementLabels).toEqual(['PRO', 'PRO', 'PRO', 'PRO', 'FREE']);
@@ -276,7 +409,7 @@ describe('ServicesComponent', () => {
         component.hasProAccess = true;
         fixture.detectChanges();
 
-        const selector = fixture.nativeElement.querySelector('.provider-selector--mobile');
+        const selector = fixture.nativeElement.querySelector('.provider-selector');
 
         expect(selector.querySelectorAll('.provider-selector__entitlement')).toHaveLength(0);
     });
@@ -304,18 +437,20 @@ describe('ServicesComponent', () => {
         expect(component.hasProAccess).toBe(false);
     });
 
-    it('renders the desktop connection selector with MCP after Wahoo', () => {
+    it('renders one paginated Material tab selector with MCP after Wahoo', () => {
         fixture.detectChanges();
 
-        const providerSelector = fixture.nativeElement.querySelector('.provider-selector--desktop');
+        const providerSelector = fixture.nativeElement.querySelector('.provider-selector');
         const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__name'))
             .map((label: Element) => label.textContent?.trim());
 
-        expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
+        expect(providerSelector.tagName.toLowerCase()).toBe('nav');
+        expect(providerSelector.hasAttribute('mat-tab-nav-bar')).toBe(true);
+        expect(fixture.nativeElement.querySelectorAll('.provider-selector')).toHaveLength(1);
         expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo', 'MCP']);
         const desktopProviderIcons = providerSelector.querySelectorAll('app-service-source-icon');
-        expect(desktopProviderIcons).toHaveLength(4);
-        expect(providerSelector.querySelectorAll('.provider-selector__mcp-brand')).toHaveLength(1);
+        expect(desktopProviderIcons).toHaveLength(0);
+        expect(providerSelector.textContent).toContain('MCP');
         expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
     });
 
@@ -324,7 +459,7 @@ describe('ServicesComponent', () => {
 
         expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
         expect(fixture.nativeElement.querySelector('app-workspace-section-navigation')).toBeNull();
-        expect(fixture.nativeElement.querySelector('.provider-selector--desktop')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.provider-selector')).toBeTruthy();
     });
 
     it('shows a connect-first data-flow state when no services are connected', () => {

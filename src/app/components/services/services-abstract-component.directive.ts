@@ -35,6 +35,7 @@ import {
   ServiceOAuthCompletionResult,
 } from '@shared/service-connection';
 import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
+import type { ProMembershipOffer } from '../../helpers/membership-selection.helper';
 
 type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
@@ -48,6 +49,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   @Input() isAdmin: boolean = false;
   @Input() showAdvancedTools = true;
   @Input() showConnectionSummary = true;
+  @Input() proOffer: ProMembershipOffer | null = null;
   @Input() activeProviderTool = 'history';
   @Input() showOnlyActiveProviderTool = false;
   @Output() connectionStateChanged = new EventEmitter<boolean>();
