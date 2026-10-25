@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StripeProduct } from '../services/app.payment.service';
-import { membershipPriceId, membershipPriceIdFromReturnUrl, membershipReturnUrl, prioritizeMembershipSelection } from './membership-selection.helper';
+import { membershipPriceId, membershipPriceIdFromReturnUrl, membershipReturnUrl, prioritizeMembershipSelection, resolveProMembershipOffer } from './membership-selection.helper';
 
 function product(role: string): StripeProduct {
   return {
@@ -57,5 +57,56 @@ describe('membership selection', () => {
     if (reason === 'one-time') products[0].prices[0].type = 'one_time';
     const selected = prioritizeMembershipSelection(products, reason === 'missing' ? 'price_missing' : requested);
     expect(selected).toEqual({ products, selectedPriceId: null, selectionUnavailable: true });
+  });
+});
+
+describe('contextual Pro membership offers', () => {
+  function catalog() {
+    const pro = product('pro');
+    pro.prices[0].recurring = { interval: 'month', interval_count: 1 };
+    pro.prices[1].recurring = { interval: 'year', interval_count: 1 };
+    pro.prices[0].metadata = { trial_days: '30' };
+    pro.prices[1].metadata = { trial_days: '14' };
+    return [product('basic'), pro];
+  }
+
+  it('uses an active Pro price and its exact configured trial without mutating the catalog', () => {
+    const products = catalog();
+    const original = structuredClone(products);
+    expect(resolveProMembershipOffer(products, 'free', false)).toEqual({ priceId: 'price_pro_month', trialDays: 30 });
+    expect(products).toEqual(original);
+  });
+
+  it.each([true, null])('suppresses trial claims when paid history is %s', history => {
+    expect(resolveProMembershipOffer(catalog(), 'free', history)).toEqual({ priceId: 'price_pro_month', trialDays: null });
+  });
+
+  it.each(['basic', 'pro', 'unknown'])('suppresses trial claims for a %s account', role => {
+    expect(resolveProMembershipOffer(catalog(), role, false).trialDays).toBeNull();
+  });
+
+  it.each(['', '0', '-2', '1.5', 'thirty', 'Infinity', '9007199254740992'])('rejects malformed trial metadata: %s', value => {
+    const products = catalog();
+    for (const price of products[1].prices) price.metadata = { trial_days: value };
+    expect(resolveProMembershipOffer(products, 'free', false).trialDays).toBeNull();
+  });
+
+  it('binds an annual-only trial to that exact price', () => {
+    const products = catalog();
+    products[1].prices[0].metadata = {};
+    expect(resolveProMembershipOffer(products, 'free', false)).toEqual({ priceId: 'price_pro_year', trialDays: 14 });
+  });
+
+  it.each(['inactive-product', 'inactive-price', 'free-price', 'one-time', 'missing-recurring', 'invalid-id'])('does not advertise an unavailable price: %s', reason => {
+    const products = catalog();
+    const pro = products[1];
+    pro.prices = [pro.prices[0]];
+    if (reason === 'inactive-product') pro.active = false;
+    if (reason === 'inactive-price') pro.prices[0].active = false;
+    if (reason === 'free-price') pro.prices[0].unit_amount = 0;
+    if (reason === 'one-time') pro.prices[0].type = 'one_time';
+    if (reason === 'missing-recurring') pro.prices[0].recurring = null;
+    if (reason === 'invalid-id') pro.prices[0].id = 'price_<unsafe>';
+    expect(resolveProMembershipOffer(products, 'free', false)).toEqual({ priceId: null, trialDays: null });
   });
 });

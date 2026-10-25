@@ -6,19 +6,25 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { of } from 'rxjs';
 import { ServiceConnectionStatusComponent } from './service-connection-status.component';
 import { signal } from '@angular/core';
 import { AppUserService } from '../../../services/app.user.service';
+import { SharedModule } from '../../../modules/shared.module';
+import { provideRouter, Router } from '@angular/router';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppEventService } from '../../../services/app.event.service';
 
 describe('ServiceConnectionStatusComponent', () => {
     let component: ServiceConnectionStatusComponent;
     let fixture: ComponentFixture<ServiceConnectionStatusComponent>;
-    const viewer = signal<{ uid: string } | null>(null);
+    const viewer = signal<{ uid: string; stripeRole?: string } | null>(null);
+    const haptics = { selection: vi.fn() };
 
     beforeEach(async () => {
         viewer.set({ uid: 'planning-user' });
+        haptics.selection.mockClear();
         await TestBed.configureTestingModule({
             declarations: [ServiceConnectionStatusComponent],
             imports: [
@@ -26,9 +32,13 @@ describe('ServiceConnectionStatusComponent', () => {
                 MatDividerModule,
                 MatIconModule,
                 MatProgressBarModule,
+                SharedModule,
             ],
             providers: [
+                provideRouter([]),
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: AppUserService, useValue: { user: viewer } },
+                { provide: AppEventService, useValue: {} },
                 {
                     provide: MatIconRegistry,
                     useValue: {
@@ -88,6 +98,71 @@ describe('ServiceConnectionStatusComponent', () => {
         const providerIcon = fixture.nativeElement.querySelector('.service-connection-status__provider-icon');
 
         expect(providerIcon).toBeTruthy();
+    });
+
+    function renderOffer(trialDays: number | null = 30, priceId: string | null = 'price_pro_month') {
+        component.serviceLabel = 'Garmin Connect';
+        component.providerIcon = 'garmin';
+        component.proRequired = true;
+        fixture.componentRef.setInput('proOffer', { priceId, trialDays });
+        fixture.detectChanges();
+    }
+
+    it('shows the configured trial and an exact-price review link without starting checkout', () => {
+        renderOffer(14, 'price_pro_year');
+        const link = fixture.nativeElement.querySelector('.membership-offer__actions a');
+        expect(link.textContent).toContain('Try Pro free for 14 days');
+        expect(link.getAttribute('href')).toBe('/subscriptions?priceId=price_pro_year');
+        expect(fixture.nativeElement.textContent).toContain('Review billing terms before you start');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('uses Get Pro without a trial claim when eligibility is unknown', () => {
+        renderOffer(null, null);
+        const link = fixture.nativeElement.querySelector('.membership-offer__actions a');
+        expect(link.textContent).toContain('Get Pro');
+        expect(link.getAttribute('href')).toBe('/subscriptions');
+        expect(fixture.nativeElement.textContent).not.toContain('free for');
+        expect(fixture.nativeElement.textContent).not.toContain('No card needed');
+    });
+
+    it('leaves Starter available and gives one selection haptic for navigation', () => {
+        const router = TestBed.inject(Router);
+        const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+        renderOffer();
+        expect(fixture.nativeElement.textContent).toContain('Manual file uploads and analysis stay available with Starter');
+        const links = fixture.nativeElement.querySelectorAll('.membership-offer__actions a');
+        links[0].click();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(router.serializeUrl(navigate.mock.calls[0][0] as import('@angular/router').UrlTree)).toBe('/subscriptions?priceId=price_pro_month');
+        links[1].click();
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        expect(links[1].getAttribute('href')).toBe('/dashboard');
+    });
+
+    it.each(['connected', 'loading', 'showDetails', 'statusLabelOverride', 'attention'])('keeps %s connection controls instead of replacing them with an offer', state => {
+        if (state === 'connected') component.connected = true;
+        if (state === 'loading') component.loading = true;
+        if (state === 'showDetails') component.showDetails = true;
+        if (state === 'statusLabelOverride') component.statusLabelOverride = 'Reconnect required';
+        if (state === 'attention') component.statusTone = 'attention';
+        renderOffer();
+        expect(fixture.nativeElement.querySelector('.membership-offer')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.service-connection-status__summary')).toBeTruthy();
+    });
+
+    it('limits the Wahoo promise to Wahoo-recorded FIT-backed activities', () => {
+        renderOffer();
+        component.providerIcon = 'wahoo';
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Wahoo-recorded');
+        expect(fixture.nativeElement.textContent).toContain('Eligible FIT-backed Wahoo workouts');
+    });
+
+    it('keeps the existing Basic membership without calling it Starter', () => {
+        viewer.set({uid:'planning-user', stripeRole:'basic'});
+        renderOffer(null);
+        expect(fixture.nativeElement.querySelector('.membership-offer__actions a:last-child').textContent).toContain('Keep current plan');
     });
     it('explains planned-workout consent and retained copies before disconnecting', () => {
         component.providerIcon = 'garmin'; component.connected = true;
