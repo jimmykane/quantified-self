@@ -105,7 +105,6 @@ export class AppPaymentService {
     private readonly checkoutSessionWaitMs = 60000;
     private readonly subscriptionReadRetryAttempts = 4;
     private readonly subscriptionReadRetryDelayMs = 750;
-    private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
@@ -772,11 +771,9 @@ export class AppPaymentService {
         }
 
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
-        const historyQuery = query(
-            subscriptionsRef,
-            where('status', 'in', this.subscriptionStatuses),
-            limit(1)
-        );
+        // Match checkout's server-side trial policy: any subscription history
+        // counts, including paused, future or missing status projections.
+        const historyQuery = query(subscriptionsRef, limit(1));
 
         try {
             const snapshot = await getDocsFromServer(historyQuery);

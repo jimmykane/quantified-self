@@ -1094,6 +1094,32 @@ describe('AppPaymentService', () => {
     });
 
     describe('hasPaidSubscriptionHistory', () => {
+        it('allows trial messaging for an authenticated user with no subscription history', async () => {
+            await expect(service.hasPaidSubscriptionHistory()).resolves.toBe(false);
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [1]
+            });
+        });
+
+        it.each(['paused', 'future_status', undefined])(
+            'suppresses trial offers for existing history with status %s, matching checkout', async status => {
+                const historyDoc = { id: 'sub_previous', data: () => ({ status }) };
+                mockGetDocsFromServer.mockImplementation(async (request: { constraints: unknown[] }) => {
+                    const statusFilter = request.constraints.find(constraint => typeof constraint === 'object'
+                        && constraint !== null && 'field' in constraint && constraint.field === 'status') as
+                        { value: string[] } | undefined;
+                    return { docs: !statusFilter || statusFilter.value.includes(status) ? [historyDoc] : [] };
+                });
+
+                await expect(service.hasPaidSubscriptionHistory()).resolves.toBe(true);
+
+                expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+                expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                    collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [1]
+                });
+            });
+
         it('should return false when there is no authenticated user', async () => {
             mockAuth.currentUser = null;
 
