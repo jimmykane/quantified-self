@@ -2285,6 +2285,9 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
     expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
     expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
+    expect(plansSection?.content).toContain('**Monthly** or **Yearly**');
+    expect(plansSection?.content).toContain('**Compare all features**');
+    expect(plansSection?.content).toContain('Yearly prices show the full yearly total');
     expect(plansSection?.content).toContain('keeps that plan and billing option through sign-in and account setup');
     expect(plansSection?.content).toContain('**Your selection**');
     expect(plansSection?.content).toContain('Opening the page never starts checkout automatically');

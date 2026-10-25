@@ -1177,6 +1177,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 
 ## Billing basics
 
+- The public pricing page shows Pro first. Use **Monthly** or **Yearly** to choose billing, and **Compare all features** to expand the full plan details. Yearly prices show the full yearly total.
+
 - Choosing a paid plan on the public pricing page keeps that plan and billing option through sign-in and account setup. It is shown first with **Your selection** on the subscription page.
 - Review the current price and trial terms, then choose the plan to start checkout. Opening the page never starts checkout automatically. If the selected option is no longer available, choose a current option instead.
 - After checkout, the membership screen checks your access for up to 20 seconds. When Pro is ready, **Connect your devices** opens [Connections](/services), where you choose a provider and review its permissions. Opening Connections does not connect an account automatically.

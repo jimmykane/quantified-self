@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterLink } from '@angular/router';
@@ -13,6 +14,8 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { PUBLIC_PRICING_FAQS, PUBLIC_PRICING_SHARED_FEATURES } from './public-pricing.content';
 import { membershipReturnUrl } from '../../helpers/membership-selection.helper';
 
+type BillingPeriod = 'month' | 'year';
+
 type PublicPlanRole = 'free' | 'basic' | 'pro';
 type RecurringInterval = 'day' | 'week' | 'month' | 'year';
 
@@ -20,6 +23,7 @@ interface PublicPlanFeatureViewModel {
     icon: string;
     iconClass: string;
     label: string;
+    highlight?: boolean;
 }
 
 interface PublicPlanPriceViewModel {
@@ -41,11 +45,14 @@ interface PublicPlanViewModel {
     subtitle: string;
     features: PublicPlanFeatureViewModel[];
     prices: PublicPlanPriceViewModel[];
+    highlights: PublicPlanFeatureViewModel[];
+    billingChoices: Record<BillingPeriod, { prices: PublicPlanPriceViewModel[]; notice: string | null }>;
 }
 
 export interface PublicPricingCatalog {
     plans: PublicPlanViewModel[];
     paidPlansUnavailable: boolean;
+    showBillingSelector: boolean;
 }
 
 interface RecurringCadence {
@@ -76,13 +83,14 @@ const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string
     imports: [
         CommonModule,
         MatCardModule,
+        MatButtonToggleModule,
         MatButtonModule,
         MatIconModule,
         MatProgressSpinnerModule,
         RouterLink,
     ],
     templateUrl: './public-pricing.component.html',
-    styleUrls: ['../pricing/pricing.component.scss', './public-pricing.component.scss'],
+    styleUrls: ['./public-pricing.component.scss'],
 })
 export class PublicPricingComponent {
     private readonly paymentService = inject(AppPaymentService);
@@ -93,6 +101,8 @@ export class PublicPricingComponent {
     readonly sharedFeatures = PUBLIC_PRICING_SHARED_FEATURES;
     readonly faqs = PUBLIC_PRICING_FAQS;
     readonly openFaq = signal<number | null>(null);
+    readonly billing = signal<BillingPeriod>('month');
+    readonly expanded = signal(false);
 
     readonly catalog$: Observable<PublicPricingCatalog> = defer(() => this.paymentService.getProducts()).pipe(
         timeout({ first: PUBLIC_PRODUCTS_TIMEOUT_MS }),
@@ -110,6 +120,19 @@ export class PublicPricingComponent {
         });
     }
 
+    changeBilling(value: BillingPeriod): void {
+        if ((value !== 'month' && value !== 'year') || value === this.billing()) {
+            return;
+        }
+        this.billing.set(value);
+        this.haptics.selection();
+    }
+
+    toggleDetails(): void {
+        this.expanded.update(value => !value);
+        this.haptics.selection();
+    }
+
     toggleFaq(index: number): void {
         this.openFaq.update((current) => current === index ? null : index);
         this.haptics.selection();
@@ -123,7 +146,9 @@ export function buildPublicPricingCatalog(products: StripeProduct[]): PublicPric
         .sort((left, right) => getRoleOrder(left.role) - getRoleOrder(right.role));
 
     return {
-        plans: [buildStarterPlan(), ...paidPlans],
+        plans: [...paidPlans, buildStarterPlan()],
+        showBillingSelector: paidPlans.some(plan => plan.prices.some(price => price.intervalLabel === 'month'))
+            && paidPlans.some(plan => plan.prices.some(price => price.intervalLabel === 'year')),
         paidPlansUnavailable: paidPlans.length === 0,
     };
 }
@@ -133,8 +158,7 @@ function buildStarterPlan(): PublicPlanViewModel {
         id: 'free_tier',
         role: 'free',
         ...PUBLIC_PLAN_COPY.free,
-        features: buildFeatures('free'),
-        prices: [{
+        ...buildPlanDetails('free', [{
             id: 'free_price',
             amount: 0,
             currency: 'USD',
@@ -144,7 +168,7 @@ function buildStarterPlan(): PublicPlanViewModel {
             trialDays: null,
             yearlySavingsLabel: null,
             showYearlySwitchHint: false,
-        }],
+        }]),
     };
 }
 
@@ -170,8 +194,29 @@ function buildPaidPlan(product: StripeProduct): PublicPlanViewModel | null {
         id: product.id,
         role,
         ...PUBLIC_PLAN_COPY[role],
-        features: buildFeatures(role),
+        ...buildPlanDetails(role, prices),
+    };
+}
+
+function buildPlanDetails(role: PublicPlanRole, prices: PublicPlanPriceViewModel[]): Pick<PublicPlanViewModel, 'features' | 'highlights' | 'prices' | 'billingChoices'> {
+    const features = buildFeatures(role);
+    const choice = (period: BillingPeriod) => {
+        const otherPeriod = period === 'month' ? 'year' : 'month';
+        const hasSelectedPeriod = prices.some(price => price.intervalLabel === period);
+        // Keep nonstandard cadences and currency variants reachable. If a plan lacks
+        // the preferred cadence, retain its actual prices with an explicit notice.
+        return {
+            prices: hasSelectedPeriod ? prices.filter(price => price.intervalLabel !== otherPeriod) : prices,
+            notice: role !== 'free' && !hasSelectedPeriod
+                ? `${period === 'month' ? 'Monthly' : 'Yearly'} billing is unavailable for this plan. Available billing shown below.`
+                : null,
+        };
+    };
+    return {
         prices,
+        features,
+        highlights: features.filter(feature => feature.highlight),
+        billingChoices: { month: choice('month'), year: choice('year') },
     };
 }
 
@@ -222,7 +267,7 @@ function normalizePaidRole(role: string | null | undefined): 'basic' | 'pro' | n
 }
 
 function getRoleOrder(role: PublicPlanRole): number {
-    return role === 'basic' ? 1 : role === 'pro' ? 2 : 0;
+    return role === 'pro' ? 0 : role === 'basic' ? 1 : 2;
 }
 
 function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
@@ -233,11 +278,13 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
             icon: standardIcon,
             iconClass: standardIconClass,
             label: getActivityLimitLabel(role),
+            highlight: true,
         },
         {
             icon: standardIcon,
             iconClass: standardIconClass,
             label: getRouteLimitLabel(role),
+            highlight: role === 'basic',
         },
         {
             icon: standardIcon,
@@ -254,27 +301,27 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
     if (role === 'free') {
         return [
             ...baseFeatures,
-            { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads' },
-            { icon: standardIcon, iconClass: standardIconClass, label: 'Core analysis tools' },
-            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
+            { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads', highlight: true },
+            { icon: standardIcon, iconClass: standardIconClass, label: 'Core analysis tools', highlight: true },
+            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role), highlight: false },
         ];
     }
 
     if (role === 'basic') {
         return [
             ...baseFeatures,
-            { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads' },
-            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
+            { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads', highlight: false },
+            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role), highlight: true },
             { icon: 'favorite', iconClass: 'qs-color-primary', label: 'Supports independent, privacy-first development' },
         ];
     }
 
     return [
         ...baseFeatures,
-        { icon: standardIcon, iconClass: standardIconClass, label: 'Automatic activity imports from your watch' },
-        { icon: standardIcon, iconClass: standardIconClass, label: 'Provider planned-workout delivery' },
-        { icon: standardIcon, iconClass: standardIconClass, label: 'Cross-device sync' },
-        { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
+        { icon: standardIcon, iconClass: standardIconClass, label: 'Automatic activity imports from your watch', highlight: true },
+        { icon: standardIcon, iconClass: standardIconClass, label: 'Provider planned-workout delivery', highlight: true },
+        { icon: standardIcon, iconClass: standardIconClass, label: 'Cross-device sync', highlight: true },
+        { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role), highlight: false },
         { icon: 'favorite', iconClass: 'qs-color-warn', label: 'Helps fund faster feature releases' },
     ];
 }
