@@ -31,6 +31,7 @@ import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { membershipPriceId, membershipPriceIdFromReturnUrl, membershipReturnUrl, prioritizeMembershipSelection } from '../../helpers/membership-selection.helper';
 
 const FREE_PRICE_ID = 'free_price';
+const PLAN_DISPLAY_ORDER: Record<string, number> = { pro: 0, basic: 1, free: 2 };
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -139,7 +140,11 @@ export class PricingComponent implements OnInit, OnDestroy {
             map(([products, params]) => {
                 const requestedPriceId = membershipPriceId(params?.get('priceId'))
                     ?? membershipPriceIdFromReturnUrl(params?.get('returnUrl'));
-                const selection = prioritizeMembershipSelection([freeProduct, ...products], requestedPriceId);
+                const offeredProducts = [freeProduct, ...products].sort((left, right) => (
+                    (PLAN_DISPLAY_ORDER[left.metadata?.role ?? left.role] ?? 3)
+                    - (PLAN_DISPLAY_ORDER[right.metadata?.role ?? right.role] ?? 3)
+                ));
+                const selection = prioritizeMembershipSelection(offeredProducts, requestedPriceId);
                 this.selectedPriceId.set(selection.selectedPriceId);
                 this.selectionUnavailable.set(selection.selectionUnavailable);
                 return selection.products;
