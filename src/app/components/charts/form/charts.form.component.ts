@@ -1,3 +1,4 @@
+import { dashboardChartPanelGrids } from '../../../helpers/dashboard-chart-layout.helper';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { TRAINING_STATE_PLOT_BOTTOM, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
@@ -116,6 +117,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
+  private panelLayoutHeight: number | null = null;
   private readonly pointsSignal = signal<DashboardFormPoint[]>([]);
   private readonly absoluteLatestPointSignal = signal<DashboardFormPoint | null>(null);
   private readonly selectedTimelineWindowSignal = signal<DashboardFormTimelineWindow>('w');
@@ -159,6 +161,14 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       logger: this.logger,
       logPrefix: '[ChartsFormComponent]',
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      onContainerResize: ({ height }) => {
+        if (height === this.panelLayoutHeight) return;
+        const grid = dashboardChartPanelGrids(this.chartDiv?.nativeElement, height);
+        if (!grid) return;
+        this.panelLayoutHeight = height;
+        // Merge geometry only: keep series, axes, notes and interaction state.
+        this.chartHost.setOption({ grid }, { notMerge: false, lazyUpdate: false, silent: true });
+      },
     });
   }
 
@@ -370,6 +380,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const gridRight = chartStyle.isCompactLayout ? 14 : 16;
     const panelHeight = isMobileTooltipViewport ? '36%' : chartStyle.isCompactLayout ? '39%' : '40%';
     const topPanelTop = isMobileTooltipViewport ? '3%' : '4%';
+    const dashboardPanels = dashboardChartPanelGrids(this.chartDiv.nativeElement);
+    if (dashboardPanels) this.panelLayoutHeight = this.chartDiv.nativeElement.clientHeight;
 
     return {
       option: {
@@ -385,6 +397,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
             right: gridRight,
             top: topPanelTop,
             height: panelHeight,
+            ...dashboardPanels?.[0],
             outerBoundsMode: 'none',
           },
           {
@@ -392,6 +405,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
             right: gridRight,
             bottom: TRAINING_STATE_PLOT_BOTTOM,
             height: panelHeight,
+            ...dashboardPanels?.[1],
             outerBoundsMode: 'none',
           },
         ],

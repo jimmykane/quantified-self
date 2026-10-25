@@ -41,6 +41,18 @@ export function dashboardChartFrameGrid(
   };
 }
 
+/** Share the dashboard Form canvas equally, with only label clearance between panels. */
+export function dashboardChartPanelGrids(canvas: HTMLElement, height = canvas?.clientHeight) {
+  if (!canvas?.closest('.dashboard-chart-frame') || !(height > 0)) return null;
+  const top = 8;
+  const gap = 16;
+  const panelHeight = Math.max(1, (height - top - TRAINING_STATE_PLOT_BOTTOM - gap) / 2);
+  return [
+    { top, height: panelHeight },
+    { bottom: TRAINING_STATE_PLOT_BOTTOM, height: panelHeight },
+  ];
+}
+
 /** Align neighbouring plots without imposing a fixed height on their summaries. */
 export function alignDashboardChartPlots(board: HTMLElement, enabled: boolean): HTMLElement[] {
   const plots = Array.from(board.querySelectorAll<HTMLElement>(

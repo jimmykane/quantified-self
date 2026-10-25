@@ -1414,7 +1414,10 @@ pass batches one rectangle read per visible cell/plot before writing offsets. A 
 flex-layout rounding from feeding an idle ResizeObserver loop; real header changes still realign. Observers and queued frames are torn down with the board.
 Window resize listening is a fallback only when `ResizeObserver` is unavailable.
 Generic XY/column charts retain their ECharts heading and aggregate. Form/TSS deliberately keeps two panels with
-a 440px canvas floor; compact KPI rows keep their small sparklines, and Calendar and maps keep their own layouts.
+a 440px canvas floor. Its panels share the remaining height equally with a fixed 16px gap, rather than leaving a
+percentage of taller tiles empty. The existing chart-host resize callback merges grid geometry only when the canvas
+height changes; it does not rebuild series, axes or source data. Standalone Form charts keep their existing layout.
+Compact KPI rows keep their small sparklines, and Calendar and maps keep their own layouts.
 Pie/donut charts use the common minimum without Cartesian header alignment. Their saved-tile legend stays in a bounded footer row with ECharts paging when needed; all categories remain available. The shared `legendScrollFeedback` option owns selection feedback for accepted paging events and ignores synchronized changes; setup and layout remain silent. Size containment prevents old canvas
 dimensions from determining the next flex layout. Embedded Sleep removes its duplicate inner vertical padding.
 

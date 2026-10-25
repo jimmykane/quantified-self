@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { alignDashboardChartPlots, dashboardChartFrameGrid, hasDashboardChartLayoutChanges } from './dashboard-chart-layout.helper';
+import { alignDashboardChartPlots, dashboardChartFrameGrid, dashboardChartPanelGrids, hasDashboardChartLayoutChanges } from './dashboard-chart-layout.helper';
 
 afterEach(() => document.body.replaceChildren());
 
@@ -33,6 +33,22 @@ function offset(plot: HTMLElement) {
 }
 
 describe('dashboard plot alignment', () => {
+  it.each([240, 440, 720, 1000])('keeps dashboard panels 16px apart in a %ipx canvas', height => {
+    const plot = addPlot(createBoard(), 0, 60);
+    const [top, bottom] = dashboardChartPanelGrids(plot, height)!;
+    const bottomStart = height - bottom.bottom! - bottom.height;
+    expect(top.height).toBe(bottom.height);
+    expect(top.height).toBeGreaterThan(0);
+    expect(bottomStart - top.top! - top.height).toBe(16);
+    expect(top.top).toBe(8);
+    expect(bottom.bottom).toBe(24);
+  });
+
+  it('keeps standalone previews and unmeasured canvases out of dashboard panel sizing', () => {
+    expect(dashboardChartPanelGrids(document.createElement('div'), 440)).toBeNull();
+    expect(dashboardChartPanelGrids(addPlot(createBoard(), 0, 60), 0)).toBeNull();
+  });
+
   it('scopes common axis insets to saved dashboard frames and releases unused legend space', () => {
     const preview = document.createElement('div');
     expect(dashboardChartFrameGrid(preview, { legendBottom: 32 })).toEqual({});
