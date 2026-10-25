@@ -35,6 +35,7 @@ const loadActivityImportDispatchers = (): FunctionModule =>
   module.require('./queue') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
+  linkExistingStripeCustomer: () => module.require('./stripe/claims') as FunctionModule,
   'createStripeCheckoutSession': () => module.require('./stripe/billing/handlers') as FunctionModule,
   'createStripePortalLink': () => module.require('./stripe/billing/handlers') as FunctionModule,
   'ext-firestore-stripe-payments-createPortalLink': () => module.require('./stripe/billing/handlers') as FunctionModule,

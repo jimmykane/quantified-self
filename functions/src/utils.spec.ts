@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { USAGE_LIMITS } from '../../shared/limits';
+import * as callablePolicy from './shared/callable-policy';
 import {
     generateIDFromParts,
     generateIDFromPartsOld,
     isCorsAllowed,
     determineRedirectURI,
+    ALLOWED_CORS_ORIGINS,
+    isFunctionsEmulator,
     enforceAppCheck,
     ENFORCE_APP_CHECK,
     shouldEnforceAppCheck,
@@ -283,6 +286,16 @@ describe('utils', () => {
     });
 
     describe('enforceAppCheck', () => {
+        it('preserves the shared policy through the existing utility exports', () => {
+            expect(enforceAppCheck).toBe(callablePolicy.enforceAppCheck);
+            expect(shouldEnforceAppCheck).toBe(callablePolicy.shouldEnforceAppCheck);
+            expect(isFunctionsEmulator).toBe(callablePolicy.isFunctionsEmulator);
+            expect(ENFORCE_APP_CHECK).toBe(true);
+            expect(ALLOWED_CORS_ORIGINS).toBe(callablePolicy.ALLOWED_CORS_ORIGINS);
+            expect(ALLOWED_CORS_ORIGINS).toEqual([
+                'https://quantified-self.io', 'https://beta.quantified-self.io', /https?:\/\/localhost:\d+/
+            ]);
+        });
         it('should not throw when app context is present', () => {
             const request = { app: { appId: 'test-app' } };
             expect(() => enforceAppCheck(request)).not.toThrow();
