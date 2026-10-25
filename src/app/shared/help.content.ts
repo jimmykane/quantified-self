@@ -511,7 +511,8 @@ The sync guides' **Start Setup** action opens Connections. If sign-in or onboard
 - The [homepage](/) shows shared Training, Health, dashboard, workout-analysis, map, and device-comparison previews. The Training Plans section has a Calendar and workout-profile example with fictional sample data. Select a day or switch to Workout profile to inspect its prescription; nothing is saved.
 - The Health example uses the same category cards and charts as the signed-in workspace. Choose a category or **View history**, then use **Health overview** to return. Its readings are fictional, and it never loads your account data or saves changes.
 - The homepage keeps every feature section visible as you scroll. Use the jump links below its introduction to go directly to Training, Workouts, Plans, Health, Assistant, Maps, Comparisons, or Integrations. Focus moves to the chosen section's heading, so Tab continues through that section's controls. Each section has a shareable link, such as [Comparisons](/#home-comparisons); your browser's Back and Forward buttons restore the exact place you were reading, including the homepage view before your first jump.
-- The homepage links to the public Training, Plans, Health, and Assistant overviews. Use **Get Started Free** to sign in and begin onboarding. Provider connections and history imports require Pro.
+- The homepage links to the public Training, Plans, Health, and Assistant overviews. Provider connections and history imports require Pro.
+- Use the homepage's **Get Started** actions to sign in and begin onboarding. Review current pricing and eligible trial offers in the membership section. Opening pricing does not start checkout or connect a provider.
 
 ## Where things live
 
