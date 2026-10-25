@@ -43,12 +43,12 @@ describe('ServicesComponent', () => {
 
     beforeEach(async () => {
         mockUserService = {
-            isPro: vi.fn(),
-            isAdmin: vi.fn()
+            isPro: vi.fn(async () => false),
+            isAdmin: vi.fn(async () => false)
         };
 
         mockAuthService = {
-            user$: of(null)
+            user$: new Subject<User | null>()
         };
 
         mockRouter = {
@@ -216,27 +216,62 @@ describe('ServicesComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
     });
 
-    it('should set isAdmin to true when userService returns true', async () => {
-        mockUserService.isAdmin.mockReturnValue(Promise.resolve(true));
-        mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123' }, isPro: true };
-
-        // Trigger ngOnInit
+    it.each([true, false])('uses the verified admin claim from resolver data: %s', async admin => {
+        mockAuthService.user$ = new Subject();
+        mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123', admin }, isPro: admin };
         await component.ngOnInit();
-
-        // Wait for async operations
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        expect(component.isAdmin).toBe(true);
+        expect(component.isAdmin).toBe(admin);
     });
 
-    it('should set isAdmin to false when userService returns false', async () => {
-        mockUserService.isAdmin.mockReturnValue(Promise.resolve(false));
-        mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123' }, isPro: true };
-
+    it('uses the latest verified account without waiting for a second access lookup', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        mockUserService.isPro.mockReturnValue(new Promise(() => {}));
         await component.ngOnInit();
-        await new Promise(resolve => setTimeout(resolve, 0));
 
+        userUpdates$.next({ uid: 'basic-owner', stripeRole: 'basic' } as User);
+        userUpdates$.next({ uid: 'pro-owner', stripeRole: 'pro' } as User);
+        expect(component.user?.uid).toBe('pro-owner');
+        expect(component.hasProAccess).toBe(true);
+        expect(component.proOffer()).toBeNull();
+
+        userUpdates$.next({ uid: 'admin-owner', stripeRole: 'free', admin: true } as unknown as User);
+        expect(component.isAdmin).toBe(true);
+        expect(component.hasProAccess).toBe(true);
+        userUpdates$.next({ uid: 'admin-owner', stripeRole: 'free', admin: false } as unknown as User);
         expect(component.isAdmin).toBe(false);
+        expect(component.hasProAccess).toBe(false);
+    });
+
+    it('clears trial messaging and access immediately when the verified profile signs out', async () => {
+        setStarterCatalog();
+        await component.selectService('garmin');
+        await vi.waitFor(() => expect(component.proOffer()?.trialDays).toBe(30));
+        const userUpdates$ = new Subject<User | null>();
+        mockAuthService.user$ = userUpdates$;
+        await component.ngOnInit();
+
+        userUpdates$.next(null);
+        expect(component.user).toBeNull();
+        expect(component.proOffer()).toBeNull();
+        expect(component.hasProAccess).toBe(false);
+        expect(component.isAdmin).toBe(false);
+    });
+
+    it('does not start another billing read after teardown while an access check was pending', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        mockActivatedRoute.snapshot.queryParamMap.get.mockReturnValue(ServiceNames.GarminAPI);
+        let finishAccess: (value: boolean) => void;
+        mockUserService.isPro.mockReturnValue(new Promise<boolean>(resolve => { finishAccess = resolve; }));
+        mockUserService.isAdmin.mockResolvedValue(false);
+        await component.ngOnInit();
+        userUpdates$.next({ uid: 'starter', stripeRole: 'free' } as User);
+        const readsBeforeDestroy = mockPaymentService.getProducts.mock.calls.length;
+        component.ngOnDestroy();
+        finishAccess(false);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(mockPaymentService.getProducts).toHaveBeenCalledTimes(readsBeforeDestroy);
     });
 
     it('should navigate with correct query params when selectService is called', async () => {
