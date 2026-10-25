@@ -35,7 +35,7 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     const customer = { id: customerId, livemode: false, metadata: { firebaseUID: uid }, email: 'synthetic@example.com' };
     const price = { id: priceId, product: productId, type: mode === 'subscription' ? 'recurring' : 'one_time', active: true,
       unit_amount: 1000, currency: 'eur', recurring: mode === 'subscription' ? { interval: 'month', interval_count: 1 } : null, metadata: { trial_days: '7' } };
-    const product = { id: productId, active: true, metadata: { firebaseRole: 'basic' }, name: 'Synthetic billing product',
+    const product = { id: productId, active: true, metadata: { firebaseRole: 'basic' } as Record<string, string>, name: 'Synthetic billing product',
       description: null, images: [], tax_code: null };
     const sub = { id: `sub_${uid}`, customer: customerId, status: 'active', created: 100,
       livemode: false, metadata: {}, cancel_at_period_end: false, trial_start: null, trial_end: null, cancel_at: null, canceled_at: null, ended_at: null,
@@ -90,7 +90,7 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect((await db.doc(`customers/${f.uid}`).get()).get('stripeId')).toBe(f.customerId);
   });
   it.each(['firebaseRole', 'role'])('requires a payment method for new Pro trials using trusted product %s', async roleKey => {
-    const f = await fixture(); f.product.metadata = { [roleKey]: 'pro' } as any;
+    const f = await fixture(); f.product.metadata = { [roleKey]: 'pro' };
     const data = { ...f.request, trial_period_days: 7, payment_method_collection: 'if_required', checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION };
     await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
     const params = f.stripe.checkout.sessions.create.mock.calls[0][0];
