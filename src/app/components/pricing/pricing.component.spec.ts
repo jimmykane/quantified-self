@@ -1,3 +1,4 @@
+import { User } from '@sports-alliance/sports-lib';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -1000,6 +1001,20 @@ describe('PricingComponent', () => {
         expect(setFreeTierSpy).not.toHaveBeenCalled();
         expect(selectFreeTierSpy).not.toHaveBeenCalled();
         expect(component.isLoading).toBe(false);
+    });
+
+    it.each(['acceptedPrivacyPolicy', 'acceptedDataPolicy', 'acceptedTos'] as const)('blocks checkout and free completion when the supplied onboarding profile lacks %s', async missingPolicy => {
+        await fixture.whenStable();
+        component.isOnboarding = true;
+        component.onboardingUser = Object.assign(new User('test-uid'), acceptedPoliciesUser, { [missingPolicy]: false });
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        const free = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier');
+        await component.subscribe({ id: 'price_test', currency: 'eur', unit_amount: 299 });
+        await component.selectFreeTier();
+        expect(checkout).not.toHaveBeenCalled();
+        expect(free).not.toHaveBeenCalled();
+        expect(component.isLoading).toBe(false);
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should stay on onboarding and skip free-tier selection when required legal policies are missing in onboarding mode', async () => {
