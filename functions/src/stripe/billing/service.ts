@@ -192,8 +192,12 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
   const customer = await ensureBillingCustomer(ctx, lease, uid);
   const name = `checkout_${requestId}`;
   const root = accountRef(ctx.db, uid);
+  const saved = (await operationRef(ctx.db, uid, name).get()).data() as Operation | undefined;
   const active = (await root.get()).get('activeCheckout') as string | undefined;
   if (active && active !== name) {
+    // Recovery belongs to this operation's original Stripe identity. It must
+    // neither return a newer session nor replace that operation's reservation.
+    if (saved) throw new BillingError('operation_uncertain');
     const previous = (await operationRef(ctx.db, uid, active).get()).data() as Operation | undefined;
     if (previous) {
       if (!previous.result?.id) throw new BillingError('operation_uncertain');
@@ -205,27 +209,18 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
       if (session.status === 'open') {
         const lineItems = previous.params.line_items as { price: string }[];
         if (previous.params.mode !== request.mode || lineItems[0]?.price !== request.price) throw new BillingError('operation_uncertain');
-        if (previous.params.subscription_data?.trial_period_days) {
-          if (previous.params.payment_method_collection === 'always' && !request.checkout_terms_version) {
-            throw new BillingError('checkout_terms_changed');
-          }
-          if (previous.params.payment_method_collection !== 'always' && request.checkout_terms_version) {
-            // Preserve old operation parameters/keys, but do not reuse an offer
-            // that differs from the updated Pro terms the browser just showed.
-            const price = await ctx.stripe.prices.retrieve(request.price);
-            const productId = stripeId(price.product);
-            if (!productId) throw new BillingError('operation_uncertain');
-            const product = await ctx.stripe.products.retrieve(productId);
-            if ((product.metadata.firebaseRole ?? product.metadata.role) === 'pro') throw new BillingError('checkout_offer_pending');
-          }
-        }
+        // A different browser request must still be eligible for the current
+        // offer. Price/mode alone cannot distinguish trial changes or policy
+        // changes. Original-operation recovery below retains its frozen terms.
+        const current = await checkoutParameters(ctx, lease, uid, customer, request);
+        if ((previous.params.subscription_data?.trial_period_days ?? 0) !== (current.subscription_data?.trial_period_days ?? 0)
+          || previous.params.payment_method_collection !== current.payment_method_collection) throw new BillingError('checkout_offer_pending');
         if (!session.url) throw new BillingError('operation_uncertain');
         await assertBillingAuthority(ctx, lease, uid, customer);
         return { sessionId: session.id, url: session.url, customerId: customer };
       }
     }
   }
-  const saved = (await operationRef(ctx.db, uid, name).get()).data() as Operation | undefined;
   const params = saved?.params ?? await checkoutParameters(ctx, lease, uid, customer, request);
   const operation = saved ?? await reserveOperation(ctx, lease, uid, name, params);
   if (operation.rejected) throw new BillingError('checkout_rejected');

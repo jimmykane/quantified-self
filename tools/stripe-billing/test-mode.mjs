@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { root, readLocalEnvironment, project } from './local.mjs';
+import { assertProTrialCheckout } from './test-mode-verification.mjs';
 Object.assign(process.env, readLocalEnvironment());
 // Fixture evidence is one local journal; reject overlapping driver processes.
 const lockFile = resolve(root, '.local/stripe-billing/fixture-driver.lock');
@@ -95,7 +96,7 @@ async function checkout(label, mode, trial) {
   if (!response.ok) throw new Error(`Checkout request rejected: ${response.status}`);
   const result = await until(async () => (await db.doc(`customers/${fixture.uid}/checkout_sessions/${requestId}`).get()).data(), value => value?.url || value?.error, 'checkout');
   if (result.error) throw new Error(`Checkout failed: ${result.error.code}`);
-  fixture.checkout = { requestId, sessionId: result.sessionId, url: result.url, proTrial: trial };
+  fixture.checkout = { requestId, sessionId: result.sessionId, url: result.url };
   fixture.customerId = (await db.doc(`customers/${fixture.uid}`).get()).get('stripeId'); save();
   console.log(`Checkout ready for ${label}; open its URL from the ignored fixtures file.`);
 }
@@ -106,17 +107,19 @@ async function verify(label) {
     const payment = await until(async () => (await db.doc(`customers/${fixture.uid}/payments/${session.payment_intent}`).get()).data(), value => value?.status === 'succeeded', 'payment synchronization');
     assert.equal(payment.prices.length, 1); assert.equal(payment.items.length, 1);
   } else {
+    // A retry can rebuild the local checkout result. Identify its trial from
+    // the immutable original request, never a transient driver flag or label.
+    const request = await db.doc(`customers/${fixture.uid}/checkout_sessions/${fixture.checkout.requestId}`).get();
+    assert.ok(request.exists, 'The original checkout request is required for verification.');
+    const proTrial = request.get('price') === state.prices.proTrial?.id && request.get('trial_period_days') > 0;
     const sub = await until(async () => (await db.doc(`customers/${fixture.uid}/subscriptions/${session.subscription}`).get()).data(), value => ['active', 'trialing'].includes(value?.status), 'subscription synchronization');
-    const role = fixture.checkout.proTrial ? 'pro' : 'basic';
+    const role = proTrial ? 'pro' : 'basic';
     assert.equal(sub.role, role); assert.ok(sub.current_period_end?.toMillis() > 0);
-    if (fixture.checkout.proTrial) {
-      assert.equal(session.payment_method_collection, 'always');
+    if (proTrial) {
       const subscription = await stripe.subscriptions.retrieve(session.subscription);
-      assert.equal(subscription.status, 'trialing');
       const customer = await stripe.customers.retrieve(fixture.customerId);
-      assert.ok(subscription.default_payment_method || customer.invoice_settings.default_payment_method, 'Trial must retain a payment method.');
       const invoice = await stripe.invoices.retrieve(subscription.latest_invoice);
-      assert.equal(invoice.amount_paid, 0, 'The free trial must not charge a subscription payment.');
+      assertProTrialCheckout({ session, subscription, customer, invoice });
     }
     await until(async () => (await app.auth().getUser(fixture.uid)).customClaims, value => value?.stripeRole === role, 'claim reconciliation');
     await until(async () => (await db.doc(`mail/welcome_email_${session.subscription}`).get()).exists, value => value, 'welcome email outbox');

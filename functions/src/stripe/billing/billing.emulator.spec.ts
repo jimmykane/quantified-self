@@ -8,7 +8,7 @@ import type Stripe from 'stripe';
 import { Decimal } from 'stripe';
 import { BILLING_ACCOUNTS, BILLING_CONTROL, BILLING_JOBS, billingId, type BillingEvent } from './model';
 import { admitBillingCheckout, admitBillingEvent, processBillingJob } from './queue';
-import { acquireBillingLease, commitBillingProjections, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
+import { acquireBillingLease, commitBillingProjections, createBillingCheckout, createBillingPortal, releaseBillingLease, requestBillingDeletion } from './service';
 import { billingTransport, dispatchBillingJob } from './dispatch';
 import { PROVIDER_MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { getBillingStripe } from '../client';
@@ -164,6 +164,85 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
     await ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!);
     expect((await ref.get()).get('url')).toBeTruthy();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it.each([[0, 7], [7, 0], [7, 14]])('does not reuse a checkout after trial length changes from %s to %s days', async (before, after) => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    f.price.metadata.trial_days = String(before);
+    const data = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, ...(before ? { trial_period_days: before } : {}) };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    const operation = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    const original = (await operation.get()).data();
+    f.price.metadata.trial_days = String(after);
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    const offer = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, ...(after ? { trial_period_days: after } : {}) };
+    await ref.set(offer); await f.run((await admitBillingCheckout(db, f.uid, next, offer, Timestamp.now()))!);
+    expect((await ref.get()).get('error.code')).toBe('checkout_offer_pending');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect((await operation.get()).data()).toEqual(original);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    // An expired session permits a separate current offer without rewriting the old operation.
+    [...f.sessions.values()][0].status = 'expired';
+    const fresh = unique(), freshRef = db.doc(`customers/${f.uid}/checkout_sessions/${fresh}`);
+    await freshRef.set(offer); await f.run((await admitBillingCheckout(db, f.uid, fresh, offer, Timestamp.now()))!);
+    expect((await freshRef.get()).get('url')).toBeTruthy();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    expect((await operation.get()).data()).toEqual(original);
+  });
+  it('does not reuse a card-required Pro trial after the trusted product becomes Basic', async () => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, trial_period_days: 7 };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    f.product.metadata.firebaseRole = 'basic';
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!);
+    expect((await ref.get()).get('error.code')).toBe('checkout_offer_pending');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it.each(['canceled', 'past_due'])('rechecks %s subscription history before reusing an open trial', async status => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, trial_period_days: 7 };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    f.stripe.subscriptions.list.mockResolvedValue({ data: [{ status }], has_more: false });
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!);
+    expect((await ref.get()).get('error.code')).toBe(status === 'canceled' ? 'trial_ineligible' : 'subscription_exists');
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it('never recovers an original operation using a newer open checkout or overwrites its reservation', async () => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, trial_period_days: 7 };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    const original = (await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).data();
+    [...f.sessions.values()][0].status = 'expired';
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!);
+    const newer = (await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).data();
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      await expect(createBillingCheckout(f.ctx, lease, f.uid, f.requestId, data)).rejects.toMatchObject({ code: 'operation_uncertain' });
+    } finally { await releaseBillingLease(db, lease); }
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${next}`);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).data()).toEqual(original);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).data()).toEqual(newer);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+  });
+  it('retains the original checkout when current offer eligibility cannot be read', async () => {
+    const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+    const data = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, trial_period_days: 7 };
+    await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+    f.stripe.subscriptions.list.mockRejectedValueOnce(new Error('history unavailable'));
+    const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
+    await ref.set(data);
+    const id = (await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!;
+    await expect(f.run(id)).rejects.toThrow();
+    expect((await ref.get()).get('url')).toBeUndefined();
+    expect((await ref.get()).get('error.code')).toBe('provider_unavailable');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('pending');
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${f.requestId}`);
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).exists).toBe(false);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
   });
   it('reuses a returning customer and supports one-time payment checkout', async () => {

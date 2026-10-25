@@ -26,7 +26,7 @@ const MESSAGES: Record<BillingErrorCode, string> = {
   subscription_exists: 'You already have a subscription. Please use Manage subscription.',
   trial_ineligible: 'This trial is no longer available. Please refresh the pricing page.',
   checkout_terms_changed: 'New Pro trials require a payment method. Refresh the app and review the updated trial terms before continuing.',
-  checkout_offer_pending: 'An earlier trial checkout is still open under different terms. Let it expire before starting a new trial checkout, or contact support.',
+  checkout_offer_pending: 'An earlier checkout is still open under different terms. Let it expire before starting a new checkout, or contact support.',
   operation_uncertain: 'Your previous billing request needs review. Please contact support before trying again.',
   provider_unavailable: 'Billing is taking longer than expected. Your request is retained; please try checking it again later.',
   retry_exhausted: 'We could not complete your billing request. Please contact support.',
