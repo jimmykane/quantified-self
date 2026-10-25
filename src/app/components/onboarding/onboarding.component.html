@@ -76,6 +76,7 @@
                 <div class="step-content pricing-step">
                     <app-pricing
                         [isOnboarding]="true"
+                        [onboardingUser]="user"
                         (loadingStateChange)="onPricingLoadingChange($event)"
                         (planSelected)="onPlanSelected()"></app-pricing>
 
