@@ -727,5 +727,17 @@ production memory and cold-start monitoring remain necessary before changing run
 
 ## Rollback
 
-Remove the target from `TARGET_LOADERS` and redeploy that function from a verified revision. Unknown targets automatically
-use the complete entrypoint, so rollback does not require changing the function name or trigger configuration.
+Restore the previous verified source revision in a separate rollback worktree, retaining its matching loader,
+verification scripts, bootstrap and dependency lockfile. Rebuild and run that revision's entrypoint, deployment-safety,
+secret-binding and affected handler checks before requesting approval to redeploy only the affected Functions.
+Compare their endpoint/trigger descriptors with the current release and verify runtime health after deployment.
+
+For the 73-target migration on 2026-10-26, the pre-change revision is
+`ff6b68f29ba3d865468d078e65e09919f5a16c4e`. It retains these targets on the full-entrypoint fallback with the same
+handler behavior and runtime settings. This is a source baseline, not evidence that the revision was deployed.
+If later releases change handler behavior or data contracts, review those changes before selecting an older revision;
+prefer a compatible corrective build when reverting them would be unsafe.
+
+Removing a loader from the current revision alone is not a deployable rollback: the complete-coverage assertion
+intentionally rejects the resulting missing loader. Keep that protection enabled. No Function rename, deletion,
+resource change or production deployment is authorized by this runbook.
