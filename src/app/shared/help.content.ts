@@ -1191,6 +1191,10 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
 - Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
+- New Pro trials require a payment method in Stripe Checkout. There is no subscription charge during the free trial. Review the selected price, billing interval, any applicable tax, and first payment date in Checkout before confirming.
+- After the trial, the selected subscription renews automatically until you cancel. Cancel from **Membership → Manage subscription** before the trial ends to avoid the first payment. Existing trials keep the terms you originally accepted; complimentary extensions are unchanged.
+- Starter stays free and does not require a payment method.
+- If the app asks you to review updated trial terms, refresh it and review the offer again. An earlier open trial checkout may need to expire before you can start one under the new terms; contact support if it stays blocked.
 - Yearly paid plans appear automatically when active yearly Stripe prices are available.
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.

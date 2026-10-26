@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 import { guardedBillingStripe } from './guarded-client';
 import type Stripe from 'stripe';
 import type { Auth } from 'firebase-admin/auth';
@@ -167,6 +168,10 @@ async function checkoutParameters(ctx: BillingDependencies, lease: BillingLease,
       trialDays = offeredDays;
     }
   }
+  const requiresPaymentMethod = !!trialDays && (product.metadata.firebaseRole ?? product.metadata.role) === 'pro';
+  if (requiresPaymentMethod && request.checkout_terms_version !== STRIPE_CHECKOUT_TERMS_VERSION) {
+    throw new BillingError('checkout_terms_changed');
+  }
   const params: Stripe.Checkout.SessionCreateParams = {
     customer, mode: request.mode, line_items: [{ price: price.id, quantity: 1 }],
     success_url: request.success_url, cancel_url: request.cancel_url,
@@ -175,7 +180,7 @@ async function checkoutParameters(ctx: BillingDependencies, lease: BillingLease,
     metadata: { firebaseUID: uid },
     // Expiry and every other POST argument are frozen in the operation journal.
     expires_at: Math.floor(now(ctx) / 1000) + 3600,
-    ...(request.mode === 'subscription' ? { payment_method_collection: 'if_required' as const,
+    ...(request.mode === 'subscription' ? { payment_method_collection: requiresPaymentMethod ? 'always' as const : 'if_required' as const,
       // Gifts extend classic subscriptions; the pinned API otherwise defaults to flexible.
       subscription_data: { billing_mode: { type: 'classic' as const }, metadata: { firebaseUID: uid }, ...(trialDays ? { trial_period_days: trialDays } : {}) } }
       : { payment_intent_data: { metadata: { firebaseUID: uid } } }),
@@ -187,8 +192,12 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
   const customer = await ensureBillingCustomer(ctx, lease, uid);
   const name = `checkout_${requestId}`;
   const root = accountRef(ctx.db, uid);
+  const saved = (await operationRef(ctx.db, uid, name).get()).data() as Operation | undefined;
   const active = (await root.get()).get('activeCheckout') as string | undefined;
   if (active && active !== name) {
+    // Recovery belongs to this operation's original Stripe identity. It must
+    // neither return a newer session nor replace that operation's reservation.
+    if (saved) throw new BillingError('operation_uncertain');
     const previous = (await operationRef(ctx.db, uid, active).get()).data() as Operation | undefined;
     if (previous) {
       if (!previous.result?.id) throw new BillingError('operation_uncertain');
@@ -200,13 +209,18 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
       if (session.status === 'open') {
         const lineItems = previous.params.line_items as { price: string }[];
         if (previous.params.mode !== request.mode || lineItems[0]?.price !== request.price) throw new BillingError('operation_uncertain');
+        // A different browser request must still be eligible for the current
+        // offer. Price/mode alone cannot distinguish trial changes or policy
+        // changes. Original-operation recovery below retains its frozen terms.
+        const current = await checkoutParameters(ctx, lease, uid, customer, request);
+        if ((previous.params.subscription_data?.trial_period_days ?? 0) !== (current.subscription_data?.trial_period_days ?? 0)
+          || previous.params.payment_method_collection !== current.payment_method_collection) throw new BillingError('checkout_offer_pending');
         if (!session.url) throw new BillingError('operation_uncertain');
         await assertBillingAuthority(ctx, lease, uid, customer);
         return { sessionId: session.id, url: session.url, customerId: customer };
       }
     }
   }
-  const saved = (await operationRef(ctx.db, uid, name).get()).data() as Operation | undefined;
   const params = saved?.params ?? await checkoutParameters(ctx, lease, uid, customer, request);
   const operation = saved ?? await reserveOperation(ctx, lease, uid, name, params);
   if (operation.rejected) throw new BillingError('checkout_rejected');

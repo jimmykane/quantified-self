@@ -4,6 +4,10 @@ This document outlines the pricing structure, usage limits, and enforcement poli
 
 ## Subscription Tiers
 
+New eligible Pro trials require a reusable payment method in Stripe Checkout; the configured free trial is not a subscription charge. The selected price renews after trial end unless the member cancels beforehand. Public pricing, onboarding and Membership disclose these terms, with the final total and first payment date confirmed in Checkout. Starter remains free without a payment method, and existing trials and complimentary extensions retain their original terms.
+
+The authoritative server policy, offer-version compatibility, trial-reminder verification and coordinated rollout are in [Stripe billing](stripe-billing.md#payment-methods-for-new-pro-trials). Collection at trial start is not evidence of a successful later payment or conversion lift.
+
 The application defines three primary user roles based on subscription status:
 
 ### 1. Free
