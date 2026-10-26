@@ -1546,6 +1546,13 @@ Provider file URLs are external input even if they came from an authenticated pa
 
 Treat a successful HTTP status as transport success, not proof that a provider file is ready. Normalize only recognized wrappers and validate the complete FIT envelope—including its declared length—before invoking Sports Lib. Apply a decoded-body limit when the provider contract documents a safe maximum; do not invent one that could reject valid activity files. A provider-specific incomplete or placeholder response should remain retryable with a distinct exhausted-retry DLQ context. Diagnostics may retain only structural facts such as byte length, an allowlisted content-type category, and validation reason; never retain or log the response body. If a structurally valid FIT parses without a session, retry only when provider evidence supports a narrowly bounded not-ready case (for Suunto, a suspiciously small response); keep ordinary full-sized sessionless files terminal so permanent corruption does not consume the retry budget.
 
+Shared downloaded-FIT normalization accepts multipart file parts labelled `application/octet-stream` or
+`application/vnd.ant.fit`, case-insensitively and with optional media-type parameters. Both require the existing
+form-data/filename headers, matching multipart boundary and complete FIT envelope including trailing CRC bytes;
+unknown media types and incomplete parts remain unmodified for caller validation. This compatibility fix leaves
+monitoring **unchanged**: existing import outcomes and retry diagnostics still apply, with no queue, retry-policy,
+telemetry, Help, MCP or Training contract changes.
+
 Suunto FIT downloads in the queued sync worker use the existing 60-second deadline plus an application safety bound
 of 128 MiB per response, enforced while reading even when Content-Length is absent. Redirects are rejected. This is
 an operator-selected QS limit, not a documented Suunto maximum: a valid larger file will require operator review.

@@ -285,10 +285,11 @@ export class EChartsHostController {
       && this.lastResizeSize.pixelRatio === pixelRatio) return;
 
     this.config.eChartsLoader.resize(this.chart, {
-      // ECharts retains explicit initialization dimensions unless resize replaces them.
-      // Switch back to the live host size once layout is available (including overlays).
-      width: 'auto',
-      height: 'auto',
+      // ECharts hides its canvas while measuring 'auto', which can reflow flex/grid
+      // tiles and measure a transient height. Use the live content box measured
+      // before that reflow, also replacing any fixed initialization dimensions.
+      width,
+      height,
       silent: true,
     });
     this.lastResizeSize = { width, height, pixelRatio };
@@ -297,23 +298,30 @@ export class EChartsHostController {
       this.config.eChartsLoader.setOption(this.chart, noteLayout, { notMerge: false, lazyUpdate: false, silent: true });
     }
     this.config.onContainerResize?.({ width, height });
+    // Dashboard alignment can change the flex allocation later in this frame,
+    // returning to the observer's previously reported size without a new event.
+    // Recheck next frame; the unchanged-size guard ends the work once settled.
+    if (typeof requestAnimationFrame !== 'undefined') this.scheduleResize();
   }
 
   private getContainerSize(container: HTMLElement): { width: number; height: number } {
     const clientWidth = Number(container.clientWidth);
     const clientHeight = Number(container.clientHeight);
+    const style = window.getComputedStyle(container);
+    const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const paddingY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
 
     if (Number.isFinite(clientWidth) && Number.isFinite(clientHeight) && clientWidth > 0 && clientHeight > 0) {
       return {
-        width: clientWidth,
-        height: clientHeight,
+        width: clientWidth - paddingX,
+        height: clientHeight - paddingY,
       };
     }
 
     const rect = container.getBoundingClientRect();
     return {
-      width: rect.width,
-      height: rect.height,
+      width: rect.width - paddingX,
+      height: rect.height - paddingY,
     };
   }
 

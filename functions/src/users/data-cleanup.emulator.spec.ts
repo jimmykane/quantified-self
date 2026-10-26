@@ -348,6 +348,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await marker.set({ expireAt: Timestamp.fromMillis(Date.now() - 1) });
         const { attemptId } = await beginAccountDataCleanup(db, uid);
         await checkpointAccountDeletionIdentifiers(db, uid, emptyIdentifiers, attemptId);
+        // Both transactions contend on the same marker; allow bounded emulator lock waits and SDK backoff.
         await Promise.all(['synthetic-provider-one', 'synthetic-provider-two'].map(id =>
             checkpointAccountDeletionIdentifiers(db, uid, { ...emptyIdentifiers, suuntoUserNames: [id] }, attemptId)));
         await db.doc(`users/${uid}/sleepSessions/one`).set({ synthetic: true });
@@ -372,7 +373,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         expect(complete.expireAt.toMillis() - Date.now()).toBeGreaterThan(6 * 86400_000);
         // Keep lookup identities for duplicate Auth events throughout completed retention.
         expect(complete.providerIdentifiers.suuntoUserNames).toHaveLength(2);
-    });
+    }, 30_000);
 
     it('prevents superseded invocations and pending operational targets from recording completion', async () => {
         const uid = owner();

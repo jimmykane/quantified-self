@@ -36,6 +36,7 @@ describe('AppIconService', () => {
         // We can be more specific if we want, checking for a specific icon
         expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalledWith('logo', undefined);
         expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalledWith('wahoo', undefined);
+        expect(domSanitizerSpy.bypassSecurityTrustResourceUrl).not.toHaveBeenCalledWith('assets/logos/facebook_logo.svg');
     });
 
     it('keeps the Wahoo registry asset as a path-based SVG', () => {

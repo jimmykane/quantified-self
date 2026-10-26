@@ -109,13 +109,17 @@ describe('downloadSuuntoFITFile', () => {
     });
   });
 
-  it('unwraps a multipart response before validating it', async () => {
+  it.each([
+    ['application/octet-stream', 'multipart/form-data'],
+    ['application/vnd.ant.fit', 'multipart/form-data'],
+    ['application/vnd.ant.fit', 'application/octet-stream;charset=UTF-8'],
+  ])('unwraps a %s part inside a %s response before validating it', async (partContentType, contentType) => {
     const fit = createSyntheticFitPayload(Buffer.from([0x0a, 0x0b]));
     const boundary = '------SuuntoFitBoundary';
     const multipart = Buffer.concat([
       Buffer.from(
         `${boundary}\r\nContent-Disposition: form-data; name="file"; filename="activity.fit"\r\n`
-          + 'Content-Type: application/octet-stream\r\n\r\n',
+          + `Content-Type: ${partContentType}\r\n\r\n`,
         'latin1',
       ),
       fit,
@@ -124,21 +128,23 @@ describe('downloadSuuntoFITFile', () => {
     mockGetBinaryResponse.mockResolvedValue({
       body: multipart,
       statusCode: 200,
-      contentType: 'multipart/form-data',
+      contentType,
       contentLength: multipart.length,
     });
 
     await expect(downloadSuuntoFITFile('token', 'workout-1')).resolves.toEqual(fit);
   });
 
-  it('retries a multipart FIT whose missing CRC was followed by boundary bytes', async () => {
+  it.each([
+    'application/octet-stream', 'application/vnd.ant.fit',
+  ])('retries a multipart %s FIT whose missing CRC was followed by boundary bytes', async (partContentType) => {
     const fit = createSyntheticFitPayload(Buffer.from([0x0a, 0x0b]));
     const truncatedFit = fit.subarray(0, fit.length - 2);
     const boundary = '------SuuntoFitBoundary';
     const multipart = Buffer.concat([
       Buffer.from(
         `${boundary}\r\nContent-Disposition: form-data; name="file"; filename="activity.fit"\r\n`
-          + 'Content-Type: application/octet-stream\r\n\r\n',
+          + `Content-Type: ${partContentType}\r\n\r\n`,
         'latin1',
       ),
       truncatedFit,

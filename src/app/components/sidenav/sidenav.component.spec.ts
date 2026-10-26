@@ -182,15 +182,17 @@ describe('SideNavComponent', () => {
         openSpy.mockRestore();
     });
 
-    it('should trigger haptics when opening the Facebook group', async () => {
-        const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    it('keeps only the supported footer actions for guests and signed-in users', () => {
+        for (const user of [null, new User('footer-user')]) {
+            mockUserService.user.mockReturnValue(user);
+            fixture.detectChanges();
 
-        await component.facebookGroup();
+            const actions = Array.from(
+                fixture.nativeElement.querySelectorAll('.sidenav-footer-links [matTooltip]') as NodeListOf<HTMLElement>,
+            ).map(action => action.getAttribute('matTooltip'));
 
-        expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
-        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('facebook_group_click');
-        expect(openSpy).toHaveBeenCalledWith('https://www.facebook.com/groups/quantifiedself.io');
-        openSpy.mockRestore();
+            expect(actions).toEqual(['Release Notes', 'Star on GitHub', 'Contact Support', 'Report a Bug', 'Policies']);
+        }
     });
 
     it('renders contact support as a same-context email link', () => {
