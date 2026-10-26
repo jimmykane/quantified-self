@@ -1,0 +1,44 @@
+<app-shell-header [authState]="true" [isDashboardRoute]="true" [isHandset]="mobile" />
+@if (design === 'drawer') {
+<button class="header-imports" mat-stroked-button (click)="toggleImports()" [attr.aria-expanded]="drawer()" aria-haspopup="dialog">
+  <mat-icon>sync</mat-icon><span>Imports</span><span class="import-count">2</span>
+</button>
+}
+<div class="shell-content">
+  @if (design === 'banner') {
+  <section class="import-banner" aria-label="History import progress">
+    <mat-icon class="active-icon" aria-hidden="true">sync</mat-icon>
+    <div class="banner-copy"><strong>Your history is importing</strong><span>Suunto · 128 items or requests</span></div>
+    <button mat-button (click)="showDetails()">View progress<mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+    <mat-progress-bar mode="indeterminate" aria-label="History import in progress" />
+  </section>
+  }
+  <main class="qs-workspace-page">
+    <div class="page-heading"><div><p class="eyebrow">YOUR OVERVIEW</p><h1>Dashboard</h1></div>
+      <button mat-icon-button disabled aria-label="Dashboard settings"><mat-icon>settings_input_component</mat-icon></button>
+    </div>
+    @if (design === 'card') {
+    <mat-card appearance="outlined" class="import-card">
+      <mat-card-content>
+        <div class="card-heading"><mat-icon class="active-icon">sync</mat-icon><div><h2>Your history is on its way</h2><p>Keep using the app. Importing continues in the background.</p></div></div>
+        <div class="provider-title"><app-service-source-icon [sourceServiceName]="service.SuuntoApp" [showTooltip]="false" /><strong>Suunto</strong><span>Importing</span></div>
+        <div class="stage-list">
+          <div class="stage"><mat-icon class="active-icon">sync</mat-icon><span>Activities<small>128 items or requests</small></span><span>Importing</span></div>
+          <div class="stage"><mat-icon>check_circle</mat-icon><span>Sleep<small>14 items or requests</small></span><span>Processed</span></div>
+          <div class="stage"><mat-icon>schedule</mat-icon><span>Health</span><span>Queued</span></div>
+        </div>
+        <mat-progress-bar mode="indeterminate" aria-label="Suunto history import in progress" />
+        <div class="card-footer"><span>Requested: last 90 days</span><button mat-button (click)="showDetails()">View details<mat-icon iconPositionEnd>arrow_forward</mat-icon></button></div>
+      </mat-card-content>
+    </mat-card>
+    }
+    <section class="overview" aria-label="Dashboard with sample data">
+      <div class="overview-heading"><h2>Your training at a glance</h2><button mat-stroked-button disabled>Last 30 days<mat-icon iconPositionEnd>expand_more</mat-icon></button></div>
+      <app-home-dashboard-preview />
+    </section>
+    @if (design !== 'card') {
+    <section class="background-note"><mat-icon>history</mat-icon><div><h2>More history, more context</h2><p>Your dashboard updates as imported data arrives.</p></div></section>
+    }
+    <p class="preview-note">Design preview · Sample import status and dashboard data</p>
+  </main>
+</div>
