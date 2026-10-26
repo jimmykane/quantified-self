@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { ACTIVITY_SEND_LIMITS, ActivitySendRow } from '../../../shared/activity-send';
 import { ALLOWED_CORS_ORIGINS, hasProAccess, shouldEnforceAppCheck } from '../utils';
-import { decodeSendFile, sendFileHash, sendIdentifier } from './policy';
+import { decodeSendFile, SendFileValidationError, sendFileHash, sendIdentifier } from './policy';
 import { batchRef, describeFIT, guardedSendTransaction, operationRef, publicBatch, requireDraft, SendOperation, SendSource } from './store';
 import { queueRetiredSendSourceCleanup } from './source-cleanup';
 import { reserveSendUploadCleanup, sendUploadCleanupRef } from './upload-cleanup';
@@ -18,12 +18,14 @@ const UPLOAD_ERROR_CODES = new Set([
   'unimplemented', 'internal', 'unavailable', 'data-loss', 'unauthenticated',
 ]);
 
-function logUploadRejection(stage: UploadStage, code: string, httpStatus: number): void {
+function logUploadRejection(stage: UploadStage, code: string, httpStatus: number, error: unknown): void {
   try {
     const log = httpStatus >= 500 ? logger.error : logger.warn;
     // Use the existing request trace; never copy headers, identities or exceptions.
     log('[ActivitySendUpload] Request rejected.', {
       stage, errorCode: UPLOAD_ERROR_CODES.has(code) ? code : 'unknown', httpStatus,
+      ...(stage === 'file_validation' && error instanceof SendFileValidationError
+        ? { validationReason: error.validationReason, receivedBytes: error.receivedBytes } : {}),
     });
   } catch { /* Diagnostics must not change the response or cleanup behavior. */ }
 }
@@ -143,7 +145,7 @@ export const uploadActivitySendFile = onRequest({ region: 'europe-west2', cors: 
     const known = error instanceof HttpsError;
     const code = known ? error.code : 'unavailable';
     const status = code === 'unauthenticated' ? 401 : code === 'permission-denied' ? 403 : code === 'resource-exhausted' ? 429 : code === 'already-exists' ? 409 : known ? 400 : 503;
-    logUploadRejection(diagnostic.stage, known ? code : 'unknown', status);
+    logUploadRejection(diagnostic.stage, known ? code : 'unknown', status, error);
     response.status(status).json({ code, message: known ? error.message : 'File staging is temporarily unavailable. Retry the same file.' });
   }
 });

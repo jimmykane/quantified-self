@@ -1630,6 +1630,12 @@ failures preserve the parser's existing HTTP 400; they do not create events, ret
 existing bucket and helper without changing bucket access. The Send activities temporary-source lifecycle is separate
 and is not covered by this manual archive-upload branch.
 
+Send activities file-validation rejections are not captured in debug storage. Their existing
+`[ActivitySendUpload] Request rejected.` warning includes `receivedBytes` (the raw HTTP body size) and a fixed
+`validationReason` for empty/oversized bodies, unsupported extensions, gzip failures, or the shared FIT-envelope
+inspection reason. These diagnostics do not include filenames, identities, headers, file contents, or raw exceptions;
+the existing request trace provides correlation. Validation behavior and client error messages stay unchanged.
+
 #### Fourteen-day debug-file expiry
 
 `storage.debug-lifecycle.json` defines native Cloud Storage deletion eligibility at object age 14 days for the entire
