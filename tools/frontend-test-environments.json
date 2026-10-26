@@ -123,6 +123,7 @@
     "src/app/helpers/health-sleep-account.helper.spec.ts",
     "src/app/helpers/health-source-selection.helper.spec.ts",
     "src/app/helpers/help-search.helper.spec.ts",
+    "src/app/helpers/history-import-progress.helper.spec.ts",
     "src/app/helpers/intensity-zones-chart-data-helper.spec.ts",
     "src/app/helpers/intensity-zones.spec.ts",
     "src/app/helpers/membership-selection.helper.spec.ts",

@@ -23,6 +23,10 @@
     "environment": "angular",
     "reason": "Compiles the Health overview with TestBed to verify signal inputs, child chart bindings, Material category controls, account-scoped source choices and haptic feedback."
   },
+  "src/app/components/history-import-progress/history-import-progress.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the shared header indicator, dashboard cards and panel with TestBed to verify live shared bindings, account isolation, provider links, read-error refresh, Material overlay lifecycle and single-owner haptics."
+  },
   "src/app/components/home/home-reveal.directive.spec.ts": {
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
@@ -102,6 +106,10 @@
   "src/app/services/benchmark-rr-analysis.service.spec.ts": {
     "environment": "angular",
     "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R–R panel fixture suite."
+  },
+  "src/app/services/history-import-progress.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
   },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",

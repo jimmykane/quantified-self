@@ -940,6 +940,38 @@ New Pro trial offers disclose that a payment method is required and direct the m
 
 Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
+### Shared history progress surfaces
+
+The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
+subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;
+capability counts remain items or requests, with no percentage, ETA or complete-delivery claim. Garmin cards use
+**Requesting history** / **Waiting to retry requests**; a sole Garmin header uses **Requesting Garmin history** /
+**Waiting to retry Garmin requests**. Garmin counters are **requests scheduled**, including planned Health windows,
+not records received or confirmed HTTP submissions. The shared card explicitly says Garmin sends records separately
+and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
+Requested/processed
+context stays prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
+counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
+browser and clears it from the shared header/panel/Dashboard. Details and retry controls remain in Connections.
+New runs, resumed work and new terminal results appear again. Active work, reconnect guidance and unavailable
+status cannot be dismissed. Undismissed issues remain until superseded. Read failures are unavailable, not zero.
+Raw account changes clear both surfaces and close owned panels. Viewing progress makes no provider request or write;
+details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
+feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).
+
+Connection lifecycle takes precedence over a retained active projection: pending/completed disconnects remove it
+from these surfaces, while lost authorization shows reconnect guidance without an active spinner or retry claim.
+Use the connection state from the same safe metadata read; never infer a live import from the retained run alone.
+Read-only refreshes retain each provider's last status until its fresh snapshot arrives, with an explicit busy action
+and no duplicate refresh. A pending read for another provider cannot delay a known lifecycle change.
+Members can hide the Dashboard group and restore it using **Show on dashboard** in the header panel. This is an
+account-scoped local browser preference only; live status, provider work, consent and the existing metadata reads
+remain unchanged. Browser-storage failure falls back to the current app session.
+
+Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#830 ingestion bundles still cover all
+workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,
+Rules, index or telemetry contract changes. This presentation change requires only a separately approved frontend release.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:

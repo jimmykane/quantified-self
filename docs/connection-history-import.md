@@ -15,6 +15,60 @@ The checkbox uses the shared capability inventory for its description. Dashboard
 
 Dashboard setup actions read durable service state on every visit. The empty-activity card offers **Connect service** only after confirming that no activity service is connected, including for accounts with dismissed prompts or without Pro. A saved Garmin connection-history run covering Sleep or Health suppresses the generic history prompt from admission onward, even with zero records or failed/skipped steps; progress and retries remain in Services. Activity-only history does not suppress the Sleep/Health offer. The prompt waits for service metadata and preserves the older manual backfill markers. These frontend decisions change no queue, monitoring, MCP, consent or provider API contract.
 
+## Shared header and Dashboard progress
+
+The authenticated header lazily loads a text action such as **Importing history · 2**. Its Material panel (bottom
+sheet on phones) and the signed-in owner's Dashboard render the same `HistoryImportCardsComponent`. The root
+`HistoryImportProgressService` subscribes once per authenticated session to the four existing owner-readable
+`users/{uid}/meta/{service}` documents. It consumes only `connectionHistoryImport`; Connections and older prompt
+readers retain their existing contracts. There are no private run/queue/token reads, new callable, polling loop or write.
+
+Auth and the verified profile must match before reads begin. Raw sign-out/account changes clear status immediately,
+unsubscribe old metadata, dismiss owned panels silently and reject old results. Profile-only updates do not restart
+listeners. Dashboard progress is omitted when viewing another account. Read failures are unavailable, not zero; an
+explicit **Refresh status** reattaches only these safe reads. Header, panel and Dashboard consume the same live view.
+During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
+snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
+
+The Dashboard group has **Hide from dashboard**. The header panel's **Show on dashboard** switch restores it; the
+panel and header keep their live status while Dashboard cards are hidden. This preference applies to future runs too.
+It is stored as a local boolean for the signed-in account through `APP_STORAGE`, with an in-memory fallback if storage
+is blocked. Each account has its own choice on that browser. It saves no import data, changes no server preference,
+and neither stops nor starts provider work. Stale panels cannot change another session's preference.
+
+The same safe metadata snapshot supplies the current connection state. Pending or completed disconnects hide any
+retained run projection, which the server can leave marked active after invalidating its lifecycle. An active projection
+with `reconnect_required` shows **Reconnect required** and a Connections link instead of stale processing stages or
+an automatic-retry claim. A successful reconnect replaces/clears the old projection through the existing lifecycle;
+this UI performs no recovery action and reads no token or generation fields.
+
+Active work and automatic retries retain their distinct stages. Garmin cards say **Requesting history** or **Waiting
+to retry requests**; a sole Garmin header says **Requesting Garmin history** or **Waiting to retry Garmin requests**.
+Garmin Activities, Sleep and Health counters explicitly describe **requests scheduled**, not records received or
+accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records
+separately after accepting requests; delivery can take hours or days and completion is not tracked here. Submitted
+requests say **History requested** without an activity spinner. Older processed Garmin projections say **Request
+processing finished**, never that records have finished importing. Requested/processed terminal context
+expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
+does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
+**Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
+current account on this browser. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
+is blocked; no server write or recovery action occurs. New runs and resumed work remain visible, and a new terminal
+timestamp from a retry is a new result. Stale owner/result actions are rejected. Active work, reconnect guidance and
+unavailable status have no result-dismissal action. Connections retains the detailed status and retry controls.
+Until dismissed or superseded, issues remain visible. Counts are per capability's items or requests, never failure totals,
+and are never summed into a percentage,
+unique-record total, ETA or proof of complete coverage. Combined Sleep/Health capabilities keep one count.
+
+This covers coordinator projections, including the manual Suunto/COROS/Wahoo activity path. Legacy manual activity
+leases and independent Sleep/Health tools keep their existing feedback rather than gaining fabricated progress.
+**View details** navigates to the existing provider tab; merely opening these surfaces starts no provider work.
+
+Monitoring is **unchanged**: reviewed the #847 coordinator and #829/#830 ingestion coverage below and their source
+bundles. Workers, queues, dispatchers, leases, retries, outcomes and telemetry remain identical. MCP/Assistant,
+Training, entitlements and consent are unaffected. Only a separately approved frontend release is required;
+no Functions, Rules, indexes, cloud settings or migration are part of this change.
+
 ## Requested range versus stored history
 
 The expanded owner-only History import status labels the selected boundary **Requested range**, never delivered

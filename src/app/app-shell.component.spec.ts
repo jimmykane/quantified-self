@@ -443,6 +443,16 @@ describe('AppShellComponent', () => {
         expect(bannerComponent).toBeTruthy();
     });
 
+    it('keeps workspace offsets below a wrapped header and the existing banner', () => {
+        renderShellFixture(); component.onboardingCompleted = true;
+        component.onBannerHeightChanged(24); component.onHeaderHeightChanged(112); fixture.detectChanges();
+        expect(component.layoutTopOffsetPx).toBe(136);
+        expect(component.visibleTopOffsetPx).toBe(136);
+        component.headerHidden = true; expect(component.visibleTopOffsetPx).toBe(24);
+        component.onHeaderHeightChanged(NaN); component.onHeaderHeightChanged(0);
+        expect(component.layoutTopOffsetPx).toBe(136);
+    });
+
     it('should expose layout css variables based on banner height', () => {
         renderShellFixture();
         component.onboardingCompleted = true;

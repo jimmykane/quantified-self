@@ -1,0 +1,73 @@
+@if (showCards()) {
+<section class="history-import-region" aria-label="History import progress">
+  @if (placement() === 'dashboard') {
+  <div class="dashboard-heading">
+    <h2>History imports</h2>
+    <button mat-icon-button type="button" aria-label="Hide history import progress from dashboard" matTooltip="Hide from dashboard" (click)="hideDashboard()">
+      <mat-icon aria-hidden="true">visibility_off</mat-icon>
+    </button>
+  </div>
+  }
+  <div class="history-import-cards">
+  @for (item of items(); track item.serviceName) {
+  <mat-card appearance="outlined" class="history-import-card">
+    <mat-card-content>
+      <div class="provider-heading">
+        <app-service-source-icon [sourceServiceName]="item.serviceName" [showTooltip]="false" />
+        <strong>{{ item.name }}</strong><span class="provider-status" [class.needs-attention]="item.kind === 'attention'">{{ item.label }}</span>
+      </div>
+      @if (item.rangeLabel) { <p class="requested-range">Requested range: {{ item.rangeLabel }}</p> }
+      @if (item.kind === 'unavailable') {
+      <p class="status-explanation">This provider’s import status could not be loaded.</p>
+      <button mat-button type="button" [disabled]="refreshing()" [attr.aria-busy]="refreshing()" (click)="refresh()">
+        <span class="refresh-content">
+          @if (refreshing()) { <mat-progress-spinner mode="indeterminate" [diameter]="14" [strokeWidth]="2" aria-hidden="true" /> }
+          <span>{{ refreshing() ? 'Checking status' : 'Refresh status' }}</span>
+        </span>
+      </button>
+      } @else {
+      @if (item.explanation) {
+      <p class="status-explanation">{{ item.explanation }}</p>
+      } @else {
+      <div class="history-steps">
+        @for (step of item.steps; track $index) {
+        <div class="history-step" [class.step-failed]="step.status === 'failed'">
+          <mat-icon aria-hidden="true">{{ step.icon }}</mat-icon>
+          <div class="step-copy"><span>{{ step.label }}</span>
+            @if (step.count !== null && step.count > 0) { <small>{{ step.count | number }} {{ step.countLabel }}</small> }
+          </div>
+          <span class="step-status">{{ step.description }}</span>
+          @if (step.message) { <p class="step-explanation">{{ step.message }}</p> }
+        </div>
+        }
+      </div>
+      @if (item.kind === 'active') { <mat-progress-bar mode="indeterminate" [attr.aria-label]="item.name + (item.requestOnly ? ' history request submission in progress' : ' history import in progress')" /> }
+      <p class="coverage-note">
+        @if (item.requestOnly) {
+          @if (item.canDismiss) { Request processing has finished with issues. Counts are not failure totals. Details remain in Connections. }
+        Counts describe scheduled requests, not records received. Garmin sends records separately after accepting requests.
+        Delivery may take hours or days; delivery completion is not tracked here.
+        } @else if (item.canDismiss) {
+        Processing has finished with issues. Counts shown are items or requests, not failure totals. Details remain in Connections.
+        } @else if (item.kind === 'requested') {
+        History requested. Provider delivery may take hours or days.
+        } @else {
+        Counts describe processing, not complete data coverage.
+        }
+      </p>
+      }
+      <div class="history-actions">
+        @if (item.canDismiss) {
+        <button mat-button type="button" [attr.aria-label]="'Dismiss ' + item.name + ' history import result'" (click)="dismissResult(item)">Dismiss this result</button>
+        }
+        <a mat-button routerLink="/services" [queryParams]="{serviceName: item.serviceName}" [attr.aria-label]="'View ' + item.name + ' history import details'" (click)="openDetails($event)">
+          View details<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+        </a>
+      </div>
+      }
+    </mat-card-content>
+  </mat-card>
+  }
+  </div>
+</section>
+}
