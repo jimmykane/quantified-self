@@ -73,6 +73,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     currentRole: StripeRole | null = null;
     isLoading = false;
     loadingPriceId: string | null = null;
+    readonly checkoutProgress = signal('Preparing your checkout…');
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
     private readonly subscriptionSummarySubject = new BehaviorSubject<SubscriptionSummary | null>(null);
     subscriptionSummary$: Observable<SubscriptionSummary | null> = this.subscriptionSummarySubject.asObservable();
@@ -539,6 +540,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.loadingPriceId = priceId;
+        this.checkoutProgress.set('Preparing your checkout…');
         this.setLoadingState(true);
 
         try {
@@ -547,7 +549,9 @@ export class PricingComponent implements OnInit, OnDestroy {
                 typeof price !== 'string' ? price.currency : undefined,
                 typeof price !== 'string' ? price.unit_amount / 100 : undefined
             );
-            await this.paymentService.appendCheckoutSession(price, undefined, undefined, () => !this.destroyed);
+            await this.paymentService.appendCheckoutSession(price, undefined, undefined, () => !this.destroyed, () => {
+                if (!this.destroyed) this.checkoutProgress.set('Updating your checkout…');
+            });
         } catch (error) {
             if (this.destroyed) {
                 return;

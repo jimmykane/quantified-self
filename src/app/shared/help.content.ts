@@ -1187,14 +1187,15 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - During billing maintenance, new checkout and portal requests are temporarily paused. Existing subscriptions continue billing normally. Wait for billing to reopen before trying again.
-- If a checkout result is still being confirmed, contact support before starting another payment.
+- If you return from an unfinished checkout, you can choose a different plan or billing interval. **Updating your checkout…** means the old payment link is being closed before the new one opens. Choosing the same offer resumes its existing checkout.
+- If checkout completed in another tab, refresh Membership to see your access. If a payment result is still being confirmed, wait for confirmation before trying another payment; contact support if it stays unresolved.
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
 - Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
 - New Pro trials require a payment method in Stripe Checkout. There is no subscription charge during the free trial. Review the selected price, billing interval, any applicable tax, and first payment date in Checkout before confirming.
 - After the trial, the selected subscription renews automatically until you cancel. Cancel from **Membership → Manage subscription** before the trial ends to avoid the first payment. Existing trials keep the terms you originally accepted; complimentary extensions are unchanged.
 - Starter stays free and does not require a payment method.
-- If the app asks you to review updated trial terms, refresh it and review the offer again. An earlier open trial checkout may need to expire before you can start one under the new terms; contact support if it stays blocked.
+- If the app asks you to review updated trial terms, refresh it and review the offer again. Choosing the updated offer safely replaces an earlier unfinished checkout; existing subscriptions keep their accepted terms.
 - Yearly paid plans appear automatically when active yearly Stripe prices are available.
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.

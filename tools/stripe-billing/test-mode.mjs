@@ -269,6 +269,38 @@ async function policy(label) {
   state.results.push({ case: 'native classic Checkout gift, renewal, duplicate signatures and maintenance', passedAt: new Date().toISOString() }); save();
   console.log('Verified classic Checkout gift/email, renewal, duplicate/signed ingress, and cached-client maintenance.');
 }
+async function switchCheckout(label) {
+  assert.ok(!state.users[label], 'Use a fresh synthetic label for the switching flow.');
+  await checkout(label, 'subscription', true, true);
+  const fixture = state.users[label];
+  const sessions = [fixture.checkout.sessionId];
+  for (const [mode, trial, same] of [['subscription', true, false], ['subscription', true, true],
+    ['subscription', false, false], ['payment', false, false]]) {
+    const previous = fixture.checkout.sessionId;
+    await checkout(label, mode, trial);
+    const current = await stripe.checkout.sessions.retrieve(fixture.checkout.sessionId);
+    assert.equal(current.livemode, false);
+    assert.equal(current.status, 'open'); assert.equal(current.customer, fixture.customerId);
+    assert.equal(current.automatic_tax.enabled, true); assert.equal(current.allow_promotion_codes, true);
+    if (trial) assert.equal(current.payment_method_collection, 'always');
+    if (same) assert.equal(current.id, previous, 'The same offer must reuse its session.');
+    else {
+      assert.notEqual(current.id, previous);
+      assert.equal((await stripe.checkout.sessions.retrieve(previous)).status, 'expired');
+      sessions.push(current.id);
+    }
+  }
+  const all = await stripe.checkout.sessions.list({ customer: fixture.customerId, limit: 100 });
+  assert.equal(all.has_more, false); assert.equal(all.data.length, sessions.length);
+  assert.equal(all.data.filter(session => session.status === 'open').length, 1);
+  assert.ok(all.data.every(session => !session.subscription && !session.payment_intent));
+  const jobs = await db.collection('stripeBillingJobs').where('uid', '==', fixture.uid).get();
+  assert.ok(jobs.docs.filter(job => job.get('kind') === 'checkout').every(job => job.get('state') === 'done'));
+  state.results.push({ case: 'annual/monthly, same offer, Pro/Basic and one-time checkout switching; no payment',
+    passedAt: new Date().toISOString() }); save();
+  console.log('Verified Stripe test-mode switching: previous sessions expired, same offer reused, one open session, no payment.');
+}
+
 async function retryCheckout(label) {
   const fixture = state.users[label];
   const jobs = await db.collection('stripeBillingJobs').where('uid', '==', fixture.uid).get();
@@ -292,8 +324,9 @@ try {
   else if (command === 'verify') await verify(label);
   else if (command === 'lifecycle') await lifecycle();
   else if (command === 'policy') await policy(label);
+  else if (command === 'switch-checkout') await switchCheckout(label);
   else if (command === 'retry') await retryCheckout(label);
-  else throw new Error('Use seed, checkout LABEL [subscription|payment] [--trial [--yearly]], verify LABEL, policy LABEL, lifecycle, or retry LABEL.');
+  else throw new Error('Use seed, checkout LABEL [subscription|payment] [--trial [--yearly]], verify LABEL, policy LABEL, lifecycle, switch-checkout FRESH_LABEL, or retry LABEL.');
 } catch (error) {
   // Fixed test-driver messages contain no provider bodies, credentials or customer data.
   if (error.type?.startsWith('Stripe')) console.error(`Stripe test fixture failed (${error.type}, ${error.code ?? 'no_code'}, parameter ${error.param ?? 'none'}).`);

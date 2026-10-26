@@ -42,11 +42,14 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     for (const phrase of ['New Pro trials require a payment method', 'no subscription charge during the free trial',
       'first payment date', 'before the trial ends to avoid the first payment', 'Existing trials keep the terms',
-      'Starter stays free', 'earlier open trial checkout may need to expire']) expect(copy).toContain(phrase);
+      'Starter stays free', 'safely replaces an earlier unfinished checkout']) expect(copy).toContain(phrase);
   });
   it('explains the checkout handoff and recovery before another payment', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     expect(copy).toContain('checks your access for up to 20 seconds');
+    expect(copy).toContain('**Updating your checkout…**');
+    expect(copy).toContain('Choosing the same offer resumes its existing checkout');
+    expect(copy).toContain('If checkout completed in another tab, refresh Membership');
     expect(copy).toContain('**Connect your devices** opens [Connections](/services)');
     expect(copy).toContain('Opening Connections does not connect an account automatically');
     expect(copy).toContain('**Membership still syncing**');

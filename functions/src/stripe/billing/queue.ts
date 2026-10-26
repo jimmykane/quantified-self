@@ -68,7 +68,7 @@ export async function writeCheckoutError(db: Firestore, uid: string, requestId: 
   await db.runTransaction(async tx => {
     const ref = db.doc(`customers/${uid}/checkout_sessions/${requestId}`);
     const [guard, current, account] = await Promise.all([getUserDeletionGuardStateInTransaction(db, tx, uid), tx.get(ref), tx.get(db.collection(BILLING_ACCOUNTS).doc(uid))]);
-    if (!guard.shouldSkip && !account.get('deleting') && current.exists && !current.get('sessionId')) tx.update(ref, { error: safeBillingError(error) });
+    if (!guard.shouldSkip && !account.get('deleting') && current.exists && !current.get('sessionId')) tx.update(ref, { error: safeBillingError(error), status: 'failed' });
   });
 }
 export async function finishBillingJob(db: Firestore, id: string, generation: number, state: 'done' | 'skipped', deletedCustomerIds: readonly string[] = []): Promise<boolean> {
@@ -207,7 +207,7 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
     if (job.kind === 'checkout') {
       const { customerId, ...result } = await createBillingCheckout(ownedContext, lease, job.uid!, job.requestId!, job.request!);
       const committed = await commitBillingProjections(ctx, lease, job.uid, customerId, [
-        { path: `customers/${job.uid}/checkout_sessions/${job.requestId}`, data: { ...result, error: null, created: Timestamp.fromMillis(time) } },
+        { path: `customers/${job.uid}/checkout_sessions/${job.requestId}`, data: { ...result, error: null, status: 'ready', created: Timestamp.fromMillis(time) } },
       ], { ref, generation });
       if (committed) observeBilling('processed');
       else if (await finishBillingJob(ctx.db, id, generation, 'skipped')) observeBilling('skipped');
@@ -228,6 +228,11 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
       return;
     }
     if (job.kind === 'checkout') await writeCheckoutError(ctx.db, job.uid!, job.requestId!, error);
+    if (job.kind === 'checkout' && error instanceof BillingError
+      && ['checkout_completed', 'checkout_replaced'].includes(error.code)) {
+      if (await finishBillingJob(ctx.db, id, generation, 'skipped')) observeBilling('skipped');
+      return;
+    }
     await failBillingJob(ctx.db, id, job, error, ctx.now?.() ?? Date.now());
   } finally { if (acquiredLease) await releaseBillingLease(ctx.db, acquiredLease); }
 }
