@@ -38,6 +38,10 @@ app-home-dashboard-preview { display: block; }
 .background-note p { font: var(--mat-sys-body-medium); margin-top: 6px; color: var(--mat-sys-on-surface-variant); }
 .preview-note { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin-top: 28px; }
 .header-imports { position: fixed; top: 12px; right: 72px; z-index: 1002; }
+.header-imports--text { top: 8px; height: 48px; max-width: calc(100vw - 200px); padding-inline: 12px; }
+.header-activity-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+.header-activity-content mat-progress-spinner { flex: 0 0 14px; }
+.header-activity-label { white-space: normal; font: var(--mat-sys-label-large); }
 .import-count { margin-left: 8px; font-weight: 600; }
 .drawer-intro { margin: 14px 0 24px; font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
 .drawer-provider { padding-bottom: 20px; }

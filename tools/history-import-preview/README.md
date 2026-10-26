@@ -14,7 +14,8 @@ From this directory with Node 22 and the repository dependencies installed:
 - `/?design=banner`: compact status strip below the header, details on demand.
 - `/?design=card`: dashboard card with resource stages.
 - `/?design=drawer`: header entry and open import drawer; mobile uses a bottom sheet layout.
-- `/?design=header`: collapsed header indicator for three imports; tap to open dashboard-style provider cards.
+- `/?design=header`: borderless **Importing history · 3** text button with a small activity spinner;
+  tap to open dashboard-style provider cards. The label wraps at narrow phone widths.
   Suunto imports, Garmin waits for delivery and COROS retries automatically. Each card opens its own matching details.
 - Add `&theme=light` to check the light theme.
 

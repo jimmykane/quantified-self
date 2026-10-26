@@ -1,7 +1,11 @@
 <app-shell-header [authState]="true" [isDashboardRoute]="true" [isHandset]="mobile" />
-@if (design === 'drawer' || design === 'header') {
-<button class="header-imports" mat-stroked-button (click)="toggleImports()" [attr.aria-label]="'View ' + (design === 'header' ? importCount : 2) + ' history imports'" [attr.aria-expanded]="drawer()" aria-haspopup="dialog">
-  <mat-icon>sync</mat-icon><span>Imports</span><span class="import-count">{{ design === 'header' ? importCount : 2 }}</span>
+@if (design === 'header') {
+<button class="header-imports header-imports--text" mat-button (click)="toggleImports()" [attr.aria-label]="'View ' + importCount + ' history imports'" [attr.aria-expanded]="drawer()" aria-haspopup="dialog">
+  <span class="header-activity-content"><mat-progress-spinner mode="indeterminate" [diameter]="14" [strokeWidth]="2" aria-hidden="true" /><span class="header-activity-label">Importing history · {{ importCount }}</span></span>
+</button>
+} @else if (design === 'drawer') {
+<button class="header-imports" mat-stroked-button (click)="toggleImports()" aria-label="View 2 history imports" [attr.aria-expanded]="drawer()" aria-haspopup="dialog">
+  <mat-icon>sync</mat-icon><span>Imports</span><span class="import-count">2</span>
 </button>
 }
 <div class="shell-content">
