@@ -118,7 +118,9 @@ Use a dedicated operator credential for Events read when running event-window re
 
 ## Changing an unfinished checkout
 
-Selecting the same current price, mode, trial length and payment-method policy reuses its open Stripe session.
+Selecting the same current price, mode, trial length and payment-method policy reuses its open Stripe session and
+records that request's Firestore creation time in the existing operation's `selection` field. Retrying that request
+retains the selection; older queued requests cannot undo it, even after the session expires.
 Selecting a different valid offer reserves a new operation under the customer lease before external work. In one
 transaction it records the prior operation/session, marks the old operation `replacedBy`, moves `activeCheckout`, and
 sets the new request's server-owned `status: updating`. Request creation times prevent older queued selections from
@@ -130,8 +132,9 @@ replacement operation. It reads Stripe again after either success or error. Only
 Checkout POST with the replacement's frozen parameters/key; an ambiguous result remains retryable with the same
 journal. Lost creation responses retain normal same-key reconciliation. An already completed checkout stops the
 switch and durably closes the unused replacement reservation, restoring the known predecessor without changing
-its frozen terms. For an earlier completed subscription, current Stripe subscription state permits a returning member only
-after that subscription has ended. An old replaced operation cannot expire or overwrite its successor.
+its frozen terms or losing the latest selection time. For an earlier completed subscription, current Stripe subscription
+state permits another subscription checkout only after that subscription has ended; a one-time purchase remains allowed.
+An old replaced operation cannot expire or overwrite its successor.
 
 The frontend shows **Updating your checkout…** while the server transitions the session. A completed subscription
 checkout triggers the existing subscription recovery path; a superseded selection asks the member to use their latest

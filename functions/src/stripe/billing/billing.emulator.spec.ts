@@ -247,6 +247,76 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
     expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${newer.requestId}`);
   });
+  it.each(['open', 'expired'])('retains the latest same-offer selection when its checkout is %s', async status => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const initialPrice = { ...f.price };
+    const olderOffer = await changePrice(f), olderPrice = { ...f.price };
+    const older = await nextRequest(f, olderOffer);
+    Object.assign(f.price, initialPrice);
+    const latest = await nextRequest(f); await f.run(latest.id);
+    expect((await latest.ref.get()).get('sessionId')).toBe((await f.ref.get()).get('sessionId'));
+    const previous = [...f.sessions.values()][0]; previous.status = status;
+    if (status === 'expired') previous.url = null;
+    Object.assign(f.price, olderPrice);
+    await f.run(older.id);
+    expect((await older.ref.get()).get('error.code')).toBe('checkout_replaced');
+    expect((await db.doc(`${BILLING_JOBS}/${older.id}`).get()).get('state')).toBe('skipped');
+    expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it('allows the latest same-offer request to retry after recording its selection', async () => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const latest = await nextRequest(f);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      const first = await createBillingCheckout(f.ctx, lease, f.uid, latest.requestId, f.request);
+      expect(await createBillingCheckout(f.ctx, lease, f.uid, latest.requestId, f.request)).toEqual(first);
+      expect(first.sessionId).toBe((await f.ref.get()).get('sessionId'));
+    } finally { await releaseBillingLease(db, lease); }
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+  });
+  it('lets an older identical selection reuse checkout without changing the latest selection', async () => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const offer = await changePrice(f);
+    const older = await nextRequest(f, offer), latest = await nextRequest(f, offer);
+    await f.run(latest.id); await f.run(older.id);
+    expect((await older.ref.get()).get('sessionId')).toBe((await latest.ref.get()).get('sessionId'));
+    expect((await latest.operation.get()).get('selection.requestId')).toBe(latest.requestId);
+    expect((await latest.operation.get()).get('selection.createdAt')).toEqual((await latest.ref.get()).createTime);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
+  });
+  it('retains selection order when a completed checkout restores its predecessor', async () => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const older = await nextRequest(f);
+    const latest = await nextRequest(f, await changePrice(f));
+    const previous = [...f.sessions.values()][0]; previous.subscription = f.sub.id;
+    f.stripe.checkout.sessions.expire.mockImplementationOnce(async () => {
+      previous.status = 'complete'; throw new Error('already complete');
+    });
+    await f.run(latest.id);
+    expect((await latest.ref.get()).get('error.code')).toBe('checkout_completed');
+    f.sub.status = 'canceled';
+    await f.run(older.id);
+    expect((await older.ref.get()).get('error.code')).toBe('checkout_replaced');
+    expect((await db.doc(`${BILLING_JOBS}/${older.id}`).get()).get('state')).toBe('skipped');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it('allows a one-time purchase after a completed subscription checkout', async () => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const previous = [...f.sessions.values()][0]; previous.status = 'complete'; previous.subscription = f.sub.id;
+    f.stripe.subscriptions.list.mockResolvedValue({ data: [f.sub], has_more: false });
+    f.price.type = 'one_time'; f.price.recurring = null;
+    const next = await nextRequest(f, { ...await changePrice(f), mode: 'payment' });
+    await f.run(next.id);
+    expect((await next.ref.get()).get('status')).toBe('ready');
+    expect((await next.ref.get()).get('url')).toBeTruthy();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    expect(f.stripe.checkout.sessions.create.mock.calls[1][0].mode).toBe('payment');
+    expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+    expect(f.stripe.subscriptions.retrieve).not.toHaveBeenCalled();
+  });
   it('never resumes an operation superseded by a plan switch', async () => {
     const f = await fixture(); await f.run((await f.admit())!);
     const next = await nextRequest(f, await changePrice(f)); await f.run(next.id);
