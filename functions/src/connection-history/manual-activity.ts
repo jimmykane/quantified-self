@@ -7,12 +7,14 @@ import { isServiceUnavailableForSyncConnection } from '../../../shared/service-c
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, HistoryLifecycleChangedError } from './execution';
 import { CONNECTION_HISTORY_COLLECTION, createHistoryRun, historyProjection } from './model';
 
-type ManualHistoryService = ServiceNames.SuuntoApp | ServiceNames.COROSAPI | ServiceNames.WahooAPI;
+type ManualHistoryService = ServiceNames.GarminAPI | ServiceNames.SuuntoApp | ServiceNames.COROSAPI | ServiceNames.WahooAPI;
 const TOKEN_COLLECTIONS: Record<ManualHistoryService, string> = {
+  [ServiceNames.GarminAPI]: GARMIN_API_TOKENS_COLLECTION_NAME,
   [ServiceNames.SuuntoApp]: SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME,
   [ServiceNames.COROSAPI]: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME,
   [ServiceNames.WahooAPI]: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
@@ -51,7 +53,7 @@ export async function startManualActivityHistory(
     if (Number(meta?.historyImportLeaseExpiresAt) > nowMs) {
       throw new HttpsError('already-exists', 'Another history import is running.');
     }
-    const nextAllowed = activityHistoryNextAllowedAt(Number(meta?.didLastHistoryImport), Number(meta?.processedActivitiesFromLastHistoryImportCount));
+    const nextAllowed = activityHistoryNextAllowedAt(Number(meta?.didLastHistoryImport), Number(meta?.processedActivitiesFromLastHistoryImportCount), serviceName === ServiceNames.GarminAPI);
     if (nextAllowed > nowMs) {
       throw new HttpsError('permission-denied', `History import is not allowed until ${new Date(nextAllowed).toISOString()}`);
     }

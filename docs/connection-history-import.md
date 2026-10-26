@@ -100,23 +100,23 @@ Only server code reads runs, receipts, cursors, and leases. Client metadata cont
 
 ## Shared operations
 
-### Manual activity imports: Suunto, COROS and Wahoo
+### Manual activity imports: Garmin, Suunto, COROS and Wahoo
 
 Updated clients send `background: true` to the existing `addSuuntoAppHistoryToQueue`,
-`addCOROSAPIHistoryToQueue` and `addWahooAPIHistoryToQueue` callables. After the existing App Check, authentication, Pro and date validation,
+`addCOROSAPIHistoryToQueue`, `addWahooAPIHistoryToQueue` and `backfillGarminAPIActivities` callables. After the existing App Check, authentication, Pro and date validation,
 one transaction captures the current server-owned provider account, token/root credential generation and
 connection generation. It creates an activity-only run, reserves activity history and projects safe progress
 into the existing service metadata. It neither reconnects the account nor changes credentials. The existing
 Firestore trigger and recovery scheduler dispatch it; the callable makes no provider request on this path.
 
-The selected range is stored as `custom`, independently of the OAuth preset registry. Suunto and Wahoo retain the
+The selected range is stored as `custom`, independently of the OAuth preset registry. Garmin, Suunto and Wahoo retain the
 exact submitted timestamps and display the selected local dates; COROS retains its calendar-date validation/clamping and includes the entire end day.
 Manual window cursors advance by one millisecond, so adjacent windows do not omit the end of a day. Automatic
 snapshots retain their original cursor precision. Only the activity capability is selected: manual activity
 requests never add Sleep, Health or routes. The automatic-admission environment switch does not disable manual
 requests. No existing jobs are converted, reset or replayed.
 
-The shared coordinator admits at most 100 workouts per window, uses the existing 60-second Suunto/COROS history
+For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
 dispatch spread, waits for committed child outcomes and resumes with the same capacity, retry, deletion and
 connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed
 page cursor and the same exact selected range. Its deferred workout dispatch schedule is unchanged, not replaced
@@ -125,6 +125,14 @@ Acceptance is not processing completion. A long manual import can take multiple 
 sharing the coordinator is not a promise that every large range completes faster than the old bulk scan.
 The foreground request is now limited to durable admission instead of provider scanning.
 
+Garmin reuses its existing activity adapter and backfill operation, submitting one bounded 30-day window per
+coordinator step. It retains permission checks, exact token/connection fences, provider-minimum clipping and `409`
+already-requested handling. A transient failure resumes the failed window; successful earlier windows are checkpointed.
+Admission reserves the run but does not claim Garmin accepted it. The existing operation records the fixed 30-day
+cooldown after a successful/already-requested window, anchored to run admission; the count-based cooldown used by
+other providers never applies to Garmin. Completion is **requested**, not ingested. Garmin delivers activities through
+its existing webhook/worker path without per-run completion correlation. This route starts no Sleep or Health request.
+
 An active coordinator (including an automatic run not yet holding an activity reservation), manual lease or
 reservation blocks another manual run. Cooldown remains server-authoritative and is rechecked transactionally.
 Retrying an older failed run cannot replace a newer active run's projection, even for a different resource.
@@ -132,14 +140,14 @@ Restored children use `dispatchedToCloudTask: null`, matching all canonical disp
 The UI follows the live projection after acceptance, keeps pending state across dialog reopening, and discards
 its optimistic receipt after a connection change. Progress and owner retry reuse the existing Connections panel.
 Background acceptance does not emit the legacy scan-result event or reset live import counts/cooldown metadata.
-The coordinator-active form lock applies to Suunto/COROS/Wahoo; Garmin retains its existing lease and
-contention-buffer behavior, with reservations still enforced by the server.
+The coordinator-active form lock applies to all four providers, alongside existing lease and contention-buffer
+behavior. Garmin's form says **Requesting Garmin history**, then **History requested**, and explains asynchronous delivery.
 
 Compatibility is deliberate: omitted/false `background` retains the old callable contract, and a new client can
 still read an old backend's stats response. Existing connections without account/generation metadata use the old
 manual path until a normal reconnect establishes that identity; admission never invents generations. Missing or
-mismatching tokens on a versioned connection fail closed. Garmin manual activity imports and all manual
-Sleep/Health/route imports remain on their existing paths.
+mismatching tokens on a versioned connection fail closed. Garmin's legacy path still returns void; new clients accept
+that response during backend-first rollout or legacy fallback. All manual Sleep/Health/route imports remain on their existing paths.
 
 Monitoring: **covered/unchanged**, after reviewing `tools/connection-history-monitoring/definitions.mjs` and
 `tools/import-monitoring/definitions.mjs`. New runs use the same collection, workers, fixed provider labels,
@@ -149,7 +157,8 @@ probe, metric or alert apply is needed. No MCP/Assistant or Training contract ch
 Release the compatible backend first: `addSuuntoAppHistoryToQueue`, `addCOROSAPIHistoryToQueue`,
 `processConnectionHistoryTask`, and `retryConnectionHistoryImport`. The Wahoo follow-up additionally needs
 `addWahooAPIHistoryToQueue`; once that shared coordinator/retry support is deployed, this is the only additional
-backend function required for Wahoo. Release the frontend afterward. No Rules, indexes,
+backend function required for Wahoo. Garmin additionally needs only `backfillGarminAPIActivities`: its adapter and
+coordinator already support bounded requests and requested completion. Release the frontend afterward. No Rules, indexes,
 secrets or cloud queue configuration changes are needed. Deployment still requires separate approval.
 To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
 retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.

@@ -5,13 +5,20 @@
   </app-status-info>
 </div>
 } @else if (backgroundActivityImport(); as history) {
+@let garminRequests = serviceName === serviceNames.GarminAPI;
 <div class="status-container" role="status" aria-live="polite">
   <app-status-info [type]="history.active ? 'pending' : backgroundImportNeedsAttention ? 'warning' : 'success'"
-    [title]="history.active ? 'History import in progress' : backgroundImportNeedsAttention ? 'History import needs attention' : 'History import finished'">
+    [title]="history.active ? (garminRequests ? 'Requesting Garmin history' : 'History import in progress') : backgroundImportNeedsAttention ? 'History import needs attention' : garminRequests ? 'History requested' : 'History import finished'">
     @if (history.active) {
+      @if (garminRequests) {
+    We’re requesting your selected history from Garmin in the background. You can close this dialog or leave the app.
+      } @else {
     Your selected history is importing in the background. You can close this dialog or leave the app.
+      }
     } @else if (backgroundImportNeedsAttention) {
     Some history could not be imported. Check History import in Connections for details and retry options.
+    } @else if (garminRequests) {
+    History requests have been sent to Garmin. Delivery may take hours or days; this status does not confirm all activities have arrived.
     } @else {
     Your selected history has been processed.
     }
