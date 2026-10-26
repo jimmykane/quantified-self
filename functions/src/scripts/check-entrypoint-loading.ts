@@ -133,20 +133,38 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   parseCOROSAPIWorkoutQueue: { memoryMb: 256, timeoutSeconds: 300 },
   parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
 };
-const RUNTIME_CONTRACT_TARGETS = [
-  'linkExistingStripeCustomer',
-  ...BILLING_TARGETS,
-  ...Object.keys(BILLING_SUPPORT_TARGET_METADATA),
-  ...CONNECTION_HISTORY_TARGETS,
-  ...Object.keys(GEN1_DISPATCHER_METADATA),
-  'processGarminHealthBackfillTask',
-  'observeDerivedMetricsHealth',
-  'processSportsLibReparseTask',
-  'processSportsLibReparseHeavyTask',
-  'processSportsLibRouteReparseTask',
-  'scheduleSportsLibReparseScan',
-  'scheduleSportsLibRouteReparseScan',
-];
+// Every runtime target is compared against a separate fresh discovery process,
+// including all trigger, resource, retry, scaling, IAM and secret metadata.
+const RUNTIME_CONTRACT_TARGETS = OPTIMIZED_FUNCTION_TARGETS;
+const REMAINING_GEN1_TARGETS = new Set([
+  'addCOROSAPIHistoryToQueue',
+  'backfillGarminAPIActivities',
+  'deauthorizeCOROSAPI',
+  'deauthorizeGarminAPI',
+  'deauthorizeGarminAPIUsers',
+  'deleteSelf',
+  'getCOROSAPIAuthRequestTokenRedirectURI',
+  'getGarminAPIAuthRequestTokenRedirectURI',
+  'insertCOROSAPIWorkoutDataToQueue',
+  'insertGarminAPIActivityFileToQueue',
+  'insertSuuntoAppActivityToQueue',
+  'insertSuuntoAppRouteToQueue',
+  'receiveGarminAPIUserPermissions',
+  'refreshCOROSAPIRefreshTokens',
+  'refreshGarminAPIRefreshTokens',
+  'refreshSuuntoAppRefreshTokens',
+  'requestAndSetCOROSAPIAccessToken',
+  'requestAndSetGarminAPIAccessToken',
+  'wahooAPIWebhook',
+]);
+const ASSISTANT_TARGETS = new Set([
+  'applyAssistantTrainingProposal', 'assistantChat', 'getAssistantConversation',
+  'getAssistantQuotaStatus', 'resetAssistantConversation',
+]);
+const MCP_AUTHORIZATION_TARGETS = new Set([
+  'decideMcpAuthorization', 'getMcpAuthorizationRequest', 'listMcpConnections', 'revokeMcpConnection',
+]);
+
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -388,7 +406,8 @@ function probe(targetArgument: string): void {
   const normalizedModules = Object.keys(require.cache).map(path => path.replace(/\\/g, '/'));
   const marketingTarget = runtimeTarget != null && MARKETING_TARGETS.has(runtimeTarget);
   const adminTarget = runtimeTarget ? ADMIN_TARGET_METADATA[runtimeTarget] : undefined;
-  const assistantProposalTarget = runtimeTarget === 'applyAssistantTrainingProposal';
+  const assistantTarget = runtimeTarget != null && ASSISTANT_TARGETS.has(runtimeTarget);
+  const mcpAuthorizationTarget = runtimeTarget != null && MCP_AUTHORIZATION_TARGETS.has(runtimeTarget);
   const derivedRefreshTarget = runtimeTarget === 'ensureDerivedMetrics';
   const mcpTarget = runtimeTarget === 'mcpApi';
   const forbiddenModules = normalizedModules.filter(path => {
@@ -399,6 +418,10 @@ function probe(targetArgument: string): void {
       '/lib/functions/src/mcp/oauth.service.js',
       '/lib/functions/src/admin/marketing/cleanup.js',
       '/lib/functions/src/admin/marketing/core.js',
+    ].some(suffix => path.endsWith(suffix))) return false;
+    if (mcpAuthorizationTarget && [
+      '/lib/functions/src/mcp/callables.js',
+      '/lib/functions/src/mcp/oauth.service.js',
     ].some(suffix => path.endsWith(suffix))) return false;
     if (runtimeTarget && LIGHTWEIGHT_BILLING_TARGETS.has(runtimeTarget) && (
       path.endsWith('/lib/functions/src/utils.js')
@@ -423,11 +446,11 @@ function probe(targetArgument: string): void {
       || path.endsWith('/lib/functions/src/shared/cloud-tasks.js')
     )) return true;
     if (
-      (path.includes('/node_modules/@genkit-ai/') && !assistantProposalTarget)
-      || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)
+      (path.includes('/node_modules/@genkit-ai/') && !assistantTarget)
+      || (path.includes('/node_modules/genkit/') && !assistantTarget)
       || (path.includes('/node_modules/@google-cloud/bigquery/') && !adminTarget?.allowsBigQuery)
       || (path.includes('/lib/functions/src/mcp/')
-        && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget && !adminTarget?.allowsMcp)
+        && !assistantTarget && !derivedRefreshTarget && !mcpTarget && !adminTarget?.allowsMcp)
     ) return true;
     if (!path.includes('/lib/functions/src/admin/')) return false;
     if (adminTarget) {
@@ -547,6 +570,9 @@ async function check(): Promise<void> {
     [...RUNTIME_CONTRACT_TARGETS].sort()),
   'Full discovery is missing an isolated runtime contract.');
 
+  assert(arraysEqual(discovery.exports, [...OPTIMIZED_FUNCTION_TARGETS].sort()),
+    'Every discovered function must have an isolated loader; remove stale loaders too.');
+
   const unknown = runProbe(UNKNOWN_TARGET);
   assert(unknown.matchesFullEntrypoint, 'An unknown runtime target did not use the complete entrypoint.');
   assert(
@@ -572,6 +598,9 @@ async function check(): Promise<void> {
   }
   for (const target of [
     canaryTarget,
+    'assistantChat', 'getMcpAuthorizationRequest', 'deleteSelf', 'wahooAPIWebhook',
+    'sendRegistrationWelcomeEmail', 'saveTimelineNote', 'deleteTimelineNote',
+    'saveManualHealthMeasurement', 'deleteManualHealthMeasurement',
     ...Object.keys(BILLING_SUPPORT_TARGET_METADATA),
     'impersonateUser',
     ...CONNECTION_HISTORY_TARGETS,
@@ -615,6 +644,9 @@ async function check(): Promise<void> {
   }
 
   for (const target of [
+    'assistantChat', 'getMcpAuthorizationRequest', 'deleteSelf', 'wahooAPIWebhook',
+    'sendRegistrationWelcomeEmail', 'saveTimelineNote', 'deleteTimelineNote',
+    'saveManualHealthMeasurement', 'deleteManualHealthMeasurement',
     'linkExistingStripeCustomer',
     ...Object.keys(BILLING_SUPPORT_TARGET_METADATA),
     ...CONNECTION_HISTORY_TARGETS,
@@ -652,27 +684,16 @@ async function check(): Promise<void> {
   assert(arraysEqual((accountCleanup.secretEnvironmentVariables || []).map(secret => secret.key || '').sort(),
     ACCOUNT_CLEANUP_SECRETS), 'Account cleanup secret bindings changed.');
 
-  const firstGenerationEndpoint = Object.entries(stack.endpoints)
-    .find(([target, endpoint]) => endpoint.platform === 'gcfv1'
-      && !OPTIMIZED_FUNCTION_TARGETS.includes(target));
-  assert(firstGenerationEndpoint, 'Firebase manifest no longer contains a Gen 1 fallback target.');
-  const firstGeneration = runProbe(firstGenerationEndpoint[0]);
-  assert(
-    firstGeneration.matchesFullEntrypoint
-      && arraysEqual(discovery.exports, firstGeneration.exports),
-    `${firstGenerationEndpoint[0]} did not retain the complete Gen 1 entrypoint fallback.`,
-  );
-
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
     const endpoint = stack.endpoints[target];
     const billingSupport = BILLING_SUPPORT_TARGET_METADATA[target];
     const expectedPlatform = target === 'receiveSuunto247Data' || target === 'receiveGarminAPIHealthData'
-      || GEN1_DISPATCHER_METADATA[target]
+      || GEN1_DISPATCHER_METADATA[target] || REMAINING_GEN1_TARGETS.has(target)
       ? 'gcfv1' : billingSupport?.platform || 'gcfv2';
     assert(endpoint?.platform === expectedPlatform, `${target} runtime generation changed.`);
     assert(endpoint.entryPoint === target.replace(/-/g, '.'), `${target} entrypoint metadata changed.`);
     assert(
-      arraysEqual(endpoint.region || [], [billingSupport?.region || (BILLING_TARGETS.includes(target) ? 'europe-west3' : 'europe-west2')]),
+      arraysEqual(endpoint.region || [], [billingSupport?.region || (BILLING_TARGETS.includes(target) || target === 'sendRegistrationWelcomeEmail' ? 'europe-west3' : 'europe-west2')]),
       `${target} region metadata changed.`,
     );
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
@@ -1021,7 +1042,8 @@ async function check(): Promise<void> {
       } else {
         assert(endpoint.callableTrigger !== undefined, `${target} callable trigger changed.`);
       }
-    } else {
+    } else if (target === 'getSuuntoAPIAuthRequestTokenRedirectURI'
+      || target === 'requestAndSetSuuntoAPIAccessToken') {
       assert(endpoint.availableMemoryMb === 512, `${target} is no longer configured at 512 MiB.`);
       assert(
         arraysEqual(secretKeys, ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET']),
