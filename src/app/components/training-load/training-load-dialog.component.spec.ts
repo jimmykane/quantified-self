@@ -11,7 +11,9 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits,
+  convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('Training load editor', () => {
   const save = vi.fn(); const selection = vi.fn(); const success = vi.fn(); const error = vi.fn();
@@ -281,6 +283,9 @@ describe('Training load editor', () => {
     expect(component.actualMethodLabel).toBe('Swim pace (CSS)');
     expect(component.explanation).toContain('CSS saved with this workout');
     expect(component.automatic).toBe(60);
+    component.data.unitSettings = normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    component.metadata()!.legs!.walk.policy.swimThresholdSpeed = convertSwimPaceToSpeed(114 / convertSwimPaceToSwimPacePer100Yard(1));
+    expect(component.savedCssLabel).toBe('01:54 min/100yd');
   });
   it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', async type => {
     component.activities[0].type = type;

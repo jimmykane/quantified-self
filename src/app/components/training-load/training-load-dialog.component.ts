@@ -102,7 +102,8 @@ export class TrainingLoadDialogComponent implements OnInit {
   get savedCssLabel(): string | null {
     const speed = this.policy.swimThresholdSpeed;
     if (speed === undefined) return null;
-    const display = resolveUnitAwareDisplayFromValue(DataSwimPace.type, convertSpeedToSwimPace(speed), this.data.unitSettings);
+    const display = resolveUnitAwareDisplayFromValue(DataSwimPace.type, convertSpeedToSwimPace(speed), this.data.unitSettings,
+      { roundSwimPaceSeconds: true });
     return display ? `${display.value} ${display.unit}` : null;
   }
   get automatic(): number | null {

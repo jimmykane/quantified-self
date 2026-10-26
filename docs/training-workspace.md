@@ -6254,7 +6254,9 @@ and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) fo
 Settings → Training load defaults → Swimming accepts an optional independently measured CSS as `mm:ss` per
 100 metres or 100 yards. Store only canonical `swimThresholdSpeed` in metres/second on the existing private policy
 head and immutable revision. Unit conversion is a display concern; switching units or saving another preference
-must not quantize an unchanged canonical value. Blank removes CSS from the new revision. CSS is not inferred from
+must not quantize an unchanged canonical value. CSS labels round to the nearest second after unit conversion;
+this display-only precision does not change saved CSS, calculations or ordinary pace statistics.
+Blank removes CSS from the new revision. CSS is not inferred from
 ordinary swim speed, guessed Garmin fields, or the workout's average pace.
 
 `SWIM_PACE` is an explicit preferred method for pool and open-water swimming. Imported valid scores, including zero,
@@ -6276,8 +6278,11 @@ without the additive candidate asks for the existing original-file reimport acti
 it does not adopt today's CSS. Numeric override and exclusion retain priority, and reset restores the saved policy.
 “Also use these preferences for future workouts” copies method/inclusion only and preserves the current policy head's
 CSS in the same revision-checked transaction. It never copies an old workout's CSS or numeric override. If an explicit
-multisport reassociation brings different CSS, load requires source reparse before using that calibration; overrides
-and exclusions remain available. Ambiguous legs retain the existing review requirement.
+multisport reassociation brings different CSS, calculated load requires source reparse before using that calibration;
+overrides and exclusions remain available, and imported scores remain authoritative. Merging must not remove that
+calibration check: refresh the source candidates before merging. Merge retries retain the original CSS and its
+matching candidate snapshot together only for unchanged source fingerprints; different source data requires review.
+Ambiguous legs retain the existing review requirement.
 
 MCP impact review: existing recorded-stat queries keep their meaning; Training and impact use the shared modeled-load
 resolver. CSS, policy history and candidates stay owner-only and absent from MCP output. No new metric token, schema,

@@ -156,7 +156,8 @@ export function resolveEffectiveTrainingLoad(
       method: 'OVERRIDE', estimated: false, reasons: [] };
     // Explicit reassociation may bring a different saved CSS to this leg. Only source reparse
     // can recompute its candidate; do not present the target's old calibration as the retained one.
-    if (associated && policy.swimThresholdSpeed !== entry?.[1].policy.swimThresholdSpeed)
+    if (associated && policy.swimThresholdSpeed !== entry?.[1].policy.swimThresholdSpeed &&
+      entry?.[1].evaluations?.automatic.provenance !== 'imported')
       return unavailable('reparse-required');
     const method = control?.method ?? policy.method;
     const evaluations = entry?.[1].evaluations;

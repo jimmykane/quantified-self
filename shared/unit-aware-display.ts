@@ -4,6 +4,7 @@ import {
   DataDuration,
   DataTrainingStressScore,
   DataSwimDistance,
+  DataSwimPace,
   type DataInterface,
   DaysOfTheWeek,
   DistanceUnits,
@@ -214,6 +215,8 @@ export interface ResolveUnitAwareDisplayOptions {
   durationMilliseconds?: boolean;
   /** Keep the load editor's requested precision in the canonical Sports Lib formatter. */
   trainingStressScoreDecimals?: 0 | 1;
+  /** Round configured CSS for display only, after conversion to the preferred swim-pace unit. */
+  roundSwimPaceSeconds?: boolean;
   locale?: string | null;
 }
 
@@ -284,11 +287,14 @@ export function resolveUnitAwareDisplayStat(
   const preferredStat = options?.preferredType
     ? unitBasedStats.find((unitStat) => unitStat.getType?.() === options.preferredType)
     : undefined;
-  const selectedStat = preferredStat || unitBasedStats[0] || stat;
-  const selectedType = selectedStat?.getType?.();
+  const unitStat = preferredStat || unitBasedStats[0] || stat;
+  const selectedType = unitStat?.getType?.();
   if (!selectedType) {
     return null;
   }
+
+  const selectedStat = options?.roundSwimPaceSeconds === true && unitStat instanceof DataSwimPace && Number.isFinite(unitStat.getValue())
+    ? DynamicDataLoader.getDataInstanceFromDataType(selectedType, Math.round(unitStat.getValue())) : unitStat;
 
   const rawValue = typeof selectedStat.getValue === 'function' ? Number(selectedStat.getValue()) : null;
   const isDuration = selectedStat instanceof DataDuration;
