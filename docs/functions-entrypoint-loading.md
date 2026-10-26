@@ -2,8 +2,8 @@
 
 The Functions package runtime main is `functions/src/index.ts`; the complete deployed-function registry lives in
 `functions/src/full-entrypoint.ts`. Google sets `FUNCTION_TARGET` to the exported handler name when it starts a deployed
-function container. The runtime main uses that value to load selected handlers without evaluating the complete backend
-module graph.
+function container. The runtime main uses that value to load the requested handler without evaluating the complete backend
+registry. All 188 deployed exports have an isolated loader; none relies on the full-backend fallback during normal runtime startup.
 
 ## Loading paths
 
@@ -14,7 +14,7 @@ module graph.
   timeout, concurrency and IAM configuration.
 - Discovery, an absent target and an unknown target load `functions/src/full-entrypoint.ts`. This is the complete export
   surface used before target-aware loading and remains the safe fallback for Firebase CLI discovery, new functions and
-  targets that have not been optimized.
+  targets that have not been registered. CI rejects missing or stale loaders before deployment.
 
 Firebase discovery modes (`FUNCTIONS_CONTROL_API` and `FUNCTIONS_MANIFEST_OUTPUT_PATH`) always take precedence over an
 inherited `FUNCTION_TARGET`. This prevents a developer or CI environment variable from reducing the deployment manifest
@@ -200,7 +200,7 @@ All three retain `europe-west2` and their original Firebase handler objects. The
 their respective `suuntoAppAccessTokens/{userID}/tokens/{tokenID}` and `garminAPITokens/{userID}/tokens/{tokenID}` paths.
 Their timeout, CPU and minimum-instance options remain unspecified; neither binds secrets. Projection bounds, revision
 ordering, safe account fields and transaction-owned account-deletion checks continue through the same implementation.
-The shared COROS projection remains on its previous loading path.
+The COROS projection also uses this owner module through the complete-coverage follow-up below.
 
 The Garmin receiver retains only `GARMINAPI_WEBHOOK_SECRET`, its existing instance defaults, webhook authentication,
 payload validation and durable queue staging. Its generation and registered webhook URL are unchanged. No provider
@@ -264,6 +264,49 @@ On 2026-10-09, three fresh Node 22.23.3 imports per target on the rebased PR mea
 Other local verification was running concurrently, so these timings are a startup sanity check rather than a
 controlled performance comparison. Keep runtime limits unchanged and verify production memory/startup separately.
 
+## Complete runtime coverage (2026-10-26)
+
+The remaining 73 Functions now load directly from their existing owner modules. Together with the prior billing
+migration, all **188** deployed exports have isolated runtime loaders. The fallback remains available for absent or
+unknown targets and Firebase deployment discovery. A compiled coverage assertion requires exact equality between the
+full export inventory and loader registry, so adding a Function without its loader fails CI/predeploy.
+
+The new coverage includes COROS, Garmin, Suunto and Wahoo authentication, history, webhooks, refresh and manual
+imports; sync backfills and disconnect triggers; Health/Sleep backfills; route and activity operations; Assistant
+callables; MCP authorization; Health reads and manual measurements; Timeline notes; account deletion and welcome mail.
+Each runtime exports only its requested original Firebase handler. Shared owner modules can still evaluate sibling
+handlers and required domain dependencies: this is registry isolation, not a claim that every handler has a separate bundle.
+In particular, Assistant callables still require their shared Genkit/MCP implementation; MCP authorization permits only
+its callable and OAuth service modules. No other target gains an exemption from the unrelated-import guards.
+
+Four public names differ from their owner-module exports and keep explicit identity-preserving mappings:
+
+| Public Function | Owner export |
+| --- | --- |
+| `saveTimelineNote` | `timeline-notes/callable.saveTimelineNoteCallable` |
+| `deleteTimelineNote` | `timeline-notes/callable.deleteTimelineNoteCallable` |
+| `saveManualHealthMeasurement` | `health/manual-callable.saveManualHealthMeasurementCallable` |
+| `deleteManualHealthMeasurement` | `health/manual-callable.deleteManualHealthMeasurementCallable` |
+
+Nineteen newly isolated Functions remain Gen 1. Their HTTP/callable/scheduled triggers are unchanged, as are the
+existing Gen 1 receivers, dispatchers and Auth cleanup. The welcome-mail trigger remains in `europe-west3`; the other
+72 newly isolated Functions retain `europe-west2`. Memory, CPU, timeouts, retries, concurrency, instance settings,
+secrets and IAM declarations continue to come from the unchanged owner handlers.
+
+Every isolated runtime's complete endpoint and trigger descriptors are captured before importing the full registry,
+then compared with a separate fresh discovery process. This covers all 188 Functions, rather than a selected subset.
+The check also validates handler identity, one exported target, import boundaries, both discovery overrides and
+standalone secret validation with inherited runtime targets, including all four public aliases.
+
+Monitoring coverage is **unchanged**: names, runtime generations, regions, handler execution, queue lifecycle,
+acknowledgements, committed outcomes and log labels are identical. Existing provider, import, delivery, Sleep/Health,
+route, cleanup and email monitoring filters remain applicable. Help was reviewed; there is no user-visible workflow
+change. MCP tools, authorization policy, consent, scopes, measurement contracts and Training behavior are unchanged;
+this routing-only change does not add any read or mutation capability.
+
+No deployment or production configuration change is part of this migration. After separate deployment approval,
+compare startup latency, memory and errors for the affected Functions before changing any runtime resource limits.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -274,12 +317,12 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 172 application exports;
+- discovery exposes all 188 application exports and every export has a loader;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - standalone secret-binding validation forces complete discovery even with an inherited ingestion `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
-- a non-optimized Gen 1 target retains the complete entrypoint fallback;
-- each optimized target exposes only its requested handler;
+- Gen 1 and Gen 2 targets both use isolated loaders while preserving their runtime generation;
+- each optimized target exposes only its requested handler, with complete endpoint/trigger metadata matching fresh discovery;
 - the optimized export is the exact object created by the provider wrapper;
 - optimized Suunto startup does not import Genkit, BigQuery, MCP or admin handler modules;
 - optimized marketing startup does not import Genkit, BigQuery, MCP or unrelated admin modules;
