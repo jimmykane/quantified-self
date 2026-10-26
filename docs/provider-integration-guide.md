@@ -935,7 +935,11 @@ Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-del
 The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
 subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;
 capability counts remain items or requests, with no percentage, ETA or complete-delivery claim. Requested/processed
-context stays prominent for 24 hours; failures/skips remain until superseded. Read failures are unavailable, not zero.
+context stays prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
+counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
+browser and clears it from the shared header/panel/Dashboard. Details and retry controls remain in Connections.
+New runs, resumed work and new terminal results appear again. Active work, reconnect guidance and unavailable
+status cannot be dismissed. Undismissed issues remain until superseded. Read failures are unavailable, not zero.
 Raw account changes clear both surfaces and close owned panels. Viewing progress makes no provider request or write;
 details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
 feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).

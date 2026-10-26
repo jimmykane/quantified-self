@@ -42,9 +42,20 @@
         }
       </div>
       @if (item.kind === 'active') { <mat-progress-bar mode="indeterminate" [attr.aria-label]="item.name + ' history import in progress'" /> }
-      <p class="coverage-note">{{ item.kind === 'requested' ? 'History requested. Provider delivery may take hours or days.' : 'Counts describe processing, not complete data coverage.' }}</p>
+      <p class="coverage-note">
+        @if (item.canDismiss) {
+        Processing has finished with issues. Counts shown are items or requests, not failure totals. Details remain in Connections.
+        } @else if (item.kind === 'requested') {
+        History requested. Provider delivery may take hours or days.
+        } @else {
+        Counts describe processing, not complete data coverage.
+        }
+      </p>
       }
       <div class="history-actions">
+        @if (item.canDismiss) {
+        <button mat-button type="button" [attr.aria-label]="'Dismiss ' + item.name + ' history import result'" (click)="dismissResult(item)">Dismiss this result</button>
+        }
         <a mat-button routerLink="/services" [queryParams]="{serviceName: item.serviceName}" [attr.aria-label]="'View ' + item.name + ' history import details'" (click)="openDetails($event)">
           View details<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
         </a>

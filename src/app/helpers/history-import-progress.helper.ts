@@ -18,6 +18,10 @@ export interface HistoryImportProgressStep {
 export interface HistoryImportProgressItem {
   serviceName: ServiceNames; name: string; runId: string | null; kind: HistoryImportKind; label: string;
   rangeLabel: string | null; steps: HistoryImportProgressStep[]; expiresAtMs?: number; explanation?: string;
+  updatedAtMs?: number; canDismiss?: boolean;
+}
+export interface HistoryImportResultDismissal {
+  serviceName: ServiceNames; runId: string; updatedAtMs: number;
 }
 export interface HistoryImportProgressView {
   items: HistoryImportProgressItem[]; active: boolean; label: string; nextExpiryAtMs: number | null;
@@ -32,7 +36,7 @@ const icons: Record<ConnectionHistoryStatus, string> = {
   processed: 'check_circle', skipped: 'info', failed: 'warning',
 };
 const labels: Record<HistoryImportKind, string> = {
-  active: 'Importing', retrying: 'Waiting to retry', attention: 'Needs attention',
+  active: 'Importing', retrying: 'Waiting to retry', attention: 'Finished with issues',
   requested: 'History requested', processed: 'Processed', unavailable: 'Status unavailable',
 };
 const order: Record<HistoryImportKind, number> = {active: 0, retrying: 1, attention: 2, unavailable: 3, requested: 4, processed: 5};
@@ -81,14 +85,18 @@ function item(source: HistoryImportSource, nowMs: number): HistoryImportProgress
       explanation: 'This connection needs authorization. Open Connections to review and reconnect the provider before importing more history.'};
   }
   return {serviceName, name: getProviderDisplayName(serviceName), runId: value.runId, kind, label: labels[kind],
-    rangeLabel: range, steps, expiresAtMs};
+    rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active && kind === 'attention'};
 }
-export function buildHistoryImportProgress(sources: readonly HistoryImportSource[], nowMs: number): HistoryImportProgressView {
+export function buildHistoryImportProgress(sources: readonly HistoryImportSource[], nowMs: number,
+  dismissed: readonly HistoryImportResultDismissal[] = []): HistoryImportProgressView {
   const items = sources.map(source => item(source, nowMs)).filter((entry): entry is HistoryImportProgressItem => !!entry)
+    .filter(entry => !entry.canDismiss || !dismissed.some(result => result.serviceName === entry.serviceName
+      && result.runId === entry.runId && result.updatedAtMs === entry.updatedAtMs))
     .sort((a, b) => order[a.kind] - order[b.kind]);
   const active = items.some(entry => entry.kind === 'active' || entry.kind === 'retrying');
-  const label = active ? 'Importing history' : items.some(entry => entry.kind === 'attention') ? 'History needs attention'
+  const label = active ? 'Importing history' : items.some(entry => entry.kind === 'attention' && !entry.canDismiss) ? 'History needs attention'
     : items.some(entry => entry.kind === 'unavailable') ? 'Import status unavailable'
+      : items.some(entry => entry.kind === 'attention') ? 'History finished with issues'
       : items.some(entry => entry.kind === 'requested') ? 'History requested' : 'History processed';
   const deadlines = items.flatMap(entry => entry.expiresAtMs === undefined ? [] : [entry.expiresAtMs]);
   return {items, active, label, nextExpiryAtMs: deadlines.length ? Math.min(...deadlines) : null};

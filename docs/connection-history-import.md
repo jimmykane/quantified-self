@@ -45,8 +45,14 @@ this UI performs no recovery action and reads no token or generation fields.
 Active work and automatic retries retain their distinct stages. Submitted Garmin requests are labelled **History
 requested** without an activity spinner; delivery can still take hours or days. Requested/processed terminal context
 expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
-does not read or write data. Failed/skipped outcomes stay until superseded. Connections retains the detailed status
-after prominent context expires. Counts are per capability's items or requests, never summed into a percentage,
+does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
+**Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
+current account on this browser. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
+is blocked; no server write or recovery action occurs. New runs and resumed work remain visible, and a new terminal
+timestamp from a retry is a new result. Stale owner/result actions are rejected. Active work, reconnect guidance and
+unavailable status have no result-dismissal action. Connections retains the detailed status and retry controls.
+Until dismissed or superseded, issues remain visible. Counts are per capability's items or requests, never failure totals,
+and are never summed into a percentage,
 unique-record total, ETA or proof of complete coverage. Combined Sleep/Health capabilities keep one count.
 
 This covers coordinator projections, including the manual Suunto/COROS/Wahoo activity path. Legacy manual activity

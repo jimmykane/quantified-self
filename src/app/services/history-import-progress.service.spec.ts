@@ -14,6 +14,7 @@ vi.mock('app/firebase/auth', async original => ({...await original<typeof import
 const now = Date.UTC(2026, 9, 26);
 const status = (active = true) => ({runId: 'run', rangePreset: '30_days', active, updatedAtMs: now,
   steps: [{id: 'activities', resources: ['activities'], status: active ? 'requesting' : 'processed', count: 7}]});
+const failedStatus = () => ({...status(false), steps: [{id: 'activities', resources: ['activities'], status: 'failed', count: 26}]});
 
 describe('HistoryImportProgressService', () => {
   let sessions$: BehaviorSubject<FirebaseUserType | null>;
@@ -212,5 +213,77 @@ describe('HistoryImportProgressService', () => {
     expect(service.dashboardHidden()).toBe(true);
     expect(service.setDashboardHidden(false, service.owner())).toBe(true);
     expect(service.dashboardHidden()).toBe(false);
+  });
+  it('remembers one dismissed result across reload without hiding future imports or changing metadata', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    const metadata = {connectionState: 'connected', connectionHistoryImport: failedStatus()};
+    stream('a').next(metadata);
+    expect(service.dismissResult(service.view().items[0], service.owner())).toBe(true);
+    expect(service.view().items).toEqual([]);
+    expect(service.dashboardHidden()).toBe(false);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+    expect(stream('a').value).toEqual(metadata);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({providers: [{provide: Auth, useValue: auth}, {provide: APP_STORAGE, useValue: storage},
+      {provide: AppUserService, useValue: {user$: profiles$, getUserMetaForService: getMeta}}]});
+    const restored = TestBed.inject(HistoryImportProgressService);
+    expect(restored.view().items).toEqual([]);
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: {...failedStatus(), runId: 'next-run'}});
+    expect(restored.view().items[0].runId).toBe('next-run');
+  });
+  it('shows a dismissed run again when retried and when it produces a new terminal result', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    service.dismissResult(service.view().items[0], service.owner());
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
+    expect(service.view().active).toBe(true);
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: {...failedStatus(), updatedAtMs: now + 1}});
+    expect(service.view().items[0].label).toBe('Finished with issues');
+  });
+  it('isolates dismissals by provider and account and rejects old sessions and superseded results', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    stream('a', ServiceNames.WahooAPI).next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    const owner = service.owner(), previous = service.view().items[0];
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: {...failedStatus(), updatedAtMs: now + 1}});
+    expect(service.dismissResult(previous, owner)).toBe(false);
+    expect(service.dismissResult(service.view().items[0], owner)).toBe(true);
+    expect(service.view().items.map(item => item.serviceName)).toEqual([ServiceNames.WahooAPI]);
+    connect('b'); stream('b').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    expect(service.dismissResult(service.view().items[0], owner)).toBe(false);
+    expect(service.view().items).toHaveLength(1);
+    connect('a');
+    expect(service.dismissResult(service.view().items[0], owner)).toBe(false);
+    expect(service.view().items.map(item => item.serviceName)).toEqual([ServiceNames.WahooAPI]);
+  });
+  it('cannot dismiss active work, reconnect guidance or unavailable status', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    for (const metadata of [
+      {connectionState: 'connected', connectionHistoryImport: status()},
+      {connectionState: 'reconnect_required', connectionHistoryImport: status()},
+      {connectionState: 'connected', connectionHistoryImport: {}},
+    ]) {
+      stream('a').next(metadata);
+      expect(service.dismissResult(service.view().items[0], service.owner())).toBe(false);
+      expect(service.view().items).toHaveLength(1);
+    }
+    expect(storage.length).toBe(0);
+  });
+  it('retains a session dismissal when browser storage is blocked', () => {
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new Error('storage blocked'); });
+    vi.spyOn(storage, 'setItem').mockImplementation(() => { throw new Error('storage blocked'); });
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    const result = service.view().items[0];
+    expect(service.dismissResult(result, service.owner())).toBe(true);
+    expect(service.dismissResult(result, service.owner())).toBe(false);
+    service.refresh();
+    expect(service.view().items).toEqual([]);
+  });
+  it('keeps results visible when a stored dismissal is malformed', () => {
+    vi.spyOn(storage, 'getItem').mockReturnValue('{invalid');
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    expect(service.view().items[0].label).toBe('Finished with issues');
   });
 });

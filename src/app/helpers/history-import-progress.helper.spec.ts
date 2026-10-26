@@ -36,9 +36,24 @@ describe('history import progress presentation', () => {
   });
   it.each(['failed', 'skipped'])('keeps %s outcomes visible until superseded', status => {
     const result = view(projection(status, false), ServiceNames.SuuntoApp, now + 10 * HISTORY_IMPORT_RECENT_MS);
-    expect(result.label).toBe('History needs attention');
+    expect(result.label).toBe('History finished with issues');
+    expect(result.active).toBe(false);
+    expect(result.items[0].label).toBe('Finished with issues');
+    expect(result.items[0].canDismiss).toBe(true);
     expect(result.items[0].kind).toBe('attention');
     expect(result.nextExpiryAtMs).toBeNull();
+  });
+  it('dismisses only the exact finished result and keeps other providers and resumed work visible', () => {
+    const dismissed = [{serviceName: ServiceNames.SuuntoApp, runId: 'run', updatedAtMs: now}];
+    const result = buildHistoryImportProgress([
+      {serviceName: ServiceNames.SuuntoApp, projection: projection('failed', false)},
+      {serviceName: ServiceNames.COROSAPI, projection: projection('failed', false)},
+    ], now, dismissed);
+    expect(result.items.map(item => item.serviceName)).toEqual([ServiceNames.COROSAPI]);
+    for (const next of [projection(), {...projection('failed', false), updatedAtMs: now + 1},
+      {...projection('failed', false), runId: 'new-run'}]) {
+      expect(buildHistoryImportProgress([{serviceName: ServiceNames.SuuntoApp, projection: next}], now, dismissed).items).toHaveLength(1);
+    }
   });
   it.each(['processed', 'requested'])('expires recent %s context at exactly 24 hours', status => {
     const value = projection(status, false);
@@ -54,6 +69,15 @@ describe('history import progress presentation', () => {
     expect(result.label).toBe('Import status unavailable');
     expect(result.active).toBe(false);
     expect(result.items[0].kind).toBe('unavailable');
+  });
+  it('does not claim history finished while another provider status is unavailable', () => {
+    const result = buildHistoryImportProgress([
+      {serviceName: ServiceNames.SuuntoApp, projection: projection('failed', false)},
+      {serviceName: ServiceNames.WahooAPI, unavailable: true},
+    ], now);
+    expect(result.label).toBe('Import status unavailable');
+    expect(result.items[0].label).toBe('Finished with issues');
+    expect(result.items[0].canDismiss).toBe(true);
   });
   it.each([{}, {...projection(), active: 'yes'}, {...projection(), updatedAtMs: NaN},
     {...projection(), steps: [{id: 'a', status: 'unknown', resources: ['activities']}]},
@@ -92,6 +116,7 @@ describe('history import progress presentation', () => {
     expect(result.active).toBe(false);
     expect(result.label).toBe('History needs attention');
     expect(result.items[0]).toMatchObject({kind: 'attention', label: 'Reconnect required', steps: []});
+    expect(result.items[0].canDismiss).not.toBe(true);
     expect(result.items[0].explanation).toContain('Open Connections');
   });
 });

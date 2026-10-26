@@ -11,7 +11,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { FirebaseUserType } from 'app/firebase/auth';
 import { HistoryImportProgressService, type HistoryImportOwner } from '../../services/history-import-progress.service';
-import { buildHistoryImportProgress, type HistoryImportSource } from '../../helpers/history-import-progress.helper';
+import { buildHistoryImportProgress, type HistoryImportSource, type HistoryImportProgressItem,
+  type HistoryImportResultDismissal } from '../../helpers/history-import-progress.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppEventService } from '../../services/app.event.service';
 import { HistoryImportCardsComponent } from './history-import-cards.component';
@@ -29,14 +30,21 @@ function projection(status = 'requesting', active = true, count = 7) {
 async function setup(mobile = false) {
   const owner = signal<HistoryImportOwner | null>({uid: 'owner', session: {uid: 'owner'} as FirebaseUserType});
   const sources = signal<HistoryImportSource[]>([{serviceName: ServiceNames.SuuntoApp, projection: projection()}]);
-  const view = computed(() => buildHistoryImportProgress(owner() ? sources() : [], Date.now()));
+  const dismissedResults = signal<HistoryImportResultDismissal[]>([]);
+  const view = computed(() => buildHistoryImportProgress(owner() ? sources() : [], Date.now(), dismissedResults()));
   const refreshing = signal(false);
   const dashboardHidden = signal(false);
   const setDashboardHidden = vi.fn((hidden: boolean, expectedOwner: HistoryImportOwner | null) => {
     if (!owner() || owner() !== expectedOwner || dashboardHidden() === hidden) return false;
     dashboardHidden.set(hidden); return true;
   });
-  const progress = {owner, view, refreshing, refresh: vi.fn(), dashboardHidden, setDashboardHidden};
+  const dismissResult = vi.fn((item: HistoryImportProgressItem, expectedOwner: HistoryImportOwner | null) => {
+    if (!owner() || owner() !== expectedOwner || !item.canDismiss || !item.runId || item.updatedAtMs === undefined
+      || !view().items.includes(item)) return false;
+    dismissedResults.update(previous => [...previous, {serviceName: item.serviceName, runId: item.runId!, updatedAtMs: item.updatedAtMs!}]);
+    return true;
+  });
+  const progress = {owner, view, refreshing, refresh: vi.fn(), dashboardHidden, setDashboardHidden, dismissResult};
   const closed$ = new Subject<void>();
   const dismiss = vi.fn();
   const dialog = {open: vi.fn().mockReturnValue({close: dismiss, afterClosed: () => closed$})};
@@ -82,6 +90,42 @@ describe('shared history import surfaces', () => {
     expect(host.querySelector('mat-progress-bar')).toBeNull();
     expect(host.querySelector('a')?.getAttribute('href')).toContain('serviceName=Garmin%20API');
     expect(host.textContent).toContain('Provider delivery may take hours or days');
+  });
+  it.each(['failed', 'skipped'])('lets the owner dismiss a finished %s result from both surfaces while future imports remain visible', async status => {
+    const state = await setup();
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: projection(status, false, 26)}]);
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.history-import-header-action')?.textContent).toContain('History finished with issues');
+    expect(host.querySelector('.provider-status')?.textContent).toContain('Finished with issues');
+    expect(host.querySelector('.coverage-note')?.textContent).toContain('not failure totals');
+    expect(host.querySelector('mat-progress-spinner')).toBeNull();
+    expect(host.querySelector('mat-progress-bar')).toBeNull();
+    expect(state.haptics.selection).not.toHaveBeenCalled();
+    const button = host.querySelector('button[aria-label="Dismiss Suunto history import result"]') as HTMLButtonElement;
+    button.click(); fixture.detectChanges(); button.click();
+    expect(host.querySelector('.history-import-header-action')).toBeNull();
+    expect(host.querySelector('mat-card')).toBeNull();
+    expect(state.progress.dashboardHidden()).toBe(false);
+    expect(state.haptics.selection).toHaveBeenCalledTimes(1);
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: {...projection(), runId: 'next-run'}}]); fixture.detectChanges();
+    expect(host.querySelector('.history-import-header-action')?.textContent).toContain('Importing history');
+    expect(host.querySelector('mat-card')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Dismiss Suunto history import result"]')).toBeNull();
+  });
+  it('never offers dismissal for live work, reconnect guidance or unknown status', async () => {
+    const state = await setup(); const fixture = TestBed.createComponent(SharedSurfaces);
+    for (const source of [
+      {serviceName: ServiceNames.SuuntoApp, projection: projection()},
+      {serviceName: ServiceNames.SuuntoApp, projection: projection('retrying')},
+      {serviceName: ServiceNames.SuuntoApp, projection: projection(), connectionState: 'reconnect_required' as const},
+      {serviceName: ServiceNames.SuuntoApp, unavailable: true},
+    ]) {
+      state.sources.set([source]); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('button[aria-label="Dismiss Suunto history import result"]')).toBeNull();
+    }
+    expect(state.progress.dismissResult).not.toHaveBeenCalled();
+    expect(state.haptics.selection).not.toHaveBeenCalled();
   });
   it('does not expose current-owner cards on another account dashboard', async () => {
     await setup(); const fixture = TestBed.createComponent(HistoryImportCardsComponent);

@@ -10,6 +10,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import type { HistoryImportProgressItem } from '../../helpers/history-import-progress.helper';
 
 @Component({selector: 'app-history-import-cards', standalone: true,
   imports: [DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatProgressSpinnerModule, MatTooltipModule, ServiceSourceIconComponent],
@@ -28,6 +29,11 @@ export class HistoryImportCardsComponent {
     const owner = this.progress.owner();
     if (this.placement() !== 'dashboard' || owner?.uid !== this.ownerUid()) return;
     if (this.progress.setDashboardHidden(true, owner)) this.haptics.selection();
+  }
+  dismissResult(item: HistoryImportProgressItem): void {
+    const owner = this.progress.owner();
+    if (owner?.uid !== this.ownerUid()) return;
+    if (this.progress.dismissResult(item, owner)) this.haptics.selection();
   }
   refresh(): void {
     if (this.progress.owner()?.uid !== this.ownerUid() || this.refreshing()) return;

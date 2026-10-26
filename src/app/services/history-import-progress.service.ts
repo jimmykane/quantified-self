@@ -4,7 +4,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, authState, type FirebaseUserType } from 'app/firebase/auth';
 import { Subject, catchError, combineLatest, defer, distinctUntilChanged, map, of, scan, startWith, switchMap } from 'rxjs';
 import { AppUserService } from './app.user.service';
-import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportProgress, type HistoryImportSource } from '../helpers/history-import-progress.helper';
+import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportProgress, type HistoryImportSource,
+  type HistoryImportProgressItem, type HistoryImportResultDismissal } from '../helpers/history-import-progress.helper';
 import { APP_STORAGE } from './storage/app.storage.token';
 
 export interface HistoryImportOwner { uid: string; session: FirebaseUserType; }
@@ -21,6 +22,7 @@ export class HistoryImportProgressService {
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly storage = inject(APP_STORAGE, {optional: true});
   private readonly dashboardVisibility = signal(new Map<string, boolean>());
+  private readonly dismissedResults = signal(new Map<string, HistoryImportResultDismissal>());
   private readonly refresh$ = new Subject<void>();
   private readonly now = signal(Date.now());
   private expiryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,7 +63,14 @@ export class HistoryImportProgressService {
     const owner = this.snapshot().owner;
     return owner?.session === this.auth.currentUser ? owner : null;
   });
-  readonly view = computed(() => buildHistoryImportProgress(this.owner() ? this.snapshot().sources : [], Math.max(this.now(), Date.now())));
+  readonly view = computed(() => {
+    const owner = this.owner();
+    const dismissed = owner ? HISTORY_IMPORT_PROVIDERS.flatMap(serviceName => {
+      const result = this.readDismissedResult(owner.uid, serviceName);
+      return result ? [result] : [];
+    }) : [];
+    return buildHistoryImportProgress(owner ? this.snapshot().sources : [], Math.max(this.now(), Date.now()), dismissed);
+  });
   readonly refreshing = computed(() => !!this.owner() && this.snapshot().refreshing);
   readonly dashboardHidden = computed(() => {
     const uid = this.owner()?.uid;
@@ -88,6 +97,20 @@ export class HistoryImportProgressService {
   }
   refresh(): void { if (this.owner() && !this.refreshing()) this.refresh$.next(); }
 
+  dismissResult(item: HistoryImportProgressItem, expectedOwner: HistoryImportOwner | null): boolean {
+    const owner = this.owner();
+    if (!this.browser || !owner || owner !== expectedOwner || !item?.canDismiss) return false;
+    const current = this.view().items.find(result => result.canDismiss && result.serviceName === item.serviceName
+      && result.runId === item.runId && result.updatedAtMs === item.updatedAtMs);
+    if (!current?.runId || current.updatedAtMs === undefined) return false;
+    const result = {serviceName: current.serviceName, runId: current.runId, updatedAtMs: current.updatedAtMs};
+    const key = this.resultDismissalKey(owner.uid, current.serviceName);
+    this.dismissedResults.update(previous => new Map(previous).set(key, result));
+    try { this.storage?.setItem(key, JSON.stringify(result)); }
+    catch { /* Keep this session's dismissal when browser storage is blocked. */ }
+    return true;
+  }
+
   setDashboardHidden(hidden: boolean, expectedOwner: HistoryImportOwner | null): boolean {
     const owner = this.owner();
     if (!this.browser || !owner || owner !== expectedOwner || this.dashboardHidden() === hidden) return false;
@@ -102,5 +125,23 @@ export class HistoryImportProgressService {
 
   private dashboardVisibilityKey(uid: string): string {
     return `history-import.dashboard-hidden.v1.${encodeURIComponent(uid)}`;
+  }
+
+  private resultDismissalKey(uid: string, serviceName: string): string {
+    return `history-import.dismissed-result.v1.${encodeURIComponent(uid)}.${encodeURIComponent(serviceName)}`;
+  }
+
+  private readDismissedResult(uid: string, serviceName: HistoryImportResultDismissal['serviceName']): HistoryImportResultDismissal | null {
+    const key = this.resultDismissalKey(uid, serviceName);
+    const override = this.dismissedResults().get(key);
+    if (override) return override;
+    try {
+      const saved: unknown = JSON.parse(this.storage?.getItem(key) ?? 'null');
+      if (!saved || typeof saved !== 'object') return null;
+      const result = saved as Partial<HistoryImportResultDismissal>;
+      if (result.serviceName !== serviceName || typeof result.runId !== 'string' || !result.runId
+        || result.runId.length > 256 || typeof result.updatedAtMs !== 'number' || !Number.isFinite(result.updatedAtMs)) return null;
+      return {serviceName, runId: result.runId, updatedAtMs: result.updatedAtMs};
+    } catch { return null; }
   }
 }

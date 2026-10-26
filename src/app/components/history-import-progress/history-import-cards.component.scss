@@ -18,7 +18,7 @@ p { margin: 0; }
 .step-status, .step-explanation { grid-column: 2; overflow-wrap: anywhere; }
 .step-status { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
 .coverage-note { margin-top: 12px; }
-.history-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+.history-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; margin-top: 4px; }
 .refresh-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .refresh-content mat-progress-spinner { flex: 0 0 14px; width: 14px; height: 14px; }
 @media (max-width: 600px) {
