@@ -461,12 +461,12 @@ describe('LoginComponent', () => {
         expect(mockAuthService.localStorageService.setItem).toHaveBeenCalledWith('pendingLinkProvider', 'github.com');
     });
 
-    it('should pass a safe returnUrl query parameter when sending an email link', async () => {
-        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+    it.each(['/tools/compare', '/services?serviceName=COROS%20API'])('passes the safe returnUrl %s when sending an email link', async returnUrl => {
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl });
 
         await component.sendEmailLink('test@example.com');
 
-        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', '/tools/compare');
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', returnUrl);
     });
 
     it('should not fall back to a stale service redirect when email link returnUrl query parameter is unsafe', async () => {
@@ -791,8 +791,8 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
     });
 
-    it('should return to a safe local returnUrl query parameter after login', async () => {
-        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+    it.each(['/tools/compare', '/services?serviceName=COROS%20API'])('returns to the safe local URL %s after login', async returnUrl => {
+        activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl });
 
         component.ngOnInit();
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -801,7 +801,7 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
-        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/tools/compare');
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith(returnUrl);
         expect(mockAuthService.redirectUrl).toBeNull();
     });
 

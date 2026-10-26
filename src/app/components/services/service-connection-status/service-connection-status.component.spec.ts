@@ -114,6 +114,8 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(link.textContent).toContain('Try Pro free for 14 days');
         expect(link.getAttribute('href')).toBe('/subscriptions?priceId=price_pro_year');
         expect(fixture.nativeElement.textContent).toContain('Review billing terms before you start');
+        expect(fixture.nativeElement.textContent).toContain('Payment method required.');
+        expect(fixture.nativeElement.textContent).not.toContain('No card needed');
         expect(haptics.selection).not.toHaveBeenCalled();
     });
 

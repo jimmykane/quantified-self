@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppPaymentService, CheckoutStartError } from './app.payment.service';
+import { AppPaymentService, CheckoutStartError, type StripePrice } from './app.payment.service';
 import { Firestore } from 'app/firebase/firestore';
 import { Auth } from 'app/firebase/auth';
 import { Functions } from 'app/firebase/functions';
@@ -151,6 +151,9 @@ describe('AppPaymentService', () => {
         liteFirestore.doc.mockImplementation((_firestore: unknown, path: string) => path);
         liteFirestore.getDoc.mockResolvedValue({ data: () => undefined });
         mockLimit.mockImplementation((value: number) => value);
+        mockCollection.mockImplementation((_firestore: unknown, path: string) => ({ path }));
+        mockWhere.mockImplementation((field: string, op: string, value: unknown) => ({ field, op, value }));
+        mockQuery.mockImplementation((collection: unknown, ...constraints: unknown[]) => ({ collection, constraints }));
         mockRunInInjectionContext.mockImplementation((injector: any, fn: any) => fn());
 
         TestBed.configureTestingModule({
@@ -350,6 +353,167 @@ describe('AppPaymentService', () => {
     });
 
     describe('appendCheckoutSession', () => {
+        const trialPrice: StripePrice = {
+            id: 'price_monthly_trial', type: 'recurring', active: true,
+            currency: 'eur', unit_amount: 1000, description: 'Monthly',
+            interval: 'month', interval_count: 1, trial_period_days: null,
+            metadata: { trial_days: '30' }
+        };
+        const subscriptionDoc = (status: string, id = `sub_${status}`) => ({ id, data: () => ({ status }) });
+
+        it.each(['canceled', 'past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'future_status'])(
+            'uses one server read and denies another trial for %s history', async status => {
+                mockGetDocsFromServer.mockResolvedValueOnce({ docs: [subscriptionDoc(status)] });
+
+                await service.appendCheckoutSession(trialPrice);
+
+                expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+                expect(mockLimit).toHaveBeenCalledWith(100);
+                expect(mockSetDoc).toHaveBeenCalledOnce();
+                expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBeUndefined();
+            });
+
+        it.each(['active', 'trialing'])('uses the combined read to route %s subscribers to management', async status => {
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [subscriptionDoc('canceled'), subscriptionDoc(status)]
+            });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('reads subscriptions only after the linking check completes', async () => {
+            let finishLink: (value: { data: { linked: boolean } }) => void;
+            mockFunctionsService.call.mockImplementationOnce(() => new Promise(resolve => { finishLink = resolve; }));
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+            const checkout = service.appendCheckoutSession(trialPrice);
+            await vi.waitFor(() => expect(mockFunctionsService.call).toHaveBeenCalledWith('linkExistingStripeCustomer'));
+            expect(mockGetDocsFromServer).not.toHaveBeenCalled();
+            expect(mockSetDoc).not.toHaveBeenCalled();
+
+            // A subscription became visible while linking was running.
+            mockGetDocsFromServer.mockResolvedValueOnce({ docs: [subscriptionDoc('active')] });
+            finishLink!({ data: { linked: false } });
+            await checkout;
+
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('does not read history or create checkout when the trial candidate is restored', async () => {
+            mockFunctionsService.call.mockResolvedValueOnce({ data: { linked: true, role: 'pro' } });
+
+            await expect(service.appendCheckoutSession(trialPrice)).rejects.toThrow('SUBSCRIPTION_RESTORED:pro');
+
+            expect(mockGetDocsFromServer).not.toHaveBeenCalled();
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('checks subscriptions even when the linking callable fails', async () => {
+            mockFunctionsService.call.mockRejectedValueOnce(new Error('Link check unavailable'));
+            mockGetDocsFromServer.mockResolvedValueOnce({ docs: [subscriptionDoc('trialing')] });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it.each([true, false])('bounds long histories and checks active subscriptions beyond the page (active=%s)', async active => {
+            mockGetDocsFromServer
+                .mockResolvedValueOnce({ docs: Array.from({ length: 100 }, (_, i) => subscriptionDoc('canceled', `sub_${i}`)) })
+                .mockResolvedValueOnce({ docs: active ? [subscriptionDoc('active')] : [] });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
+            expect(mockLimit).toHaveBeenCalledWith(100);
+            expect(mockLimit).toHaveBeenCalledWith(1);
+            expect(mockGetDocsFromServer).toHaveBeenNthCalledWith(2, {
+                collection: { path: 'customers/test_user_uid/subscriptions' },
+                constraints: [{ field: 'status', op: 'in', value: ['active', 'trialing'] }, 1]
+            });
+            if (active) {
+                expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+                expect(mockSetDoc).not.toHaveBeenCalled();
+            } else {
+                expect(manageSpy).not.toHaveBeenCalled();
+                expect(mockSetDoc).toHaveBeenCalledOnce();
+                expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBeUndefined();
+            }
+        });
+
+        it('uses one read when a full history page already contains an active subscription', async () => {
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [...Array.from({ length: 99 }, () => subscriptionDoc('canceled')), subscriptionDoc('trialing')]
+            });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('rejects an account change while the long-history fallback is pending', async () => {
+            let finishRead: (value: { docs: [] }) => void;
+            mockGetDocsFromServer
+                .mockResolvedValueOnce({ docs: Array.from({ length: 100 }, () => subscriptionDoc('canceled')) })
+                .mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+            const checkout = service.appendCheckoutSession(trialPrice);
+            await vi.waitFor(() => expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2));
+            mockAuth.currentUser = { uid: 'other_user', getIdToken: vi.fn() };
+            finishRead!({ docs: [] });
+
+            await expect(checkout).rejects.toThrow('Authenticated user changed');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('blocks checkout when the bounded-history fallback fails', async () => {
+            const readError = new Error('Active subscription read unavailable');
+            mockGetDocsFromServer
+                .mockResolvedValueOnce({ docs: Array.from({ length: 100 }, () => subscriptionDoc('canceled')) })
+                .mockRejectedValueOnce(readError);
+
+            await expect(service.appendCheckoutSession(trialPrice)).rejects.toBe(readError);
+
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('rejects an account change while the combined read is pending', async () => {
+            let finishRead: (value: { docs: [] }) => void;
+            mockGetDocsFromServer.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+            const checkout = service.appendCheckoutSession(trialPrice);
+            await vi.waitFor(() => expect(mockGetDocsFromServer).toHaveBeenCalledOnce());
+            mockAuth.currentUser = { uid: 'other_user', getIdToken: vi.fn() };
+            finishRead!({ docs: [] });
+
+            await expect(checkout).rejects.toThrow('Authenticated user changed');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('reads fresh history again on a stale-customer retry before offering a trial', async () => {
+            mockDocData.mockReturnValueOnce(of({ error: { message: 'No such customer' } }))
+                .mockReturnValueOnce(of({ url: 'http://stripe.com/checkout' }));
+            mockGetDocsFromServer.mockResolvedValueOnce({ docs: [] })
+                .mockResolvedValueOnce({ docs: [subscriptionDoc('canceled')] });
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
+            expect(mockSetDoc).toHaveBeenCalledTimes(2);
+            expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBe(30);
+            expect(mockSetDoc.mock.calls[1][1].trial_period_days).toBeUndefined();
+        });
+
         it('should add subscription checkout metadata and if_required payment collection when mode is subscription', async () => {
             const priceId = 'price_123';
             // Force mode to be subscription for this test by passing a price object with recurring type
@@ -403,6 +567,11 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.mode).toBe('payment');
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' },
+                constraints: [{ field: 'status', op: 'in', value: ['active', 'trialing'] }, 1]
+            });
 
             // CHECK 1: Top-level metadata MUST be present
             expect(payload.metadata).toEqual({
@@ -439,9 +608,13 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.trial_period_days).toBe(14);
+            expect(payload.checkout_terms_version).toBe('pro-trial-payment-method-v1');
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [100]
+            });
         });
 
         it('should not set trial_period_days when user has paid subscription history', async () => {
@@ -459,7 +632,7 @@ describe('AppPaymentService', () => {
             } as any;
 
             mockGetDocsFromServer.mockResolvedValueOnce({
-                docs: [{ id: 'sub_existing' }]
+                docs: [{ id: 'sub_existing', data: () => ({ status: 'canceled' }) }]
             });
 
             await service.appendCheckoutSession(recurringPriceWithTrial);
@@ -473,7 +646,7 @@ describe('AppPaymentService', () => {
             expect(payload.allow_promotion_codes).toBe(true);
         });
 
-        it('should not set trial_period_days when history lookup fails during checkout gating (fail-closed)', async () => {
+        it('blocks checkout when the combined history and active-subscription read fails', async () => {
             const recurringPriceWithTrial = {
                 id: 'price_recurring_trial_history_error',
                 type: 'recurring',
@@ -487,17 +660,12 @@ describe('AppPaymentService', () => {
                 }
             } as any;
 
-            mockGetDocsFromServer.mockRejectedValueOnce(new Error('Firestore unavailable'));
+            const readError = new Error('Firestore unavailable');
+            mockGetDocsFromServer.mockRejectedValueOnce(readError);
 
-            await service.appendCheckoutSession(recurringPriceWithTrial);
-
-            expect(mockSetDoc).toHaveBeenCalled();
-            const args = mockSetDoc.mock.calls[0];
-            const payload = args[1];
-
-            expect(payload.trial_period_days).toBeUndefined();
-            expect(payload.promotion_code).toBeUndefined();
-            expect(payload.allow_promotion_codes).toBe(true);
+            await expect(service.appendCheckoutSession(recurringPriceWithTrial)).rejects.toBe(readError);
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+            expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
         it('should not set trial_period_days when recurring price has no valid trial days', async () => {
@@ -927,6 +1095,32 @@ describe('AppPaymentService', () => {
     });
 
     describe('hasPaidSubscriptionHistory', () => {
+        it('allows trial messaging for an authenticated user with no subscription history', async () => {
+            await expect(service.hasPaidSubscriptionHistory()).resolves.toBe(false);
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [1]
+            });
+        });
+
+        it.each(['paused', 'future_status', undefined])(
+            'suppresses trial offers for existing history with status %s, matching checkout', async status => {
+                const historyDoc = { id: 'sub_previous', data: () => ({ status }) };
+                mockGetDocsFromServer.mockImplementation(async (request: { constraints: unknown[] }) => {
+                    const statusFilter = request.constraints.find(constraint => typeof constraint === 'object'
+                        && constraint !== null && 'field' in constraint && constraint.field === 'status') as
+                        { value: string[] } | undefined;
+                    return { docs: !statusFilter || statusFilter.value.includes(status) ? [historyDoc] : [] };
+                });
+
+                await expect(service.hasPaidSubscriptionHistory()).resolves.toBe(true);
+
+                expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+                expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                    collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [1]
+                });
+            });
+
         it('should return false when there is no authenticated user', async () => {
             mockAuth.currentUser = null;
 

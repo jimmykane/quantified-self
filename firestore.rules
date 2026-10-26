@@ -670,13 +670,14 @@ service cloud.firestore {
             && (!exists(tombstone) || (get(tombstone).data.get('expireAt', null) is timestamp
               && get(tombstone).data.expireAt <= request.time))
             && data.keys().hasOnly(['price', 'mode', 'success_url', 'cancel_url',
-              'allow_promotion_codes', 'automatic_tax', 'metadata', 'payment_method_collection', 'trial_period_days'])
+              'allow_promotion_codes', 'automatic_tax', 'metadata', 'payment_method_collection', 'trial_period_days', 'checkout_terms_version'])
             && data.price is string && data.price.matches('^price_[a-zA-Z0-9]+$')
             && price.active == true && data.mode == price.mode
             && get(/databases/$(database)/documents/products/$(price.product)).data.active == true
             && data.allow_promotion_codes == true && data.automatic_tax == {'enabled': true}
             && data.metadata == {'firebaseUID': userID}
             && data.get('payment_method_collection', 'if_required') == 'if_required'
+            && (!('checkout_terms_version' in data) || data.checkout_terms_version == 'pro-trial-payment-method-v1')
             && (!('trial_period_days' in data) || (data.mode == 'subscription'
               && data.trial_period_days is int && data.trial_period_days > 0
               && data.trial_period_days == price.trialDays))

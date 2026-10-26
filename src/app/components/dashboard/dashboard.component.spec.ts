@@ -387,12 +387,12 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
     });
 
-    it('shows the no-activity dashboard state for owner dashboards without activities', async () => {
+    it.each(['free', 'pro'] as const)('shows first activity actions before unit setup for %s owner dashboards without activities', async (role) => {
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
         mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
-        mockUser.stripeRole = 'pro';
-        mockUser.settings.appSettings = {};
+        mockUser.stripeRole = role;
+        mockUser.settings.appSettings = { unitSetupCompleted: false };
         mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
             [ServiceNames.GarminAPI]: false,
             [ServiceNames.SuuntoApp]: false,
@@ -409,6 +409,11 @@ describe('DashboardComponent', () => {
         expect(component.showNoActivityDashboardState).toBe(true);
         expect(text).toContain('No activities yet');
         expect(text).toContain('Connect a service or upload an activity.');
+        const emptyState = fixture.nativeElement.querySelector('.dashboard-no-activity') as HTMLElement;
+        const actionPrompts = fixture.nativeElement.querySelector('app-dashboard-action-prompts') as HTMLElement;
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(true);
+        expect(emptyState.compareDocumentPosition(actionPrompts) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
         expect(template).toContain('[fullWidth]="true"');
         expect(template).toContain('uploadLabel="Upload activity"');
         expect(template).toContain('routerLink="/features/supported-activities"');

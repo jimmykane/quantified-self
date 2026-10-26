@@ -44,7 +44,11 @@
                     <p class="yearly-savings-label">{{ price.yearlySavingsLabel }}</p>
                   }
                   @if (price.trialDays !== null) {
-                    <p class="trial-offer-copy">{{ price.trialDays }}-day free trial for eligible new members. No card needed.</p>
+                    <p class="trial-offer-copy">{{ price.trialDays }}-day free trial for eligible new members.
+                      @if (plan.role === 'pro') {
+                        Payment method required. Then renews at the price above until canceled. Cancel before your trial ends to avoid payment.
+                      } @else { No card needed. }
+                    </p>
                   } @else if (plan.role === 'free') {
                     <p class="trial-offer-copy">No card needed.</p>
                   }

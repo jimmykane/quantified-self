@@ -1191,6 +1191,10 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
 - Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
+- New Pro trials require a payment method in Stripe Checkout. There is no subscription charge during the free trial. Review the selected price, billing interval, any applicable tax, and first payment date in Checkout before confirming.
+- After the trial, the selected subscription renews automatically until you cancel. Cancel from **Membership → Manage subscription** before the trial ends to avoid the first payment. Existing trials keep the terms you originally accepted; complimentary extensions are unchanged.
+- Starter stays free and does not require a payment method.
+- If the app asks you to review updated trial terms, refresh it and review the offer again. An earlier open trial checkout may need to expire before you can start one under the new terms; contact support if it stays blocked.
 - Yearly paid plans appear automatically when active yearly Stripe prices are available.
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.
@@ -1364,6 +1368,8 @@ The public [Training Data Sync Guides](/guides) hub links to the [import activit
 
 For **Wahoo to Suunto**, the guide's **Get Started** action keeps Wahoo selected through sign-in and required onboarding. It opens the Wahoo tab without starting a connection or enabling sync. Enable **To Suunto** in Wahoo's **Activity sync settings** for new eligible imports. For saved Wahoo workouts, open **Send past activities** under **Suunto**, choose **Saved activities**, select **Wahoo API** and your dates, then preview and confirm Send. Preview sends nothing; review delivery in **Recent sends**. Both workflows require Pro. Wahoo imports skip workouts without an available FIT original and those identified as coming from a third-party fitness application.
 
+For **COROS to Suunto**, the guide's **Get Started** action keeps COROS selected through sign-in and required onboarding. Opening the COROS tab does not connect an account or enable sync. With Pro, connect both providers, then choose **Activity sync settings → To Suunto** under COROS for new eligible imports. Missing COROS API history is limited to the latest rolling **3 months**; older saved activities can still be sent when their eligible original FIT files remain available. For a one-time send, open **Send past activities** under **Suunto**, choose **Saved activities**, select **COROS API** and your dates, then preview and confirm Send. Preview sends nothing; check **Recent sends** and Suunto for delivery.
+
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, TCX, JSON, and SML files.
 
 The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [FIT and GPX Route Files](/features/fit-gpx-route-files). The comparison page combines centralized Garmin, Suunto, COROS, and Wahoo activities with uploaded FIT/TCX/GPX/JSON/SML activity files, synchronized overlays, sports-device benchmarks, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
@@ -1531,12 +1537,12 @@ Direct COROS route upload accepts one GPX or FIT file, parses it server-side, an
 COROS to Suunto activity sync requires:
 
 - you must connect both COROS and Suunto,
-- turn on automatic activity sync in COROS Services,
+- open **Activity sync settings → To Suunto** under COROS in **Connections** and enable automatic sync,
 - and keep both service connections active.
 
 Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event. COROS Services also offers Wahoo as a destination.
 
-**Send past activities** is available under the Suunto or Wahoo destination card in Services. Select **COROS imports** and a date range to send COROS activities already saved in Quantified Self; you can also select supported other imports or manual uploads.
+**Send past activities** is available under the Suunto or Wahoo destination card in Services. Choose **Saved activities**, select **COROS API** in **Activity sources** and a date range, then preview and confirm **Send** to send COROS activities already saved in Quantified Self; you can also select supported other imports or manual uploads.
 
 You can send past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
 

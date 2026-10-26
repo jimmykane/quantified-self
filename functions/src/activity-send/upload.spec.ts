@@ -90,6 +90,30 @@ describe('Send file rejection diagnostics', () => {
     if (target !== 'save') expect(mocks.cleanup).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['empty_body', () => Buffer.alloc(0), '.fit', 'Choose a FIT or FIT.gz file up to 20 MiB.'],
+    ['invalid_gzip', () => Buffer.from('private-file-content'), '.fit.gz', 'FIT.gz cannot be expanded within 20 MiB.'],
+    ['invalid_header_size', () => Buffer.from('private-file-content'), '.fit', 'The selected file is not a complete FIT recording.'],
+    ['truncated_payload', () => {
+      const fit = Buffer.alloc(16); fit[0] = 14; fit.writeUInt32LE(100, 4); fit.write('.FIT', 8, 'ascii'); return fit;
+    }, '.fit', 'The selected file is not a complete FIT recording.'],
+  ] as const)('logs the actual %s reason and raw byte count without private data', async (validationReason, body, suffix, message) => {
+    const actual = await vi.importActual<typeof import('./policy')>('./policy');
+    mocks.decode.mockImplementationOnce(actual.decodeSendFile);
+    const req = request({ 'X-QS-Filename': encodeURIComponent(PRIVATE + suffix) });
+    req.rawBody = body();
+    const res = response();
+    await invoke(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ code: 'invalid-argument', message });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[ActivitySendUpload] Request rejected.', {
+      stage: 'file_validation', errorCode: 'invalid-argument', httpStatus: 400, validationReason, receivedBytes: req.rawBody.length,
+    });
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(mocks.describe).not.toHaveBeenCalled(); expect(mocks.save).not.toHaveBeenCalled();
+  });
+
   it('identifies cleanup failures rather than mislabelling the original storage failure', async () => {
     mocks.metadata.mockRejectedValueOnce(new Error(PRIVATE)); mocks.cleanup.mockRejectedValueOnce(new Error(PRIVATE));
     const res = response();

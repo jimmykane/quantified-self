@@ -659,7 +659,7 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
-        h1: 'How to sync COROS workouts to Suunto automatically',
+        h1: 'Sync COROS activities to Suunto',
       },
       {
         path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,

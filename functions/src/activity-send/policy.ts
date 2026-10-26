@@ -3,7 +3,16 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ACTIVITY_SEND_LIMITS, ActivitySendRecovery, ActivitySendStatus } from '../../../shared/activity-send';
-import { inspectFitPayload } from '../shared/fit-payload';
+import { inspectFitPayload, type FitPayloadInspectionReason } from '../shared/fit-payload';
+
+type SendFileValidationReason = 'empty_body' | 'file_too_large' | 'unsupported_extension'
+  | 'invalid_gzip' | 'gzip_output_too_large' | Exclude<FitPayloadInspectionReason, 'valid'>;
+
+export class SendFileValidationError extends HttpsError {
+  constructor(readonly validationReason: SendFileValidationReason, readonly receivedBytes: number, message: string) {
+    super('invalid-argument', message);
+  }
+}
 
 export function sendIdentifier(value: unknown): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new HttpsError('invalid-argument', 'Invalid send reference.');
@@ -11,12 +20,17 @@ export function sendIdentifier(value: unknown): string {
 }
 export function decodeSendFile(input: Buffer, filename: string): Buffer {
   if (!input.length || input.length > ACTIVITY_SEND_LIMITS.fileBytes || !/\.fit(?:\.gz)?$/i.test(filename)) {
-    throw new HttpsError('invalid-argument', 'Choose a FIT or FIT.gz file up to 20 MiB.');
+    const reason = !input.length ? 'empty_body' : input.length > ACTIVITY_SEND_LIMITS.fileBytes ? 'file_too_large' : 'unsupported_extension';
+    throw new SendFileValidationError(reason, input.length, 'Choose a FIT or FIT.gz file up to 20 MiB.');
   }
   let fit: Buffer;
   try { fit = /\.gz$/i.test(filename) ? gunzipSync(input, { maxOutputLength: ACTIVITY_SEND_LIMITS.fileBytes }) : input; }
-  catch { throw new HttpsError('invalid-argument', 'FIT.gz cannot be expanded within 20 MiB.'); }
-  if (!inspectFitPayload(fit).isCompleteFit) throw new HttpsError('invalid-argument', 'The selected file is not a complete FIT recording.');
+  catch (error) {
+    const reason = (error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE' ? 'gzip_output_too_large' : 'invalid_gzip';
+    throw new SendFileValidationError(reason, input.length, 'FIT.gz cannot be expanded within 20 MiB.');
+  }
+  const inspection = inspectFitPayload(fit);
+  if (inspection.reason !== 'valid') throw new SendFileValidationError(inspection.reason, input.length, 'The selected file is not a complete FIT recording.');
   return fit;
 }
 export function sendFileHash(fit: Buffer): string { return createHash('sha256').update(fit).digest('hex'); }

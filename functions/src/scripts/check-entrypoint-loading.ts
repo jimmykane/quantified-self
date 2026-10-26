@@ -107,6 +107,7 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
 };
 const RUNTIME_CONTRACT_TARGETS = [
+  'linkExistingStripeCustomer',
   ...BILLING_TARGETS,
   ...CONNECTION_HISTORY_TARGETS,
   ...Object.keys(GEN1_DISPATCHER_METADATA),
@@ -364,6 +365,14 @@ function probe(targetArgument: string): void {
   const mcpTarget = runtimeTarget === 'mcpApi';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
+    if (runtimeTarget === 'linkExistingStripeCustomer' && (
+      path.endsWith('/lib/functions/src/utils.js')
+      || path.includes('/node_modules/@sports-alliance/sports-lib/')
+      || path.includes('/node_modules/@google-cloud/tasks/')
+      || path.includes('/node_modules/stripe/')
+      || path.includes('/lib/functions/src/reparse/')
+      || path.endsWith('/lib/functions/src/stripe/billing/handlers.js')
+    )) return true;
     if (runtimeTarget === 'observeDerivedMetricsHealth' && (
       path.includes('/node_modules/@sports-alliance/sports-lib/')
       || path.includes('/node_modules/@google-cloud/tasks/')
@@ -513,6 +522,7 @@ async function check(): Promise<void> {
   const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
   assert(canaryTarget, 'The optimized target registry is empty.');
   for (const target of [
+    'linkExistingStripeCustomer',
     ...CONNECTION_HISTORY_TARGETS,
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(GEN1_DISPATCHER_METADATA),
@@ -567,6 +577,7 @@ async function check(): Promise<void> {
   }
 
   for (const target of [
+    'linkExistingStripeCustomer',
     ...CONNECTION_HISTORY_TARGETS,
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(GEN1_DISPATCHER_METADATA),
@@ -656,6 +667,15 @@ async function check(): Promise<void> {
           && endpoint.eventTrigger.eventFilterPathPatterns?.document === events[target][1]
           && endpoint.eventTrigger.retry === true, `${target} billing event contract changed.`);
       }
+    } else if (target === 'linkExistingStripeCustomer') {
+      assert(endpoint.availableMemoryMb === 512 && isDefaultRuntimeValue(endpoint.timeoutSeconds),
+        `${target} memory or timeout changed.`);
+      assert(endpoint.callableTrigger !== undefined && endpoint.httpsTrigger === undefined
+        && endpoint.eventTrigger === undefined && endpoint.taskQueueTrigger === undefined,
+      `${target} callable trigger changed.`);
+      assert(arraysEqual(secretKeys, ['STRIPE_SECRET_KEY']), `${target} secret bindings changed.`);
+      assert(isDefaultRuntimeValue(endpoint.minInstances) && isDefaultRuntimeValue(endpoint.maxInstances)
+        && isDefaultRuntimeValue(endpoint.concurrency), `${target} scaling settings changed.`);
     } else if (target === 'mcpApi') {
       assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 120, `${target} timeout configuration changed.`);

@@ -1,17 +1,6 @@
 <section class="component-container qs-workspace-page">
   <app-loading-overlay [isLoading]="!isInitialized" [showSkeleton]="false" height="auto">
     <div class="dashboard-content">
-      <app-dashboard-action-prompts
-        [prompts]="dashboardActionPrompts"
-        [user]="user"
-        [unitSetupOptions]="unitSetupOptions"
-        [selectedUnitSetupPreset]="selectedUnitSetupPreset"
-        (primary)="onDashboardActionPromptPrimary($event)"
-        (secondary)="onDashboardActionPromptSecondary($event)"
-        (menuAction)="onDashboardActionPromptMenuAction($event)"
-        (controlChange)="onDashboardActionPromptControlChange($event)">
-      </app-dashboard-action-prompts>
-
       @if (showNoActivityDashboardState && user) {
       <mat-card class="dashboard-no-activity" appearance="outlined">
         <mat-card-content class="dashboard-no-activity__content">
@@ -60,6 +49,17 @@
         </mat-card-content>
       </mat-card>
       }
+
+      <app-dashboard-action-prompts
+        [prompts]="dashboardActionPrompts"
+        [user]="user"
+        [unitSetupOptions]="unitSetupOptions"
+        [selectedUnitSetupPreset]="selectedUnitSetupPreset"
+        (primary)="onDashboardActionPromptPrimary($event)"
+        (secondary)="onDashboardActionPromptSecondary($event)"
+        (menuAction)="onDashboardActionPromptMenuAction($event)"
+        (controlChange)="onDashboardActionPromptControlChange($event)">
+      </app-dashboard-action-prompts>
 
       <!-- Removed mat-divider in favor of CSS spacing/gap -->
 

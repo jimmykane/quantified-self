@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { createHash } from 'node:crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -263,6 +264,7 @@ export async function processGarminHealthQueueItem(
     queueItem.providerUserId,
     callback.uploadEndTimeMs,
     receivedAtMs,
+    diagnostic => logger.warn('[HealthSync][Garmin] Discarded out-of-interval Daily heart-rate samples.', diagnostic),
   );
   stage('result_assembly');
   const payloadDigest = getGarminHealthPayloadDigest(

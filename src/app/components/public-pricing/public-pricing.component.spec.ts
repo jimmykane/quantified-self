@@ -120,6 +120,19 @@ describe('PublicPricingComponent', () => {
         expect(planBadge.closest('mat-card')?.getAttribute('data-plan')).toBe('pro');
     });
 
+    it('shows the payment requirement and renewal terms with a Pro trial while Starter remains card-free', () => {
+        paymentService.getProducts.mockReturnValue(of(PAID_PRODUCTS.map(product => product.role === 'pro'
+            ? { ...product, prices: product.prices!.map(price => ({ ...price, metadata: { trial_days: '14' } })) } : product)));
+        fixture.detectChanges();
+        const pro = fixture.nativeElement.querySelector('[data-plan="pro"]');
+        expect(pro.textContent).toContain('14-day free trial');
+        expect(pro.textContent).toContain('Payment method required.');
+        expect(pro.textContent).toContain('Then renews at the price above until canceled.');
+        expect(pro.textContent).toContain('Cancel before your trial ends to avoid payment.');
+        expect(pro.textContent).not.toContain('No card needed');
+        expect(fixture.nativeElement.querySelector('[data-plan="free"]').textContent).toContain('No card needed');
+    });
+
     it('keeps the loading state independent from membership verification', () => {
         const products$ = new Subject<StripeProduct[]>();
         paymentService.getProducts.mockReturnValue(products$);

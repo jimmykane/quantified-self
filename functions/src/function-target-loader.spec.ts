@@ -11,6 +11,7 @@ describe('function target loader', () => {
   });
   it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
+      'linkExistingStripeCustomer',
       'createStripeCheckoutSession',
       'createStripePortalLink',
       'ext-firestore-stripe-payments-createPortalLink',

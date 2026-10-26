@@ -152,6 +152,16 @@ Garmin Sleep and Health history recovery must account for a moving provider mini
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. Garmin workout, Sleep, and Health failed jobs retain original callback URLs under the existing admin-only 30-day expiry for separately authorized recovery; successful/skipped queue rows still clear them. Never log or project those credentials. Legacy DLQ callbacks with removed credentials or expired URLs require bounded Summary Resender recovery. Verify actual ingestion, not merely replay submission. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
 
+Garmin Daily HR samples beyond the declared monitoring duration are discarded after complete raw-map validation,
+preserving valid samples and scalar metrics within the unchanged interval. Invalid values, shapes and raw input
+caps remain terminal; other summary families retain strict interval validation. One bounded callback WARNING
+reports only fixed categories and discarded/affected counts, without identities, dates, health values or raw offsets.
+Diagnostics do not alter content digests or resume cursors. Monitoring is **unchanged**: the existing #830 worker,
+committed outcomes, backlog and unavailable-observation filters cover the same guarded ingestion path. No schema,
+MCP/Training contract, consent, queue policy or Help change is required. See
+[Garmin Health worker diagnostics](garmin-integration.md#health-worker-diagnostics) for semantics, verification,
+Function-only release/rollback and separately authorized failed-job recovery.
+
 ### Inbound prescription access is separate from delivery (#708)
 
 The October 6, 2026 investigation does **not** approve a cloud workout-library importer. See the
@@ -916,7 +926,9 @@ connected service nor a capability fixture grants readiness, scopes or user cons
 
 Non-Pro accounts can review provider benefits on a clean disconnected connection overview. The offer uses the existing Stripe catalog and owner subscription-history reads, once per account/role after selecting a provider; the free MCP tab does not initiate those billing reads. Only an active, positive recurring Pro price with configured trial metadata and confirmed eligible history can advertise a trial. Unknown reads fall back to Get Pro, and a supplied price only selects a Membership review option. It neither starts checkout nor grants provider access or sync consent. Wahoo copy stays limited to eligible FIT-backed Wahoo-recorded activities. Existing connected, loading, detailed, reconnect and pending-disconnect controls take precedence over the offer, including after Pro lapse. Material tab pagination preserves full labels and query selection on phones.
 
-Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Release is frontend-only after separate deployment approval; there is no Functions, Rules, index, cloud configuration or migration step. Reverting the frontend commit restores the prior prompt and selector.
+New Pro trial offers disclose that a payment method is required and direct the member to review the selected price and renewal/cancellation terms. Trial collection policy, cached-client offer versions, existing no-card trials and safe rollout are owned by [Stripe billing](stripe-billing.md#payment-methods-for-new-pro-trials). The provider offer still cannot initiate checkout or connect a provider automatically.
+
+Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
 ## 2. Choose the right architecture
 
@@ -1620,6 +1632,12 @@ failures preserve the parser's existing HTTP 400; they do not create events, ret
 existing bucket and helper without changing bucket access. The Send activities temporary-source lifecycle is separate
 and is not covered by this manual archive-upload branch.
 
+Send activities file-validation rejections are not captured in debug storage. Their existing
+`[ActivitySendUpload] Request rejected.` warning includes `receivedBytes` (the raw HTTP body size) and a fixed
+`validationReason` for empty/oversized bodies, unsupported extensions, gzip failures, or the shared FIT-envelope
+inspection reason. These diagnostics do not include filenames, identities, headers, file contents, or raw exceptions;
+the existing request trace provides correlation. Validation behavior and client error messages stay unchanged.
+
 #### Fourteen-day debug-file expiry
 
 `storage.debug-lifecycle.json` defines native Cloud Storage deletion eligibility at object age 14 days for the entire
@@ -1816,7 +1834,7 @@ history dialog remains availability-aware and falls back to Sleep-only wording w
 
 Use `app-service-source-icon` and the shared presentation helpers. Imported activity surfaces use source attribution; connection and destination surfaces use destination branding. See [connected-provider attribution audit](connected-provider-attribution-audit.md).
 
-The Wahoo-to-Suunto public guide and Help distinguish Wahoo's opt-in **Activity sync settings → To Suunto** from **Send past activities** under the Suunto destination, which opens the recorded-activity sending workspace. Its Get Started action preserves the curated Wahoo tab through sign-in, profile recovery and required onboarding; only that explicit local query and plain Connections are accepted by the setup-return helper. Keep source labels, preview/confirmation steps, FIT and third-party import limits, Pro boundary, and delivery-status wording aligned with that workspace. This guidance and setup navigation leave provider scopes, consent, workers, queues, retries and monitoring unchanged.
+The Wahoo-to-Suunto public guide and Help distinguish Wahoo's opt-in **Activity sync settings → To Suunto** from **Send past activities** under the Suunto destination, which opens the recorded-activity sending workspace. The Wahoo and COROS guides preserve their curated provider tab through sign-in, profile recovery and required onboarding; only those explicit local queries and plain Connections are accepted by the setup-return helper. The COROS guide distinguishes the rolling three-month API history-import window from older saved FIT originals eligible for a one-time send under Suunto. Keep source labels, preview/confirmation steps, FIT and third-party import limits, Pro boundary, and delivery-status wording aligned with that workspace. This guidance and setup navigation leave provider scopes, consent, workers, queues, retries and monitoring unchanged.
 
 ## 10. Admin and operational coverage
 

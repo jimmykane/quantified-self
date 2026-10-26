@@ -188,7 +188,10 @@
 
           @if (trialDays !== null) {
           <p class="trial-offer-copy">
-            {{ trialDays }}-day free trial for eligible new members. No card needed.
+            {{ trialDays }}-day free trial for eligible new members.
+            @if (product.metadata['role'] === 'pro') {
+            Payment method required. Then renews at the price above until canceled. Cancel before your trial ends to avoid payment.
+            } @else { No card needed. }
           </p>
           }
 

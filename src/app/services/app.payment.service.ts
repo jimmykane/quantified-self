@@ -13,6 +13,7 @@ import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '@shared/stripe-checkout-terms';
 
 export interface StripeProduct {
     id: string;
@@ -61,6 +62,11 @@ interface CheckoutInput {
     mode: CheckoutMode;
 }
 
+interface CheckoutSubscriptionState {
+    hasHistory: boolean;
+    hasActiveSubscription: boolean;
+}
+
 interface CheckoutSessionPayload {
     price: string;
     success_url: string;
@@ -69,6 +75,7 @@ interface CheckoutSessionPayload {
     mode: CheckoutMode;
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
+    checkout_terms_version: typeof STRIPE_CHECKOUT_TERMS_VERSION;
     payment_method_collection?: 'if_required';
     trial_period_days?: number;
     promotion_code?: string;
@@ -96,10 +103,10 @@ export class AppPaymentService {
     private dialog = inject(MatDialog);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
+    private readonly checkoutSubscriptionReadLimit = 100;
     private readonly checkoutSessionWaitMs = 60000;
     private readonly subscriptionReadRetryAttempts = 4;
     private readonly subscriptionReadRetryDelayMs = 750;
-    private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
@@ -324,13 +331,18 @@ export class AppPaymentService {
     ): Promise<void> {
         this.assertCheckoutUserStillCurrent(userId);
         const checkoutInput = this.resolveCheckoutInput(price);
-        const trialPeriodDays = await this.resolveTrialPeriodDaysForCheckout(price);
-        this.assertCheckoutUserStillCurrent(userId);
+        const offeredTrialPeriodDays = this.resolveOfferedTrialPeriodDays(price);
 
         await this.runPreCheckoutLinkCheck(user, userId);
         this.assertCheckoutUserStillCurrent(userId);
 
-        const shouldExitCheckout = await this.handleExistingActiveSubscriptions(userId);
+        // Read once after linking, which can restore an existing subscription.
+        // Keep this per attempt: neither pricing-page state nor a previous
+        // checkout attempt is authoritative enough for the duplicate/trial gate.
+        const subscriptions = await this.readCheckoutSubscriptionState(userId, offeredTrialPeriodDays !== null);
+        this.assertCheckoutUserStillCurrent(userId);
+        const trialPeriodDays = subscriptions.hasHistory ? null : offeredTrialPeriodDays;
+        const shouldExitCheckout = await this.handleExistingActiveSubscriptions(userId, subscriptions.hasActiveSubscription);
         if (shouldExitCheckout) {
             return;
         }
@@ -402,7 +414,7 @@ export class AppPaymentService {
         };
     }
 
-    private async resolveTrialPeriodDaysForCheckout(price: string | StripePrice): Promise<number | null> {
+    private resolveOfferedTrialPeriodDays(price: string | StripePrice): number | null {
         if (typeof price === 'string') {
             return null;
         }
@@ -411,17 +423,7 @@ export class AppPaymentService {
             return null;
         }
 
-        const trialPeriodDays = this.resolveMetadataTrialDays(price.metadata?.trial_days);
-        if (trialPeriodDays === null) {
-            return null;
-        }
-
-        const hasPaidHistory = await this.hasPaidSubscriptionHistoryForCheckoutEligibility();
-        if (hasPaidHistory) {
-            return null;
-        }
-
-        return trialPeriodDays;
+        return this.resolveMetadataTrialDays(price.metadata?.trial_days);
     }
 
     private resolveMetadataTrialDays(metadataTrialDays: string | undefined): number | null {
@@ -460,18 +462,45 @@ export class AppPaymentService {
         }
     }
 
-    private async handleExistingActiveSubscriptions(userId: string): Promise<boolean> {
+    private async readCheckoutSubscriptionState(userId: string, checkHistory: boolean): Promise<CheckoutSubscriptionState> {
         const subscriptionsRef = collection(this.firestore, `customers/${userId}/subscriptions`);
-        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
+        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']), limit(1));
 
         try {
-            const activeSubscriptionsSnapshot = await getDocsFromServer(activeQuery);
+            // Any history rules out another trial, including statuses not yet
+            // known to this client. Without an offered trial, only check active access.
+            const snapshot = await getDocsFromServer(checkHistory
+                ? query(subscriptionsRef, limit(this.checkoutSubscriptionReadLimit))
+                : activeQuery);
             this.assertCheckoutUserStillCurrent(userId);
+            let hasActiveSubscription = snapshot.docs.some(subscription => {
+                const status = subscription.data().status;
+                return status === 'active' || status === 'trialing';
+            });
 
-            if (!activeSubscriptionsSnapshot.docs.length) {
-                return false;
+            // A full history page may hide an active subscription beyond the
+            // read bound. Check it directly instead of scanning all old records.
+            if (checkHistory && !hasActiveSubscription && snapshot.docs.length >= this.checkoutSubscriptionReadLimit) {
+                const activeSnapshot = await getDocsFromServer(activeQuery);
+                this.assertCheckoutUserStillCurrent(userId);
+                hasActiveSubscription = activeSnapshot.docs.length > 0;
             }
 
+            return { hasHistory: snapshot.docs.length > 0, hasActiveSubscription };
+        } catch (error) {
+            // This read also guards against duplicate subscriptions. Never turn
+            // an unavailable read into an empty history or a trial-free checkout.
+            this.logger.error('Error checking existing subscriptions:', error);
+            throw error;
+        }
+    }
+
+    private async handleExistingActiveSubscriptions(userId: string, hasActiveSubscription: boolean): Promise<boolean> {
+        if (!hasActiveSubscription) {
+            return false;
+        }
+
+        try {
             this.logger.warn('User already has an active subscription. Opening management dialog.');
             const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
                 data: {
@@ -520,7 +549,8 @@ export class AppPaymentService {
             allow_promotion_codes: true,
             mode: checkoutInput.mode,
             automatic_tax: { enabled: true },
-            metadata: { firebaseUID: userId }
+            metadata: { firebaseUID: userId },
+            checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION,
         };
 
         if (checkoutInput.mode === 'subscription') {
@@ -738,35 +768,20 @@ export class AppPaymentService {
     }
 
     async hasPaidSubscriptionHistory(): Promise<boolean | null> {
-        return this.checkPaidSubscriptionHistory('fail-open');
-    }
-
-    private async hasPaidSubscriptionHistoryForCheckoutEligibility(): Promise<boolean> {
-        return (await this.checkPaidSubscriptionHistory('fail-closed')) ?? true;
-    }
-
-    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean | null> {
         const user = this.auth.currentUser;
         if (!user) {
             return false;
         }
 
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
-        const historyQuery = query(
-            subscriptionsRef,
-            where('status', 'in', this.subscriptionStatuses),
-            limit(1)
-        );
+        // Match checkout's server-side trial policy: any subscription history
+        // counts, including paused, future or missing status projections.
+        const historyQuery = query(subscriptionsRef, limit(1));
 
         try {
             const snapshot = await getDocsFromServer(historyQuery);
             return snapshot.docs.length > 0;
         } catch (error) {
-            if (onError === 'fail-closed') {
-                this.logger.warn('Could not verify subscription history for checkout gating. Blocking trial eligibility (fail-closed).', error);
-                return true;
-            }
-
             this.logger.warn('Could not verify subscription history. Suppressing trial messaging until the read recovers.', error);
             return null;
         }

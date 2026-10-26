@@ -1,3 +1,5 @@
+import { HttpsError } from 'firebase-functions/v2/https';
+import { ALLOWED_CORS_ORIGINS } from './shared/callable-policy';
 import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
 import { TrainingLoadSourceWrite } from './training-load/training-load-source-write';
 import * as functions from 'firebase-functions/v1';
@@ -114,48 +116,8 @@ export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
   return res;
 }
 
-export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
-  'https://quantified-self.io',
-  'https://beta.quantified-self.io',
-  /https?:\/\/localhost:\d+/
-];
-
-/**
- * Global toggle for App Check enforcement.
- * Set to `false` to disable App Check verification for all functions.
- * This is useful for local development or testing.
- * 
- * WARNING: Always keep this `true` in production!
- */
-export const ENFORCE_APP_CHECK = true;
-
-import { HttpsError } from 'firebase-functions/v2/https';
-
-/**
- * The Firebase Functions emulator sets this flag inside the local worker
- * process. It is not derived from a request value, so it cannot be supplied
- * by a remote caller to weaken production verification.
- */
-export function isFunctionsEmulator(): boolean {
-  return process.env.FUNCTIONS_EMULATOR === 'true';
-}
-
-export function shouldEnforceAppCheck(): boolean {
-  return ENFORCE_APP_CHECK && !isFunctionsEmulator();
-}
-
-/**
- * Enforces App Check verification if ENFORCE_APP_CHECK is enabled.
- * Throws an HttpsError if verification fails.
- * 
- * @param request - The callable request object containing app verification
- * @throws HttpsError with 'failed-precondition' code if App Check fails
- */
-export function enforceAppCheck(request: { app?: unknown }): void {
-  if (shouldEnforceAppCheck() && !request.app) {
-    throw new HttpsError('failed-precondition', 'App Check verification failed.');
-  }
-}
+// Preserve existing imports while isolated callables use the lightweight owner.
+export { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, isFunctionsEmulator, shouldEnforceAppCheck, enforceAppCheck } from './shared/callable-policy';
 
 export function isCorsAllowed(req: Request) {
   const origin = <string>req.get('origin') || '';
