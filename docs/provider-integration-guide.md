@@ -940,6 +940,12 @@ Raw account changes clear both surfaces and close owned panels. Viewing progress
 details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
 feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).
 
+Connection lifecycle takes precedence over a retained active projection: pending/completed disconnects remove it
+from these surfaces, while lost authorization shows reconnect guidance without an active spinner or retry claim.
+Use the connection state from the same safe metadata read; never infer a live import from the retained run alone.
+Read-only refreshes retain each provider's last status until its fresh snapshot arrives, with an explicit busy action
+and no duplicate refresh. A pending read for another provider cannot delay a known lifecycle change.
+
 Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#830 ingestion bundles still cover all
 workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,
 Rules, index or telemetry contract changes. This presentation change requires only a separately approved frontend release.

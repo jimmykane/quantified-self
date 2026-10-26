@@ -27,6 +27,14 @@ Auth and the verified profile must match before reads begin. Raw sign-out/accoun
 unsubscribe old metadata, dismiss owned panels silently and reject old results. Profile-only updates do not restart
 listeners. Dashboard progress is omitted when viewing another account. Read failures are unavailable, not zero; an
 explicit **Refresh status** reattaches only these safe reads. Header, panel and Dashboard consume the same live view.
+During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
+snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
+
+The same safe metadata snapshot supplies the current connection state. Pending or completed disconnects hide any
+retained run projection, which the server can leave marked active after invalidating its lifecycle. An active projection
+with `reconnect_required` shows **Reconnect required** and a Connections link instead of stale processing stages or
+an automatic-retry claim. A successful reconnect replaces/clears the old projection through the existing lifecycle;
+this UI performs no recovery action and reads no token or generation fields.
 
 Active work and automatic retries retain their distinct stages. Submitted Garmin requests are labelled **History
 requested** without an activity spinner; delivery can still take hours or days. Requested/processed terminal context

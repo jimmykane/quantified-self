@@ -1,18 +1,23 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { historyRangeLabel, historyRangeOptions, type ConnectionHistoryStatus, type HistoryResource } from '@shared/connection-history';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import { SERVICE_CONNECTION_STATES, type ServiceConnectionState } from '@shared/service-connection';
 
 export const HISTORY_IMPORT_PROVIDERS = [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI] as const;
 export const HISTORY_IMPORT_RECENT_MS = 24 * 60 * 60 * 1000;
 export type HistoryImportKind = 'active' | 'retrying' | 'attention' | 'requested' | 'processed' | 'unavailable';
-export interface HistoryImportSource { serviceName: ServiceNames; projection?: unknown; unavailable?: boolean; }
+export interface HistoryImportSource {
+  serviceName: ServiceNames; projection?: unknown; unavailable?: boolean;
+  /** The metadata reader supplies null after the server clears a connection. */
+  connectionState?: ServiceConnectionState | null;
+}
 export interface HistoryImportProgressStep {
   id: string; label: string; description: string; icon: string; status: ConnectionHistoryStatus;
   count: number | null; message: string | null;
 }
 export interface HistoryImportProgressItem {
   serviceName: ServiceNames; name: string; runId: string | null; kind: HistoryImportKind; label: string;
-  rangeLabel: string | null; steps: HistoryImportProgressStep[]; expiresAtMs?: number;
+  rangeLabel: string | null; steps: HistoryImportProgressStep[]; expiresAtMs?: number; explanation?: string;
 }
 export interface HistoryImportProgressView {
   items: HistoryImportProgressItem[]; active: boolean; label: string; nextExpiryAtMs: number | null;
@@ -40,6 +45,9 @@ function unavailable(serviceName: ServiceNames): HistoryImportProgressItem {
 function item(source: HistoryImportSource, nowMs: number): HistoryImportProgressItem | null {
   const {serviceName, projection: value} = source;
   if (source.unavailable) return unavailable(serviceName);
+  // Disconnect rotates the lifecycle but can retain the last run projection.
+  // Do not present that stale run as work that is still being performed.
+  if (source.connectionState === null || source.connectionState === SERVICE_CONNECTION_STATES.DisconnectPending) return null;
   if (value === undefined || value === null) return null;
   if (!record(value) || typeof value.runId !== 'string' || !value.runId.trim() || value.runId.length > 256
     || typeof value.active !== 'boolean' || !validTime(value.updatedAtMs)
@@ -67,6 +75,11 @@ function item(source: HistoryImportSource, nowMs: number): HistoryImportProgress
   const range = typeof value.rangePreset === 'string' && (value.rangePreset === 'custom'
     || historyRangeOptions(serviceName).some(option => option.value === value.rangePreset))
     ? historyRangeLabel(serviceName, value.rangePreset as Parameters<typeof historyRangeLabel>[1]) : null;
+  if (value.active && source.connectionState === SERVICE_CONNECTION_STATES.ReconnectRequired) {
+    return {serviceName, name: getProviderDisplayName(serviceName), runId: value.runId, kind: 'attention',
+      label: 'Reconnect required', rangeLabel: range, steps: [],
+      explanation: 'This connection needs authorization. Open Connections to review and reconnect the provider before importing more history.'};
+  }
   return {serviceName, name: getProviderDisplayName(serviceName), runId: value.runId, kind, label: labels[kind],
     rangeLabel: range, steps, expiresAtMs};
 }

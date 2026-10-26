@@ -78,4 +78,20 @@ describe('history import progress presentation', () => {
   it('never labels an inconsistent inactive queued projection as processed', () => {
     expect(view(projection('queued', false)).items[0].kind).toBe('unavailable');
   });
+  it.each(['disconnect_pending', null] as const)('hides retained progress after the connection becomes %s', connectionState => {
+    const result = buildHistoryImportProgress([
+      {serviceName: ServiceNames.SuuntoApp, projection: projection(), connectionState},
+    ], now);
+    expect(result.items).toEqual([]);
+    expect(result.active).toBe(false);
+  });
+  it('shows reconnect guidance instead of stale in-progress stages after authorization is lost', () => {
+    const result = buildHistoryImportProgress([
+      {serviceName: ServiceNames.COROSAPI, projection: projection('retrying'), connectionState: 'reconnect_required'},
+    ], now);
+    expect(result.active).toBe(false);
+    expect(result.label).toBe('History needs attention');
+    expect(result.items[0]).toMatchObject({kind: 'attention', label: 'Reconnect required', steps: []});
+    expect(result.items[0].explanation).toContain('Open Connections');
+  });
 });

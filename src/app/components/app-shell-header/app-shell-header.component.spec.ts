@@ -25,7 +25,7 @@ describe('AppShellHeaderComponent', () => {
       declarations: [AppShellHeaderComponent],
       imports: [NgComponentOutlet],
       providers: [
-        {provide: HistoryImportProgressService, useValue: {owner: signal(null), view: computed(() => buildHistoryImportProgress([], Date.now()))}},
+        {provide: HistoryImportProgressService, useValue: {owner: signal(null), view: computed(() => buildHistoryImportProgress([], Date.now())), refreshing: signal(false)}},
         {provide: MatDialog, useValue: {}}, {provide: MatBottomSheet, useValue: {}},
       ],
       schemas: [NO_ERRORS_SCHEMA]

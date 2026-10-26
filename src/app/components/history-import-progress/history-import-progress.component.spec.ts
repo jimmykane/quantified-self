@@ -30,7 +30,8 @@ async function setup(mobile = false) {
   const owner = signal<HistoryImportOwner | null>({uid: 'owner', session: {uid: 'owner'} as FirebaseUserType});
   const sources = signal<HistoryImportSource[]>([{serviceName: ServiceNames.SuuntoApp, projection: projection()}]);
   const view = computed(() => buildHistoryImportProgress(owner() ? sources() : [], Date.now()));
-  const progress = {owner, view, refresh: vi.fn()};
+  const refreshing = signal(false);
+  const progress = {owner, view, refreshing, refresh: vi.fn()};
   const closed$ = new Subject<void>();
   const dismiss = vi.fn();
   const dialog = {open: vi.fn().mockReturnValue({close: dismiss, afterClosed: () => closed$})};
@@ -82,11 +83,43 @@ describe('shared history import surfaces', () => {
     fixture.componentRef.setInput('ownerUid', 'someone-else'); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
   });
+  it('updates both surfaces when authorization is lost and hides retained runs on disconnect', async () => {
+    const state = await setup(); const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const retained = projection('retrying');
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: retained, connectionState: 'reconnect_required'}]);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('button.history-import-header-action')?.textContent).toContain('History needs attention');
+    expect(host.querySelector('mat-progress-spinner')).toBeNull();
+    expect(host.querySelector('mat-progress-bar')).toBeNull();
+    expect(host.querySelector('app-history-import-cards')?.textContent).toContain('Open Connections');
+    expect(host.querySelector('app-history-import-cards')?.textContent).not.toContain('Waiting to retry');
+    expect(host.querySelector('a')?.getAttribute('href')).toContain('serviceName=Suunto%20app');
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: retained, connectionState: 'disconnect_pending'}]);
+    fixture.detectChanges();
+    expect(host.querySelector('button.history-import-header-action')).toBeNull();
+    expect(host.querySelector('mat-card')).toBeNull();
+    expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
   it('displays unavailable reads accessibly and refreshes status without a provider operation', async () => {
     const state = await setup(); state.sources.set([{serviceName: ServiceNames.COROSAPI, unavailable: true}]);
     const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
     const button = (fixture.nativeElement as HTMLElement).querySelector('app-history-import-cards button') as HTMLButtonElement;
     expect(button.textContent).toContain('Refresh status'); button.click();
+    expect(state.progress.refresh).toHaveBeenCalledTimes(1);
+    expect(state.haptics.selection).toHaveBeenCalledTimes(1);
+  });
+  it('keeps an unavailable card visible with a disabled loading action during refresh', async () => {
+    const state = await setup(); state.sources.set([{serviceName: ServiceNames.COROSAPI, unavailable: true}]);
+    state.progress.refresh.mockImplementation(() => state.progress.refreshing.set(true));
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector('app-history-import-cards button') as HTMLButtonElement;
+    button.click(); fixture.detectChanges(); button.click();
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Checking status');
+    expect(host.querySelector('app-history-import-cards mat-progress-spinner')).not.toBeNull();
+    expect(host.querySelector('mat-card')).not.toBeNull();
     expect(state.progress.refresh).toHaveBeenCalledTimes(1);
     expect(state.haptics.selection).toHaveBeenCalledTimes(1);
   });

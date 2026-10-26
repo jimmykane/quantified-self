@@ -5,21 +5,23 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({selector: 'app-history-import-cards', standalone: true,
-  imports: [DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ServiceSourceIconComponent],
+  imports: [DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatProgressSpinnerModule, ServiceSourceIconComponent],
   templateUrl: './history-import-cards.component.html', styleUrl: './history-import-cards.component.scss'})
 export class HistoryImportCardsComponent {
   readonly ownerUid = input.required<string>();
   readonly detailsOpened = output<void>();
   private readonly progress = inject(HistoryImportProgressService);
   private readonly haptics = inject(AppHapticsService);
+  readonly refreshing = this.progress.refreshing;
   readonly items = computed(() => this.progress.owner()?.uid === this.ownerUid() ? this.progress.view().items : []);
   refresh(): void {
-    if (this.progress.owner()?.uid !== this.ownerUid()) return;
+    if (this.progress.owner()?.uid !== this.ownerUid() || this.refreshing()) return;
     this.haptics.selection(); this.progress.refresh();
   }
   openDetails(event: MouseEvent): void {

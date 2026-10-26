@@ -20,7 +20,10 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['**Importing history**', 'update together with the header', '**View details**',
       'does not start, retry or cancel an import', '**24 hours**', '**History requested**',
-      '**Status unavailable**', '**Refresh status**', 'not a percentage']) expect(copy).toContain(phrase);
+      '**Status unavailable**', '**Refresh status**', 'not a percentage',
+      'Disconnecting a provider removes its retained import status', '**Reconnect required**',
+      'Reconnecting and importing remain your explicit choices', '**Checking status**',
+      'refresh is disabled until that check finishes']) expect(copy).toContain(phrase);
   });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;

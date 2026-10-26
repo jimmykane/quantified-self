@@ -1,6 +1,6 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
@@ -45,34 +45,34 @@ describe('HistoryImportProgressService', () => {
     expect(getMeta).not.toHaveBeenCalled();
     profiles$.next(new User('a'));
     expect(getMeta).toHaveBeenCalledTimes(4);
-    stream('a').next({connectionHistoryImport: status()});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
     const header = service.view, dashboard = service.view;
     expect(header().items).toBe(dashboard().items);
     expect(header().items[0].steps[0].count).toBe(7);
     profiles$.next(new User('a'));
     expect(getMeta).toHaveBeenCalledTimes(4);
-    stream('a').next({connectionHistoryImport: {...status(), steps: [{id: 'activities', resources: ['activities'], status: 'requesting', count: 12}]}});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: {...status(), steps: [{id: 'activities', resources: ['activities'], status: 'requesting', count: 12}]}});
     expect(dashboard().items[0].steps[0].count).toBe(12);
   });
   it('clears immediately on raw sign-out, before a delayed profile emission', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionHistoryImport: status()});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
     auth.currentUser = null; sessions$.next(null);
     expect(service.view().items).toEqual([]);
     expect(stream('a').observed).toBe(false);
-    stream('a').next({connectionHistoryImport: status()});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
     service.refresh();
     expect(service.view().items).toEqual([]);
     expect(getMeta).toHaveBeenCalledTimes(4);
   });
   it('never exposes another owner and discards old reads across A/B/A', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionHistoryImport: status()});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
     const first = service.owner();
     auth.currentUser = session('b'); sessions$.next(auth.currentUser);
     expect(service.view().items).toEqual([]);
     profiles$.next(new User('b'));
-    stream('a').next({connectionHistoryImport: status()});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
     expect(service.view().items).toEqual([]);
     connect('a');
     expect(service.owner()).not.toBe(first);
@@ -82,7 +82,7 @@ describe('HistoryImportProgressService', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a'); const owner = service.owner();
     stream('a').error(new Error('read unavailable'));
     expect(service.view().items[0].kind).toBe('unavailable');
-    reads.set('a/' + ServiceNames.SuuntoApp, new BehaviorSubject<Record<string, unknown> | undefined>({connectionHistoryImport: status()}));
+    reads.set('a/' + ServiceNames.SuuntoApp, new BehaviorSubject<Record<string, unknown> | undefined>({connectionState: 'connected', connectionHistoryImport: status()}));
     service.refresh();
     expect(service.owner()).toBe(owner);
     expect(service.view().items[0].kind).toBe('active');
@@ -90,7 +90,7 @@ describe('HistoryImportProgressService', () => {
   });
   it('expires recent terminal context without polling or further metadata reads', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionHistoryImport: status(false)}); TestBed.flushEffects();
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status(false)}); TestBed.flushEffects();
     expect(service.view().items).toHaveLength(1);
     vi.advanceTimersByTime(HISTORY_IMPORT_RECENT_MS); TestBed.flushEffects();
     expect(service.view().items).toEqual([]);
@@ -98,7 +98,7 @@ describe('HistoryImportProgressService', () => {
   });
   it('unsubscribes and cancels timers on destruction', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionHistoryImport: status(false)}); TestBed.flushEffects();
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status(false)}); TestBed.flushEffects();
     TestBed.resetTestingModule();
     expect(stream('a').observed).toBe(false);
     service.refresh();
@@ -113,9 +113,53 @@ describe('HistoryImportProgressService', () => {
   });
   it('clears retained status if the verified profile stream fails', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionHistoryImport: status()});
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
     profiles$.error(new Error('profile unavailable'));
     expect(service.view().items).toEqual([]);
     expect(stream('a').observed).toBe(false);
+  });
+  it('uses current connection lifecycle from the same metadata read to stop stale active status', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    const projection = status();
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: projection});
+    expect(service.view().active).toBe(true);
+    stream('a').next({connectionState: 'reconnect_required', connectionHistoryImport: projection});
+    expect(service.view().active).toBe(false);
+    expect(service.view().items[0].label).toBe('Reconnect required');
+    stream('a').next({connectionState: 'disconnect_pending', connectionHistoryImport: projection});
+    expect(service.view().items).toEqual([]);
+    // Disconnect completion clears connectionState but retains the old projection.
+    stream('a').next({connectionHistoryImport: projection});
+    expect(service.view().items).toEqual([]);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+  });
+  it('keeps the last status visible while refreshed metadata is pending and ignores repeat refreshes', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
+    const owner = service.owner();
+    const pending = new Map<ServiceNames, Subject<Record<string, unknown> | undefined>>();
+    getMeta.mockImplementation((_user: User, provider: ServiceNames) => {
+      const next = new Subject<Record<string, unknown> | undefined>(); pending.set(provider, next); return next;
+    });
+    service.refresh();
+    expect(service.owner()).toBe(owner);
+    expect(service.view().items[0]?.steps[0].count).toBe(7);
+    expect(service.refreshing()).toBe(true);
+    service.refresh();
+    expect(getMeta).toHaveBeenCalledTimes(8);
+    pending.get(ServiceNames.SuuntoApp)!.next({connectionState: 'disconnect_pending', connectionHistoryImport: status()});
+    expect(service.view().items).toEqual([]);
+    expect(service.refreshing()).toBe(true);
+    for (const [provider, source] of pending) source.next(provider === ServiceNames.SuuntoApp
+      ? {connectionState: 'connected', connectionHistoryImport: {...status(), steps: [{id: 'activities', resources: ['activities'], status: 'requesting', count: 12}]}} : undefined);
+    expect(service.refreshing()).toBe(false);
+    expect(service.view().items[0]?.steps[0].count).toBe(12);
+    service.refresh();
+    const oldRead = pending.get(ServiceNames.SuuntoApp)!;
+    auth.currentUser = null; sessions$.next(null);
+    oldRead.next({connectionState: 'connected', connectionHistoryImport: status()});
+    expect(oldRead.observed).toBe(false);
+    expect(service.refreshing()).toBe(false);
+    expect(service.view().items).toEqual([]);
   });
 });
