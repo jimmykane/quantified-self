@@ -6273,7 +6273,10 @@ Legacy policies without CSS stay without CSS. New settings cannot retroactively 
 No historical correction editor, migration, bulk reparse, new collection, trigger, index or policy-history read is added.
 Saved routes and planned-workout relative targets are outside this feature.
 
-The owner event editor offers Swim pace only for Swimming legs, and only when that evaluation exists. Old metadata
+The owner event editor offers Swim pace only for Swimming legs, and only when that evaluation exists. If reparse
+corrects a swim to another sport, the saved Swim pace choice remains visible but disabled, with the actual fallback
+and its reason. Copying preferences to that sport's future defaults requires choosing a supported method first;
+the saved policy and calculated candidates remain unchanged. Old metadata
 without the additive candidate asks for the existing original-file reimport action. Reimport retains the old policy;
 it does not adopt today's CSS. Numeric override and exclusion retain priority, and reset restores the saved policy.
 “Also use these preferences for future workouts” copies method/inclusion only and preserves the current policy head's

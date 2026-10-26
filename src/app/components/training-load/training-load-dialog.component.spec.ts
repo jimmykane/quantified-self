@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
+import { MatCheckbox } from '@angular/material/checkbox';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
@@ -64,6 +65,8 @@ describe('Training load editor', () => {
     expect(element.textContent).toContain('Save activity');
     expect(element.textContent).toContain('Reset activity');
     expect([...element.querySelectorAll('dt')].map(label => label.textContent)).not.toContain('Modeled activity TSS');
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(select.options.some(option => option.value === 'SWIM_PACE')).toBe(false);
     expect(selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
   });
   it('keeps differing legacy workout and activity scores explicitly labelled', async () => {
@@ -286,6 +289,37 @@ describe('Training load editor', () => {
     component.data.unitSettings = normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
     component.metadata()!.legs!.walk.policy.swimThresholdSpeed = convertSwimPaceToSpeed(114 / convertSwimPaceToSwimPacePer100Yard(1));
     expect(component.savedCssLabel).toBe('01:54 min/100yd');
+  });
+  it('keeps a saved swim preference visible after reparse corrects the sport, with its actual fallback', async () => {
+    const candidate = { preference: 'AUTOMATIC' as const, score: 60, method: 'HR' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    watch.mockReturnValue(of({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Walking, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Swimming), method: 'SWIM_PACE', swimThresholdSpeed: 100 / 113 },
+      recordedTss: 87.3, evaluations: { version: 1, automatic: candidate,
+        hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' },
+        swimPace: { ...candidate, preference: 'SWIM_PACE', reasons: ['unsupported-sport'] } },
+    } } }));
+    const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loaded(), fixture.componentInstance.error()).toBe(true));
+    fixture.detectChanges();
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    await vi.waitFor(() => expect(select.triggerValue).toBe('Swim pace (CSS)'));
+    expect(select.value).toBe('SWIM_PACE');
+    expect(select.options.find(option => option.value === 'SWIM_PACE')?.disabled).toBe(true);
+    expect(fixture.componentInstance.legModel).toMatchObject({ score: 60, method: 'HR', reasons: ['unsupported-sport'] });
+    expect(fixture.nativeElement.textContent).toContain('This calculation is not supported for this sport.');
+    expect(fixture.debugElement.query(By.directive(MatCheckbox))).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Choose a method supported by this sport before copying preferences');
+    expect(selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+    fixture.componentInstance.form.controls.method.setValue('HR');
+    fixture.changeDetectorRef.markForCheck(); fixture.detectChanges();
+    const future = fixture.debugElement.query(By.directive(MatCheckbox)).componentInstance as MatCheckbox;
+    expect(future.disabled).toBe(false);
+    expect(select.options.some(option => option.value === 'SWIM_PACE')).toBe(false);
+    expect(fixture.componentInstance.policy.method).toBe('SWIM_PACE');
+    expect(fixture.componentInstance.legModel.score).toBe(60);
   });
   it('hides an Automatic comparison calculated with different CSS, including while overridden or excluded', () => {
     component.activities[0].type = ActivityTypes.Swimming;

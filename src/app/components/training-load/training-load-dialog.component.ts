@@ -136,6 +136,7 @@ export class TrainingLoadDialogComponent implements OnInit {
   }
   get reasonText(): string {
     const messages: Record<string, string> = {
+      'unsupported-sport': 'This calculation is not supported for this sport.',
       'missing-hr-calibration': 'The file is missing required HR calibration.',
       'threshold-hr-fallback': 'Full Banister calibration is unavailable; the threshold-HR estimate was used.',
       'invalid-hr-calibration': 'The file HR calibration is inconsistent or invalid.',
