@@ -28,6 +28,38 @@ describe('history import progress presentation', () => {
     expect(result.label).toBe('History requested');
     expect(result.items[0].steps[0].description).toContain('delivery may take hours or days');
     expect(result.items[0].kind).toBe('requested');
+    expect(result.items[0].requestOnly).toBe(true);
+    expect(result.items[0].steps[0].countLabel).toBe('requests scheduled');
+  });
+  it.each(['queued', 'requesting', 'retrying'])('describes Garmin %s work as history requests rather than record delivery', status => {
+    const result = view(projection(status), ServiceNames.GarminAPI);
+    expect(result.label).toBe(status === 'retrying' ? 'Waiting to retry Garmin requests' : 'Requesting Garmin history');
+    expect(result.items[0].label).toBe(status === 'retrying' ? 'Waiting to retry requests' : 'Requesting history');
+    expect(result.items[0].steps[0]).toMatchObject({count: 128, countLabel: 'requests scheduled'});
+  });
+  it('keeps counters distinct across Garmin Activities, Sleep and Health and preserves other provider wording', () => {
+    const garmin = {...projection('requested', false), steps: [
+      {id: 'activities', resources: ['activities'], status: 'requested', count: 1},
+      {id: 'sleep', resources: ['sleep'], status: 'requested', count: 2},
+      {id: 'health', resources: ['health'], status: 'requested', count: 30},
+    ]};
+    const result = view(garmin, ServiceNames.GarminAPI);
+    expect(result.items[0].steps.map(step => [step.count, step.countLabel])).toEqual([
+      [1, 'request scheduled'], [2, 'requests scheduled'], [30, 'requests scheduled'],
+    ]);
+    const mixed = buildHistoryImportProgress([
+      {serviceName: ServiceNames.GarminAPI, projection: projection()},
+      {serviceName: ServiceNames.SuuntoApp, projection: projection('processed', false)},
+    ], now);
+    expect(mixed.label).toBe('Importing history');
+    expect(mixed.items.find(item => item.serviceName === ServiceNames.SuuntoApp)?.steps[0].countLabel).toBe('items or requests');
+  });
+  it('labels older processed Garmin projections as finished request processing', () => {
+    const result = view(projection('processed', false), ServiceNames.GarminAPI);
+    expect(result.active).toBe(false);
+    expect(result.label).toBe('History requests finished');
+    expect(result.items[0].label).toBe('Request processing finished');
+    expect(result.items[0].steps[0].description).toBe('Request processing finished');
   });
   it('shows an automatic retry without requiring another user action', () => {
     const result = view(projection('retrying'));

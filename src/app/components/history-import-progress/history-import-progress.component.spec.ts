@@ -89,7 +89,42 @@ describe('shared history import surfaces', () => {
     expect(host.querySelector('mat-progress-spinner')).toBeNull();
     expect(host.querySelector('mat-progress-bar')).toBeNull();
     expect(host.querySelector('a')?.getAttribute('href')).toContain('serviceName=Garmin%20API');
-    expect(host.textContent).toContain('Provider delivery may take hours or days');
+    expect(host.textContent).toContain('7 requests scheduled');
+    expect(host.textContent).not.toContain('items or requests');
+    expect(host.textContent).toContain('Counts describe scheduled requests, not records received');
+    expect(host.textContent).toContain('Garmin sends records separately after accepting requests');
+    expect(host.textContent).toContain('Delivery may take hours or days; delivery completion is not tracked here');
+  });
+  it.each(['queued', 'requesting', 'retrying'])('labels Garmin %s progress as requests across shared surfaces', async status => {
+    const state = await setup(); state.sources.set([{serviceName: ServiceNames.GarminAPI, projection: projection(status, true, 1)}]);
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const header = host.querySelector('.history-import-header-action')!;
+    const label = status === 'retrying' ? 'Waiting to retry Garmin requests' : 'Requesting Garmin history';
+    expect(header.textContent).toContain(label);
+    expect(header.getAttribute('aria-label')).toContain(label);
+    expect(host.querySelector('.provider-status')?.textContent).toContain(status === 'retrying' ? 'Waiting to retry requests' : 'Requesting history');
+    expect(host.textContent).toContain('1 request scheduled');
+    expect(host.textContent).toContain('delivery completion is not tracked here');
+    const bar = host.querySelector('mat-progress-bar');
+    if (status === 'retrying') expect(bar).toBeNull();
+    else expect(bar?.getAttribute('aria-label')).toBe('Garmin history request submission in progress');
+    expect(state.progress.refresh).not.toHaveBeenCalled();
+    expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
+  it('keeps Garmin request issues dismissible without treating request counts as failed records', async () => {
+    const state = await setup(); state.sources.set([{serviceName: ServiceNames.GarminAPI, projection: projection('failed', false, 3)}]);
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.coverage-note')?.textContent).toContain('Request processing has finished with issues');
+    expect(host.querySelector('.coverage-note')?.textContent).toContain('not failure totals');
+    expect(host.textContent).toContain('3 requests scheduled');
+    expect(host.querySelector('mat-progress-spinner')).toBeNull();
+    expect(host.querySelector('mat-progress-bar')).toBeNull();
+    (host.querySelector('button[aria-label="Dismiss Garmin history import result"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(host.querySelector('mat-card')).toBeNull();
+    expect(host.querySelector('.history-import-header-action')).toBeNull();
   });
   it.each(['failed', 'skipped'])('lets the owner dismiss a finished %s result from both surfaces while future imports remain visible', async status => {
     const state = await setup();

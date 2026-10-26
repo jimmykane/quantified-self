@@ -42,8 +42,13 @@ with `reconnect_required` shows **Reconnect required** and a Connections link in
 an automatic-retry claim. A successful reconnect replaces/clears the old projection through the existing lifecycle;
 this UI performs no recovery action and reads no token or generation fields.
 
-Active work and automatic retries retain their distinct stages. Submitted Garmin requests are labelled **History
-requested** without an activity spinner; delivery can still take hours or days. Requested/processed terminal context
+Active work and automatic retries retain their distinct stages. Garmin cards say **Requesting history** or **Waiting
+to retry requests**; a sole Garmin header says **Requesting Garmin history** or **Waiting to retry Garmin requests**.
+Garmin Activities, Sleep and Health counters explicitly describe **requests scheduled**, not records received or
+accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records
+separately after accepting requests; delivery can take hours or days and completion is not tracked here. Submitted
+requests say **History requested** without an activity spinner. Older processed Garmin projections say **Request
+processing finished**, never that records have finished importing. Requested/processed terminal context
 expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
 does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
 **Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the

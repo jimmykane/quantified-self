@@ -934,7 +934,12 @@ Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-del
 
 The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
 subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;
-capability counts remain items or requests, with no percentage, ETA or complete-delivery claim. Requested/processed
+capability counts remain items or requests, with no percentage, ETA or complete-delivery claim. Garmin cards use
+**Requesting history** / **Waiting to retry requests**; a sole Garmin header uses **Requesting Garmin history** /
+**Waiting to retry Garmin requests**. Garmin counters are **requests scheduled**, including planned Health windows,
+not records received or confirmed HTTP submissions. The shared card explicitly says Garmin sends records separately
+and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
+Requested/processed
 context stays prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
 counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
 browser and clears it from the shared header/panel/Dashboard. Details and retry controls remain in Connections.
