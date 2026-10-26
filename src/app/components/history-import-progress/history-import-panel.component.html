@@ -1,0 +1,8 @@
+<header class="panel-heading">
+  <div><h2>History imports</h2><p>{{ count() }} {{ count() === 1 ? 'provider' : 'providers' }} · {{ view().active ? 'Continues in the background' : 'Latest history status' }}</p></div>
+  <button mat-icon-button type="button" aria-label="Close history imports" (click)="close()"><mat-icon aria-hidden="true">close</mat-icon></button>
+</header>
+<div class="panel-content" tabindex="0" aria-label="Provider history import cards">
+  <app-history-import-cards [ownerUid]="ownerUid" (detailsOpened)="close(false)" />
+  @if (!count()) { <p class="empty-status">No active or recent history imports.</p> }
+</div>

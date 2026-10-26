@@ -1,0 +1,6 @@
+:host { display: flex; min-width: 104px; max-width: 210px; flex: 0 1 auto; }
+.history-import-header-action { height: 48px; max-width: 100%; min-width: 0; padding-inline: 8px; }
+.history-import-header-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+.history-import-header-content mat-progress-spinner, .history-import-header-content mat-icon { flex: 0 0 14px; width: 14px; height: 14px; font-size: 14px; }
+.history-import-header-content > span { white-space: normal; font: var(--mat-sys-label-large); }
+@media (max-width: 480px) { .history-import-header-content > span { font: var(--mat-sys-label-medium); } }

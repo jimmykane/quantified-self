@@ -1,6 +1,0 @@
-// Reuse the prototype's semantic rows in the Material dialog/bottom sheet.
-@use './preview';
-:host { display: block; min-height: 100%; padding: 24px; background: var(--mat-sys-surface); }
-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-h2 { font: var(--mat-sys-title-large); font-weight: 600; }
-@media (max-width: 720px) { :host { padding: 8px 0; } }

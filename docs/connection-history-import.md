@@ -15,6 +15,35 @@ The checkbox uses the shared capability inventory for its description. Dashboard
 
 Dashboard setup actions read durable service state on every visit. The empty-activity card offers **Connect service** only after confirming that no activity service is connected, including for accounts with dismissed prompts or without Pro. A saved Garmin connection-history run covering Sleep or Health suppresses the generic history prompt from admission onward, even with zero records or failed/skipped steps; progress and retries remain in Services. Activity-only history does not suppress the Sleep/Health offer. The prompt waits for service metadata and preserves the older manual backfill markers. These frontend decisions change no queue, monitoring, MCP, consent or provider API contract.
 
+## Shared header and Dashboard progress
+
+The authenticated header lazily loads a text action such as **Importing history · 2**. Its Material panel (bottom
+sheet on phones) and the signed-in owner's Dashboard render the same `HistoryImportCardsComponent`. The root
+`HistoryImportProgressService` subscribes once per authenticated session to the four existing owner-readable
+`users/{uid}/meta/{service}` documents. It consumes only `connectionHistoryImport`; Connections and older prompt
+readers retain their existing contracts. There are no private run/queue/token reads, new callable, polling loop or write.
+
+Auth and the verified profile must match before reads begin. Raw sign-out/account changes clear status immediately,
+unsubscribe old metadata, dismiss owned panels silently and reject old results. Profile-only updates do not restart
+listeners. Dashboard progress is omitted when viewing another account. Read failures are unavailable, not zero; an
+explicit **Refresh status** reattaches only these safe reads. Header, panel and Dashboard consume the same live view.
+
+Active work and automatic retries retain their distinct stages. Submitted Garmin requests are labelled **History
+requested** without an activity spinner; delivery can still take hours or days. Requested/processed terminal context
+expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
+does not read or write data. Failed/skipped outcomes stay until superseded. Connections retains the detailed status
+after prominent context expires. Counts are per capability's items or requests, never summed into a percentage,
+unique-record total, ETA or proof of complete coverage. Combined Sleep/Health capabilities keep one count.
+
+This covers coordinator projections, including the manual Suunto/COROS/Wahoo activity path. Legacy manual activity
+leases and independent Sleep/Health tools keep their existing feedback rather than gaining fabricated progress.
+**View details** navigates to the existing provider tab; merely opening these surfaces starts no provider work.
+
+Monitoring is **unchanged**: reviewed the #847 coordinator and #829/#830 ingestion coverage below and their source
+bundles. Workers, queues, dispatchers, leases, retries, outcomes and telemetry remain identical. MCP/Assistant,
+Training, entitlements and consent are unaffected. Only a separately approved frontend release is required;
+no Functions, Rules, indexes, cloud settings or migration are part of this change.
+
 ## Requested range versus stored history
 
 The expanded owner-only History import status labels the selected boundary **Requested range**, never delivered

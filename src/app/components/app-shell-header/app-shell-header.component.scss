@@ -7,9 +7,13 @@
   display: flex !important;
   /* Force flex */
   align-items: center;
-  height: 64px;
+  min-height: 64px;
+  height: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  box-sizing: border-box;
   /* Standard toolbar height */
-  padding: 0 16px;
+  padding: 8px 16px;
   background-color: var(--mat-sys-surface-container-lowest);
   box-shadow: 0 2px 4px color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   /* Subtle shadow for depth */
@@ -182,6 +186,12 @@ nav button.hamburger-link {
     align-items: center;
     justify-content: center;
   }
+}
+
+@media (max-width: 480px) {
+  .custom-header { padding-inline: 8px; }
+  nav button.hamburger-link { margin-right: 4px; }
+  mat-icon.header-logo { margin-left: 8px; width: 28px; height: 28px; }
 }
 
 /* Dark Theme Overrides */

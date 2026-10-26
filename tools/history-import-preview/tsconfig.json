@@ -1,6 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {"outDir": "../../tmp/history-import-preview-tsc", "types": ["node"]},
-  "angularCompilerOptions": {"strictTemplates": true},
-  "files": ["main.ts"], "include": ["../../src/**/*.d.ts"]
-}

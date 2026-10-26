@@ -193,6 +193,15 @@ describe('DashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('mounts shared import progress only on the signed-in owner dashboard', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-history-import-cards')).not.toBeNull();
+        component.targetUser = new User('another-owner') as AppUserInterface;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-history-import-cards')).toBeNull();
+    });
+
     it('should place event search filters inside the event table toolbar slot', () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
 

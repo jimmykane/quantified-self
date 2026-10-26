@@ -1,5 +1,13 @@
 # Frontend UI Composition
 
+## App header progress
+
+Provider history uses a lazy authenticated text action and the same live cards on the owner's Dashboard and in its
+Material panel/bottom sheet. Status labels wrap on phones. Header actions may wrap when local processing, upload or
+admin actions compete for space; `AppShellHeaderComponent` reports the measured header height so shell content,
+navigation offsets and scroll hiding remain aligned. The default remains 64 px. No additional provider work starts
+when the header, cards or details panel render. See [history progress](connection-history-import.md#shared-header-and-dashboard-progress).
+
 ## Route headers
 
 Authenticated product routes use the shared `app-page-header` primitive from

@@ -16,6 +16,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains shared provider import progress and distinguishes requests from delivery', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Importing history**', 'update together with the header', '**View details**',
+      'does not start, retry or cancel an import', '**24 hours**', '**History requested**',
+      '**Status unavailable**', '**Refresh status**', 'not a percentage']) expect(copy).toContain(phrase);
+  });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     for (const phrase of ['New Pro trials require a payment method', 'no subscription charge during the free trial',

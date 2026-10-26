@@ -930,6 +930,20 @@ New Pro trial offers disclose that a payment method is required and direct the m
 
 Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
+### Shared history progress surfaces
+
+The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
+subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;
+capability counts remain items or requests, with no percentage, ETA or complete-delivery claim. Requested/processed
+context stays prominent for 24 hours; failures/skips remain until superseded. Read failures are unavailable, not zero.
+Raw account changes clear both surfaces and close owned panels. Viewing progress makes no provider request or write;
+details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
+feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).
+
+Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#830 ingestion bundles still cover all
+workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,
+Rules, index or telemetry contract changes. This presentation change requires only a separately approved frontend release.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:

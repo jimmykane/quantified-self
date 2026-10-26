@@ -47,7 +47,7 @@
     [unreadWhatsNewCount]="unreadWhatsNewCount"
     (toggleSidenav)="toggleSidenav()" (logoClick)="onLogoClick()"
     (whatsNewClick)="openWhatsNew()" (dashboardClick)="navigateToDashboard()"
-    (adminClick)="navigateToAdmin()" (loginClick)="navigateToLogin()">
+    (adminClick)="navigateToAdmin()" (loginClick)="navigateToLogin()" (heightChanged)="onHeaderHeightChanged($event)">
   </app-shell-header>
   }
 

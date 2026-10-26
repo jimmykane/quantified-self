@@ -85,6 +85,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
   }
   private readonly bannerHeightSignal = signal(0);
+  private readonly headerHeightSignal = signal(APP_SHELL_HEADER_HEIGHT_PX);
   private readonly hasBannerSignal = signal(false);
   public authState: boolean | null = null;
   private readonly showInitialLoaderSignal = signal(true);
@@ -240,7 +241,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return this.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX;
+    return this.bannerHeight + this.headerHeightSignal();
   }
 
   get effectiveTopOffsetPx(): number {
@@ -252,7 +253,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
+    return this.bannerHeight + (this.headerHidden ? 0 : this.headerHeightSignal());
+  }
+
+  onHeaderHeightChanged(height: number): void {
+    if (Number.isFinite(height) && height >= APP_SHELL_HEADER_HEIGHT_PX) this.headerHeightSignal.set(Math.ceil(height));
   }
 
   constructor() {
