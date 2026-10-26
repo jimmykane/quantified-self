@@ -5,7 +5,7 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideHttpClient } from '@angular/common/http';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
-import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatBottomSheet, MatBottomSheetModule, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { AppThemes, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
@@ -27,7 +27,7 @@ import { RecordedHistoryStartService } from '../../src/app/services/recorded-his
 
 // Local, synthetic projections only. No Auth/Firestore/provider initialization.
 const params = new URLSearchParams(location.search);
-const design = ['banner', 'card', 'drawer'].includes(params.get('design') || '') ? params.get('design')! : 'banner';
+const design = ['banner', 'card', 'drawer', 'header'].includes(params.get('design') || '') ? params.get('design')! : 'banner';
 const light = params.get('theme') === 'light';
 document.body.classList.toggle('dark-theme', !light);
 const suunto: ConnectionHistoryStatusProjection = {
@@ -40,19 +40,44 @@ const suunto: ConnectionHistoryStatusProjection = {
     {id: 'health', resources: ['health'], status: 'queued', count: 0},
   ],
 };
+interface PreviewImport { name: string; service: ServiceNames; status: ConnectionHistoryStatusProjection; }
+const previewImports: PreviewImport[] = [
+  {name: 'Suunto', service: ServiceNames.SuuntoApp, status: suunto},
+  {name: 'Garmin', service: ServiceNames.GarminAPI, status: {...suunto, runId: 'preview-garmin', active: false,
+    steps: [{id: 'activities', resources: ['activities'], status: 'requested', count: 3}]}},
+  {name: 'COROS', service: ServiceNames.COROSAPI, status: {...suunto, runId: 'preview-coros', rangePreset: 'maximum', startMs: Date.UTC(2026, 6, 26),
+    steps: [{id: 'activities', resources: ['activities'], status: 'retrying', count: 46,
+      message: 'The provider is temporarily unavailable. Your import will retry automatically.'}]}},
+];
 // Compile the shipped header and processing indicator, without bootstrapping app services.
 @NgModule({declarations: [AppShellHeaderComponent, ProcessingIndicatorComponent],
   imports: [CommonModule, AppShellModule], exports: [AppShellHeaderComponent]})
 class PreviewShellModule {}
 
 @Component({standalone: true, imports: [AppShellModule, AppChartSharedModule, MatDialogModule, ConnectionHistoryStatusComponent],
-  template: `<h2 mat-dialog-title>Suunto history import</h2><mat-dialog-content>
+  template: `<h2 mat-dialog-title>{{ item.name }} history import</h2><mat-dialog-content>
     <app-connection-history-status [service]="service" [status]="status" [disabled]="true" />
     </mat-dialog-content><mat-dialog-actions align="end"><button mat-button mat-dialog-close appHapticTap>Close</button></mat-dialog-actions>`,
 })
 class ImportDetails {
-  readonly service = ServiceNames.SuuntoApp;
-  readonly status = suunto;
+  readonly item: PreviewImport = inject(MAT_DIALOG_DATA, {optional: true}) || previewImports[0];
+  readonly service = this.item.service;
+  readonly status = this.item.status;
+}
+
+@Component({standalone: true, imports: [AppShellModule, MatCardModule, ServiceSourceIconComponent],
+  templateUrl: './header-panel.html', styleUrl: './header-panel.scss'})
+class HeaderImportPanel {
+  readonly imports = previewImports;
+  private readonly dialog = inject(MatDialog);
+  private readonly dialogRef = inject(MatDialogRef, {optional: true});
+  private readonly sheetRef = inject(MatBottomSheetRef, {optional: true});
+  private readonly haptics = inject(AppHapticsService);
+  close(): void { this.haptics.selection(); this.dialogRef?.close(); this.sheetRef?.dismiss(); }
+  showDetails(item: PreviewImport): void {
+    this.haptics.selection();
+    this.dialog.open(ImportDetails, {data: item, width: '560px', maxWidth: 'calc(100vw - 32px)'});
+  }
 }
 
 @Component({standalone: true, imports: [AppShellModule, ServiceSourceIconComponent],
@@ -79,6 +104,7 @@ class ImportPreview {
   readonly drawer = signal(false);
   readonly mobile = matchMedia('(max-width: 720px)').matches;
   readonly service = ServiceNames;
+  readonly importCount = previewImports.length;
   private readonly dialog = inject(MatDialog);
   private readonly sheet = inject(MatBottomSheet);
   private readonly haptics = inject(AppHapticsService);
@@ -91,6 +117,16 @@ class ImportPreview {
     if (this.drawer()) return;
     if (userInitiated) this.haptics.selection();
     this.drawer.set(true);
+    if (design === 'header') {
+      if (this.mobile) {
+        this.sheet.open(HeaderImportPanel, {ariaLabel: 'History imports'}).afterDismissed().subscribe(() => this.drawer.set(false));
+        return;
+      }
+      this.dialog.open(HeaderImportPanel, {ariaLabel: 'History imports', width: '620px', maxWidth: 'calc(100vw - 32px)',
+        maxHeight: 'calc(100dvh - 92px)', position: {right: '16px', top: '76px'},
+      }).afterClosed().subscribe(() => this.drawer.set(false));
+      return;
+    }
     if (this.mobile) {
       this.sheet.open(ImportPanel, {ariaLabel: 'History imports'}).afterDismissed().subscribe(() => this.drawer.set(false));
       return;

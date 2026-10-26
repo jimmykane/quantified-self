@@ -1,0 +1,30 @@
+<header class="panel-heading">
+  <div><h2>History imports</h2><p>3 providers · Continues in the background</p></div>
+  <button mat-icon-button (click)="close()" aria-label="Close history imports"><mat-icon>close</mat-icon></button>
+</header>
+<div class="provider-cards" aria-label="Provider import cards" tabindex="0">
+  @for (item of imports; track item.name) {
+  <mat-card appearance="outlined" class="import-card">
+    <mat-card-content>
+      <div class="provider-title"><app-service-source-icon [sourceServiceName]="item.service" [showTooltip]="false" /><strong>{{ item.name }}</strong>
+        <span [class.retry-status]="item.name === 'COROS'">{{ item.name === 'Suunto' ? 'Importing' : item.name === 'Garmin' ? 'Waiting for provider' : 'Waiting to retry' }}</span>
+      </div>
+      <p class="requested-range">Requested: {{ item.name === 'COROS' ? 'up to 3 months' : 'last 90 days' }}</p>
+      @if (item.name === 'Suunto') {
+      <div class="stage-list">
+        <div class="stage"><mat-icon class="active-icon">sync</mat-icon><span>Activities<small>128 items or requests</small></span><span>Importing</span></div>
+        <div class="stage"><mat-icon>check_circle</mat-icon><span>Sleep<small>14 items or requests</small></span><span>Processed</span></div>
+        <div class="stage"><mat-icon>schedule</mat-icon><span>Health</span><span>Queued</span></div>
+      </div>
+      <mat-progress-bar mode="indeterminate" aria-label="Suunto history import in progress" />
+      } @else if (item.name === 'Garmin') {
+      <p class="provider-explanation"><mat-icon>schedule</mat-icon><span>History requested. Garmin may take hours or days to deliver it.</span></p>
+      } @else {
+      <p class="provider-explanation"><mat-icon>update</mat-icon><span>Temporarily unavailable. Your import will retry automatically.</span></p>
+      }
+      <div class="card-actions"><button mat-button (click)="showDetails(item)" [attr.aria-label]="'View ' + item.name + ' import details'">View details<mat-icon iconPositionEnd>arrow_forward</mat-icon></button></div>
+    </mat-card-content>
+  </mat-card>
+  }
+  <p class="sample-note">Design preview · Sample import states</p>
+</div>
