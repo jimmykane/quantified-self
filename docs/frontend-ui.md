@@ -10,6 +10,27 @@ reports the measured header height so shell content,
 navigation offsets and scroll hiding remain aligned. The default remains 64 px. No additional provider work starts
 when the header, cards or details panel render. See [history progress](connection-history-import.md#shared-header-and-dashboard-progress).
 
+## Public hero font loading
+
+The homepage hero keeps Inter as its first-choice font. Its heading and paragraphs use the local
+`QS Home Inter Fallback` face while the bundled web fonts load. Regular Arial and Arial Bold have separate
+width and vertical metric adjustments; a browser without those local faces retains its normal sans-serif fallback.
+This adds no font download, script, preload or hidden text. Material Symbols, buttons and numeric fonts keep
+their existing families. Once Inter loads, the final typography and layout are unchanged.
+
+The adjustments in `home.component.scss` were measured against the bundled Fontsource Inter 400/800 faces:
+2048 units per em, 1984 ascent, 494 descent and zero line gap. The width scales use representative homepage
+paragraphs (106.99%) and its bold heading (104.28%); divide Inter's vertical ratios by each width scale for the
+fallback ascent/descent overrides. Recheck these values after a font or substantial hero-copy change.
+
+Verify with the production-prerendered homepage, a cold font cache and deliberately delayed Inter responses.
+Record layout-shift entries and the hero/action positions before and after `document.fonts.ready`, at 320, 360,
+390 and 414 px plus desktop. Also check normal fonts, light/dark themes and browsers without metric overrides.
+These controlled measurements isolate font swaps: they do not establish a new Search Console result or explain
+every shift over a real visit. Keep Search Console's dated URL-group data, PageSpeed's URL/origin field data,
+and initial-load lab data separate; see [Google's report guidance](https://support.google.com/webmasters/answer/9205520)
+and [CLS diagnostics](https://web.dev/articles/optimize-cls).
+
 ## Route headers
 
 Authenticated product routes use the shared `app-page-header` primitive from
