@@ -49,6 +49,12 @@ Always-on rules:
   Existing read or write coverage never authorizes new mutation kinds, provider actions, wider consent, or deployment.
 - For any provider or service integration addition or material change, follow
   `.agent/skills/connected-provider-integration/SKILL.md`.
+- For payment or billing verification, reuse the existing `demo-stripe-billing` sandbox documented in
+  `docs/stripe-billing.md#local-test-environment`; actual Stripe test-mode lifecycle coverage was recorded in PR #922.
+  Check its launcher, fixture driver, private `~/.config/quantified-self/stripe-billing-test.env`, prior worktree's
+  ignored credentials/state and preserved temporary runtime before
+  declaring sandbox access unavailable or creating another Stripe sandbox. A live-only connector does not establish
+  that local test credentials are missing. Verify test mode and account before use; never print or commit credentials.
 - For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.
 - Never deploy, publish releases, or otherwise mutate production/cloud infrastructure unless the user gives explicit approval for that specific action in the current conversation. The existing-PR workflow above authorizes Git branch/PR updates only. Requests to implement, fix, commit, push code, prepare a deployment, continue, or "go" do not authorize a deployment. Prepare and verify changes locally, then report the exact manual command or ask for separate explicit deployment approval.
 - Never delete, purge, or disable any Firebase data or resource without separate explicit approval that identifies the exact target and scope. This includes Firestore documents or collections, Authentication users, Storage objects, Functions, Hosting releases, Extensions, scheduled jobs, task queues, configuration, and secrets. Prior approval for a deployment or a different deletion does not carry over; read-only inspection is allowed.

@@ -100,6 +100,16 @@ Use a dedicated operator credential for Events read when running event-window re
 
 ## Local test environment
 
+This existing payment sandbox was exercised with real Stripe test-mode Checkout and lifecycle flows in
+[PR #922](https://github.com/jimmykane/quantified-self/pull/922). Reuse this setup for billing changes. The Firebase
+emulators and Stripe test account are separate parts of it: a connector showing only live mode does not mean the
+local test account is unavailable. Before creating another sandbox, check the private per-user credential file
+`~/.config/quantified-self/stripe-billing-test.env`, then the previous billing worktree's ignored credential file,
+fixture journal and preserved generated runtime. The private file can be copied to the worktree credential path below;
+never print or commit its contents. Worktree cleanup can remove ignored files; preserve
+needed test credentials and synthetic evidence privately before archiving. Revalidate credentials, account and test
+configuration for each run; the historical results do not verify a new change.
+
 Billing ports are Auth 9191, Firestore 8181, Functions 5101 and Storage 9291, all loopback. This avoids sharing the normal development emulators.
 
 Normal `npm start` is a hybrid development environment and is **not** a billing sandbox. Use Node 22 and the dedicated configuration below. The launcher rejects live keys, uses only `demo-stripe-billing`, scrubs inherited cloud credentials and overrides well-known ADC with an inert local-only credential, and directs Auth, Firestore, Functions, Storage and task dispatch to loopback. The frontend disables hosted App Check, Analytics, Performance and Remote Config for this project and connects both full and Lite Firestore SDKs locally.
