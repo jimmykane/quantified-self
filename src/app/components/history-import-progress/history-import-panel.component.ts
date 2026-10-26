@@ -3,13 +3,14 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { HistoryImportProgressService, type HistoryImportOwner } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportCardsComponent } from './history-import-cards.component';
 
 export interface HistoryImportPanelData { owner: HistoryImportOwner; }
 @Component({selector: 'app-history-import-panel', standalone: true,
-  imports: [MatButtonModule, MatIconModule, HistoryImportCardsComponent],
+  imports: [MatButtonModule, MatIconModule, MatSlideToggleModule, HistoryImportCardsComponent],
   templateUrl: './history-import-panel.component.html', styleUrl: './history-import-panel.component.scss',
   host: {'[class.history-bottom-sheet]': 'bottomSheet'}})
 export class HistoryImportPanelComponent {
@@ -22,9 +23,15 @@ export class HistoryImportPanelComponent {
   readonly ownerUid = this.data?.owner.uid || '';
   readonly view = this.progress.view;
   readonly count = computed(() => this.view().items.length);
+  readonly ownerMatches = computed(() => !!this.data?.owner && this.progress.owner() === this.data.owner);
+  readonly showOnDashboard = computed(() => !this.progress.dashboardHidden());
   constructor() { effect(() => { if (this.progress.owner() !== this.data?.owner) this.close(false); }); }
   close(feedback = true): void {
     if (feedback) this.haptics.selection();
     this.dialogRef?.close(); this.sheetRef?.dismiss();
+  }
+  setShowOnDashboard(show: boolean): void {
+    if (!this.ownerMatches()) return;
+    if (this.progress.setDashboardHidden(!show, this.data!.owner)) this.haptics.selection();
   }
 }

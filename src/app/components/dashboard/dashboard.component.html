@@ -2,7 +2,7 @@
   <app-loading-overlay [isLoading]="!isInitialized" [showSkeleton]="false" height="auto">
     <div class="dashboard-content">
       @if (user && (!targetUser || targetUser.uid === user.uid)) {
-      <app-history-import-cards [ownerUid]="user.uid" />
+      <app-history-import-cards [ownerUid]="user.uid" placement="dashboard" />
       }
       @if (showNoActivityDashboardState && user) {
       <mat-card class="dashboard-no-activity" appearance="outlined">

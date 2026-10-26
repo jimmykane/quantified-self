@@ -23,7 +23,8 @@ describe('help.content', () => {
       '**Status unavailable**', '**Refresh status**', 'not a percentage',
       'Disconnecting a provider removes its retained import status', '**Reconnect required**',
       'Reconnecting and importing remain your explicit choices', '**Checking status**',
-      'refresh is disabled until that check finishes']) expect(copy).toContain(phrase);
+      'refresh is disabled until that check finishes', '**Hide from dashboard**', '**Show on dashboard**',
+      'remembered for your account on this browser', 'Hiding the cards does not stop an import']) expect(copy).toContain(phrase);
   });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;

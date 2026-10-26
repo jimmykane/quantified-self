@@ -30,6 +30,12 @@ explicit **Refresh status** reattaches only these safe reads. Header, panel and 
 During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
 snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
 
+The Dashboard group has **Hide from dashboard**. The header panel's **Show on dashboard** switch restores it; the
+panel and header keep their live status while Dashboard cards are hidden. This preference applies to future runs too.
+It is stored as a local boolean for the signed-in account through `APP_STORAGE`, with an in-memory fallback if storage
+is blocked. Each account has its own choice on that browser. It saves no import data, changes no server preference,
+and neither stops nor starts provider work. Stale panels cannot change another session's preference.
+
 The same safe metadata snapshot supplies the current connection state. Pending or completed disconnects hide any
 retained run projection, which the server can leave marked active after invalidating its lifecycle. An active projection
 with `reconnect_required` shows **Reconnect required** and a Connections link instead of stale processing stages or

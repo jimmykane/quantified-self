@@ -1,5 +1,14 @@
-@if (items().length) {
-<section class="history-import-cards" aria-label="History import progress">
+@if (showCards()) {
+<section class="history-import-region" aria-label="History import progress">
+  @if (placement() === 'dashboard') {
+  <div class="dashboard-heading">
+    <h2>History imports</h2>
+    <button mat-icon-button type="button" aria-label="Hide history import progress from dashboard" matTooltip="Hide from dashboard" (click)="hideDashboard()">
+      <mat-icon aria-hidden="true">visibility_off</mat-icon>
+    </button>
+  </div>
+  }
+  <div class="history-import-cards">
   @for (item of items(); track item.serviceName) {
   <mat-card appearance="outlined" class="history-import-card">
     <mat-card-content>
@@ -44,5 +53,6 @@
     </mat-card-content>
   </mat-card>
   }
+  </div>
 </section>
 }

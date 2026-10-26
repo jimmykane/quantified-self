@@ -197,6 +197,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('app-history-import-cards')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-history-import-cards').getAttribute('placement')).toBe('dashboard');
         component.targetUser = new User('another-owner') as AppUserInterface;
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('app-history-import-cards')).toBeNull();

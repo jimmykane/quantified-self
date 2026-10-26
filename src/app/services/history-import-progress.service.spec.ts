@@ -7,6 +7,8 @@ import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { AppUserService } from './app.user.service';
 import { HistoryImportProgressService } from './history-import-progress.service';
 import { HISTORY_IMPORT_RECENT_MS } from '../helpers/history-import-progress.helper';
+import { APP_STORAGE } from './storage/app.storage.token';
+import { MemoryStorage } from './storage/memory.storage';
 const sdk = vi.hoisted(() => ({authState: vi.fn()}));
 vi.mock('app/firebase/auth', async original => ({...await original<typeof import('app/firebase/auth')>(), authState: sdk.authState}));
 const now = Date.UTC(2026, 9, 26);
@@ -19,6 +21,7 @@ describe('HistoryImportProgressService', () => {
   let auth: {currentUser: FirebaseUserType | null};
   let reads: Map<string, BehaviorSubject<Record<string, unknown> | undefined>>;
   let getMeta: ReturnType<typeof vi.fn>;
+  let storage: MemoryStorage;
   function session(uid: string): FirebaseUserType { return {uid} as FirebaseUserType; }
   function connect(uid: string) {
     auth.currentUser = session(uid); sessions$.next(auth.currentUser); profiles$.next(new User(uid));
@@ -28,14 +31,14 @@ describe('HistoryImportProgressService', () => {
     vi.useFakeTimers(); vi.setSystemTime(now);
     sessions$ = new BehaviorSubject<FirebaseUserType | null>(null);
     profiles$ = new BehaviorSubject<User | null>(null);
-    auth = {currentUser: null}; reads = new Map();
+    auth = {currentUser: null}; reads = new Map(); storage = new MemoryStorage();
     sdk.authState.mockReturnValue(sessions$);
     getMeta = vi.fn((user: User, service: ServiceNames) => {
       const key = user.uid + '/' + service;
       if (!reads.has(key)) reads.set(key, new BehaviorSubject<Record<string, unknown> | undefined>(undefined));
       return reads.get(key)!;
     });
-    TestBed.configureTestingModule({providers: [{provide: Auth, useValue: auth},
+    TestBed.configureTestingModule({providers: [{provide: Auth, useValue: auth}, {provide: APP_STORAGE, useValue: storage},
       {provide: AppUserService, useValue: {user$: profiles$, getUserMetaForService: getMeta}}]});
   });
   afterEach(() => { TestBed.resetTestingModule(); vi.useRealTimers(); });
@@ -106,10 +109,16 @@ describe('HistoryImportProgressService', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
   it('does not subscribe to account or metadata reads during server rendering', () => {
+    const getStoredPreference = vi.spyOn(storage, 'getItem');
+    const setStoredPreference = vi.spyOn(storage, 'setItem');
     TestBed.overrideProvider(PLATFORM_ID, {useValue: 'server'});
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
     expect(service.view().items).toEqual([]);
     expect(getMeta).not.toHaveBeenCalled();
+    expect(service.dashboardHidden()).toBe(false);
+    expect(service.setDashboardHidden(true, service.owner())).toBe(false);
+    expect(getStoredPreference).not.toHaveBeenCalled();
+    expect(setStoredPreference).not.toHaveBeenCalled();
   });
   it('clears retained status if the verified profile stream fails', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
@@ -161,5 +170,47 @@ describe('HistoryImportProgressService', () => {
     expect(oldRead.observed).toBe(false);
     expect(service.refreshing()).toBe(false);
     expect(service.view().items).toEqual([]);
+  });
+  it('remembers dashboard visibility for this account while retaining live header status', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
+    const owner = service.owner();
+    expect(service.dashboardHidden()).toBe(false);
+    expect(service.setDashboardHidden(true, owner)).toBe(true);
+    expect(service.setDashboardHidden(true, owner)).toBe(false);
+    expect(service.dashboardHidden()).toBe(true);
+    expect(service.view().active).toBe(true);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({providers: [{provide: Auth, useValue: auth}, {provide: APP_STORAGE, useValue: storage},
+      {provide: AppUserService, useValue: {user$: profiles$, getUserMetaForService: getMeta}}]});
+    const restored = TestBed.inject(HistoryImportProgressService);
+    expect(restored.dashboardHidden()).toBe(true);
+    expect(restored.setDashboardHidden(false, restored.owner())).toBe(true);
+    expect(restored.dashboardHidden()).toBe(false);
+    expect(storage.length).toBe(0);
+  });
+  it('keeps visibility preferences separate between accounts and rejects stale panel actions', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a'); const firstOwner = service.owner();
+    service.setDashboardHidden(true, firstOwner);
+    connect('b');
+    expect(service.dashboardHidden()).toBe(false);
+    expect(service.setDashboardHidden(true, firstOwner)).toBe(false);
+    auth.currentUser = null; sessions$.next(null);
+    expect(service.dashboardHidden()).toBe(false);
+    expect(service.setDashboardHidden(true, service.owner())).toBe(false);
+    connect('a');
+    expect(service.dashboardHidden()).toBe(true);
+  });
+  it('allows hide and restore for this session if browser storage is unavailable', () => {
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new Error('storage blocked'); });
+    vi.spyOn(storage, 'setItem').mockImplementation(() => { throw new Error('storage blocked'); });
+    vi.spyOn(storage, 'removeItem').mockImplementation(() => { throw new Error('storage blocked'); });
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    expect(service.dashboardHidden()).toBe(false);
+    expect(service.setDashboardHidden(true, service.owner())).toBe(true);
+    expect(service.dashboardHidden()).toBe(true);
+    expect(service.setDashboardHidden(false, service.owner())).toBe(true);
+    expect(service.dashboardHidden()).toBe(false);
   });
 });

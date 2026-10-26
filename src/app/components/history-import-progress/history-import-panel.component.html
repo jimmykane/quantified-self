@@ -6,3 +6,6 @@
   <app-history-import-cards [ownerUid]="ownerUid" (detailsOpened)="close(false)" />
   @if (!count()) { <p class="empty-status">No active or recent history imports.</p> }
 </div>
+<div class="panel-preference">
+  <mat-slide-toggle [checked]="showOnDashboard()" [disabled]="!ownerMatches()" (change)="setShowOnDashboard($event.checked)">Show on dashboard</mat-slide-toggle>
+</div>

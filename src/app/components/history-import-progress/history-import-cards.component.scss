@@ -1,4 +1,7 @@
 :host { display: contents; }
+.history-import-region { min-width: 0; }
+.dashboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.dashboard-heading h2 { margin: 0; font: var(--mat-sys-title-medium); }
 .history-import-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; min-width: 0; }
 .history-import-card { --mdc-outlined-card-container-color: var(--qs-overlay-surface); --mdc-outlined-card-outline-color: var(--qs-overlay-surface-border); min-width: 0; }
 mat-card-content { padding: 18px; }

@@ -19,7 +19,7 @@ import { HistoryImportIndicatorComponent } from './history-import-indicator.comp
 import { HistoryImportPanelComponent } from './history-import-panel.component';
 
 @Component({standalone: true, imports: [HistoryImportIndicatorComponent, HistoryImportCardsComponent],
-  template: '<app-history-import-indicator /><app-history-import-cards ownerUid="owner" />'})
+  template: '<app-history-import-indicator /><app-history-import-cards ownerUid="owner" placement="dashboard" />'})
 class SharedSurfaces {}
 @Component({standalone: true, template: ''}) class Destination {}
 function projection(status = 'requesting', active = true, count = 7) {
@@ -31,7 +31,12 @@ async function setup(mobile = false) {
   const sources = signal<HistoryImportSource[]>([{serviceName: ServiceNames.SuuntoApp, projection: projection()}]);
   const view = computed(() => buildHistoryImportProgress(owner() ? sources() : [], Date.now()));
   const refreshing = signal(false);
-  const progress = {owner, view, refreshing, refresh: vi.fn()};
+  const dashboardHidden = signal(false);
+  const setDashboardHidden = vi.fn((hidden: boolean, expectedOwner: HistoryImportOwner | null) => {
+    if (!owner() || owner() !== expectedOwner || dashboardHidden() === hidden) return false;
+    dashboardHidden.set(hidden); return true;
+  });
+  const progress = {owner, view, refreshing, refresh: vi.fn(), dashboardHidden, setDashboardHidden};
   const closed$ = new Subject<void>();
   const dismiss = vi.fn();
   const dialog = {open: vi.fn().mockReturnValue({close: dismiss, afterClosed: () => closed$})};
@@ -104,7 +109,7 @@ describe('shared history import surfaces', () => {
   it('displays unavailable reads accessibly and refreshes status without a provider operation', async () => {
     const state = await setup(); state.sources.set([{serviceName: ServiceNames.COROSAPI, unavailable: true}]);
     const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
-    const button = (fixture.nativeElement as HTMLElement).querySelector('app-history-import-cards button') as HTMLButtonElement;
+    const button = (fixture.nativeElement as HTMLElement).querySelector('app-history-import-cards button[aria-busy]') as HTMLButtonElement;
     expect(button.textContent).toContain('Refresh status'); button.click();
     expect(state.progress.refresh).toHaveBeenCalledTimes(1);
     expect(state.haptics.selection).toHaveBeenCalledTimes(1);
@@ -114,7 +119,7 @@ describe('shared history import surfaces', () => {
     state.progress.refresh.mockImplementation(() => state.progress.refreshing.set(true));
     const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
-    const button = host.querySelector('app-history-import-cards button') as HTMLButtonElement;
+    const button = host.querySelector('app-history-import-cards button[aria-busy]') as HTMLButtonElement;
     button.click(); fixture.detectChanges(); button.click();
     expect(button.disabled).toBe(true);
     expect(button.textContent).toContain('Checking status');
@@ -148,5 +153,26 @@ describe('shared history import surfaces', () => {
     expect(state.dismiss).toHaveBeenCalledTimes(1);
     expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
     expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
+  it('hides only dashboard cards and restores them from the header panel with one haptic per action', async () => {
+    const state = await setup(); const dashboard = TestBed.createComponent(SharedSurfaces); dashboard.detectChanges();
+    const host = dashboard.nativeElement as HTMLElement;
+    const hide = host.querySelector('button[aria-label="Hide history import progress from dashboard"]') as HTMLButtonElement;
+    expect(hide).not.toBeNull(); hide.click(); dashboard.detectChanges();
+    expect(host.querySelector('mat-card')).toBeNull();
+    expect(host.querySelector('.history-import-header-action')?.textContent).toContain('Importing history');
+    expect(state.haptics.selection).toHaveBeenCalledTimes(1);
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: projection('requesting', true, 24)}]);
+    dashboard.detectChanges(); expect(host.querySelector('mat-card')).toBeNull();
+    const panel = TestBed.createComponent(HistoryImportPanelComponent); panel.detectChanges();
+    expect(panel.nativeElement.querySelector('mat-card')).not.toBeNull();
+    expect(panel.nativeElement.querySelector('button[aria-label="Hide history import progress from dashboard"]')).toBeNull();
+    const toggle = panel.nativeElement.querySelector('button[role="switch"]') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-checked')).toBe('false'); toggle.click();
+    panel.detectChanges(); dashboard.detectChanges();
+    expect(host.querySelector('mat-card')?.textContent).toContain('24 items or requests');
+    expect(state.haptics.selection).toHaveBeenCalledTimes(2);
+    panel.componentInstance.setShowOnDashboard(true);
+    expect(state.haptics.selection).toHaveBeenCalledTimes(2);
   });
 });

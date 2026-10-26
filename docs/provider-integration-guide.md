@@ -945,6 +945,9 @@ from these surfaces, while lost authorization shows reconnect guidance without a
 Use the connection state from the same safe metadata read; never infer a live import from the retained run alone.
 Read-only refreshes retain each provider's last status until its fresh snapshot arrives, with an explicit busy action
 and no duplicate refresh. A pending read for another provider cannot delay a known lifecycle change.
+Members can hide the Dashboard group and restore it using **Show on dashboard** in the header panel. This is an
+account-scoped local browser preference only; live status, provider work, consent and the existing metadata reads
+remain unchanged. Browser-storage failure falls back to the current app session.
 
 Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#830 ingestion bundles still cover all
 workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,

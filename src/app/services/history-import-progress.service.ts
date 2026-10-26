@@ -5,6 +5,7 @@ import { Auth, authState, type FirebaseUserType } from 'app/firebase/auth';
 import { Subject, catchError, combineLatest, defer, distinctUntilChanged, map, of, scan, startWith, switchMap } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportProgress, type HistoryImportSource } from '../helpers/history-import-progress.helper';
+import { APP_STORAGE } from './storage/app.storage.token';
 
 export interface HistoryImportOwner { uid: string; session: FirebaseUserType; }
 interface HistoryImportSnapshot { owner: HistoryImportOwner | null; sources: HistoryImportSource[]; refreshing: boolean; }
@@ -18,6 +19,8 @@ export class HistoryImportProgressService {
   private readonly destroyRef = inject(DestroyRef);
   private readonly zone = inject(NgZone);
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly storage = inject(APP_STORAGE, {optional: true});
+  private readonly dashboardVisibility = signal(new Map<string, boolean>());
   private readonly refresh$ = new Subject<void>();
   private readonly now = signal(Date.now());
   private expiryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -60,6 +63,14 @@ export class HistoryImportProgressService {
   });
   readonly view = computed(() => buildHistoryImportProgress(this.owner() ? this.snapshot().sources : [], Math.max(this.now(), Date.now())));
   readonly refreshing = computed(() => !!this.owner() && this.snapshot().refreshing);
+  readonly dashboardHidden = computed(() => {
+    const uid = this.owner()?.uid;
+    if (!uid || !this.browser) return false;
+    const overrides = this.dashboardVisibility();
+    if (overrides.has(uid)) return overrides.get(uid)!;
+    try { return this.storage?.getItem(this.dashboardVisibilityKey(uid)) === '1'; }
+    catch { return false; }
+  });
 
   constructor() {
     effect(() => {
@@ -76,4 +87,20 @@ export class HistoryImportProgressService {
     this.destroyRef.onDestroy(() => { if (this.expiryTimer !== null) clearTimeout(this.expiryTimer); });
   }
   refresh(): void { if (this.owner() && !this.refreshing()) this.refresh$.next(); }
+
+  setDashboardHidden(hidden: boolean, expectedOwner: HistoryImportOwner | null): boolean {
+    const owner = this.owner();
+    if (!this.browser || !owner || owner !== expectedOwner || this.dashboardHidden() === hidden) return false;
+    this.dashboardVisibility.update(previous => new Map(previous).set(owner.uid, hidden));
+    try {
+      const key = this.dashboardVisibilityKey(owner.uid);
+      if (hidden) this.storage?.setItem(key, '1');
+      else this.storage?.removeItem(key);
+    } catch { /* Keep this session's choice when browser storage is blocked. */ }
+    return true;
+  }
+
+  private dashboardVisibilityKey(uid: string): string {
+    return `history-import.dashboard-hidden.v1.${encodeURIComponent(uid)}`;
+  }
 }

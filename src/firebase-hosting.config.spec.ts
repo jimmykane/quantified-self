@@ -255,7 +255,7 @@ describe('Firebase Hosting configuration', () => {
       ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
     ]);
     // Includes contextual provider offers, trial review and paginated Connections navigation.
-    // Includes the Pro trial terms and shared history-progress lifecycle/refresh guidance (26 October).
+    // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-26');
   });
 

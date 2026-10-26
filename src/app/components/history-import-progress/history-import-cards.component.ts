@@ -6,20 +6,29 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({selector: 'app-history-import-cards', standalone: true,
-  imports: [DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatProgressSpinnerModule, ServiceSourceIconComponent],
+  imports: [DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatProgressSpinnerModule, MatTooltipModule, ServiceSourceIconComponent],
   templateUrl: './history-import-cards.component.html', styleUrl: './history-import-cards.component.scss'})
 export class HistoryImportCardsComponent {
   readonly ownerUid = input.required<string>();
+  readonly placement = input<'dashboard' | 'panel'>('panel');
   readonly detailsOpened = output<void>();
   private readonly progress = inject(HistoryImportProgressService);
   private readonly haptics = inject(AppHapticsService);
   readonly refreshing = this.progress.refreshing;
   readonly items = computed(() => this.progress.owner()?.uid === this.ownerUid() ? this.progress.view().items : []);
+  readonly showCards = computed(() => this.items().length > 0
+    && (this.placement() !== 'dashboard' || !this.progress.dashboardHidden()));
+  hideDashboard(): void {
+    const owner = this.progress.owner();
+    if (this.placement() !== 'dashboard' || owner?.uid !== this.ownerUid()) return;
+    if (this.progress.setDashboardHidden(true, owner)) this.haptics.selection();
+  }
   refresh(): void {
     if (this.progress.owner()?.uid !== this.ownerUid() || this.refreshing()) return;
     this.haptics.selection(); this.progress.refresh();
