@@ -85,7 +85,7 @@ Monitoring coverage is **unchanged**: this uses the same admission trigger, priv
 
 Private `stripeBillingAccounts/{uid}/operations/*` records freeze customer/checkout parameters and idempotency keys before POSTs. A customer-wide lease serializes checkout, portal, webhook projection and deletion. A single catalog lease serializes related product/price updates. Lease duration exceeds worker timeout; transactions verify the token. Every independent normal Stripe call rechecks deletion/ownership, and persistence rechecks inside its transaction.
 
-Lost customer replies are reconciled using operation metadata search, then the original key within 23 hours. Lost checkout replies retry identical parameters/key; after 23 hours they require a uniquely matching session in a bounded customer query. Incomplete/ambiguous reconciliation stops with `operation_uncertain`. Never delete a journal or mint a replacement operation to bypass this state. A definitive Stripe HTTP 400 content rejection is reconciled against the bounded customer session list. Only after confirming no matching session, the original journal is marked rejected and its active reservation released; a new browser request may create a separate operation. Network errors, 409 conflicts, idempotency errors and 5xx responses never release that reservation. An open session is reused only for a fresh request with a matching current offer after catalog/history validation, as described above; a checkout with an unknown remote identity blocks replacement. A known open session can be replaced only through the journaled flow below. Recovery of a saved operation cannot substitute a newer operation or overwrite its active reservation. Every retrieved session must still belong to the current trusted customer binding, including a retained session from another request. A mismatch fails with `customer_conflict` before returning a URL or creating a replacement checkout.
+Lost customer replies are reconciled using operation metadata search, then the original key within 23 hours. Lost checkout replies retry identical parameters/key; after 23 hours they require a uniquely matching session in a bounded customer query. Incomplete/ambiguous reconciliation stops with `operation_uncertain`. Never delete a journal or mint a replacement operation to bypass this state. A definitive Stripe HTTP 400 content rejection is reconciled against the bounded customer session list. Only after confirming no matching session, the original journal is marked rejected. Its `activeCheckout` pointer remains an ordering fence: a later browser request may create a separate operation, but an older queued selection cannot revive. Network errors, 409 conflicts, idempotency errors and 5xx responses never authorize another operation. An open session is reused only for a fresh request with a matching current offer after catalog/history validation, as described above; a checkout with an unknown remote identity blocks replacement. A known open session can be replaced only through the journaled flow below. Recovery of a saved operation cannot substitute a newer operation or overwrite its active reservation. Every retrieved session must still belong to the current trusted customer binding, including a retained session from another request. A mismatch fails with `customer_conflict` before returning a URL or creating a replacement checkout.
 
 `stripeBillingWebhook` verifies `rawBody` and `Stripe-Signature`, rejects Connect/mode mismatches, and writes a minimal event reference plus pending outbox state atomically before HTTP 200. Unsupported/unowned events are deliberately skipped. No raw payload is retained. A storage/admission failure returns 503. Each `stripeBillingJobs/{sha256}` receipt deduplicates the Stripe event ID. The private `processStripeBillingTask` retrieves current Stripe objects, validates customer identity, skips unchanged projections, and commits projections plus completion in one transaction. Reordered events therefore converge on current state.
 
@@ -134,17 +134,21 @@ journal. Lost creation responses retain normal same-key reconciliation. An alrea
 switch and durably closes the unused replacement reservation, restoring the known predecessor without changing
 its frozen terms or losing the latest selection time. For an earlier completed subscription, current Stripe subscription
 state permits another subscription checkout only after that subscription has ended; a one-time purchase remains allowed.
-An old replaced operation cannot expire or overwrite its successor.
+An old replaced operation cannot expire or overwrite its successor. If reuse was recorded but its public result was
+not committed, retry stays bound to that session. Completion or expiry returns `checkout_completed` or
+`checkout_expired`; it never creates another session for the same selection. The member must explicitly choose again
+after expiry.
 
 The frontend shows **Updating your checkout…** while the server transitions the session. A completed subscription
 checkout triggers the existing subscription recovery path; a superseded selection asks the member to use their latest
-choice. These expected outcomes finish as `skipped`, without terminal-failure records or failure counters. Actual
+choice. Expiry asks the member to choose again. These expected outcomes finish as `skipped`, without terminal-failure
+records or failure counters. Actual
 expiry/retrieval/create failures retain bounded provider retries, failure counters and operator replay. Never erase an
 operation to unblock switching. Replay must retain all predecessor references and keys.
 
 Monitoring coverage is **unchanged**: this uses the existing billing worker, outbox, customer lease, dispatch/recovery
 budgets and admission/processing/terminal/backlog/missing-telemetry policies. Successful switching counts only after
-committed processing; expected completed/superseded requests count as skips. No queue, index, secret binding, Function
+committed processing; expected completed/expired/superseded requests count as skips. No queue, index, secret binding, Function
 entrypoint, MCP or Training surface is added. Release requires the existing worker `processStripeBillingTask` and the
 frontend; the current Rules already reject client-supplied status/result fields. Local implementation authorizes no deploy.
 

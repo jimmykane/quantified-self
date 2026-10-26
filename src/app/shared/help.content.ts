@@ -1187,7 +1187,7 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - During billing maintenance, new checkout and portal requests are temporarily paused. Existing subscriptions continue billing normally. Wait for billing to reopen before trying again.
-- If you return from an unfinished checkout, you can choose a different plan or billing interval. **Updating your checkout…** means the old payment link is being closed before the new one opens. Choosing the same offer resumes its existing checkout.
+- If you return from an unfinished checkout, you can choose a different plan or billing interval. **Updating your checkout…** means the old payment link is being closed before the new one opens. Choosing the same offer resumes its existing checkout. If a checkout expires, choose the offer again to start a new checkout.
 - If checkout completed in another tab, refresh Membership to see your access. If a payment result is still being confirmed, wait for confirmation before trying another payment; contact support if it stays unresolved.
 - Cancellation takes effect at the end of the current billing period.
 - When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.

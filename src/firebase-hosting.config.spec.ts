@@ -416,7 +416,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
-    // Billing help also explains maintenance and pending checkout confirmation (2026-10-23).
+    // Billing help covers maintenance, checkout switching and expiry recovery (2026-10-26).
     // Health help also covers primary Heart rate choices, nightly HRV history, same-account daily averages, automatic retries and final failures.
     // It also documents the flat Training & health navigation for Plans and Timeline notes.
     // Help now distinguishes the comparisons landing page from the explicit note manager.

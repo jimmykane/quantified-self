@@ -878,6 +878,14 @@ describe('AppPaymentService', () => {
             expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
             expect(mockSetDoc).toHaveBeenCalledTimes(1);
         });
+        it('reports an expired checkout without an error log, recovery call, or automatic replacement', async () => {
+            const errors = vi.spyOn(TestBed.inject(LoggerService), 'error');
+            mockDocData.mockReturnValueOnce(of({ error: { code: 'checkout_expired', message: 'Choose a plan again' } }));
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('Choose a plan again');
+            expect(errors).not.toHaveBeenCalled();
+            expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('linkExistingStripeCustomer');
+            expect(mockSetDoc).toHaveBeenCalledTimes(1);
+        });
 
         it('should retry checkout once after stale customer error and then continue', async () => {
             mockDocData

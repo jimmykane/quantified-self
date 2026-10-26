@@ -385,7 +385,7 @@ export class AppPaymentService {
         if (session.error) {
             const errorMessage = this.getCheckoutErrorMessage(session.error);
             const code = typeof session.error === 'object' ? session.error.code : undefined;
-            if (code === 'checkout_completed' || code === 'checkout_replaced') {
+            if (code === 'checkout_completed' || code === 'checkout_expired' || code === 'checkout_replaced') {
                 this.logger.log('Checkout selection changed:', code);
                 if (code === 'checkout_completed' && checkoutInput.mode === 'subscription') {
                     await this.runPreCheckoutLinkCheck(user, userId);

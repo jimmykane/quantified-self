@@ -287,6 +287,78 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
   });
+  it.each(['expired', 'complete'])('does not recreate a reused checkout after a lost commit when Stripe reports %s', async status => {
+    const f = await fixture('payment'); await f.run((await f.admit())!);
+    const reused = await nextRequest(f);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      // Simulate a worker stopping after reuse is journaled, before its public
+      // result and job completion can commit.
+      await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request);
+    } finally { await releaseBillingLease(db, lease); }
+    const previous = [...f.sessions.values()][0]; previous.status = status; previous.url = null;
+    await f.run(reused.id);
+    expect((await reused.ref.get()).get('error.code')).toBe(status === 'expired' ? 'checkout_expired' : 'checkout_completed');
+    expect((await db.doc(`${BILLING_JOBS}/${reused.id}`).get()).get('state')).toBe('skipped');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await db.doc(`failed_jobs/stripe_billing_${reused.id}`).get()).exists).toBe(false);
+    // An explicit later selection may start another one-time purchase.
+    const fresh = await nextRequest(f); await f.run(fresh.id);
+    expect((await fresh.ref.get()).get('url')).toBeTruthy();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+  });
+  it.each(['expired', 'complete'])('finishes a checkpointed checkout as an expected outcome after it becomes %s', async status => {
+    const f = await fixture('payment'), id = (await f.admit())!;
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try { await createBillingCheckout(f.ctx, lease, f.uid, f.requestId, f.request); }
+    finally { await releaseBillingLease(db, lease); }
+    const previous = [...f.sessions.values()][0]; previous.status = status; previous.url = null;
+    await f.run(id);
+    expect((await f.ref.get()).get('error.code')).toBe(status === 'expired' ? 'checkout_expired' : 'checkout_completed');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('skipped');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+  });
+  it('does not commit a closed reused checkout after losing the customer lease during retrieval', async () => {
+    const f = await fixture('payment'); await f.run((await f.admit())!);
+    const reused = await nextRequest(f);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try { await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request); }
+    finally { await releaseBillingLease(db, lease); }
+    [...f.sessions.values()][0].status = 'complete';
+    const retrieve = f.stripe.checkout.sessions.retrieve.getMockImplementation()!;
+    const lock = db.doc(`stripeBillingLocks/${billingId(`customer:${f.uid}`)}`);
+    f.stripe.checkout.sessions.retrieve.mockImplementationOnce(async id => {
+      const session = await retrieve(id);
+      await lock.update({ token: 'replacement-owner', until: Timestamp.fromMillis(Date.now() + 360_000) });
+      return session;
+    });
+    await f.run(reused.id);
+    const job = await db.doc(`${BILLING_JOBS}/${reused.id}`).get();
+    expect(job.get('state')).toBe('pending'); expect(job.get('generation')).toBe(1);
+    expect((await reused.ref.get()).get('error')).toBeUndefined();
+    await lock.update({ until: Timestamp.fromMillis(0) }); await f.readyRetry(reused.id);
+    await f.run(reused.id, job.get('generation'));
+    expect((await reused.ref.get()).get('error.code')).toBe('checkout_completed');
+    expect((await db.doc(`${BILLING_JOBS}/${reused.id}`).get()).get('state')).toBe('skipped');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+  it('does not revive an older queued selection after Stripe rejects its replacement', async () => {
+    const f = await fixture(); await f.run((await f.admit())!);
+    const olderOffer = await changePrice(f), olderPrice = { ...f.price };
+    const older = await nextRequest(f, olderOffer);
+    const latest = await nextRequest(f, await changePrice(f));
+    f.stripe.checkout.sessions.create.mockRejectedValueOnce({ type: 'StripeInvalidRequestError', statusCode: 400 });
+    await f.run(latest.id);
+    expect((await latest.ref.get()).get('error.code')).toBe('checkout_rejected');
+    Object.assign(f.price, olderPrice); await f.run(older.id);
+    expect((await older.ref.get()).get('error.code')).toBe('checkout_replaced');
+    expect((await db.doc(`${BILLING_JOBS}/${older.id}`).get()).get('state')).toBe('skipped');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    const fresh = await nextRequest(f, olderOffer); await f.run(fresh.id);
+    expect((await fresh.ref.get()).get('url')).toBeTruthy();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(3);
+  });
   it('retains selection order when a completed checkout restores its predecessor', async () => {
     const f = await fixture(); await f.run((await f.admit())!);
     const older = await nextRequest(f);
@@ -646,7 +718,7 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     const rejected = (await operation.get()).data();
     expect(rejected?.rejected).toBe(true);
     expect((await f.ref.get()).get('error.code')).toBe('checkout_rejected');
-    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBeUndefined();
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${f.requestId}`);
     await replayBillingJob(db, id, true); await f.run(id, 1);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
     const nextRequest = unique(); await db.doc(`customers/${f.uid}/checkout_sessions/${nextRequest}`).set(f.request);

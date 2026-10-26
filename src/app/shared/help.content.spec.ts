@@ -49,6 +49,7 @@ describe('help.content', () => {
     expect(copy).toContain('checks your access for up to 20 seconds');
     expect(copy).toContain('**Updating your checkout…**');
     expect(copy).toContain('Choosing the same offer resumes its existing checkout');
+    expect(copy).toContain('If a checkout expires, choose the offer again');
     expect(copy).toContain('If checkout completed in another tab, refresh Membership');
     expect(copy).toContain('**Connect your devices** opens [Connections](/services)');
     expect(copy).toContain('Opening Connections does not connect an account automatically');

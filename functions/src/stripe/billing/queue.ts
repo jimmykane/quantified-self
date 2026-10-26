@@ -229,7 +229,7 @@ export async function processBillingJob(ctx: BillingDependencies, id: string, ge
     }
     if (job.kind === 'checkout') await writeCheckoutError(ctx.db, job.uid!, job.requestId!, error);
     if (job.kind === 'checkout' && error instanceof BillingError
-      && ['checkout_completed', 'checkout_replaced'].includes(error.code)) {
+      && ['checkout_completed', 'checkout_expired', 'checkout_replaced'].includes(error.code)) {
       if (await finishBillingJob(ctx.db, id, generation, 'skipped')) observeBilling('skipped');
       return;
     }
