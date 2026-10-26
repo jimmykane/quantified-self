@@ -76,12 +76,15 @@ describe('recent history option', () => {
 describe('recent history status', () => {
   const status = { runId: 'opaque', rangePreset: '30_days' as const, startMs: 1, endMs: 2, updatedAtMs: 3, active: false, canRetry: true,
     steps: [{ id: 'activities', resources: ['activities'], status: 'failed', count: 1 }] };
-  it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('shows a %s manual selected range and retry controls without implying a connection-time preset', service => {
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('shows a %s manual selected range and retry controls without implying a connection-time preset', service => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('service', service);
-    fixture.componentRef.setInput('status', { ...status, rangePreset: 'custom' });
+    fixture.componentRef.setInput('status', { ...status, rangePreset: 'custom',
+      startMs: new Date(2026, 8, 1).getTime(), endMs: new Date(2026, 8, 3, 23, 59, 59, 999).getTime() });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Requested range: Selected dates');
+    expect(fixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain('Sep 1, 2026 – Sep 3, 2026');
+    expect(fixture.nativeElement.textContent).not.toContain('(UTC)');
     expect(fixture.nativeElement.textContent).toContain('Retry failed imports');
     expect(fixture.nativeElement.textContent).not.toContain('30 days');
     expect(fixture.componentInstance.rangeTimezone()).toBeUndefined();

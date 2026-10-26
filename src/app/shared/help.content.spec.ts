@@ -30,6 +30,14 @@ describe('help.content', () => {
       'delivery completion is not tracked here',
       'a new import or a retried result appears again', 'recovery controls remain in Connections']) expect(copy).toContain(phrase);
   });
+  it('explains durable manual Garmin activity requests without claiming delivery completion', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['Manual **Garmin**, **Suunto**, **COROS** and **Wahoo**',
+      '**Requesting Garmin history**', 'temporary failures retry from the unfinished batch',
+      '**History requested** means submission finished', 'Garmin delivers activities separately',
+      'does not confirm that every activity has arrived', '**30-day cooldown**',
+      'Sleep, Health and saved routes keep their separate controls']) expect(copy).toContain(phrase);
+  });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     for (const phrase of ['New Pro trials require a payment method', 'no subscription charge during the free trial',
@@ -2435,7 +2443,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
-    expect(serviceConnectionsSection?.content).toContain('While Garmin activity history is being requested, Services shows **Import already running**');
+    expect(serviceConnectionsSection?.content).toContain('While Garmin activity history is being requested, another request is blocked');
     expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the request');
     expect(serviceConnectionsSection?.content).toContain('usual **30-day cooldown** applies while activities continue arriving from Garmin');
     expect(serviceConnectionsSection?.content).toContain('Garmin Sleep and Health history import is separate from activity history import');
@@ -2638,7 +2646,7 @@ describe('help.content', () => {
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
-    expect(serviceConnectionsSection?.content).toContain('Manual **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing');
+    expect(serviceConnectionsSection?.content).toContain('Manual **Garmin**, **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing');
     expect(serviceConnectionsSection?.content).toContain('one page at a time');
     expect(serviceConnectionsSection?.content).toContain('Acceptance means the request is saved, not that every activity has arrived');
     expect(serviceConnectionsSection?.content).toContain('wait for queued activities before reporting completion');

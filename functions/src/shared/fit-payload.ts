@@ -92,13 +92,14 @@ function hasMultipartPrefix(prefix: Buffer): boolean {
     const hasContentDisposition = /content-disposition\s*:\s*form-data\b/.test(normalizedPrefix);
     const hasFilename = /filename\s*=/.test(normalizedPrefix);
     const contentTypeMatch = normalizedPrefix.match(/content-type\s*:\s*([^\r\n]+)/);
-    const hasOctetStreamContentType = contentTypeMatch !== null &&
-        contentTypeMatch[1].trim().startsWith('application/octet-stream');
+    const contentType = contentTypeMatch?.[1].split(';', 1)[0].trim();
+    const hasFitContentType = contentType === 'application/octet-stream' ||
+        contentType === 'application/vnd.ant.fit';
 
     return hasBoundaryPrefix &&
         hasContentDisposition &&
         hasFilename &&
-        hasOctetStreamContentType;
+        hasFitContentType;
 }
 
 function getMultipartPartEnd(buffer: Buffer, prefix: Buffer, partStart: number): number | null {

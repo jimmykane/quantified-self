@@ -14,7 +14,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
   afterEach(async () => { vi.restoreAllMocks(); await mocks.db.terminate(); });
   const start = new Date('2026-10-01T00:00:00Z'), end = new Date('2026-10-02T23:59:59.999Z');
   async function seed(service: ServiceNames) {
-    const roots = { [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens', [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens', [ServiceNames.WahooAPI]: 'wahooAPIAccessTokens' };
+    const roots = { [ServiceNames.GarminAPI]: 'garminAPITokens', [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens', [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens', [ServiceNames.WahooAPI]: 'wahooAPIAccessTokens' };
     const root = `${roots[service as keyof typeof roots]}/owner`;
     const meta = mocks.db.doc(`users/owner/meta/${service}`);
     const batch = mocks.db.batch();
@@ -25,7 +25,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     await batch.commit(); return meta;
   }
   // Real contention can trigger Firestore SDK backoff beyond the five-second unit-test default.
-  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('admits only one of two concurrent %s requests with its matching reservation and projection', async service => {
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('admits only one of two concurrent %s requests with its matching reservation and projection', async service => {
     const meta = await seed(service);
     const results = await Promise.allSettled([
       startManualActivityHistory('owner', service, start, end), startManualActivityHistory('owner', service, start, end),
@@ -39,21 +39,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
       connectionHistoryImport: { runId: runs.docs[0].id, active: true, startMs: start.getTime(), endMs: end.getTime() } });
     expect(runs.docs[0].data().steps).toMatchObject([{ id: 'activities', childPaths: [], done: false }]);
   }, 30_000);
-  it('does not leave a run or reservation after an aborted admission transaction', async () => {
-    const meta = await seed(ServiceNames.SuuntoApp);
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp])('does not leave a %s run or reservation after an aborted admission transaction', async service => {
+    const meta = await seed(service);
     const original = mocks.db.runTransaction.bind(mocks.db);
     vi.spyOn(mocks.db, 'runTransaction').mockImplementationOnce(operation => original(async tx => {
       await operation(tx); throw new Error('Rejected commit');
     }));
-    await expect(startManualActivityHistory('owner', ServiceNames.SuuntoApp, start, end)).rejects.toThrow('Rejected commit');
+    await expect(startManualActivityHistory('owner', service, start, end)).rejects.toThrow('Rejected commit');
     expect((await mocks.db.collection('connectionHistoryImports').get()).empty).toBe(true);
     expect((await meta.get()).data()).not.toHaveProperty('connectionHistoryImport');
     expect((await meta.get()).data()).not.toHaveProperty('connectionHistoryReservation');
   });
-  it('checks real deletion tombstones before admission', async () => {
-    await seed(ServiceNames.COROSAPI);
+  it.each([ServiceNames.GarminAPI, ServiceNames.COROSAPI])('checks real deletion tombstones before %s admission', async service => {
+    await seed(service);
     await mocks.db.doc('userDeletionTombstones/owner').set({});
-    await expect(startManualActivityHistory('owner', ServiceNames.COROSAPI, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
     expect((await mocks.db.collection('connectionHistoryImports').get()).empty).toBe(true);
   });
 });

@@ -267,8 +267,8 @@ describe('EChartsHostController', () => {
     expect(loader.setOption).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledWith(chartMock, {
-      width: 'auto',
-      height: 'auto',
+      width: 320,
+      height: 180,
       silent: true,
     });
   });
@@ -287,12 +287,39 @@ describe('EChartsHostController', () => {
     await controller.init(container);
     controller.scheduleResize();
     frames.shift()!(0);
-    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 540, height: 100, silent: true });
     Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
     resizeObserverRecords[0].trigger();
     frames.shift()!(0);
     expect(loader.resize).toHaveBeenCalledTimes(2);
-    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 280, height: 100, silent: true });
+  });
+
+  it('uses the measured content box when range controls appear or disappear, without auto-measurement reflow', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const onContainerResize = vi.fn();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, onContainerResize });
+    const container = document.createElement('div');
+    container.style.padding = '8px 12px';
+    let height = 314;
+    Object.defineProperty(container, 'clientWidth', { get: () => 361 });
+    Object.defineProperty(container, 'clientHeight', { get: () => height });
+    await controller.init(container);
+
+    for (const contentHeight of [298, 252, 298]) {
+      height = contentHeight + 16;
+      resizeObserverRecords[0].trigger(); frames.shift()!(0);
+      expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 337, height: contentHeight, silent: true });
+      expect(onContainerResize).toHaveBeenLastCalledWith({ width: 337, height: contentHeight });
+      // A settled observer notification must not resize or rebuild the chart again.
+      resizeObserverRecords[0].trigger(); frames.shift()!(0);
+    }
+    expect(loader.resize).toHaveBeenCalledTimes(3);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(loader.setOption).not.toHaveBeenCalled();
+    controller.dispose();
   });
 
   it('ignores repeated viewport-height events when the chart size is unchanged', async () => {
@@ -311,6 +338,34 @@ describe('EChartsHostController', () => {
     Object.defineProperty(container, 'clientWidth', { configurable: true, value: 600 });
     controller.scheduleResize(); frames.shift()!(500);
     expect(loader.resize).toHaveBeenCalledTimes(2);
+    controller.dispose();
+  });
+
+  it('settles a late dashboard alignment even when the observer reports no further size change', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const container = document.createElement('div');
+    let height = 252;
+    Object.defineProperty(container, 'clientWidth', { get: () => 337 });
+    Object.defineProperty(container, 'clientHeight', { get: () => height });
+    await controller.init(container);
+    controller.scheduleResize(); frames.shift()!(0);
+    frames.shift()!(16);
+
+    // A source selector disappears, then the board aligns summaries later in
+    // the same frame. The final 252px is what ResizeObserver already reported.
+    height = 298;
+    controller.scheduleResize(); frames.shift()!(32);
+    height = 252;
+    frames.shift()!(48);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 337, height: 252, silent: true });
+    frames.shift()!(64);
+    expect(frames).toHaveLength(0);
+    expect(loader.resize).toHaveBeenCalledTimes(3);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(loader.setOption).not.toHaveBeenCalled();
     controller.dispose();
   });
 
@@ -387,7 +442,12 @@ describe('EChartsHostController', () => {
     viewportChanged(); frames.shift()!(32);
     expect(onContainerResize).toHaveBeenLastCalledWith({ width: 280, height: 400 });
     expect(loader.resize).toHaveBeenCalledTimes(2);
+    expect(frames).toHaveLength(1);
+    const pendingCheck = frames.shift()!;
     controller.dispose();
+    expect(cancelAnimationFrame).toHaveBeenCalledOnce();
+    pendingCheck(48);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
     expect(frames).toHaveLength(0);
   });
 

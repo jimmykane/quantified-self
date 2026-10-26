@@ -1332,7 +1332,7 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 Connection feature cards show what each tool does. In **History import**, the last requested date and the next available date appear together when recorded, separately for activities and Sleep/Health. These dates describe requests and availability, not completed delivery. An import waiting period may continue after the activities have arrived.
 
-Manual **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing as history selected when connecting. Choose your dates and start the import; you can then close the dialog or leave the app. Check **History import** in Connections for progress and **Retry failed imports** if needed. Acceptance means the request is saved, not that every activity has arrived. This action imports activities only; Sleep, Health and saved routes keep their separate controls. COROS still limits activity history to the latest three months. Wahoo imports eligible FIT-backed workouts one page at a time and skips workouts without a FIT file or originating from third-party fitness apps. Older connections may retain the previous import flow until reconnected. Large ranges are processed in batches and may take longer when a provider is busy.
+Manual **Garmin**, **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing as history selected when connecting. Choose your dates and start the import; you can then close the dialog or leave the app. Check **History import** in Connections for progress and **Retry failed imports** if needed. Acceptance means the request is saved, not that every activity has arrived. This action imports activities only; Sleep, Health and saved routes keep their separate controls. COROS still limits activity history to the latest three months. Wahoo imports eligible FIT-backed workouts one page at a time and skips workouts without a FIT file or originating from third-party fitness apps. Older connections may retain the previous import flow until reconnected. Large ranges are processed in batches and may take longer when a provider is busy.
 
 ### Garmin permissions
 
@@ -1458,7 +1458,9 @@ The picker starts with the latest two calendar years selected. You can expand it
 
 Garmin can deliver imported activities gradually over hours or days.
 
-While Garmin activity history is being requested, Services shows **Import already running** and prevents another request. Closing the dialog does not cancel the request; reopening it shows the current running state. If another tab started the request before the status arrived, the duplicate request shows a wait message. Once the request is accepted, the usual **30-day cooldown** applies while activities continue arriving from Garmin.
+While Garmin activity history is being requested, another request is blocked. Closing the dialog does not cancel the request; reopening it shows the current running state. If another tab started the request before the status arrived, the duplicate request shows a wait message. Once Garmin accepts a batch, the usual **30-day cooldown** applies while activities continue arriving from Garmin.
+
+Manual Garmin activity imports run in the background through the same request processing as history selected when connecting. **Requesting Garmin history** means requests are being submitted in batches; temporary failures retry from the unfinished batch. **History requested** means submission finished. Garmin delivers activities separately, which can take hours or days; this status does not confirm that every activity has arrived. Use **History import** in Connections for progress, permission guidance and **Retry failed imports**. The selected range and **30-day cooldown** still apply.
 
 Garmin Sleep and Health history import is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
 

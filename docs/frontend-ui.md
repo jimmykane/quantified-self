@@ -1423,6 +1423,12 @@ Header text, tile mounting/removal, plot participation (including a KPI trend di
 pass batches one rectangle read per visible cell/plot before writing offsets. A half-pixel tolerance prevents fractional
 flex-layout rounding from feeding an idle ResizeObserver loop; real header changes still realign. Observers and queued frames are torn down with the board.
 Window resize listening is a fallback only when `ResizeObserver` is unavailable.
+The shared ECharts host passes its measured content-box width and height to `resize`, preserving padding and
+replacing initialization dimensions. It does not ask ECharts to measure `auto`: ECharts temporarily hides its
+canvas during that measurement, which can reflow a flexible tile and leave a stale, oversized canvas after a range
+change adds or removes source controls. After a real resize it rechecks once in the following frame, covering board
+alignment that happens later in the current frame and returns the host to the observer's previously reported size.
+Unchanged dimensions end that work without resizing or redrawing again; no extra observers are needed.
 Generic XY/column charts retain their ECharts heading and aggregate. Form/TSS deliberately keeps two panels with
 a 440px canvas floor. Its panels share the remaining height equally with a fixed 16px gap, rather than leaving a
 percentage of taller tiles empty. The existing chart-host resize callback merges grid geometry only when the canvas

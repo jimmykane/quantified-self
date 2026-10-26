@@ -256,6 +256,7 @@ describe('Firebase Hosting configuration', () => {
     ]);
     // Includes contextual provider offers, trial review and paginated Connections navigation.
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
+    // Includes the Pro trial payment-method and cancellation terms refreshed today.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-26');
   });
 

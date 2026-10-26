@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../shared/callable-policy';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import type { UpcomingRenewalAmountResult } from '../../../shared/stripe-renewal';

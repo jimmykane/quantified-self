@@ -34,7 +34,7 @@ const now = Date.parse('2026-10-21T12:00:00Z');
 const start = new Date('2026-09-01T21:00:00.000Z'), end = new Date('2026-10-20T20:59:59.999Z');
 const metaPath = (service: ServiceNames) => `users/owner/meta/${service}`;
 function seed(service: ServiceNames) {
-  const roots = { [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens', [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens', [ServiceNames.WahooAPI]: 'wahooAPIAccessTokens' };
+  const roots = { [ServiceNames.GarminAPI]: 'garminAPITokens', [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens', [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens', [ServiceNames.WahooAPI]: 'wahooAPIAccessTokens' };
   const rootPath = `${roots[service as keyof typeof roots]}/owner`;
   mocks.rows.set('users/owner', { uid: 'owner' });
   mocks.rows.set(rootPath, { activeOAuthCredentialGeneration: 'credential' });
@@ -48,7 +48,7 @@ beforeEach(() => {
   mocks.rows.clear(); mocks.rejectCommit = false; mocks.retryTransaction = false;
 });
 
-describe.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('manual activity admission for %s', service => {
+describe.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('manual activity admission for %s', service => {
   it('atomically accepts exact dates and only activities without changing the connection or credentials', async () => {
     const root = seed(service);
     const originalRoot = structuredClone(mocks.rows.get(root));
@@ -97,4 +97,15 @@ describe.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.Wahoo
     await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'already-exists' });
     expect(runs()).toHaveLength(1);
   });
+});
+
+it.each([undefined, 0, 500, 100000])('keeps Garmin admission on its fixed 30-day cooldown with activity count %s', async count => {
+  seed(ServiceNames.GarminAPI);
+  const meta = mocks.rows.get(metaPath(ServiceNames.GarminAPI))!;
+  Object.assign(meta, { didLastHistoryImport: now - 86400000, processedActivitiesFromLastHistoryImportCount: count });
+  await expect(startManualActivityHistory('owner', ServiceNames.GarminAPI, start, end)).rejects.toMatchObject({ code: 'permission-denied' });
+  expect(runs()).toHaveLength(0);
+  meta.didLastHistoryImport = now - 30 * 86400000;
+  await expect(startManualActivityHistory('owner', ServiceNames.GarminAPI, start, end)).resolves.toMatchObject({ active: true });
+  expect(runs()).toHaveLength(1);
 });
