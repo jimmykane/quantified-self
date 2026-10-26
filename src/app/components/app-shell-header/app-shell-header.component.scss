@@ -9,7 +9,7 @@
   align-items: center;
   min-height: 64px;
   height: auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   box-sizing: border-box;
   /* Standard toolbar height */
@@ -190,8 +190,9 @@ nav button.hamburger-link {
 
 @media (max-width: 480px) {
   .custom-header { padding-inline: 8px; }
+  .right { margin-left: 4px; }
   nav button.hamburger-link { margin-right: 4px; }
-  mat-icon.header-logo { margin-left: 8px; width: 28px; height: 28px; }
+  mat-icon.header-logo { margin-left: 4px; width: 28px; height: 28px; flex-shrink: 0; }
 }
 
 /* Dark Theme Overrides */

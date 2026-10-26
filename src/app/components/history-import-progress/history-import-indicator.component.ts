@@ -6,12 +6,13 @@ import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-s
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportPanelComponent } from './history-import-panel.component';
 
 @Component({selector: 'app-history-import-indicator', standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatDialogModule, MatBottomSheetModule],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatDialogModule, MatBottomSheetModule, MatTooltipModule],
   templateUrl: './history-import-indicator.component.html', styleUrl: './history-import-indicator.component.scss',
   host: {'[style.display]': 'view().items.length ? null : "none"'}})
 export class HistoryImportIndicatorComponent {

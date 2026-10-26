@@ -3,8 +3,10 @@
 ## App header progress
 
 Provider history uses a lazy authenticated text action and the same live cards on the owner's Dashboard and in its
-Material panel/bottom sheet. Status labels wrap on phones. Header actions may wrap when local processing, upload or
-admin actions compete for space; `AppShellHeaderComponent` reports the measured header height so shell content,
+Material panel/bottom sheet. The status uses a compact 40 px action, a 12 px icon and a single-line label. Under crowding,
+only its label truncates; the provider count remains visible and hover/focus reveals the full status. Phone action gaps
+are tighter so import status, local processing and account actions share one row at 320 px. `AppShellHeaderComponent`
+reports the measured header height so shell content,
 navigation offsets and scroll hiding remain aligned. The default remains 64 px. No additional provider work starts
 when the header, cards or details panel render. See [history progress](connection-history-import.md#shared-header-and-dashboard-progress).
 
