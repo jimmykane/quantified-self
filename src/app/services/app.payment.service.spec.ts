@@ -608,6 +608,7 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.trial_period_days).toBe(14);
+            expect(payload.checkout_terms_version).toBe('pro-trial-payment-method-v1');
             expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);

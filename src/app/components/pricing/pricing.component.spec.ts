@@ -1196,17 +1196,17 @@ describe('PricingComponent', () => {
         expect(component.getEligibleTrialDays(product, recurringPrice)).toBeNull();
     });
 
-    it('should render trial copy with the configured trial days on paid plans for eligible users', async () => {
+    it.each(['basic', 'pro'])('renders the configured trial and correct payment terms for eligible %s members', async role => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const recurringPaidProduct: StripeProduct = {
-            id: 'prod_basic',
+            id: `prod_${role}`,
             active: true,
             name: 'Basic',
             description: 'Basic plan',
-            role: 'basic',
+            role,
             images: [],
-            metadata: { role: 'basic' },
+            metadata: { role },
             prices: [{
                 id: 'price_basic',
                 active: true,
@@ -1231,7 +1231,14 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('30-day free trial for eligible new members');
-        expect(content).toContain('No card needed.');
+        if (role === 'pro') {
+            expect(content).toContain('Payment method required.');
+            expect(content).toContain('Cancel before your trial ends to avoid payment.');
+            expect(content).not.toContain('No card needed.');
+        } else {
+            expect(content).toContain('No card needed.');
+            expect(content).not.toContain('Payment method required.');
+        }
     });
 
     it('should not render trial copy for returning users with paid history', async () => {

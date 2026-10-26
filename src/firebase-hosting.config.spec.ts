@@ -255,6 +255,7 @@ describe('Firebase Hosting configuration', () => {
       ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
     ]);
     // Includes contextual provider offers, trial review and paginated Connections navigation.
+    // Includes the Pro trial payment-method and cancellation terms refreshed today.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-25');
   });
 

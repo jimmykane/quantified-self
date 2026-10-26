@@ -13,6 +13,7 @@ import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '@shared/stripe-checkout-terms';
 
 export interface StripeProduct {
     id: string;
@@ -74,6 +75,7 @@ interface CheckoutSessionPayload {
     mode: CheckoutMode;
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
+    checkout_terms_version: typeof STRIPE_CHECKOUT_TERMS_VERSION;
     payment_method_collection?: 'if_required';
     trial_period_days?: number;
     promotion_code?: string;
@@ -547,7 +549,8 @@ export class AppPaymentService {
             allow_promotion_codes: true,
             mode: checkoutInput.mode,
             automatic_tax: { enabled: true },
-            metadata: { firebaseUID: userId }
+            metadata: { firebaseUID: userId },
+            checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION,
         };
 
         if (checkoutInput.mode === 'subscription') {

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { root, readLocalEnvironment, project } from './local.mjs';
+import { assertProTrialCheckout } from './test-mode-verification.mjs';
 Object.assign(process.env, readLocalEnvironment());
 // Fixture evidence is one local journal; reject overlapping driver processes.
 const lockFile = resolve(root, '.local/stripe-billing/fixture-driver.lock');
@@ -66,15 +67,35 @@ async function seed() {
     const promotion = await stripe.promotionCodes.create({ promotion: { type: 'coupon', coupon: coupon.id }, code: `QSTEST${state.run.slice(0, 10)}` });
     state.prices = { monthly, yearly, once }; state.products = [basic, pro]; state.promotion = promotion.code; save();
   }
+  if (!state.prices.proTrial) {
+    const pro = state.products.find(product => product.metadata.firebaseRole === 'pro');
+    assert.ok(pro, 'Seed a synthetic Pro product first.');
+    state.prices.proTrial = await stripe.prices.create({ product: pro.id, unit_amount: 1000, currency: 'eur',
+      recurring: { interval: 'month' }, tax_behavior: 'exclusive', metadata: { trial_days: '7' } });
+    save();
+  }
+  if (!state.prices.proTrialYearly) {
+    const pro = state.products.find(product => product.metadata.firebaseRole === 'pro');
+    assert.ok(pro, 'Seed a synthetic Pro product first.');
+    state.prices.proTrialYearly = await stripe.prices.create({ product: pro.id, unit_amount: 10000, currency: 'eur',
+      recurring: { interval: 'year' }, tax_behavior: 'exclusive', metadata: { trial_days: '7' } });
+    save();
+  }
   const { priceProjections, productProjection } = require('./lib/functions/src/stripe/billing/projections');
   for (const projection of [...state.products.map(productProjection), ...Object.values(state.prices).flatMap(priceProjections)]) await db.doc(projection.path).set(projection.data);
   console.log('Synthetic test catalog and local admission seeded.');
 }
-async function checkout(label, mode, trial) {
-  const fixture = await user(label); const requestId = randomUUID().replaceAll('-', '');
-  const data = { price: mode === 'payment' ? state.prices.once.id : state.prices.monthly.id, mode,
+async function checkout(label, mode, trial, yearly = false) {
+  assert.ok(!trial || mode === 'subscription', 'A trial requires subscription mode.');
+  assert.ok(!yearly || trial, 'The yearly trial fixture requires --trial.');
+  const trialPrice = yearly ? state.prices.proTrialYearly : state.prices.proTrial;
+  assert.ok(!trial || trialPrice, 'Run seed to create the Pro trial fixture.');
+  const fixture = await user(label, trial); const requestId = randomUUID().replaceAll('-', '');
+  assert.ok(!trial || fixture.clockId, 'Use a fresh trial label to create a test-clock customer.');
+  const data = { price: mode === 'payment' ? state.prices.once.id : trial ? trialPrice.id : state.prices.monthly.id, mode,
     success_url: 'http://127.0.0.1:4210/payment/success', cancel_url: 'http://127.0.0.1:4210/payment/cancel',
     allow_promotion_codes: true, automatic_tax: { enabled: true }, metadata: { firebaseUID: fixture.uid },
+    checkout_terms_version: 'pro-trial-payment-method-v1',
     ...(trial ? { trial_period_days: 7, payment_method_collection: 'if_required' } : {}) };
   // Authenticated REST create exercises the deployed emulator Rules as a cached client would.
   const field = value => typeof value === 'string' ? { stringValue: value } : typeof value === 'boolean' ? { booleanValue: value }
@@ -96,9 +117,22 @@ async function verify(label) {
     const payment = await until(async () => (await db.doc(`customers/${fixture.uid}/payments/${session.payment_intent}`).get()).data(), value => value?.status === 'succeeded', 'payment synchronization');
     assert.equal(payment.prices.length, 1); assert.equal(payment.items.length, 1);
   } else {
+    // A retry can rebuild the local checkout result. Identify its trial from
+    // the immutable original request, never a transient driver flag or label.
+    const request = await db.doc(`customers/${fixture.uid}/checkout_sessions/${fixture.checkout.requestId}`).get();
+    assert.ok(request.exists, 'The original checkout request is required for verification.');
+    const proTrial = [state.prices.proTrial?.id, state.prices.proTrialYearly?.id].includes(request.get('price'))
+      && request.get('trial_period_days') > 0;
     const sub = await until(async () => (await db.doc(`customers/${fixture.uid}/subscriptions/${session.subscription}`).get()).data(), value => ['active', 'trialing'].includes(value?.status), 'subscription synchronization');
-    assert.equal(sub.role, 'basic'); assert.ok(sub.current_period_end?.toMillis() > 0);
-    await until(async () => (await app.auth().getUser(fixture.uid)).customClaims, value => value?.stripeRole === 'basic', 'claim reconciliation');
+    const role = proTrial ? 'pro' : 'basic';
+    assert.equal(sub.role, role); assert.ok(sub.current_period_end?.toMillis() > 0);
+    if (proTrial) {
+      const subscription = await stripe.subscriptions.retrieve(session.subscription);
+      const customer = await stripe.customers.retrieve(fixture.customerId);
+      const invoice = await stripe.invoices.retrieve(subscription.latest_invoice);
+      assertProTrialCheckout({ session, subscription, customer, invoice });
+    }
+    await until(async () => (await app.auth().getUser(fixture.uid)).customClaims, value => value?.stripeRole === role, 'claim reconciliation');
     await until(async () => (await db.doc(`mail/welcome_email_${session.subscription}`).get()).exists, value => value, 'welcome email outbox');
   }
   const portal = await callable('createStripePortalLink', fixture, { returnUrl: 'http://127.0.0.1:4210/subscriptions' });
@@ -254,12 +288,12 @@ async function retryCheckout(label) {
 try {
   const [command, label = 'first'] = process.argv.slice(2);
   if (command === 'seed') await seed();
-  else if (command === 'checkout') await checkout(label, process.argv[4] ?? 'subscription', process.argv.includes('--trial'));
+  else if (command === 'checkout') await checkout(label, process.argv[4] ?? 'subscription', process.argv.includes('--trial'), process.argv.includes('--yearly'));
   else if (command === 'verify') await verify(label);
   else if (command === 'lifecycle') await lifecycle();
   else if (command === 'policy') await policy(label);
   else if (command === 'retry') await retryCheckout(label);
-  else throw new Error('Use seed, checkout LABEL [subscription|payment] [--trial], verify LABEL, policy LABEL, lifecycle, or retry LABEL.');
+  else throw new Error('Use seed, checkout LABEL [subscription|payment] [--trial [--yearly]], verify LABEL, policy LABEL, lifecycle, or retry LABEL.');
 } catch (error) {
   // Fixed test-driver messages contain no provider bodies, credentials or customer data.
   if (error.type?.startsWith('Stripe')) console.error(`Stripe test fixture failed (${error.type}, ${error.code ?? 'no_code'}, parameter ${error.param ?? 'none'}).`);

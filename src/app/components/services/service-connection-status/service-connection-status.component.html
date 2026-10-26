@@ -21,7 +21,7 @@
       <a mat-flat-button class="qs-mat-primary" [routerLink]="['/subscriptions']" [queryParams]="{priceId: offer.priceId}" appHapticTap>
         <mat-icon>arrow_forward</mat-icon>{{ offer.trialDays !== null ? 'Try Pro free for ' + offer.trialDays + (offer.trialDays === 1 ? ' day' : ' days') : 'Get Pro' }}
       </a>
-      <p>{{ offer.trialDays !== null ? 'No card needed. Review billing terms before you start.' : 'Review current prices and billing terms.' }}</p>
+      <p>{{ offer.trialDays !== null ? 'Payment method required. Review billing terms before you start.' : 'Review current prices and billing terms.' }}</p>
       <a mat-button routerLink="/dashboard" appHapticTap>{{ keepPlanLabel() }}</a>
     </div>
     <ul class="membership-offer__benefits">

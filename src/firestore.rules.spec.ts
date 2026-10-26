@@ -663,9 +663,15 @@ describe('Firestore Security Rules', () => {
             { customer: 'cus_forged' }, { price: 'price_unknown' }, { trial_period_days: 730 },
             { sessionId: 'cs_forged' }, { url: 'https://attacker.example' }, { mode: 'payment' },
             { metadata: { firebaseUID: 'other' } }, { automatic_tax: { enabled: false } },
-            { success_url: 'https://attacker.example/' }, { error: { message: 'forged' } }
+            { success_url: 'https://attacker.example/' }, { error: { message: 'forged' } },
+            { checkout_terms_version: 'future' }, { checkout_terms_version: null }, { payment_method_collection: 'always' }
         ])('rejects forged checkout fields %j', async patch => {
             await assertFails(testEnv.authenticatedContext(uid).firestore().doc(path).set({ ...payload, ...patch }));
+        });
+        it('accepts the current offer acknowledgement while leaving billing policy server-owned', async () => {
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertSucceeds(ref.set({ ...payload, checkout_terms_version: 'pro-trial-payment-method-v1' }));
+            await assertFails(ref.update({ checkout_terms_version: 'future' }));
         });
         it('blocks cached clients during maintenance and account deletion', async () => {
             const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
