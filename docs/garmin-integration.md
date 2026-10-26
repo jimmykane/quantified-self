@@ -85,6 +85,31 @@ provider bodies or signed URL text. Parser work limits are a separate concern.
 
 ### Health worker diagnostics
 
+Daily heart-rate normalization keeps the inclusive sample interval from zero through the declared
+`durationInSeconds`. Garmin can return later heart-rate offsets alongside otherwise valid daily data. After
+validating the complete raw map, its sample count, offset syntax and numeric values, the mapper discards only
+those later points and imports the remaining samples and scalar metrics. It does not extend the source interval,
+clamp timestamps, fill gaps or reinterpret other summary families. Retained sample counts drive coverage; a
+summary with no retained samples can still import its scalar metrics. Invalid sample values/shapes and input
+limits retain their existing terminal validation behavior, including when the invalid value has a later offset.
+
+`[HealthSync][Garmin] Discarded out-of-interval Daily heart-rate samples.` emits at most one WARNING per successfully
+mapped callback. Its fixed `summaryType`, `field` and `reason` plus `affectedSummaryCount` and
+`discardedSampleCount` contain no health values, dates, identifiers, raw offsets, payloads or credentials. Counts
+are bounded by the existing 10,000-summary and 20,000-sample-per-summary caps. Logging failure cannot turn
+successful mapping into a retry. Diagnostics and discarded points do not enter normalized records, revision
+digests or checkpoints; a later interval expansion that admits new samples changes the content digest normally.
+
+Monitoring coverage is **unchanged** after reviewing `tools/health-sleep-monitoring/definitions.mjs` and the
+[Health/Sleep runbook](sleep-sync-operations.md#cloud-monitoring-830): the existing Garmin `sleep_sync` worker,
+committed completion/retry/DLQ outcomes, actionable backlog and missing/unknown observations remain authoritative.
+The normalization WARNING is an operator diagnostic, not a new failure metric or evidence of committed ingestion.
+Malformed records still use the guarded failed-state/DLQ path. No queue, schedule, retry, lease, lifecycle, metric,
+dashboard or alert-policy change is required. Existing Help coverage/gap guidance remains accurate; Health/MCP
+metric semantics, schemas and consent are unchanged. Release only `processSleepSyncTask` after separate approval;
+reverting that Function revision restores strict whole-summary rejection. Existing failed jobs are not replayed
+or rewritten by deployment and require separately authorized, lifecycle-checked recovery.
+
 Health worker ERROR diagnostics distinguish token refresh, legacy identity lookup, callback request/mapping,
 Health writes, checkpoints and sync-state writes using `failureStage`. Only typed request errors can report a validated
 `providerStatusCode`; internal failures retain allowlisted RPC/transport codes instead. Correlate by `queueItemId`

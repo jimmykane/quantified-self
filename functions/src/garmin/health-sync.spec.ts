@@ -8,7 +8,10 @@ const hoisted = vi.hoisted(() => ({
   captureGuards: vi.fn(),
   guardsContinuous: vi.fn(),
   tokenMatchesGuard: vi.fn(),
+  loggerWarn: vi.fn(),
 }));
+
+vi.mock('firebase-functions/logger', () => ({ warn: hoisted.loggerWarn }));
 
 vi.mock('../tokens', () => ({
   getTokenData: hoisted.getTokenData,
@@ -44,6 +47,7 @@ import {
 } from './health-sync';
 import { ResponseBodyTooLargeError } from '../request-helper';
 import { GarminHealthAccountValidationError } from './health-lifecycle';
+import { validateHealthSourceRecordInput } from '../health/validation';
 
 function lifecycleGuards(providerIdentityPinned = true) {
   return {
@@ -167,6 +171,7 @@ describe('Garmin Health callback synchronization', () => {
         'garmin-user-1',
         1_777_424_460_000,
         Date.now(),
+        expect.any(Function),
       );
       expect(result.lifecycleGuards).toMatchObject({
         connectionStateGeneration: 'connection-generation-1',
@@ -235,6 +240,7 @@ describe('Garmin Health callback synchronization', () => {
       'garmin-user-1',
       1_777_424_460_000,
       receivedAtMs,
+      expect.any(Function),
     );
     expect(resumed.continuation).toEqual({
       payloadDigest: first.continuation.payloadDigest,
@@ -269,6 +275,58 @@ describe('Garmin Health callback synchronization', () => {
     expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, expect.objectContaining({
       url: queueItem().callbackURL,
     }));
+  });
+
+  it.each([false, true])('imports valid Daily content with private bounds diagnostics (logger fails: %s)', async loggerFails => {
+    const actual = await vi.importActual<typeof import('./health')>('./health');
+    hoisted.mapGarminHealthSummaries.mockImplementation(actual.mapGarminHealthSummaries);
+    hoisted.requestGet.mockResolvedValue([{
+      summaryId: 'private-provider-summary', userId: 'garmin-user-1', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 60, steps: 123,
+      timeOffsetHeartRateSamples: { 15: 70, 60: 72, 72: 80 },
+    }]);
+    if (loggerFails) hoisted.loggerWarn.mockImplementationOnce(() => { throw new Error('synthetic logging outage'); });
+
+    const result = await processGarminHealthQueueItem(queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards());
+
+    expect(result.healthResults).toHaveLength(1);
+    expect(result.healthResults[0].input.sampleSeries[0].offsetMs).toEqual([15_000, 60_000]);
+    validateHealthSourceRecordInput(result.healthResults[0].input);
+    expect(result.lifecycleGuards).toEqual(lifecycleGuards());
+    expect(hoisted.captureGuards).toHaveBeenCalledTimes(2);
+    expect(hoisted.loggerWarn).toHaveBeenCalledExactlyOnceWith(
+      '[HealthSync][Garmin] Discarded out-of-interval Daily heart-rate samples.',
+      { summaryType: 'dailies', field: 'timeOffsetHeartRateSamples', reason: 'samples_outside_summary_interval',
+        affectedSummaryCount: 1, discardedSampleCount: 1 },
+    );
+    const logs = JSON.stringify(hoisted.loggerWarn.mock.calls);
+    for (const privateValue of ['private-provider-summary', 'garmin-user-1', 'test-user', 'garmin-access-token',
+      'garmin-pull-token', '2025-10-09', '1760000000']) expect(logs).not.toContain(privateValue);
+  });
+
+  it('resumes unchanged normalized content and restarts when the monitoring interval grows', async () => {
+    const actual = await vi.importActual<typeof import('./health')>('./health');
+    hoisted.mapGarminHealthSummaries.mockImplementation(actual.mapGarminHealthSummaries);
+    const summary = { summaryId: 'synthetic-summary', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 60, steps: 123,
+      timeOffsetHeartRateSamples: { 15: 70, 61: 80 } };
+    hoisted.requestGet.mockResolvedValueOnce([summary]);
+    const first = await processGarminHealthQueueItem(queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards());
+    const resumedItem = { ...queueItem(), garminHealthWriteCursor: 1,
+      garminHealthPayloadDigest: first.continuation.payloadDigest,
+      garminHealthReceivedAtMs: first.continuation.receivedAtMs, garminHealthRecordsWritten: 1 };
+    const changedTail = { ...summary, timeOffsetHeartRateSamples: { 15: 70, 90: 90 } };
+    hoisted.requestGet.mockResolvedValueOnce([changedTail]);
+
+    const resumed = await processGarminHealthQueueItem(resumedItem, tokenSnapshot(), 'test-user', lifecycleGuards());
+    expect(resumed.continuation).toMatchObject({ payloadDigest: first.continuation.payloadDigest,
+      startIndex: 1, recordsWritten: 1 });
+
+    hoisted.requestGet.mockResolvedValueOnce([{ ...changedTail, durationInSeconds: 90 }]);
+    const expanded = await processGarminHealthQueueItem(resumedItem, tokenSnapshot(), 'test-user', lifecycleGuards());
+    expect(expanded.continuation.payloadDigest).not.toBe(first.continuation.payloadDigest);
+    expect(expanded.continuation).toMatchObject({ startIndex: 0, recordsWritten: 0 });
+    expect(expanded.healthResults[0].input.sampleSeries[0].offsetMs).toEqual([15_000, 90_000]);
   });
 
   it('rejects a legacy identity mismatch before requesting callback data', async () => {
