@@ -33,6 +33,7 @@ const MAX_PROVIDER_MINIMUM_ADJUSTMENTS_PER_BATCH = 3;
 interface BackfillRequest {
   startDate: string; // ISO Dates
   endDate: string;
+  background?: boolean;
 }
 
 export class GarminHistoryRangeUnavailableError extends Error {
@@ -350,6 +351,9 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
+  if (data?.background !== undefined && typeof data.background !== 'boolean') {
+    throw new functions.https.HttpsError('invalid-argument', 'background must be a boolean.');
+  }
   const startDate = new Date(data?.startDate);
   const endDate = new Date(data?.endDate);
 
@@ -378,8 +382,14 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     );
   }
 
+  if (data.background === true) {
+    const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+    const historyImport = await startManualActivityHistory(userID, ServiceNames.GarminAPI, startDate, endDate);
+    if (historyImport) return { result: 'History import accepted', historyImport };
+  }
+
   try {
-    await processGarminBackfill(userID, startDate, endDate);
+    return await processGarminBackfill(userID, startDate, endDate);
   } catch (error: unknown) {
     const errorMessage = getErrorMessage(error);
     if (error instanceof GarminHistoryImportCooldownError) {

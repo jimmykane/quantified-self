@@ -1426,7 +1426,7 @@ export class AppUserService implements OnDestroy {
         break;
       case ServiceNames.GarminAPI:
         functionName = 'backfillGarminAPIActivities';
-        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString(), background: true };
         break;
       case ServiceNames.SuuntoApp:
         functionName = 'addSuuntoAppHistoryToQueue';

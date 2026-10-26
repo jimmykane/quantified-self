@@ -2752,7 +2752,8 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPIActivities', {
                     startDate: startDate.toISOString(),
-                    endDate: endDate.toISOString()
+                    endDate: endDate.toISOString(),
+                    background: true,
                 }, { canExecute: expect.any(Function) });
             });
 
