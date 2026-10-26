@@ -71,7 +71,8 @@ interface Operation { key: string; startedAt: Timestamp; params: DocumentData; r
   replacement?: { operation: string; sessionId: string }; replacedBy?: string; completed?: boolean;
   selection?: { requestId: string; createdAt: Timestamp } }
 
-async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, uid: string, name: string, params: DocumentData): Promise<Operation> {
+async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, uid: string, name: string, params: DocumentData,
+  checkout?: { customer: string; expectedActive: string | undefined }): Promise<Operation> {
   return ctx.db.runTransaction(async tx => {
     await checkLease(tx, lease, now(ctx));
     const guard = await getUserDeletionGuardStateInTransaction(ctx.db, tx, uid);
@@ -80,10 +81,19 @@ async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, u
     const [account, operation, control] = await tx.getAll(root, ref, ctx.db.doc(BILLING_CONTROL));
     if (billingControl(control.data()).owner !== 'native') throw new BillingError('maintenance', true);
     if (guard.shouldSkip || account.get('deleting')) throw new BillingError('account_unavailable');
+    if (checkout) {
+      const [binding, source] = await tx.getAll(ctx.db.doc(`customers/${uid}`),
+        ctx.db.doc(`customers/${uid}/checkout_sessions/${name.slice('checkout_'.length)}`));
+      if (!source.exists) throw new BillingError('account_unavailable');
+      if (binding.get('stripeId') !== checkout.customer) throw new BillingError('customer_conflict');
+      if (account.get('activeCheckout') !== checkout.expectedActive) throw new BillingError('operation_uncertain');
+    }
     if (operation.exists) return operation.data() as Operation;
     const key = billingId(uid, name, randomUUID());
     const data: Operation = { key, startedAt: Timestamp.fromMillis(now(ctx)), params };
-    tx.set(root, { uid }, { merge: true });
+    // Persist both sides of the reservation together. If the commit reply is
+    // lost, retry must find this operation active, not its retired predecessor.
+    tx.set(root, { uid, ...(checkout ? { activeCheckout: name } : {}) }, { merge: true });
     tx.create(ref, data);
     return data;
   });
@@ -355,7 +365,7 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
     }
   }
   const params = saved?.params ?? await checkoutParameters(ctx, lease, uid, customer, request);
-  const operation = saved ?? await reserveOperation(ctx, lease, uid, name, params);
+  const operation = saved ?? await reserveOperation(ctx, lease, uid, name, params, { customer, expectedActive: active });
   if (operation.params.customer !== customer) throw new BillingError('customer_conflict');
   if (operation.rejected) throw new BillingError('checkout_rejected');
   if (operation.replacement && !operation.result) {

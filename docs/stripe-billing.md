@@ -85,6 +85,11 @@ Monitoring coverage is **unchanged**: this uses the same admission trigger, priv
 
 Private `stripeBillingAccounts/{uid}/operations/*` records freeze customer/checkout parameters and idempotency keys before POSTs. A customer-wide lease serializes checkout, portal, webhook projection and deletion. A single catalog lease serializes related product/price updates. Lease duration exceeds worker timeout; transactions verify the token. Every independent normal Stripe call rechecks deletion/ownership, and persistence rechecks inside its transaction.
 
+Every new checkout reservation commits its operation and `activeCheckout` pointer together, including the first
+checkout and a later selection after rejection, expiry or cancellation. The transaction verifies the expected previous
+pointer, trusted customer binding, source request, lease, processor ownership and deletion guard. A lost commit reply
+therefore resumes the same frozen parameters/key; it cannot leave the new operation pointing at its retired predecessor.
+
 Lost customer replies are reconciled using operation metadata search, then the original key within 23 hours. Lost checkout replies retry identical parameters/key; after 23 hours they require a uniquely matching session in a bounded customer query. Incomplete/ambiguous reconciliation stops with `operation_uncertain`. Never delete a journal or mint a replacement operation to bypass this state. A definitive Stripe HTTP 400 content rejection is reconciled against the bounded customer session list. Only after confirming no matching session, the original journal is marked rejected. Its `activeCheckout` pointer remains an ordering fence: a later browser request may create a separate operation, but an older queued selection cannot revive. Network errors, 409 conflicts, idempotency errors and 5xx responses never authorize another operation. An open session is reused only for a fresh request with a matching current offer after catalog/history validation, as described above; a checkout with an unknown remote identity blocks replacement. A known open session can be replaced only through the journaled flow below. Recovery of a saved operation cannot substitute a newer operation or overwrite its active reservation. Every retrieved session must still belong to the current trusted customer binding, including a retained session from another request. A mismatch fails with `customer_conflict` before returning a URL or creating a replacement checkout.
 
 `stripeBillingWebhook` verifies `rawBody` and `Stripe-Signature`, rejects Connect/mode mismatches, and writes a minimal event reference plus pending outbox state atomically before HTTP 200. Unsupported/unowned events are deliberately skipped. No raw payload is retained. A storage/admission failure returns 503. Each `stripeBillingJobs/{sha256}` receipt deduplicates the Stripe event ID. The private `processStripeBillingTask` retrieves current Stripe objects, validates customer identity, skips unchanged projections, and commits projections plus completion in one transaction. Reordered events therefore converge on current state.
@@ -153,7 +158,7 @@ entrypoint, MCP or Training surface is added. Release requires the existing work
 frontend; the current Rules already reject client-supplied status/result fields. Local implementation authorizes no deploy.
 
 Emulator regressions cover annual/monthly and Basic/Pro switching, one-time payments, same-offer reuse, concurrent tabs,
-late retries, lost expiry/create replies, completed-session races, invalid offers, returning canceled subscriptions,
+late retries, lost reservation/expiry/create replies, completed-session races, invalid offers, returning canceled subscriptions,
 retry exhaustion and account deletion. To verify the real Stripe expiry contract without charging anything, run
 `node tools/stripe-billing/test-mode.mjs switch-checkout FRESH_LABEL` after `seed` in the existing local sandbox. The
 command creates synthetic test-mode sessions, confirms that each replaced link is expired and exactly one remains

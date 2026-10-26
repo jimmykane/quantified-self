@@ -359,6 +359,45 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect((await fresh.ref.get()).get('url')).toBeTruthy();
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(3);
   });
+  it.each(['none', 'rejected', 'expired', 'canceled', 'open'])('recovers a lost reservation reply with a %s predecessor', async predecessor => {
+    const f = await fixture();
+    if (predecessor !== 'none') {
+      if (predecessor === 'rejected') f.stripe.checkout.sessions.create.mockRejectedValueOnce({ type: 'StripeInvalidRequestError', statusCode: 400 });
+      await f.run((await f.admit())!);
+      if (predecessor === 'expired') [...f.sessions.values()][0].status = 'expired';
+      if (predecessor === 'canceled') {
+        const session = [...f.sessions.values()][0]; session.status = 'complete'; session.subscription = f.sub.id;
+        f.sub.status = 'canceled'; f.stripe.subscriptions.list.mockResolvedValue({ data: [f.sub], has_more: false });
+      }
+    }
+    const next = await nextRequest(f, predecessor === 'open' ? await changePrice(f) : f.request);
+    const callsBefore = f.stripe.checkout.sessions.create.mock.calls.length;
+    const transaction = db.runTransaction.bind(db);
+    let injected = false;
+    const spy = vi.spyOn(db, 'runTransaction').mockImplementation(async (...args) => {
+      const result = await transaction(...args);
+      if (!injected && (await next.operation.get()).exists) {
+        injected = true;
+        throw new Error('synthetic lost reservation reply');
+      }
+      return result;
+    });
+    try { await expect(f.run(next.id)).rejects.toThrow(); }
+    finally { spy.mockRestore(); }
+    expect(injected).toBe(true);
+    const frozen = (await next.operation.get()).data()!;
+    expect((await db.doc(`${BILLING_JOBS}/${next.id}`).get()).get('state')).toBe('pending');
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${next.requestId}`);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(callsBefore);
+    await f.readyRetry(next.id); await f.run(next.id);
+    expect((await db.doc(`${BILLING_JOBS}/${next.id}`).get()).get('state')).toBe('done');
+    expect((await next.ref.get()).get('url')).toBeTruthy();
+    expect((await next.ref.get()).get('error')).toBeNull();
+    expect((await next.operation.get()).get('key')).toBe(frozen.key);
+    expect((await next.operation.get()).get('params')).toEqual(frozen.params);
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(callsBefore + 1);
+    expect(f.stripe.checkout.sessions.create.mock.lastCall![1].idempotencyKey).toBe(frozen.key);
+  });
   it('retains selection order when a completed checkout restores its predecessor', async () => {
     const f = await fixture(); await f.run((await f.admit())!);
     const older = await nextRequest(f);
