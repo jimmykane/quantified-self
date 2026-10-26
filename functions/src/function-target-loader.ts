@@ -36,6 +36,13 @@ const loadActivityImportDispatchers = (): FunctionModule =>
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   linkExistingStripeCustomer: () => module.require('./stripe/claims') as FunctionModule,
+  restoreUserClaims: () => module.require('./stripe/claims') as FunctionModule,
+  getUpcomingRenewalAmount: () => module.require('./stripe/get-upcoming-renewal-amount') as FunctionModule,
+  onSubscriptionUpdated: () => module.require('./stripe/subscriptions') as FunctionModule,
+  enforceSubscriptionLimits: () => module.require('./schedule/enforce-subscription-limits') as FunctionModule,
+  checkSubscriptionNotifications: () => module.require('./schedule/notifications') as FunctionModule,
+  cleanupStripeCustomer: () => module.require('./stripe/cleanup') as FunctionModule,
+  cleanupUserAccounts: () => module.require('./users/cleanup') as FunctionModule,
   'createStripeCheckoutSession': () => module.require('./stripe/billing/handlers') as FunctionModule,
   'createStripePortalLink': () => module.require('./stripe/billing/handlers') as FunctionModule,
   'ext-firestore-stripe-payments-createPortalLink': () => module.require('./stripe/billing/handlers') as FunctionModule,

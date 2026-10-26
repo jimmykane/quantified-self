@@ -9,9 +9,16 @@ describe('function target loader', () => {
   it('resolves the dotted Firebase compatibility runtime target', () => {
     expect(resolveRuntimeFunctionTarget({ FUNCTION_TARGET: 'ext.firestore.stripe.payments.createPortalLink' })).toBe('ext-firestore-stripe-payments-createPortalLink');
   });
-  it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
+  it('optimizes the billing, MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'linkExistingStripeCustomer',
+      'restoreUserClaims',
+      'getUpcomingRenewalAmount',
+      'onSubscriptionUpdated',
+      'enforceSubscriptionLimits',
+      'checkSubscriptionNotifications',
+      'cleanupStripeCustomer',
+      'cleanupUserAccounts',
       'createStripeCheckoutSession',
       'createStripePortalLink',
       'ext-firestore-stripe-payments-createPortalLink',

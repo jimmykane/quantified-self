@@ -41,6 +41,24 @@ After maintenance admission and the recovery callable, each browser checkout att
 
 Monitoring coverage is **unchanged**: this optimization changes imports and browser preparation reads, not native admission, queue lifecycle, retry budgets, processing outcomes or metric labels. Existing billing monitoring continues to cover the same workers and outcomes. Validate startup with `npm --prefix functions run entrypoint:check` and `npm --prefix functions run entrypoint:benchmark`; verify actual checkout latency separately after an explicitly authorized release. Minimum instances remain at their existing defaults.
 
+### Billing entrypoint coverage
+
+All native billing handlers, both portal names, customer linking, admin billing/gift handlers and the following supporting Functions have direct owner-module loaders. Runtime startup exports only the requested handler; Firebase deployment discovery still exports the complete inventory.
+
+| Supporting Function | Owner module | Preserved runtime |
+| --- | --- | --- |
+| `restoreUserClaims` | `stripe/claims` | Gen 2 callable, europe-west2, default memory |
+| `getUpcomingRenewalAmount` | `stripe/get-upcoming-renewal-amount` | Gen 2 callable, europe-west2, 512 MiB |
+| `cleanupStripeCustomer` | `stripe/cleanup` | Gen 2 callable, europe-west2, default memory, 0–10 instances |
+| `onSubscriptionUpdated` | `stripe/subscriptions` | Gen 2 Firestore write, europe-west3, 512 MiB, concurrency 5, retries enabled |
+| `enforceSubscriptionLimits` | `schedule/enforce-subscription-limits` | Gen 2 daily schedule, europe-west2, 1 GiB, 540 seconds |
+| `checkSubscriptionNotifications` | `schedule/notifications` | Gen 2 daily schedule, europe-west2, 512 MiB |
+| `cleanupUserAccounts` | `users/cleanup` | Gen 1 Auth deletion, europe-west2, 1 GiB, 540 seconds, retries enabled |
+
+Renewal and stale-customer callables use the same lightweight CORS/App Check policy as linking and claim restoration. Subscription updates and enforcement retain their existing provider lifecycle dependencies. Account cleanup retains its provider dependencies, OAuth grant revocation and marketing-recipient removal; the import check permits only the three required MCP/marketing implementation modules. Its existing 1 GiB allocation remains unchanged. Isolation removes full-backend discovery from these runtime imports; it does not make every owner module equally small or change handler execution.
+
+Entrypoint verification compares each isolated handler's endpoint and trigger metadata with fresh full discovery, pins its runtime settings and secret names, and checks discovery and secret validation with inherited targets. The existing unit/emulator suites cover claims, grace periods, mail, provider enforcement and recursive account cleanup. Monitoring coverage is **unchanged**: this is import routing only, with no schedule, queue, retry, credential, claim-writer or deletion-policy changes. The app Help workflow is unchanged. These loaders take effect in production only after a separately authorized deployment of the affected targets.
+
 ## Payment methods for new Pro trials
 
 New ordinary Pro trial Checkouts use Stripe `payment_method_collection: 'always'`. This collects a reusable payment method before the free trial starts, without charging the subscription during the trial. It does not restrict the customer to credit cards: eligible debit cards and other dynamically enabled Stripe payment methods remain available. It cannot guarantee that a later payment succeeds. See [Stripe Checkout trials](https://docs.stripe.com/payments/checkout/free-trials) and the [Checkout API](https://docs.stripe.com/api/checkout/sessions/create#create_checkout_session-payment_method_collection).
