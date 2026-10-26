@@ -89,12 +89,18 @@ async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, u
       if (account.get('activeCheckout') !== checkout.expectedActive) throw new BillingError('operation_uncertain');
     }
     if (operation.exists) return operation.data() as Operation;
+    const previous = checkout?.expectedActive && checkout.expectedActive !== name
+      ? await tx.get(operationRef(ctx.db, uid, checkout.expectedActive)) : undefined;
     const key = billingId(uid, name, randomUUID());
     const data: Operation = { key, startedAt: Timestamp.fromMillis(now(ctx)), params };
     // Persist both sides of the reservation together. If the commit reply is
     // lost, retry must find this operation active, not its retired predecessor.
     tx.set(root, { uid, ...(checkout ? { activeCheckout: name } : {}) }, { merge: true });
     tx.create(ref, data);
+    // The caller has resolved this predecessor as rejected, expired or complete.
+    // Retain that supersession so late retries skip instead of raising an
+    // uncertain-operation failure after the successor has already started.
+    if (previous?.exists) tx.update(previous.ref, { replacedBy: name });
     return data;
   });
 }

@@ -388,6 +388,8 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     const frozen = (await next.operation.get()).data()!;
     expect((await db.doc(`${BILLING_JOBS}/${next.id}`).get()).get('state')).toBe('pending');
     expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${next.requestId}`);
+    if (predecessor !== 'none') expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get())
+      .get('replacedBy')).toBe(`checkout_${next.requestId}`);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(callsBefore);
     await f.readyRetry(next.id); await f.run(next.id);
     expect((await db.doc(`${BILLING_JOBS}/${next.id}`).get()).get('state')).toBe('done');
@@ -436,6 +438,37 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     finally { await releaseBillingLease(db, lease); }
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+  });
+  it.each(['rejected', 'expired', 'complete', 'canceled'])('skips a delayed retry of a %s checkout after a later purchase starts', async status => {
+    const f = await fixture(status === 'canceled' ? 'subscription' : 'payment'), id = (await f.admit())!;
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try {
+      // The provider result is checkpointed, but the worker stops before
+      // committing the public result and finishing its job.
+      if (status === 'rejected') {
+        f.stripe.checkout.sessions.create.mockRejectedValueOnce({ type: 'StripeInvalidRequestError', statusCode: 400 });
+        await expect(createBillingCheckout(f.ctx, lease, f.uid, f.requestId, f.request)).rejects.toMatchObject({ code: 'checkout_rejected' });
+      } else await createBillingCheckout(f.ctx, lease, f.uid, f.requestId, f.request);
+    } finally { await releaseBillingLease(db, lease); }
+    const previous = [...f.sessions.values()][0];
+    if (previous) { previous.status = status === 'canceled' ? 'complete' : status; previous.url = null; }
+    if (status === 'canceled') {
+      previous.subscription = f.sub.id;
+      f.sub.status = 'canceled'; f.stripe.subscriptions.list.mockResolvedValue({ data: [f.sub], has_more: false });
+    }
+    const next = await nextRequest(f); await f.run(next.id);
+    const successor = (await next.operation.get()).data();
+    const warn = vi.mocked(logger.warn); warn.mockClear();
+    await f.run(id);
+    expect((await f.ref.get()).get('error.code')).toBe('checkout_replaced');
+    expect((await db.doc(`${BILLING_JOBS}/${id}`).get()).get('state')).toBe('skipped');
+    expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${next.requestId}`);
+    expect((await next.operation.get()).data()).toEqual(successor);
+    expect((await next.ref.get()).get('status')).toBe('ready');
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
   });
   it('fences replacement creation when the account is deleted during expiration', async () => {
     const f = await fixture(); await f.run((await f.admit())!);
@@ -620,7 +653,7 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect((await ref.get()).get('url')).toBeUndefined();
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
   });
-  it('never recovers an original operation using a newer open checkout or overwrites its reservation', async () => {
+  it.each([true, false])('never replaces a newer reservation while recovering an old operation (confirmed supersession=%s)', async confirmed => {
     const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
     const data = { ...f.request, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION, trial_period_days: 7 };
     await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
@@ -629,12 +662,15 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     const next = unique(), ref = db.doc(`customers/${f.uid}/checkout_sessions/${next}`);
     await ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, next, data, Timestamp.now()))!);
     const newer = (await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).data();
+    const originalRef = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+    // Older journals without the supersession marker must still fail closed.
+    if (!confirmed) await originalRef.update({ replacedBy: admin.firestore.FieldValue.delete() });
     const lease = await acquireBillingLease(db, `customer:${f.uid}`);
     try {
-      await expect(createBillingCheckout(f.ctx, lease, f.uid, f.requestId, data)).rejects.toMatchObject({ code: 'operation_uncertain' });
+      await expect(createBillingCheckout(f.ctx, lease, f.uid, f.requestId, data)).rejects.toMatchObject({ code: confirmed ? 'checkout_replaced' : 'operation_uncertain' });
     } finally { await releaseBillingLease(db, lease); }
     expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${next}`);
-    expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).data()).toEqual(original);
+    expect((await originalRef.get()).data()).toEqual({ ...original, ...(confirmed ? { replacedBy: `checkout_${next}` } : {}) });
     expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${next}`).get()).data()).toEqual(newer);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
   });
@@ -763,7 +799,7 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     const nextRequest = unique(); await db.doc(`customers/${f.uid}/checkout_sessions/${nextRequest}`).set(f.request);
     await f.run((await admitBillingCheckout(db, f.uid, nextRequest, f.request, Timestamp.now()))!);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
-    expect((await operation.get()).data()).toEqual(rejected);
+    expect((await operation.get()).data()).toEqual({ ...rejected, replacedBy: `checkout_${nextRequest}` });
     expect((await db.doc(`customers/${f.uid}/checkout_sessions/${nextRequest}`).get()).get('sessionId')).toBeTruthy();
   });
   it.each([409, 500])('does not replace a checkout after an uncertain HTTP %s outcome', async statusCode => {
