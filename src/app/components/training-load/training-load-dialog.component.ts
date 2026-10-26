@@ -107,7 +107,11 @@ export class TrainingLoadDialogComponent implements OnInit {
     return display ? `${display.value} ${display.unit}` : null;
   }
   get automatic(): number | null {
-    return this.sourceCurrent() && !this.metadata()?.sourceWritePending ? (this.leg?.evaluations ? this.leg.evaluations.automatic.score : this.recorded) : null;
+    const leg = this.leg;
+    // An override/exclusion can still resolve, but must not make a stale CSS comparison look current.
+    if (this.policy.swimThresholdSpeed !== leg?.policy.swimThresholdSpeed &&
+      leg?.evaluations?.automatic.provenance !== 'imported') return null;
+    return this.sourceCurrent() && !this.metadata()?.sourceWritePending ? (leg?.evaluations ? leg.evaluations.automatic.score : this.recorded) : null;
   }
   get recorded(): number | null { return recordedTrainingStressScore(this.activities.find(a => a.id === this.selectedId()) ?? {}); }
   get unresolved(): string[] { return this.metadata() ? unresolvedTrainingLoadLegs(this.metadata()!) : []; }

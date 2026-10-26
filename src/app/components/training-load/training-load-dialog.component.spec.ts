@@ -8,7 +8,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { TrainingLoadDialogComponent } from './training-load-dialog.component';
 import { TrainingLoadService } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
+import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
 import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits,
@@ -286,6 +286,36 @@ describe('Training load editor', () => {
     component.data.unitSettings = normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
     component.metadata()!.legs!.walk.policy.swimThresholdSpeed = convertSwimPaceToSpeed(114 / convertSwimPaceToSwimPacePer100Yard(1));
     expect(component.savedCssLabel).toBe('01:54 min/100yd');
+  });
+  it('hides an Automatic comparison calculated with different CSS, including while overridden or excluded', () => {
+    component.activities[0].type = ActivityTypes.Swimming;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 12.5, method: 'SWIM_PACE' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    const current: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000,
+      type: ActivityTypes.Swimming, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Swimming), swimThresholdSpeed: 2 },
+      recordedTss: 87.3, evaluations: { version: 1 as const, automatic: candidate,
+        hr: { ...candidate, preference: 'HR' as const }, met: { ...candidate, preference: 'MET' as const },
+        swimPace: { ...candidate, preference: 'SWIM_PACE' as const } } };
+    const metadata = { version: 1 as const, revision: 1, excluded: false,
+      controls: { retained: { activityId: 'walk', override: 0, included: true } },
+      legs: { walk: current, retained: { ...current, activityId: null,
+        policy: { ...current.policy, swimThresholdSpeed: 1 } } } };
+    component.metadata.set(metadata);
+    expect(component.savedCssLabel).toContain('01:40');
+    expect(component.legModel.score).toBe(0);
+    expect(component.automatic).toBeNull();
+    expect(component.recorded).toBe(87.3);
+    metadata.controls.retained.included = false;
+    expect(component.legModel.status).toBe('excluded');
+    expect(component.automatic).toBeNull();
+    current.policy.swimThresholdSpeed = 1;
+    current.evaluations = { ...current.evaluations!, automatic: { ...candidate, score: 100 } };
+    expect(component.automatic).toBe(100);
+    current.policy.swimThresholdSpeed = 2;
+    current.evaluations = { ...current.evaluations!, automatic: { ...candidate,
+      score: 0, method: 'IMPORTED', provenance: 'imported' } };
+    expect(component.automatic).toBe(0);
   });
   it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', async type => {
     component.activities[0].type = type;

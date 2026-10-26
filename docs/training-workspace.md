@@ -6279,8 +6279,10 @@ it does not adopt today's CSS. Numeric override and exclusion retain priority, a
 “Also use these preferences for future workouts” copies method/inclusion only and preserves the current policy head's
 CSS in the same revision-checked transaction. It never copies an old workout's CSS or numeric override. If an explicit
 multisport reassociation brings different CSS, calculated load requires source reparse before using that calibration;
-overrides and exclusions remain available, and imported scores remain authoritative. Merging must not remove that
-calibration check: refresh the source candidates before merging. Merge retries retain the original CSS and its
+overrides and exclusions remain available, and imported scores remain authoritative. The editor also withholds
+Automatic TSS calculated with different CSS, even when an override or exclusion resolves modeled load.
+Merging must not remove that calibration check: refresh the source candidates before merging.
+Merge retries retain the original CSS and its
 matching candidate snapshot together only for unchanged source fingerprints; different source data requires review.
 Ambiguous legs retain the existing review requirement.
 
