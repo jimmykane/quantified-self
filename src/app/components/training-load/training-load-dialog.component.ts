@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormControl, FormGroup } from '@angular/forms';
 import { firstValueFrom, forkJoin, take } from 'rxjs';
-import { DataTrainingStressScore, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { convertSpeedToSwimPace, DataSwimPace, DataTrainingStressScore, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
   unresolvedTrainingLoadLegs, validTrainingLoadOverride, type TrainingLoadMetadata, type TrainingLoadMethod,
@@ -95,9 +95,15 @@ export class TrainingLoadDialogComponent implements OnInit {
   get actualMethodLabel(): string {
     const load = this.legModel;
     if (load.status === 'excluded') return 'Excluded';
-    const method = load.method === 'HR' && load.hrAlgorithm
+    const method = load.method === 'SWIM_PACE' ? 'Swim pace (CSS)' : load.method === 'HR' && load.hrAlgorithm
       ? `HR · ${load.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold'}` : load.method ?? 'Unavailable';
     return method + (load.estimated ? ' (estimate)' : '');
+  }
+  get savedCssLabel(): string | null {
+    const speed = this.policy.swimThresholdSpeed;
+    if (speed === undefined) return null;
+    const display = resolveUnitAwareDisplayFromValue(DataSwimPace.type, convertSpeedToSwimPace(speed), this.data.unitSettings);
+    return display ? `${display.value} ${display.unit}` : null;
   }
   get automatic(): number | null {
     return this.sourceCurrent() && !this.metadata()?.sourceWritePending ? (this.leg?.evaluations ? this.leg.evaluations.automatic.score : this.recorded) : null;
@@ -112,8 +118,11 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.reasons.includes('source-updating')) return 'The workout changed during reparse. Close this editor and reopen the workout to load its current activities.';
     if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched activities below before using modeled load.';
     if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this activity’s saved policy.';
-    if (!this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate HR and MET candidates.';
+    if (this.legModel.reasons.includes('reparse-required') || !this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate available method candidates using the policy already saved for this workout. New CSS settings do not apply retroactively.';
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
+    if (this.legModel.method === 'SWIM_PACE') return this.policy.swimThresholdSpeed !== undefined
+      ? 'Calculated from swim speed and the CSS saved with this workout’s policy.'
+      : 'Calculated from swim speed and an independent threshold supplied by the file.';
     if (this.legModel.method === 'MET') return 'Estimate from file calories, body mass and duration.';
     if (this.legModel.hrAlgorithm === 'BANISTER') return 'Calculated from recorded heart rate and explicit resting, threshold and maximum HR calibration.';
     if (this.legModel.hrAlgorithm === 'THRESHOLD') return 'Estimated from recorded heart rate relative to the file threshold. This estimate is used when resting or maximum HR is missing and the sport supports calculated TSS.';
@@ -129,7 +138,7 @@ export class TrainingLoadDialogComponent implements OnInit {
       'missing-hr-samples': 'No usable heart-rate samples are available.',
       'missing-met-inputs': 'MET requires valid file calories, body mass and duration.',
       'missing-power-inputs': 'Power calculation inputs are unavailable.',
-      'missing-swim-threshold': 'No usable swim threshold is available. The workout’s average pace is not used as its threshold.',
+      'missing-swim-threshold': 'No usable swim threshold is available. The workout’s average pace is not used as its threshold. Set CSS in Settings for future swims; this workout keeps its saved policy.',
       'missing-pace-inputs': 'Pace calculation inputs are unavailable.',
       'calculation-unavailable': 'A calculation could not produce a valid TSS from the available inputs.',
     };

@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import { ActivityUtilities, type EventInterface } from '@sports-alliance/sports-lib';
-import { defaultAppliedTrainingLoadPolicy, isTrainingLoadMethod, recordedTrainingStressScore,
+import { defaultAppliedTrainingLoadPolicy, validTrainingLoadPolicy, recordedTrainingStressScore,
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
 import { getUserDeletionGuardedDocumentsInTransaction } from '../shared/user-deletion-guard';
@@ -91,9 +91,10 @@ async function policyAt(
     .collection('revisions').where('effectiveAt', '<=', Timestamp.fromMillis(leg.identity.startMs))
     .orderBy('effectiveAt', 'desc').limit(1));
   const data = result.docs[0]?.data();
-  return data && isTrainingLoadMethod(data.method) && typeof data.included === 'boolean'
+  return data && validTrainingLoadPolicy(fallback.family, data as AppliedTrainingLoadPolicy)
     ? { family: fallback.family, revision: data.revision, method: data.method, included: data.included,
-      effectiveAtMs: trainingLoadTimeMs(data.effectiveAt) } : fallback;
+      effectiveAtMs: trainingLoadTimeMs(data.effectiveAt),
+      ...(data.swimThresholdSpeed !== undefined ? { swimThresholdSpeed: data.swimThresholdSpeed } : {}) } : fallback;
 }
 
 /** Freeze legacy identities durably before any source overwrite, including retries after a partial write. */
@@ -214,6 +215,11 @@ async function finalizeTrainingLoadMetadata(
     for (const [key, leg] of Object.entries(reconciled.legs ?? {})) {
       if (leg.activityId && !previous?.legs?.[key])
         leg.policy = await policyAt(db, transaction, uid, leg);
+      if (leg.activityId && leg.policy.family === 'swimming' && leg.policy.swimThresholdSpeed !== undefined) {
+        const activity = activities.find(activity => activity.getID() === leg.activityId);
+        if (activity && defaultAppliedTrainingLoadPolicy(activity.type).family === 'swimming')
+          leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithSwimThreshold(activity, leg.policy.swimThresholdSpeed);
+      }
     }
     const { sourceDigest, sourceWriteTimes } = trainingLoadSourceSnapshot(parent, savedActivities);
     const next: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,

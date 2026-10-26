@@ -6249,6 +6249,43 @@ Read-only hydration consumes the saved association without changing Firestore. N
 or provider fetch is required to adopt these associations. See the [provider lifecycle](provider-integration-guide.md)
 and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
 
+### Swimming CSS and explicit pace preference
+
+Settings → Training load defaults → Swimming accepts an optional independently measured CSS as `mm:ss` per
+100 metres or 100 yards. Store only canonical `swimThresholdSpeed` in metres/second on the existing private policy
+head and immutable revision. Unit conversion is a display concern; switching units or saving another preference
+must not quantize an unchanged canonical value. Blank removes CSS from the new revision. CSS is not inferred from
+ordinary swim speed, guessed Garmin fields, or the workout's average pace.
+
+`SWIM_PACE` is an explicit preferred method for pool and open-water swimming. Imported valid scores, including zero,
+still win. Automatic retains power → HR → swim pace → MET priority; choosing Swim pace selects an available pace
+candidate before those calculated fallbacks. The existing Sports Lib swim formula is
+`100 × activeHours × (averageSwimSpeed / CSS)^3`. Missing speed/duration or rejected calculations fall back with reasons.
+The preference and CSS do not change recorded TSS, activity statistics, source fingerprints or original files.
+
+At first import, select the immutable policy effective at the leg's recorded start time. During source finalization,
+apply its CSS with `ActivityUtilities.evaluateTrainingStressScoreWithSwimThreshold` after ordinary parse-time
+candidates are cached. This side-effect-free library API returns private modeled evaluations and preserves the cached
+file-only evaluations. Matched legs reuse the saved policy during duplicate uploads, resync, retries and reparse.
+Legacy policies without CSS stay without CSS. New settings cannot retroactively calibrate old or delayed swims.
+No historical correction editor, migration, bulk reparse, new collection, trigger, index or policy-history read is added.
+Saved routes and planned-workout relative targets are outside this feature.
+
+The owner event editor offers Swim pace only for Swimming legs, and only when that evaluation exists. Old metadata
+without the additive candidate asks for the existing original-file reimport action. Reimport retains the old policy;
+it does not adopt today's CSS. Numeric override and exclusion retain priority, and reset restores the saved policy.
+“Also use these preferences for future workouts” copies method/inclusion only and preserves the current policy head's
+CSS in the same revision-checked transaction. It never copies an old workout's CSS or numeric override. If an explicit
+multisport reassociation brings different CSS, load requires source reparse before using that calibration; overrides
+and exclusions remain available. Ambiguous legs retain the existing review requirement.
+
+MCP impact review: existing recorded-stat queries keep their meaning; Training and impact use the shared modeled-load
+resolver. CSS, policy history and candidates stay owner-only and absent from MCP output. No new metric token, schema,
+permission, consent, planning mutation, provider action or bundled-skill change is introduced. Existing strict output
+contracts remain frozen. The companion Sports Lib change must be published and both root/Functions dependencies
+updated to the same released artifact before this QS change is merged or deployed; local packed builds are validation
+only. No deployment or historical reparse is authorized by this feature.
+
 ### File-only TSS evaluation and owner load controls
 
 Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain

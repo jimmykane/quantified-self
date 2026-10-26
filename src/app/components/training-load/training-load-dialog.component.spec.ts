@@ -266,6 +266,22 @@ describe('Training load editor', () => {
         evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
     expect(component.automatic).toBeNull(); expect(component.recorded).toBe(87.3);
   });
+  it('shows saved CSS and the explicit swim method without claiming the current settings were used', () => {
+    component.activities[0].type = ActivityTypes.Swimming;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 60, method: 'HR' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Swimming, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Swimming), method: 'SWIM_PACE', swimThresholdSpeed: 100 / 113 },
+      recordedTss: 60, evaluations: { version: 1, automatic: candidate,
+        hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' },
+        swimPace: { ...candidate, preference: 'SWIM_PACE', method: 'SWIM_PACE', score: 100 } },
+    } } });
+    expect(component.savedCssLabel).toContain('01:53');
+    expect(component.actualMethodLabel).toBe('Swim pace (CSS)');
+    expect(component.explanation).toContain('CSS saved with this workout');
+    expect(component.automatic).toBe(60);
+  });
   it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', async type => {
     component.activities[0].type = type;
     const result = { preference: 'AUTOMATIC' as const, method: null, score: null, estimated: false,

@@ -7,6 +7,15 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Swimming CSS policy adoption
+
+CSS applies through the existing immutable policy for each leg's recorded start time. Reparse refreshes the additive
+swim-pace candidate using that saved policy, including absence of CSS; it never adopts current CSS settings.
+No historical or route reparse campaign is required. Preserve reservations, strict identities, controls, retry and
+deletion guards. Explicit reassociation of a different CSS policy requires source-backed reparse before modeled load
+can use it. Root and Functions must adopt the same published companion library version before merge/deployment;
+a local packed library is for verification only. Scanner settings and version-mismatch checks remain unchanged.
+
 ### Sports Lib 23.7.1 GPX timestamp compatibility adoption
 
 Root and Functions pin the same published 23.7.1 artifact. GPX activity imports accept exactly 13 decimal digits as

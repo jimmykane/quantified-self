@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { By } from '@angular/platform-browser';
+import { MatSelect } from '@angular/material/select';
 import { BehaviorSubject } from 'rxjs';
 import { TrainingLoadSettingsComponent } from './training-load-settings.component';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
@@ -23,7 +25,7 @@ describe('dated Training load settings', () => {
   });
   it('loads existing defaults quietly and saves only a changed family with its revision', async () => {
     const row = component.rows.find(row => row.id === 'walking-hiking')!;
-    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false });
+    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '' });
     await component.save(row); expect(savePolicy).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenCalledWith('owner', 'walking-hiking', 4, { method: 'HR', included: true });
@@ -46,7 +48,7 @@ describe('dated Training load settings', () => {
     policies$.next([{ id: row.id, revision: 6, method: 'MET', included: false }]);
     finish(); await pending;
     expect(row.revision).toBe(6);
-    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false });
+    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '' });
     expect(row.form.pristine).toBe(true);
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', row.id, 6, { method: 'MET', included: true });
@@ -88,5 +90,54 @@ describe('dated Training load settings', () => {
     finish(); await pending;
     expect(success).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
     expect(component.message()).toBe(''); expect(row.revision).toBe(4);
+  });
+});
+
+
+describe('CSS input and units', () => {
+  it('renders CSS inputs and the pace choice only in the Swimming family', () => {
+    TestBed.configureTestingModule({ providers: [
+      { provide: TrainingLoadService, useValue: { watchPolicies: () => new BehaviorSubject([]), savePolicy: vi.fn() } },
+      { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection: vi.fn() } },
+    ] });
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('input[formControlName="cssPace"]').length).toBe(1);
+    const swimming = fixture.nativeElement.querySelector('section[aria-label="Swimming"]');
+    expect(swimming.textContent).toContain('Critical swim speed');
+    const choices = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .flatMap(element => (element.componentInstance as MatSelect).options.toArray().map(option => option.value));
+    expect(choices.filter(value => value === 'SWIM_PACE')).toHaveLength(1);
+    fixture.destroy();
+  });
+  it('saves CSS canonically, converts yards without drift, and allows removal only for future swims', async () => {
+    const savePolicy = vi.fn().mockResolvedValue(undefined);
+    const policies$ = new BehaviorSubject<TrainingLoadPolicyHead[]>([]);
+    TestBed.configureTestingModule({ providers: [
+      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
+      { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection: vi.fn() } },
+    ] });
+    const component = TestBed.runInInjectionContext(() => new TrainingLoadSettingsComponent());
+    component.uid = 'owner'; component.ngOnChanges();
+    const row = component.rows.find(row => row.id === 'swimming')!;
+    for (const text of ['0:00', '1:60', 'garbage', '-1:00']) {
+      row.form.controls.cssPace.setValue(text); row.form.markAsDirty();
+      expect(component.validCss(row)).toBe(false); await component.save(row);
+    }
+    expect(savePolicy).not.toHaveBeenCalled();
+    row.form.patchValue({ method: 'SWIM_PACE', cssPace: '1:53' });
+    component.changeCssUnit(row, 'yd'); expect(row.form.controls.cssPace.value).toBe('01:43');
+    component.changeCssUnit(row, 'm'); expect(row.form.controls.cssPace.value).toBe('01:53');
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'swimming', 0,
+      { method: 'SWIM_PACE', included: true, swimThresholdSpeed: 100 / 113 });
+    // Changing another preference must not quantize the saved speed to displayed seconds.
+    policies$.next([{ id: 'swimming', revision: 2, method: 'AUTOMATIC', included: true, swimThresholdSpeed: 0.888888 }]);
+    row.form.patchValue({ included: false }); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'swimming', 2,
+      { method: 'AUTOMATIC', included: false, swimThresholdSpeed: 0.888888 });
+    row.form.controls.cssPace.setValue(''); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'swimming', 3, { method: 'AUTOMATIC', included: false });
+    component.ngOnDestroy();
   });
 });

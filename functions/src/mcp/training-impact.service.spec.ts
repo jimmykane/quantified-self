@@ -102,7 +102,7 @@ describe('MCP Training impact service', () => {
       reasons: ['missing-hr-calibration', 'missing-swim-threshold', ...(score === null ? ['missing-met-inputs'] : [])] };
     loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
       version: 1, revision: 1, excluded: false, controls: {}, legs: { swim: {
-        activityId: 'activity-1', policy: defaultAppliedTrainingLoadPolicy('Swimming'), recordedTss: 42,
+        activityId: 'activity-1', policy: { ...defaultAppliedTrainingLoadPolicy('Swimming'), swimThresholdSpeed: 0.8849557522 }, recordedTss: 42,
         identity: { startMs: DAY_ONE, endMs: DAY_ONE + 3600000, type: 'Swimming', duration: 3600, distance: null },
         evaluations: { version: 1, automatic: evaluation, hr: { ...evaluation, preference: 'HR' },
           met: { ...evaluation, preference: 'MET' } },
@@ -117,7 +117,7 @@ describe('MCP Training impact service', () => {
         coverage: { modeledSessionCount: 1, unavailableSessionCount: 0 } });
     }
     expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
-    expect(JSON.stringify(result)).not.toMatch(/missing-swim-threshold|missing-hr-calibration|evaluations|policy|activity-1|event-1/);
+    expect(JSON.stringify(result)).not.toMatch(/missing-swim-threshold|missing-hr-calibration|evaluations|swimThresholdSpeed|policy|activity-1|event-1/);
   });
   it('projects threshold HR load through the frozen public schema without exposing private calibration diagnostics', async () => {
     const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 70 }]) });

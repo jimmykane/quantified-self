@@ -163,6 +163,25 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc(path).update({ legacyLegs: {}, revision: 2, updatedAt: serverTimestamp() }));
             await assertSucceeds(owner.doc(path).update({ ...await edit(2), editedLegKey: 'stable', controls: { stable: { override: 0 } } }));
         });
+        it('accepts private dated CSS only for swimming and protects it from other users and later edits', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            const write = (family: string, css: unknown, client = owner) => {
+                const head = client.doc(`users/owner/trainingLoadPolicies/${family}`);
+                const data = { revision: 1, revisionId: 'css', method: 'SWIM_PACE', included: true,
+                    effectiveAt: serverTimestamp(), swimThresholdSpeed: css };
+                const batch = client.batch(); batch.set(head, data); batch.set(head.collection('revisions').doc('css'), data);
+                return batch.commit();
+            };
+            for (const css of [0, -1, Infinity, NaN, '1:53']) await assertFails(write('swimming', css));
+            await assertFails(write('cycling', 1));
+            await assertFails(write('swimming', 1, other));
+            await assertSucceeds(write('swimming', 100 / 113));
+            await assertFails(other.doc('users/owner/trainingLoadPolicies/swimming').get());
+            await assertFails(owner.doc('users/owner/trainingLoadPolicies/swimming/revisions/css').update({ swimThresholdSpeed: 1 }));
+        });
         it('requires atomic immutable policy revisions with server timestamps', async () => {
             await seed();
             const owner = testEnv.authenticatedContext('owner').firestore();

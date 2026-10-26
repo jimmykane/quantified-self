@@ -23,12 +23,16 @@
       <div><dt>Automatic TSS</dt><dd>{{ score(automatic) }}</dd></div>
       @if (showActivityLoad()) { <div><dt>Modeled activity TSS</dt><dd>{{ score(legModel.score) }}</dd></div> }
       <div><dt>Actual method</dt><dd>{{ actualMethodLabel }}</dd></div>
+      @if (savedCssLabel) { <div><dt>Saved CSS</dt><dd>{{ savedCssLabel }}</dd></div> }
     </dl>
     <p role="status">{{ explanation }} {{ reasonText }}</p>
     <div [formGroup]="form" class="load-fields">
       <mat-form-field appearance="outline"><mat-label>Preferred method</mat-label>
         <mat-select formControlName="method" (selectionChange)="selection()">
           <mat-option value="AUTOMATIC">Automatic</mat-option>
+          @if (family === 'swimming') {
+            <mat-option value="SWIM_PACE" [disabled]="!leg?.evaluations?.swimPace">Swim pace (CSS)</mat-option>
+          }
           <mat-option value="HR" [disabled]="!leg?.evaluations">Heart rate</mat-option>
           <mat-option value="MET" [disabled]="!leg?.evaluations">Calories / MET estimate</mat-option>
         </mat-select>
@@ -40,7 +44,7 @@
       <mat-slide-toggle formControlName="included" (change)="selection()">Include this activity in modeled load</mat-slide-toggle>
       @if (family) {
         <mat-checkbox formControlName="future" (change)="selection()">Also use these preferences for future {{ familyLabel }} workouts</mat-checkbox>
-        <p class="hint">Copies method and inclusion only. Numeric overrides stay with this activity.</p>
+        <p class="hint">Copies method and inclusion only. Numeric overrides stay with this activity. Your current CSS setting stays unchanged.</p>
       }
     </div>
     @if (!valid) { <p role="alert">Enter a TSS between 0 and 9999.</p> }

@@ -92,6 +92,45 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     event.getActivities()[0].addStat(new DataAscent(ascent)); event.addStat(new DataAscent(ascent));
     return event;
   }
+  it('freezes dated CSS through delayed imports, retries and renamed legs without changing recorded statistics', async () => {
+    const uid = setup();
+    const head = db.doc(`users/${uid}/trainingLoadPolicies/swimming`);
+    await head.collection('revisions').doc('old').set({ method: 'SWIM_PACE', included: true,
+      revision: 1, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), swimThresholdSpeed: 1 });
+    await head.collection('revisions').doc('new').set({ method: 'HR', included: true,
+      revision: 2, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), swimThresholdSpeed: 2 });
+    const swim = (id = 'leg', start = Date.UTC(2026, 0, 2)) => {
+      const event = EventImporterJSON.getEventFromJSON({ name: 'Swim', startDate: start, endDate: start + 3600000,
+        activities: [{ startDate: start, endDate: start + 3600000, type: ActivityTypes.Swimming,
+          creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+          stats: { 'Average Speed': 1, 'Timer time': 3600, Energy: 210, Weight: 70 } }] } as any);
+      event.setID('workout'); event.getActivities()[0].setID(id);
+      ActivityUtilities.generateMissingStreamsAndStatsForActivity(event.getActivities()[0]);
+      return event;
+    };
+    const original = swim(); const before = JSON.stringify(original.toJSON());
+    const finish = await importWorkout(uid, original); await finish();
+    expect(JSON.stringify(original.toJSON())).toBe(before);
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ recordedTss: 9, policy: { revision: 1, swimThresholdSpeed: 1 },
+      evaluations: { swimPace: { method: 'SWIM_PACE', score: 100 }, automatic: { score: 100 } } });
+    await head.collection('revisions').doc('later').set({ method: 'MET', included: false,
+      revision: 3, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 4)) });
+    await importWorkout(uid, swim('renamed'));
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ activityId: 'renamed', policy: { revision: 1, swimThresholdSpeed: 1 } });
+    expect(resolveEffectiveTrainingLoad({}, saved).score).toBe(100);
+    // A swim recorded before the first CSS policy must not acquire today's calibration.
+    const earlyUid = setup();
+    await db.doc(`users/${earlyUid}/trainingLoadPolicies/swimming/revisions/css`).set({ method: 'SWIM_PACE', included: true,
+      revision: 1, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), swimThresholdSpeed: 1 });
+    await importWorkout(earlyUid, swim());
+    const early = (await db.doc(metadataPath(earlyUid)).get()).data() as TrainingLoadMetadata;
+    expect(early.legs!.leg.policy).not.toHaveProperty('swimThresholdSpeed');
+    expect(resolveEffectiveTrainingLoad({}, early).score).toBe(9);
+    await importWorkout(earlyUid, swim());
+    expect(((await db.doc(metadataPath(earlyUid)).get()).data() as TrainingLoadMetadata).legs!.leg.policy).toEqual(early.legs!.leg.policy);
+  });
   it('saves and resets ascent atomically without changing saved load, originals or other statistics', async () => {
     const uid = setup(); await importWorkout(uid, ascentWorkout());
     const parent = db.doc(`users/${uid}/events/workout`), child = db.doc(`users/${uid}/activities/leg`);
