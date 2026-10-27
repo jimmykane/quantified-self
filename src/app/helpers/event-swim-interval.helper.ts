@@ -38,7 +38,8 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
     || lengths.some((length, index) => length.index !== index + 1
       || (length.type.toLowerCase() !== 'active' && !isRestSwimLength(length))
       || +length.endDate <= +length.startDate
-      || +length.startDate < +activity.startDate || +length.endDate > +activity.endDate + 1000
+      || +length.startDate < +activity.startDate || +length.startDate >= +activity.endDate
+      || +length.endDate > +activity.endDate + 1000
       || (index > 0 && (+length.startDate <= +lengths[index - 1].startDate
         || Math.abs(+lengths[index - 1].endDate - +length.startDate) > 1000))
       || (isRestSwimLength(length) && length.distance && value(length.distance) !== 0))) return null;
@@ -64,7 +65,9 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
   groups.forEach((group, index) => {
     const rest = isRestSwimLength(group[0]);
     const lap = EventImporterJSON.getLapFromJSON({
-      startDate: +group[0].startDate, endDate: +group[group.length - 1].endDate,
+      // The accepted end-rounding allowance must not turn this table interval into
+      // a cross-leg lap. Keep source length clocks and summed timer values intact.
+      startDate: +group[0].startDate, endDate: Math.min(+group[group.length - 1].endDate, +activity.endDate),
       lapId: index + 1, type: LapTypes.Interval, stats: {}, startIndex: null, endIndex: null,
     }, index);
     setDerivedSwimIntervalLengths(lap, group);

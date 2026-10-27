@@ -109,6 +109,7 @@ interface LapMetricAvailability {
 interface LapTableView {
   key: string;
   activity: ActivityInterface;
+  sourceActivity: ActivityInterface;
   columnTooltips: Readonly<Record<string, string>>;
   rowNoun: 'interval' | 'lap';
   dataSource: MatTableDataSource<LapTableRow>;
@@ -291,7 +292,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     ]));
     this.availableLapTypes = [...new Set(Array.from(groupsByActivity.values()).flatMap(groups => groups.map(group => group.lapType)))];
 
-    this.displayActivities.forEach(activity => {
+    this.displayActivities.forEach((activity, activityIndex) => {
       groupsByActivity.get(activity)!.forEach(({ lapType, laps }) => {
         const data = this.generateLapData(activity, lapType, laps);
         const key = this.getKey(activity, lapType);
@@ -308,6 +309,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           const table: LapTableView = {
             key,
             activity,
+            sourceActivity: this.selectedActivities[activityIndex],
             columnTooltips: resolveEventLapSportFamily(activity.type) !== 'swimming' ? {}
               : this.showOriginalLaps() && projections.get(activity) ? { ...SWIM_TABLE_HEADER_TOOLTIPS,
                 'Total strokes': 'Stroke count for this source lap. Use Intervals for complete set totals.',
@@ -371,12 +373,16 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         '#': index + 1,
       };
       const sourceIndex = sourceIndexes.get(lap) ?? index;
-      const lapIdentity = `${Number.isFinite(lap.lapId) ? lap.lapId : 'index'}-${sourceIndex}`;
+      const contextLabel = getEventLapContextLabel(activity, lap, this.displayEventActivities);
+      const swim = contextLabel ? undefined : analytics.get(lap);
+      // Synthetic row numbers can change when source lengths regroup during a live
+      // refresh. State follows the same interval window and kind, never a reused number.
+      const lapIdentity = this.intervalActivities.has(activity)
+        ? `${+lap.startDate}-${+lap.endDate}-${swim?.isRest ? 'rest' : 'swim'}`
+        : `${Number.isFinite(lap.lapId) ? lap.lapId : 'index'}-${sourceIndex}`;
       // A final lap can move between display groups as more lap types hydrate.
       // Selection/disclosure identity follows its original type, never its tab.
       const selectionKey = `${this.getKey(activity, lap.type)}-${lapIdentity}`;
-      const contextLabel = getEventLapContextLabel(activity, lap, this.displayEventActivities);
-      const swim = contextLabel ? undefined : analytics.get(lap);
       Object.defineProperties(row, {
         contextLabel: { value: contextLabel, enumerable: false },
         timingExplanation: { value: getRejectedSwimTiming(lap) ? SWIM_TIMING_UNAVAILABLE_REASON : undefined, enumerable: false },

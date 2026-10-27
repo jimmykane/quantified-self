@@ -184,7 +184,7 @@
   <section>
     @if (selectedActivities.length > 1 || hasMultipleEventActivities) {
     <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
-      [activity]="lapTable.activity" [selectedActivities]="selectedActivities">
+      [activity]="lapTable.sourceActivity" [selectedActivities]="selectedActivities">
     </app-activity-toggle>
     }
     @if (selectedActivities.length > 1) {

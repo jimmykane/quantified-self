@@ -422,6 +422,9 @@ consecutive idle lengths form a separate rest. Recorded leading/trailing rests a
 unrecorded time before/after the lengths is not turned into an invented rest. Native Garmin-style single sequences
 with valid active membership keep their existing rows and metrics, including when only rest membership is missing.
 A Session end segment or summary is not considered a competing lap scheme.
+Every length must start inside its activity. Accepted end-time roundoff is bounded to the activity end only on the
+synthetic lap, so a following activity cannot turn it into a cross-leg row. Recorded length clocks, timer sums,
+source laps and chart/map boundaries are unchanged.
 
 Derived intervals reuse the swim analytics, summaries, column settings and expandable length table. Strokes and
 distance require complete contributing fields; timer time respects explicit zero and rejected timing.
@@ -439,7 +442,10 @@ so their Lap column never exposes synthetic interval indexes as recorded lap num
 An Intervals / Original laps Material toggle defaults to intervals and emits one selection haptic for an accepted
 change. Original laps retain their provider types and remain available for inspection. View-specific row identities
 prevent selection/disclosure state from leaking between the two representations; ordinary unit/column refreshes
-preserve it within the current view. Column headers expose keyboard-focusable, accessible tooltips distinguishing
+preserve it within the current view. Derived row state follows its time window and swim/rest kind, so live length
+regrouping cannot move selection or expansion onto a different interval with a reused row number. Comparison headers
+receive the original activity object, keeping temporary projections out of shared selection and color-cache state.
+Column headers expose keyboard-focusable, accessible tooltips distinguishing
 interval stroke totals, individual-length counts, recorded per-length averages, stroke rate and normalized SWOLF.
 The event section also appears when lengths support intervals but no original laps are visible. Switching to an
 empty Original laps view keeps the view toggle available, with an explicit empty message.

@@ -6,6 +6,7 @@ import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { getSwimIntervalActivity } from './event-swim-interval.helper';
 import { getSwimLapAnalytics } from './event-swim-analytics.helper';
 import { getSwimLapStrokeLabels } from './event-swim-length.helper';
+import { getEventLapContextLabel } from './event-lap-type.helper';
 import { createSwimIntervalFixture as swimIntervalFixture } from './event-swim-interval.test-fixtures';
 
 describe('swim interval display projection', () => {
@@ -59,6 +60,32 @@ describe('swim interval display projection', () => {
     expect(getSwimIntervalActivity(source)).toBeNull();
   });
 
+  it.each([1, 500, 1000])('keeps accepted %sms end-time roundoff inside its own activity without changing source timing', excess => {
+    const source = swimIntervalFixture();
+    source.getSwimLengths().at(-1)!.endDate = new Date(300000 + excess);
+    const before = JSON.stringify(source.toJSON());
+    const display = getSwimIntervalActivity(source)!;
+    const last = display.getLaps().at(-1)!;
+    const next = swimIntervalFixture();
+    next.type = ActivityTypes.Cycling;
+    next.startDate = new Date(300000);
+    next.endDate = new Date(600000);
+    expect(+last.endDate).toBe(300000);
+    expect(getEventLapContextLabel(display, last, [display, next])).toBe('');
+    expect(getSwimLapAnalytics(display).get(last)?.strokes?.getValue()).toBe(28);
+    expect(last.getDuration()?.getValue()).toBe(60);
+    expect(JSON.stringify(source.toJSON())).toBe(before);
+  });
+
+  it.each([0, 250])('rejects a length starting %sms at/after the activity end, even within the end-rounding tolerance', offset => {
+    const source = swimIntervalFixture();
+    const lengths = source.getSwimLengths();
+    lengths.at(-2)!.endDate = new Date(300000 + offset);
+    lengths.at(-1)!.startDate = new Date(300000 + offset);
+    lengths.at(-1)!.endDate = new Date(300500 + offset);
+    expect(getSwimIntervalActivity(source)).toBeNull();
+  });
+
   it('uses recorded timer durations and native distance for pace, cadence and normalized SWOLF', () => {
     const source = swimIntervalFixture();
     source.getSwimLengths()[0].timerTime = new DataDuration(0);
@@ -97,7 +124,7 @@ describe('swim interval display projection', () => {
     expect(analytics.cadenceDuration).toBe(30 * coverage);
   });
 
-  it.each(['partial', 'unknown', 'duplicate', 'overlap', 'gap', 'outside', 'rest distance', 'non-pool'])('falls back to original laps for %s evidence', problem => {
+  it.each(['partial', 'unknown', 'duplicate', 'overlap', 'gap', 'outside', 'after end', 'rest distance', 'non-pool'])('falls back to original laps for %s evidence', problem => {
     const source = swimIntervalFixture();
     const lengths = source.getSwimLengths();
     switch (problem) {
@@ -107,6 +134,7 @@ describe('swim interval display projection', () => {
       case 'overlap': lengths[1].startDate = new Date(10000); break;
       case 'gap': lengths[1].startDate = new Date(32000); break;
       case 'outside': lengths[0].startDate = new Date(-1000); break;
+      case 'after end': lengths.at(-1)!.endDate = new Date(301001); break;
       case 'rest distance': lengths[4].distance = new DataDistance(25); break;
       case 'non-pool': source.type = ActivityTypes.OpenWaterSwimming; break;
     }
