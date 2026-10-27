@@ -10,6 +10,25 @@ reports the measured header height so shell content,
 navigation offsets and scroll hiding remain aligned. The default remains 64 px. No additional provider work starts
 when the header, cards or details panel render. See [history progress](connection-history-import.md#shared-header-and-dashboard-progress).
 
+## Homepage example loading
+
+Home opts its shared public examples into `PublicFeaturePreviewComponent.prepareAhead`. After the view attaches,
+the existing `chartViewportQueue` uses the shell's scroll root and 600px lookahead to release nearby examples one
+per frame. Their Angular defer blocks can start before they enter the visible viewport; their original viewport
+trigger remains available. Far-away examples stay deferred, and teardown cancels pending queue work and ignores
+late readiness results. Other public pages keep the default viewport-only behavior. Server rendering preserves
+placeholders without starting browser work. Already-started module downloads can finish after navigation.
+
+Homepage placeholders retain their dimensions but have transparent fill/borders, avoiding a gray panel flashing
+before the example. A slow download still needs time and can leave reserved space. Keep actual chart renderers,
+themes, sample fixtures, canonical displays, reduced-motion behavior and interactions unchanged. This scheduling
+does not introduce account-data reads. Review Help for changed user workflows; none are introduced here.
+
+Verify normal scrolling and direct section links on phones and desktop, both themes, delayed chunks and navigation
+away during preparation. Record whether the actual example is prepared below the visible viewport, as well as
+whether a visible placeholder still paints a fill. Keep the production startup/combined-preview budgets and SSR
+snippet exclusions intact; these visual checks do not establish field INP, Search Console recovery or growth lift.
+
 ## Public hero font loading
 
 The homepage hero keeps Inter as its first-choice font. Its heading and paragraphs use the local
