@@ -203,4 +203,13 @@ describe('shared history adapter contracts', () => {
     await expect(executeHistoryOperation(job, job.steps[2], execution)).rejects.toThrow('temporarily unavailable'); expect(mocks.garmin).not.toHaveBeenCalled();
     job.steps[0].capability.version = 999; await expect(executeHistoryOperation(job, job.steps[0], execution)).rejects.toThrow('capability changed');
   });
+  it.each(['version', 'resource', 'provider'] as const)('rejects an incompatible batch %s instead of reinterpreting it as legacy history', async change => {
+    const job = run(change === 'provider' ? ServiceNames.GarminAPI : ServiceNames.SuuntoApp);
+    const step = job.steps.find(step => step.id === 'health')!;
+    step.suuntoWindowBatchVersion = 1;
+    if (change === 'version') Reflect.set(step, 'suuntoWindowBatchVersion', 2);
+    if (change === 'resource') step.resources = ['sleep'];
+    await expect(executeHistoryOperation(job, step, execution)).rejects.toMatchObject({ name: 'HistorySkippedError' });
+    expect(mocks.suunto).not.toHaveBeenCalled(); expect(mocks.garmin).not.toHaveBeenCalled();
+  });
 });

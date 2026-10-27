@@ -48,6 +48,16 @@ describe('connection history contract', () => {
     expect(isConnectionHistoryRunId('11111111-1111-4111-8111-111111111111')).toBe(true);
     expect(isConnectionHistoryRunId('flow')).toBe(false);
   });
+  it.each(['sleep', 'health'] as const)('keys implicit %s batching by its actual default range, not a 30-day range', resource => {
+    const run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, rangePreset: 'maximum',
+      runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root',
+      providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', Date.now());
+    const explicit = run.steps.find(step => step.id === resource)!;
+    const implicit = { ...explicit }; delete implicit.windowDays;
+    expect(historyOperationKey(implicit)).toBe(historyOperationKey(explicit));
+    expect(historyOperationKey(implicit)).not.toBe(historyOperationKey({ ...explicit, windowDays: 30 }));
+    expect(historyOperationKey(implicit)).not.toBe(historyOperationKey({ ...explicit, windowDays: 0 }));
+  });
   it('has a server admission switch and retains manual entrypoints', () => {
     const previous = process.env.CONNECTION_HISTORY_IMPORT_ENABLED;
     try { process.env.CONNECTION_HISTORY_IMPORT_ENABLED = 'false'; expect(isConnectionHistoryAdmissionEnabled()).toBe(false);

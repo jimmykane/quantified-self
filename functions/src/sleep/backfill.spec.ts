@@ -390,7 +390,10 @@ describe('backfillSuuntoAppSleep', () => {
             .toBeLessThan(hoisted.addSleepSyncQueueItem.mock.invocationCallOrder[0]);
     });
 
-    it.each(['sleep', 'health'] as const)('admits four bounded %s targets with unchanged history guards and deterministic retry identities', async resource => {
+    it.each([
+        { resource: 'sleep' as const, failedIndex: 0 }, { resource: 'sleep' as const, failedIndex: 3 },
+        { resource: 'health' as const, failedIndex: 0 }, { resource: 'health' as const, failedIndex: 3 },
+    ])('admits four bounded $resource targets after child $failedIndex fails without resetting retained children', async ({ resource, failedIndex }) => {
         seedSuuntoToken();
         const width = (resource === 'health' ? 26 : 28) * 86400000;
         const execution = { runId: 'run', tokenPath: 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1', providerUserId: 'suunto-user-1',
@@ -400,13 +403,15 @@ describe('backfillSuuntoAppSleep', () => {
         let fail = true;
         hoisted.addSleepSyncQueueItem.mockImplementation(async input => {
             // Fail by range identity, independent of concurrent admission order.
-            if (fail && input.rangeStartMs === options.startMs + width) throw new Error('Interrupted queue write');
+            const index = (input.rangeStartMs - options.startMs) / width;
+            for (let delay = index; delay > 0; delay--) await Promise.resolve();
+            if (fail && index === failedIndex) throw new Error('Interrupted queue write');
             if (!retained.has(input.dedupeKey)) retained.set(input.dedupeKey, { revision: 'original', processed: true });
             return { path: input.dedupeKey };
         });
         await expect(queueSuuntoSleepHealthHistory('user-1', options)).rejects.toThrow('Interrupted queue write');
         const previous = new Map(retained);
-        expect(previous.size).toBeGreaterThan(0);
+        expect(previous.size).toBe(3); // All other started writes drained, even when the first child failed.
         expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
         fail = false;
         const result = await queueSuuntoSleepHealthHistory('user-1', options);

@@ -61,6 +61,11 @@ function historyWindow(run: ConnectionHistoryRun, step: HistoryStep) {
   return { endMs, nextStartMs: endMs + resolutionMs };
 }
 export function getHistoryAdapter(run: ConnectionHistoryRun, step: HistoryStep): HistoryAdapter {
+  if (step.suuntoWindowBatchVersion !== undefined && (step.suuntoWindowBatchVersion !== 1
+    || run.serviceName !== ServiceNames.SuuntoApp || (step.id !== 'sleep' && step.id !== 'health')
+    || step.resources.length !== 1 || step.resources[0] !== step.id)) {
+    throw new HistorySkippedError('This history import plan changed. Reconnect to use the current version.');
+  }
   const adapter = HISTORY_ADAPTERS[run.serviceName]?.[step.id]?.[step.capability.version];
   if (!adapter) throw new HistorySkippedError('This history capability changed. Reconnect to use the current version.');
   return adapter;

@@ -293,7 +293,10 @@ selected final millisecond. The parent waits for all children before advancing t
 
 The private `suuntoWindowBatchVersion: 1` step snapshot and receipt key bind this policy to new runs. Existing runs
 without it retain their exact 30-day parent/28-day child ranges, receipts, retry identities and checkpoints; no
-migration or replay occurs. The manual combined Sleep/Health callable, other providers, activities, routes,
+migration or replay occurs. An omitted batch size uses the same 104/112-day default in both the planner and receipt
+identity; it cannot reuse a receipt for a 30-day batch. Unsupported batch versions or mismatched provider/resource
+snapshots stop visibly before admission instead of silently falling back to legacy windows.
+The manual combined Sleep/Health callable, other providers, activities, routes,
 permissions, source writers, queue concurrency, retry budgets and half-hour recovery remain unchanged. The same
 pinned account and lifecycle guards apply to all four children, with immediate dispatch and `preserveExisting`.
 A partial enqueue keeps the cursor and cooldown; retry repeats the exact deterministic children and waits for every
@@ -325,7 +328,10 @@ import gets faster under contention**: with seven dense one-year imports plus a 
 import takes 669 -> 1,809 simulated seconds at four slots, 249 -> 489 at sixteen slots, and remains 249 at eighty.
 The shared-queue dense case also increases maximum foreground wait from 220 to 938 seconds at four slots.
 Reducing batches to two alone did not eliminate the contention tradeoff. These counterexamples are retained in the
-benchmark output; adding `--require-no-slowdown` makes the command fail on these counterexamples. Do not claim the no-slowdown requirement is satisfied from aggregate completion alone.
+benchmark output; adding `--require-no-slowdown` checks each individual import across every multi-import scenario
+and fails on these counterexamples. Do not claim the no-slowdown requirement is satisfied from aggregate completion
+alone. `node --test tools/benchmarks/suunto-history-windows.test.mjs` verifies the acceptance gate, request/continuation
+accounting and millisecond boundary coverage independently of the production tests.
 Keep the change in draft pending resolution or explicit acceptance of that tradeoff. No real provider traffic is
 part of this verification. Post-release assessment must compare per-import completion/short-import latency,
 normal webhook lag, request counts, failures, queue age and billed runtime separately.

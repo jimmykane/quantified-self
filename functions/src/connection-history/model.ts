@@ -2,7 +2,7 @@ import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../ga
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryImportRange, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 
-import { suuntoHistoryWindowDays, SUUNTO_HISTORY_WINDOWS_PER_BATCH } from '../suunto/history-windows';
+import { suuntoHistoryBatchDays } from '../suunto/history-windows';
 
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
@@ -60,7 +60,10 @@ export interface HistoryConnectionContext {
 }
 /** Exact identity of the committed provider operation, shared with read-only recovery monitoring. */
 export function historyOperationKey(step: HistoryStep): string {
-  return JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page,
+  const defaultWindowDays = step.suuntoWindowBatchVersion === 1 && (step.id === 'sleep' || step.id === 'health')
+    ? suuntoHistoryBatchDays(step.id) : 30;
+  const windowDays = step.suuntoWindowBatchVersion === 1 ? step.windowDays ?? defaultWindowDays : step.windowDays || 30;
+  return JSON.stringify([step.id, step.capability.version, step.nextStartMs, windowDays, step.page,
     ...(step.routeAfterId === undefined ? [] : [step.routeAfterId]),
     ...(step.suuntoWindowBatchVersion === undefined ? [] : [{ suuntoWindowBatchVersion: step.suuntoWindowBatchVersion }])]);
 }
@@ -82,7 +85,7 @@ export function createHistoryRun(userID: string, serviceName: ServiceNames, cont
       .map(capability => ({
         id: capability.id, resources: [...capability.resources], capability: { ...capability, resources: [...capability.resources] },
         ...(serviceName === ServiceNames.SuuntoApp && (capability.id === 'sleep' || capability.id === 'health')
-          ? { suuntoWindowBatchVersion: 1 as const, windowDays: suuntoHistoryWindowDays(capability.id) * SUUNTO_HISTORY_WINDOWS_PER_BATCH } : {}),
+          ? { suuntoWindowBatchVersion: 1 as const, windowDays: suuntoHistoryBatchDays(capability.id) } : {}),
         status: 'queued', count: 0, nextStartMs: range.startMs, page: 1, retryCount: 0, done: false, childPaths: [],
       })),
   };

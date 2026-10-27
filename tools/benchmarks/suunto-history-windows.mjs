@@ -105,6 +105,13 @@ export function simulate({ days, batchSize, slots = 8, imports = 1, importDays, 
   }
   return { ...metrics, completionSeconds: Math.max(...runs.map(run => run.completed)), perImportSeconds: runs.map(run => run.completed) };
 }
+export function countSlowerImports(before, after) {
+  assert.equal(after.perImportSeconds.length, before.perImportSeconds.length, 'compare the same imports');
+  return after.perImportSeconds.filter((time, i) => time > before.perImportSeconds[i]).length;
+}
+export function satisfiesNoSlowdown(comparisons) {
+  return comparisons.every(({ before, after }) => countSlowerImports(before, after) === 0);
+}
 export function stress() {
   const scenarios = [
     { name: 'empty', days: 9795.8575 },
@@ -120,7 +127,7 @@ export function stress() {
     assert.ok(after.completionSeconds <= before.completionSeconds, `${scenario.name}: import latency regression`);
     assert.ok(after.calls <= before.calls, `${scenario.name}: provider call regression`);
     assert.ok(after.maxChildren <= 4);
-    return { scenario: scenario.name, before, after };
+    return { scenario: scenario.name, before, after, slowerImports: countSlowerImports(before, after) };
   });
   let comparisons = 0;
   for (const days of [0.001, 1, 26, 28, 30, 31, 60, 90, 104, 112, 365, 730]) {
@@ -136,9 +143,9 @@ export function stress() {
     const options = { days: 365, importDays: [365, 365, 365, 365, 365, 365, 365, 30], imports: 8, slots, foreground: true, density: 4 };
     const before = simulate({ ...options, batchSize: 0 });
     const after = simulate({ ...options, batchSize: 4 });
-    return { slots, before, after, slowerImports: after.perImportSeconds.filter((time, i) => time > before.perImportSeconds[i]).length };
+    return { slots, before, after, slowerImports: countSlowerImports(before, after) };
   });
-  return { noSlowdownSatisfied: contentionChecks.every(row => row.slowerImports === 0), contentionChecks, assumptions: 'Virtual time; FIFO fixed worker slots; 1s serialized coordinator; 60s child polling; all Health feeds; response splits; 900s transient backoff. Equal coverage (legacy sub-second gaps normalized); no live speed or euro-cost claim.', comparisons, rows };
+  return { noSlowdownSatisfied: satisfiesNoSlowdown([...rows, ...contentionChecks]), contentionChecks, assumptions: 'Virtual time; FIFO fixed worker slots; 1s serialized coordinator; 60s child polling; all Health feeds; response splits; 900s transient backoff. Equal coverage (legacy sub-second gaps normalized); no live speed or euro-cost claim.', comparisons, rows };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = stress();
