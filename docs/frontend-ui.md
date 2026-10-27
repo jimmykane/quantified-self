@@ -15,8 +15,15 @@ when the header, cards or details panel render. See [history progress](connectio
 The homepage hero keeps Inter as its first-choice font. Its heading and paragraphs use the local
 `QS Home Inter Fallback` face while the bundled web fonts load. Regular Arial and Arial Bold have separate
 width and vertical metric adjustments; a browser without those local faces retains its normal sans-serif fallback.
-This adds no font download, script, preload or hidden text. Material Symbols, buttons and numeric fonts keep
-their existing families. Once Inter loads, the final typography and layout are unchanged.
+The hero fallback adds no font download, script, preload or hidden text and does not change Material Symbols,
+button or numeric font families. Once Inter loads, the final typography and layout are unchanged.
+
+The homepage section shortcuts are a separate font-loading boundary. Their `QS Home Navigation` face reuses the
+bundled Inter 500 asset with `font-display: optional`. If it arrives too late, those links retain the normal system
+sans-serif for that navigation instead of swapping and potentially gaining a flex row. Cached or early Inter remains
+eligible for the initial layout. This intentionally permits fallback typography on a slow visit; it does not constrain
+row heights, clip links, preload another font or change Material typography elsewhere. See
+[Google's font-loading guidance](https://web.dev/learn/performance/optimize-web-fonts#optional).
 
 The adjustments in `home.component.scss` were measured against the bundled Fontsource Inter 400/800 faces:
 2048 units per em, 1984 ascent, 494 descent and zero line gap. The width scales use representative homepage
@@ -26,10 +33,26 @@ fallback ascent/descent overrides. Recheck these values after a font or substant
 Verify with the production-prerendered homepage, a cold font cache and deliberately delayed Inter responses.
 Record layout-shift entries and the hero/action positions before and after `document.fonts.ready`, at 320, 360,
 390 and 414 px plus desktop. Also check normal fonts, light/dark themes and browsers without metric overrides.
+Include 744, 757 and 768 px: the shortcut row can wrap near these tablet widths even when the hero remains stable.
+Record the actual viewport width and shortcut/integrations positions, rather than relying on an emulation preset.
 These controlled measurements isolate font swaps: they do not establish a new Search Console result or explain
 every shift over a real visit. Keep Search Console's dated URL-group data, PageSpeed's URL/origin field data,
 and initial-load lab data separate; see [Google's report guidance](https://support.google.com/webmasters/answer/9205520)
 and [CLS diagnostics](https://web.dev/articles/optimize-cls).
+
+## Sign-in route loading
+
+`LoginModule` imports its forms, loading/haptic primitives and required Material modules directly. Keep activity-data
+services and broad `SharedModule`/`MaterialModule` dependencies out of this route: merely entering sign-in should not
+construct the activity workspace. The production-output check follows the sign-in module's static dependency graph
+and rejects those dependencies; the component regression uses a throwing activity-service provider to catch eager
+injection. Keep rendered forms, account-linking, error/recovery dialogs and selected-plan navigation covered when
+changing these imports.
+
+Profile Get Started from the hydrated homepage using equivalent production-mode builds and isolated anonymous local
+services. Separate click Event Timing from the asynchronous wait for sign-in to render, and report cold/warm conditions,
+CPU throttling and source-map exclusions. A smaller lazy payload or a fast local click does not establish field INP;
+Search Console and CrUX need their own post-release observations.
 
 ## Route headers
 

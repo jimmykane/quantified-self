@@ -123,7 +123,7 @@ describe('LoginComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppHapticsService, useValue: haptics },
                 { provide: AppWindowService, useValue: appWindow },
-                { provide: AppEventService, useValue: {} },
+                { provide: AppEventService, useFactory: () => { throw new Error('Sign-in must not initialize activity-data services'); } },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
                 { provide: MatSnackBar, useValue: mockSnackBar },
@@ -140,7 +140,7 @@ describe('LoginComponent', () => {
         component = TestBed.inject(LoginComponent);
     });
 
-    it('should create', () => {
+    it('creates sign-in without initializing activity-data services', () => {
         expect(component).toBeTruthy();
     });
 
