@@ -1004,6 +1004,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     };
     const didMarkConnected = (serviceName === ServiceNames.WahooAPI
       || serviceName === ServiceNames.COROSAPI
+      || serviceName === ServiceNames.SuuntoApp
       || serviceName === ServiceNames.GarminAPI) && uniqueId
       ? await markServiceConnected(
         userID,

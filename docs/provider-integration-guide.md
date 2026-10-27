@@ -1311,7 +1311,9 @@ clients retain the previous call path. Background admission for all four provide
 missing provider account ID from exactly one owner-scoped token matching the existing active credential generation
 and provider identity. The repair commits with the run and projection, retains all lifecycle guards, and never
 changes credentials or invents generations. Unverifiable connections require reconnecting instead of silently
-using the legacy scan. Existing legacy jobs are unchanged; no bulk migration is required. Automatic history, Garmin manual
+using the legacy scan. Suunto OAuth now supplies its verified account ID to the existing guarded connected-state
+write, ensuring reconnect replaces a previously recovered identity; deploy `requestAndSetSuuntoAPIAccessToken`
+with the four history admission functions. Existing legacy jobs are unchanged; no bulk migration is required. Automatic history, Garmin manual
 history, and manual Sleep/Health/routes keep their scope. No provider call happens during background admission;
 the existing bounded child path and committed outcomes control continuation. Suunto/COROS retain their 60-second
 dispatch spread; Wahoo uses one 100-workout page per step, its existing deferred dispatch and exact date filtering.

@@ -366,8 +366,11 @@ describe('service-connection-meta', () => {
 
   it('mirrors Suunto connection and terminal-auth transitions to Health state', async () => {
     const healthUserID = 'suunto-health-user';
+    hoisted.metaData = { connectionState: 'connected', connectionStateGeneration: 'previous-connection', providerUserId: 'previous-suunto-account' };
 
-    await expect(markServiceConnected(healthUserID, ServiceNames.SuuntoApp)).resolves.toBe(true);
+    await expect(markServiceConnected(healthUserID, ServiceNames.SuuntoApp, 'current-suunto-account')).resolves.toBe(true);
+    expect(hoisted.metaData.providerUserId).toBe('current-suunto-account');
+    expect(hoisted.metaData.connectionStateGeneration).not.toBe('previous-connection');
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
       healthUserID,
       'SuuntoApp',
