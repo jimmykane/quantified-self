@@ -258,6 +258,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
     // Manual-history help now explains existing-account verification and reconnect requirements.
+    // Pool-swim help covers length-derived intervals, original lap triggers and keyboard header explanations.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-27');
   });
 

@@ -414,6 +414,33 @@ Partial HR coverage is visible, and unsupported aggregate metrics remain blank w
 This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
 remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
+Pool swims with overlapping lap schemes or unassigned lengths use a separate table-only Intervals projection
+(`event-swim-interval.helper.ts`). It requires the complete recorded active-length count, valid ordered length indices,
+known active/rest types and chronological coverage (allowing one second of FIT timestamp quantization). Missing,
+malformed or incomplete evidence keeps the original lap view. Consecutive active lengths form one interval;
+consecutive idle lengths form a separate rest. Leading/trailing rests and the final active set are retained.
+Native Garmin-style single sequences with valid membership keep their existing rows and metrics.
+
+Derived intervals reuse the swim analytics, summaries, column settings and expandable length table. Strokes and
+distance require complete contributing fields; timer time respects explicit zero and rejected timing. Heart-rate
+averages are duration-weighted from complete length coverage, while maxima require complete length maxima. The
+persistent summary also preserves the whole-session peak from original lap/session/stream evidence. No unmatched
+native lap metrics are copied into intervals. Corroborated nominal yard display uses the same independent length
+evidence as Swim Lengths; the original canonical distance remains in pace/SWOLF calculations and storage.
+
+An Intervals / Original laps Material toggle defaults to intervals and emits one selection haptic for an accepted
+change. Original laps retain their provider types and remain available for inspection. View-specific row identities
+prevent selection/disclosure state from leaking between the two representations; ordinary unit/column refreshes
+preserve it within the current view. Column headers expose keyboard-focusable, accessible tooltips distinguishing
+interval stroke totals, individual-length counts, recorded per-length averages, stroke rate and normalized SWOLF.
+
+This fixes the UI consequence of Sports Lib 21.6.8 refusing ambiguous length-to-lap ownership. The earlier first-match
+assignment could attach the next set's lengths to a preceding lap, so it must not be restored. The projection works
+with saved length records regardless of null or older arbitrary lap indices. No parser/library upgrade, historical
+reparse, source rewrite, Training/CSS/TSS change or migration is required. MCP impact: **no wire impact**; explicit
+activity-lap and swim-length projections continue returning source records, including nullable source membership.
+No public schema, scope, consent, plugin or backend read/write path changes.
+
 Event lap tables use `getEventLapTableGroups` to append one Session end segment to a single unambiguous sequence.
 Its positive recorded interval must follow non-overlapping laps inside the activity and end at the activity boundary
 (allowing one second of end-time rounding). Recorded pause gaps are allowed. The final row continues the numbering

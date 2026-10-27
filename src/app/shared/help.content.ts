@@ -765,6 +765,10 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 ### Event lap tables
 
+- Pool swims with overlapping lap types or unassigned lengths open in **Intervals** when the complete recorded lengths can be read reliably. Each row contains one swim set or a separate rest, with total strokes and recorded stroke types. **Mixed** means a set contains more than one stroke type. Expand a row to inspect its lengths.
+- Use **Original laps** to inspect the watch's own lap groups. **Fitness equipment** is a recorded lap trigger, not a different sport; it can overlap **Manual** laps. Do not add those groups together. Already-correct lap sequences keep their recorded intervals. This display also works for saved activities without reimporting them.
+- Hover over a table header or focus it with the keyboard for an explanation. **Total strokes** is the count for an interval; **Strokes** in Swim Lengths is the count for one length; **Average Stroke Count** is a recorded per-length average; **Average Stroke Rate** is strokes per minute. Missing fields stay unavailable.
+
 - Event details include a **Laps** table when selected activities contain lap data.
 - A sole lap that repeats the whole activity is hidden. If the lap and activity totals cannot be compared reliably, the lap stays visible. Final segments after earlier laps remain visible, including Garmin **Session end** laps and Suunto final partial laps. Chart and map end markers are handled separately.
 - When one **Session end** segment clearly follows a single lap sequence, it appears as the last numbered row with a **Final lap** label, without a separate tab. Its recorded values stay separate from the preceding lap. Mixed lap types, overlapping or uncertain timing, multiple session endings and laps spanning activity legs keep their separate groups. This changes the table only, not your recorded laps.

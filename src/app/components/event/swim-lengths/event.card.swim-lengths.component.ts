@@ -19,7 +19,7 @@ import {
 } from '../../../helpers/event-swim-length.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
-import { getActiveSwimLengthCadence, getNormalizedSwolf, getSwimLengthDistance, getSwimLengthDuration, getSwolfColumnLabel, sumSwimValues } from '../../../helpers/event-swim-analytics.helper';
+import { SWIM_TABLE_HEADER_TOOLTIPS, getActiveSwimLengthCadence, getNormalizedSwolf, getSwimLengthDistance, getSwimLengthDuration, getSwolfColumnLabel, sumSwimValues } from '../../../helpers/event-swim-analytics.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import {
   getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters, NominalSwimDistanceDisplayContext,
@@ -93,6 +93,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   @Input() lap: LapInterface | null = null;
   public lapLengthTable: Pick<SwimLengthGroupView, 'rows' | 'columns' | 'columnNames'> | null = null;
   public swolfColumnLabel = '';
+  public readonly columnTooltips = SWIM_TABLE_HEADER_TOOLTIPS;
 
   public activitiesWithSwimLengths: ActivityInterface[] = [];
   public swimLengthViews: SwimLengthActivityView[] = [];

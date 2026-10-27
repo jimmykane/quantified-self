@@ -109,6 +109,7 @@
     "src/app/helpers/event-summary-reader.helper.spec.ts",
     "src/app/helpers/event-swim-analytics.helper.spec.ts",
     "src/app/helpers/event-swim-distance-display.helper.spec.ts",
+    "src/app/helpers/event-swim-interval.helper.spec.ts",
     "src/app/helpers/event-swim-length.helper.spec.ts",
     "src/app/helpers/event-swim-rest-block.helper.spec.ts",
     "src/app/helpers/event-tag-library.helper.spec.ts",

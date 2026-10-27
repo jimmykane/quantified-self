@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
@@ -50,6 +51,8 @@ import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-dis
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from '../../../helpers/event-swim-analytics.helper';
+import { createSwimIntervalFixture } from '../../../helpers/event-swim-interval.test-fixtures';
+import { getSwimLapLengths } from '../../../helpers/event-swim-length.helper';
 import { createNominalYardPoolFixture } from '../../../helpers/event-swim-distance-display.test-fixtures';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
@@ -132,7 +135,7 @@ describe('EventCardLapsComponent', () => {
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatDialogModule, MatTableModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatDialogModule, MatTableModule, MatButtonToggleModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -153,6 +156,65 @@ describe('EventCardLapsComponent', () => {
         component.unitSettings = {} as UserUnitSettingsInterface;
         component.event = { getActivities: () => [] } as EventInterface;
         fixture.detectChanges();
+    });
+
+    it('defaults overlapping swim laps to one complete interval table and switches back through the real control', () => {
+        const activity = createSwimIntervalFixture();
+        activity.setID('synthetic-swim');
+        const source = JSON.stringify(activity.toJSON());
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.hasSwimIntervals).toBe(true);
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        expect(fixture.nativeElement.querySelector('.lap-type-tabs')).toBeNull();
+        const table = component.lapTableGroups[0].tables[0];
+        const rows = table.dataSource.data.filter(row => !row.isLapAverage);
+        expect(rows.map(row => row[EVENT_LAP_STROKES_COLUMN])).toEqual(['53', '', '8', '', '28']);
+        expect(rows.map(row => row[EVENT_LAP_STROKE_COLUMN])).toEqual(['Freestyle', '', 'Butterfly', '', 'Mixed']);
+        expect(rows.map(row => row.isRest)).toEqual([false, true, false, true, false]);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.toggleLapLengths(rows[0]);
+        component.toggleLapSelection(table, rows[0]);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const refreshed = component.lapTableGroups[0].tables[0];
+        const first = refreshed.dataSource.data.find(row => !row.isLapAverage)!;
+        expect(first.lengthsExpanded).toBe(true);
+        expect(refreshed.selectedCount).toBe(1);
+        expect(getSwimLapLengths(refreshed.activity).get(first.lap)?.map(length => length.index)).toEqual([1, 2, 3, 4]);
+        haptics.selection.mockClear();
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[1].click();
+        fixture.detectChanges();
+        expect(component.showOriginalLaps()).toBe(true);
+        expect(component.availableLapTypes).toEqual([LapTypes.FitnessEquipment, LapTypes.Manual]);
+        expect(component.lapTableGroups.every(group => group.tables[0].selectedCount === 0)).toBe(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.setOriginalLaps(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[0].click();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        expect(JSON.stringify(activity.toJSON())).toBe(source);
+    });
+
+    it('renders corroborated whole yards in an unassigned swim interval and its selected summary', () => {
+        const { activity, rawLengths } = createNominalYardPoolFixture();
+        rawLengths.forEach(length => length.lapIndex = null);
+        component.selectedActivities = [activity];
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const row = table.dataSource.data.find(row => !row.isLapAverage)!;
+        expect(row[DataDistance.type]).toBe('100 yd');
+        expect(row[EVENT_LAP_STROKES_COLUMN]).toBe('40');
+        component.toggleLapSelection(table, row);
+        expect(table.selectedSummary[DataDistance.type]).toBe('100 yd · 1/1');
+        component.unitSettings = getDefaultUserUnitSettings();
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables[0].dataSource.data[0][DataDistance.type]).toBe('91.59 m');
     });
 
     it('explains rejected lap timing while retaining lap distance and identity', () => {
@@ -1975,15 +2037,15 @@ describe('EventCardLapsComponent source contracts', () => {
         );
 
         expect(template).toContain("column === 'selection' || column === '#'");
-        expect(template).toContain('Select all laps in this table');
-        expect(template).toContain("[aria-label]=\"(row.members ? 'Select laps ' : 'Select lap ') + row['#']\"");
+        expect(template).toContain("[aria-label]=\"'Select all ' + lapTable.rowNoun + 's in this table'\"");
+        expect(template).toContain("[aria-label]=\"(row.members ? 'Select laps ' : 'Select ' + lapTable.rowNoun + ' ') + row['#']\"");
         expect(template).toContain("column === 'selection' && !row.isLapAverage");
         expect(template).toContain('toggleAllLapSelections(lapTable)');
         expect(template).toContain('toggleLapSelection(lapTable, row)');
         expect(template).toContain('lapTable.selectedSummaryLabel');
         expect(template).toContain('*matFooterRowDef="lapTable.columns; sticky: true"');
         expect(template).toContain('lap-selected-summary-row');
-        expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
+        expect(template).toContain('<app-data-type-icon [dataType]="column" [tooltip]="lapTable.columnTooltips[column]" [focusable]="true"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
         expect(template).toContain('lapColumnsDialog');
