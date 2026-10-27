@@ -257,6 +257,78 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(0);
   });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].flatMap(sport => [false, true].map(missingBoundaries => ({ sport, missingBoundaries }))))(
+    'recovers frozen v16 before one opt-in v17 $sport update (missing boundaries=$missingBoundaries)', async ({ sport, missingBoundaries }) => {
+    op.suuntoSwimmingSettings = defaultSuuntoSwimmingGuideSettings();
+    const targets: WorkoutStepV1['targets'] = missingBoundaries ? [{ kind: 'speed', mode: 'absolute', presentation: 'speed',
+      minimumMetersPerSecond: 1, maximumMetersPerSecond: 2 }] : [];
+    const note = missingBoundaries ? { note: 'Relax' } : {};
+    next({ structure: { version: 1, sport, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: missingBoundaries ? { kind: 'time', seconds: 40 } : { kind: 'manual' }, targets, ...note },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets, ...note },
+    ] } });
+    const original = (await execute())!;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v16');
+    const frozen = structuredClone(server.guides.get(original.ids.guide)!.guide);
+    if (missingBoundaries) expect((frozen.steps[1] as SuuntoGuideFieldsStepV1).createManualLap).toBeUndefined();
+    expect(guidePayloadForRecovery(op, owner)).toEqual(frozen);
+    op.suuntoSwimmingSettings = { version: 1, workFields: [],
+      restFields: ['interval', 'previousLapPace', 'previousLapDuration', 'previousLapStrokes'] };
+    next();
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v17');
+    server.afterHandle = async request => { if (request.method === 'PUT') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const current = server.guides.get(original.ids.guide)!.guide;
+    const rest = current.steps[1] as SuuntoGuideFieldsStepV1;
+    const selected = rest.fields.filter(field => 'windowOffset' in field);
+    expect(selected.map(field => field.type)).toEqual(missingBoundaries ? ['pace'] : ['pace', 'duration', 'strokes']);
+    if (missingBoundaries) expect(rest.createManualLap).toBe(true);
+    expect(selected.every(field => 'windowOffset' in field && field.windowOffset === -1)).toBe(true);
+    expect(await readGuideArchive(await packageGuide(current))).toEqual(current);
+    const started = structuredClone(op);
+    const readingIndex = rest.fields.findIndex(field => 'windowOffset' in field);
+    const originalField = rest.fields[readingIndex];
+    rest.fields[readingIndex] = { type: 'heartRate', title: 'Wrong lap' };
+    // An owned existing Guide can resume its update, but mismatched content is never acceptance proof.
+    expect(await recover()).toEqual({ kind: 'resume' });
+    op = started;
+    rest.fields[readingIndex] = originalField;
+    expect(await recover()).toMatchObject({ kind: 'accepted', artifact: { ids: original.ids } });
+    expect(current.externalId).toBe(frozen.externalId);
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+    expect(transport.assess({ ...op.workout!, structure: { ...op.workout!.structure, sport: ActivityTypes.Running } },
+      op.destinationKey, op.timeZone, undefined, undefined, undefined, undefined, op.suuntoSwimmingSettings).mappingVersion)
+      .toBe('suunto-guides-v16');
+  });
+  it.each(['missing', -2, 0, 1] as const)('does not accept a previous-lap create with a changed offset (%s) or repeat its POST', async offset => {
+    op.suuntoSwimmingSettings = { version: 1, workFields: [], restFields: ['previousLapPace', 'previousLapDuration', 'previousLapStrokes'] };
+    next({ structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] } });
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const rest = server.guides.get('guide-1')!.guide.steps[1] as SuuntoGuideFieldsStepV1;
+    const original = structuredClone(rest.fields);
+    // Exercise every new reading; a relative offset is part of the exact sent Guide.
+    for (let index = 1; index < rest.fields.length; index++) {
+      const field = rest.fields[index] as unknown as Record<string, unknown>;
+      if (offset === 'missing') delete field.windowOffset;
+      else field.windowOffset = offset;
+      expect(await recover()).toEqual({ kind: 'uncertain' });
+      await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+      rest.fields = structuredClone(original);
+    }
+    expect(await recover()).toMatchObject({ kind: 'accepted' });
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.some(request => ['PUT', 'DELETE'].includes(request.method))).toBe(false);
+  });
   it('uses the snapshotted strength units and updates the same Guide after a unit-only change', async () => {
     strengthOperation();
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v13');

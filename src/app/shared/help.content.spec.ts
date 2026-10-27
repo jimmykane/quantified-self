@@ -16,15 +16,41 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains shared provider import progress and distinguishes requests from delivery', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Importing history**', 'update together with the header', '**View details**',
+      'does not start, retry or cancel an import', '**24 hours**', '**History requested**',
+      '**Status unavailable**', '**Refresh status**', 'not a percentage',
+      'Disconnecting a provider removes its retained import status', '**Reconnect required**',
+      'Reconnecting and importing remain your explicit choices', '**Checking status**',
+      'refresh is disabled until that check finishes', '**Hide from dashboard**', '**Show on dashboard**',
+      'remembered for your account on this browser', 'Hiding the cards does not stop an import',
+      '**Finished with issues**', '**Dismiss this result**', 'not failure totals',
+      '**Requesting Garmin history**', '**requests scheduled**', 'not records received',
+      'delivery completion is not tracked here',
+      'a new import or a retried result appears again', 'recovery controls remain in Connections']) expect(copy).toContain(phrase);
+  });
+  it('explains durable manual Garmin activity requests without claiming delivery completion', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['Manual **Garmin**, **Suunto**, **COROS** and **Wahoo**',
+      '**Requesting Garmin history**', 'temporary failures retry from the unfinished batch',
+      '**History requested** means submission finished', 'Garmin delivers activities separately',
+      'does not confirm that every activity has arrived', '**30-day cooldown**',
+      'Sleep, Health and saved routes keep their separate controls']) expect(copy).toContain(phrase);
+  });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     for (const phrase of ['New Pro trials require a payment method', 'no subscription charge during the free trial',
       'first payment date', 'before the trial ends to avoid the first payment', 'Existing trials keep the terms',
-      'Starter stays free', 'earlier open trial checkout may need to expire']) expect(copy).toContain(phrase);
+      'Starter stays free', 'safely replaces an earlier unfinished checkout']) expect(copy).toContain(phrase);
   });
   it('explains the checkout handoff and recovery before another payment', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     expect(copy).toContain('checks your access for up to 20 seconds');
+    expect(copy).toContain('**Updating your checkout…**');
+    expect(copy).toContain('Choosing the same offer resumes its existing checkout');
+    expect(copy).toContain('If a checkout expires, choose the offer again');
+    expect(copy).toContain('If checkout completed in another tab, refresh Membership');
     expect(copy).toContain('**Connect your devices** opens [Connections](/services)');
     expect(copy).toContain('Opening Connections does not connect an account automatically');
     expect(copy).toContain('**Membership still syncing**');
@@ -663,7 +689,7 @@ describe('help.content', () => {
   it('explains manual pool progress and rest screens without promising measurement or fixed-position fixes', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**Manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
-      'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
+      'previous closed manual lap', 'Active **Recovery** keeps swim readings',
       '**Show swimming Guide screens**', 'cannot guarantee fixed positions', 'do not fix delayed pool-length detection',
       'only in an individual pool or open-water swimming workout', 'not shown for other sports, plan settings or sync history',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
@@ -704,9 +730,20 @@ describe('help.content', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**Save Guide screens**', '**Interval 1/10**', '**Prev plan**/**Next plan**',
       'prescribed, not measured', 'not pool lengths or recorded laps', 'no fake target field',
-      'past and completed copies stay unchanged', 'does not expose a previous-lap selector', '**m:ss/100m**',
+      'past and completed copies stay unchanged', 'previous closed manual lap', '**m:ss/100m**',
       'removing an average from Work or Rest does not remove automatic laps',
       '**20 seconds or less**', 'does not guarantee an audible or vibrating alert', 'your own Rest instructions still show']) expect(content).toContain(phrase);
+  });
+  it('explains opt-in previous Work lap readings with truthful lap and phase limits', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Last Work lap: average pace**', '**Last Work lap: elapsed time**', '**Last Work lap: stroke count**',
+      'Rest immediately after Work', 'both a Lap-button ending and an automatic Work ending', 'only its final segment',
+      'Existing default choices stay unchanged', 'Consecutive Rest or Rest after another phase',
+      'Another Lap recorded without ending Rest changes which lap is shown', 'even below the expanded-screen limit',
+      'adds missing lap boundaries at automatic step endings, even without Work averages',
+      'Lap-button endings are not duplicated', '1,000-screen limit stays blocked',
+      'Rest countdown, targets and your instructions keep priority']) expect(content).toContain(phrase);
+    expect(content).not.toContain('completed-interval pace, time, measured distance and stroke count cannot currently be selected');
   });
   it('explains truthful swim field availability, compact headings and safe completed/hidden Guide reuse', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -2421,7 +2458,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
-    expect(serviceConnectionsSection?.content).toContain('While Garmin activity history is being requested, Services shows **Import already running**');
+    expect(serviceConnectionsSection?.content).toContain('While Garmin activity history is being requested, another request is blocked');
     expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the request');
     expect(serviceConnectionsSection?.content).toContain('usual **30-day cooldown** applies while activities continue arriving from Garmin');
     expect(serviceConnectionsSection?.content).toContain('Garmin Sleep and Health history import is separate from activity history import');
@@ -2624,7 +2661,7 @@ describe('help.content', () => {
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
-    expect(serviceConnectionsSection?.content).toContain('Manual **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing');
+    expect(serviceConnectionsSection?.content).toContain('Manual **Garmin**, **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing');
     expect(serviceConnectionsSection?.content).toContain('one page at a time');
     expect(serviceConnectionsSection?.content).toContain('Acceptance means the request is saved, not that every activity has arrived');
     expect(serviceConnectionsSection?.content).toContain('wait for queued activities before reporting completion');

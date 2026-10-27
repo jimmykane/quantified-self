@@ -8,14 +8,14 @@ import { isSuuntoSwimmingSport } from './suunto-swimming-presentation';
 /** V14 remains immutable. V15 changes presentation, never transitions/laps. */
 export function presentSuuntoSwimmingScreensV15(structure: WorkoutStructureV1, steps: SuuntoGuideStepV1[],
   settings: unknown, units: UserUnitSettingsInterface | undefined,
-  jsonBytes: (steps: SuuntoGuideStepV1[]) => number): SuuntoGuideStepV1[] {
+  jsonBytes: (steps: SuuntoGuideStepV1[]) => number, previousLapReadings = false): SuuntoGuideStepV1[] {
   if (!isSuuntoSwimmingSport(structure.sport)) return steps;
   const fits = (candidate: SuuntoGuideStepV1[]) => jsonBytes(candidate.map(node => node.type === 'repeat'
     ? { ...node, steps: node.steps.map(enrichNotification) } : enrichNotification(node))) <= 256 * 1024;
   const decorate = <T extends SuuntoGuideFieldsStepV1>(screen: T, occurrence?: SuuntoSwimmingOccurrence,
     previous?: SuuntoSwimmingOccurrence, next?: SuuntoSwimmingOccurrence): T => {
     if (!['Work', 'Rest'].includes(screen.title)) return screen;
-    const planned = planSuuntoSwimmingScreen(screen.title, screen.fields, structure.sport, settings, occurrence, previous, next, units);
+    const planned = planSuuntoSwimmingScreen(screen.title, screen.fields, structure.sport, settings, occurrence, previous, next, units, previousLapReadings);
     const result = { ...screen, title: planned.title, fields: planned.fields,
       ...(screen.notification ? { notification: { ...screen.notification, title: planned.title } } : {}) };
     // Match the existing short-rest policy before introducing context text.
@@ -27,7 +27,7 @@ export function presentSuuntoSwimmingScreensV15(structure: WorkoutStructureV1, s
   const fallback = () => fits(compact) ? compact : steps;
   const count = steps.reduce((sum, node) => sum + (node.type === 'repeat' ? node.times * node.steps.length : 1), 0);
   if (count > SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT) return fallback();
-  const occurrences = suuntoSwimmingOccurrences(structure);
+  const occurrences = suuntoSwimmingOccurrences(structure, previousLapReadings);
   if (!occurrences) return fallback();
   const branches = steps.some(node => node.type === 'fields' && node.id?.startsWith('qs-boundary-'));
   let position = 0;

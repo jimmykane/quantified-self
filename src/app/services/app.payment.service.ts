@@ -8,7 +8,7 @@ import { Firestore, collection, collectionData, doc, docData, getDocFromServer, 
 
 import { Auth } from 'app/firebase/auth';
 import type { FirebaseUserType } from 'app/firebase/auth';
-import { EMPTY, Observable, catchError, from, mergeMap, switchMap, filter, take, map, merge, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
+import { EMPTY, Observable, catchError, from, mergeMap, switchMap, filter, take, map, merge, of, retry, throwError, timeout, timer, firstValueFrom, tap } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -83,7 +83,8 @@ interface CheckoutSessionPayload {
 
 interface CheckoutSessionDocumentData {
     url?: string;
-    error?: string | { message?: string };
+    error?: string | { code?: string; message?: string };
+    status?: 'updating' | 'ready' | 'failed';
 }
 
 export class CheckoutStartError extends Error {
@@ -308,7 +309,7 @@ export class AppPaymentService {
     /**
      * Creates a checkout session and redirects the user to Stripe.
      */
-    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string, canRedirect?: () => boolean): Promise<void> {
+    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string, canRedirect?: () => boolean, onProgress?: (status: 'updating') => void): Promise<void> {
         const user = this.auth.currentUser;
         if (!user) {
             throw new Error('User must be authenticated to create a checkout session.');
@@ -317,7 +318,7 @@ export class AppPaymentService {
         await this.assertBillingAvailable();
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
-        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0, canRedirect);
+        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0, canRedirect, onProgress);
     }
 
     private async appendCheckoutSessionWithAttempt(
@@ -327,7 +328,8 @@ export class AppPaymentService {
         cancelUrl: string,
         user: { getIdToken: (forceRefresh?: boolean) => Promise<string> },
         attempt: number,
-        canRedirect?: () => boolean
+        canRedirect?: () => boolean,
+        onProgress?: (status: 'updating') => void
     ): Promise<void> {
         this.assertCheckoutUserStillCurrent(userId);
         const checkoutInput = this.resolveCheckoutInput(price);
@@ -364,7 +366,9 @@ export class AppPaymentService {
 
         let session: CheckoutSessionDocumentData;
         try {
-            session = await this.waitForCheckoutSessionUpdate(userId, checkoutSessionDocId);
+            session = await this.waitForCheckoutSessionUpdate(userId, checkoutSessionDocId, status => {
+                if (this.auth.currentUser?.uid === userId && canRedirect?.() !== false) onProgress?.(status);
+            });
         } catch (error) {
             this.logger.error('Error waiting for checkout session URL:', error);
             const errorName = error instanceof Error ? error.name : '';
@@ -380,12 +384,21 @@ export class AppPaymentService {
 
         if (session.error) {
             const errorMessage = this.getCheckoutErrorMessage(session.error);
-            this.logger.error('Stripe extension returned an error:', session.error);
+            const code = typeof session.error === 'object' ? session.error.code : undefined;
+            if (code === 'checkout_completed' || code === 'checkout_expired' || code === 'checkout_replaced') {
+                this.logger.log('Checkout selection changed:', code);
+                if (code === 'checkout_completed' && checkoutInput.mode === 'subscription') {
+                    await this.runPreCheckoutLinkCheck(user, userId);
+                    this.assertCheckoutUserStillCurrent(userId);
+                }
+                throw new CheckoutStartError(errorMessage);
+            }
+            this.logger.error('Stripe billing returned an error:', session.error);
 
             if (errorMessage.includes('No such customer') && attempt < this.maxCheckoutRetryAttempts) {
                 this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
                 await this.functionsService.call<void, { success: boolean, cleaned: boolean }>('cleanupStripeCustomer');
-                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1, canRedirect);
+                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1, canRedirect, onProgress);
                 return;
             }
 
@@ -563,10 +576,11 @@ export class AppPaymentService {
         return payload;
     }
 
-    private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
+    private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string, onProgress?: (status: 'updating') => void): Promise<CheckoutSessionDocumentData> {
         const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
         let reportedServerReadFailure = false;
-        // A server read also recovers sessions when the live Firestore listener misses an extension update.
+        let reportedUpdating = false;
+        // A server read also recovers sessions when the live Firestore listener misses a billing update.
         const serverUpdates$ = timer(5000, 10000).pipe(
             mergeMap(() => from(this.readCheckoutSessionFromServer(userId, checkoutSessionDocId)).pipe(
                 catchError((error: unknown) => {
@@ -585,6 +599,13 @@ export class AppPaymentService {
         );
         const session = await firstValueFrom(
             merge(docData(sessionRef), serverUpdates$).pipe(
+                tap(sessionData => {
+                    const data = sessionData as CheckoutSessionDocumentData | undefined;
+                    if (data?.status === 'updating' && !data.url && !data.error && !reportedUpdating) {
+                        reportedUpdating = true;
+                        onProgress?.('updating');
+                    }
+                }),
                 filter((sessionData): sessionData is CheckoutSessionDocumentData => {
                     const data = sessionData as CheckoutSessionDocumentData | null | undefined;
                     return !!data && (!!data.url || !!data.error);

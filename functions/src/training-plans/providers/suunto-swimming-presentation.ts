@@ -1,7 +1,7 @@
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { formatWorkoutEndingV1, type WorkoutStepV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
 import { suuntoGuideWatchTextV1 } from '../../../../shared/suunto-guide-presentation';
-import { normalizeSuuntoSwimmingGuideSettings, type SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { normalizeSuuntoSwimmingGuideSettingsForRecovery, type SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import type { SuuntoGuideFieldV1, SuuntoGuideFieldsStepV1, SuuntoGuideStepV1 } from './suunto-guide.serializer';
 
 type Occurrence = { step: WorkoutStepV1; interval?: number; total: number };
@@ -92,7 +92,7 @@ export function presentSuuntoSwimmingScreens(structure: WorkoutStructureV1, step
   rawSettings: unknown, units: UserUnitSettingsInterface | undefined,
   jsonBytes: (steps: SuuntoGuideStepV1[]) => number): SuuntoGuideStepV1[] {
   if (!isSuuntoSwimmingSport(structure.sport)) return steps;
-  const settings = normalizeSuuntoSwimmingGuideSettings(rawSettings);
+  const settings = normalizeSuuntoSwimmingGuideSettingsForRecovery(rawSettings);
   const fits = (candidate: SuuntoGuideStepV1[]) => jsonBytes(candidate.map(node => node.type === 'repeat'
     ? { ...node, steps: node.steps.map(screen => ({ ...screen, ...(screen.notification ? { notification: { ...screen.notification, type: 'default' } } : {}) })) }
     : { ...node, ...(node.notification ? { notification: { ...node.notification, type: 'default' } } : {}) })) <= 256 * 1024;

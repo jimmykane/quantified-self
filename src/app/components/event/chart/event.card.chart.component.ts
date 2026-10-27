@@ -1,3 +1,4 @@
+import { getUserChartDataTypesToUse } from '../../../helpers/app-chart-data-types.helper';
 import { resolveEventLineContinuity, equalEventLineContinuity, type EventLineContinuitySettings } from '../../../helpers/event-chart-line-continuity.helper';
 import {
   ChangeDetectorRef,
@@ -36,7 +37,6 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
 import { applyComparisonDeviceAppearance } from '../../../helpers/device-chart-appearance.helper';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import {
   AppChartSettingsLocalStorageService,
@@ -359,11 +359,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public get dataTypesToUse(): string[] {
-    return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : [];
+    return this.user ? getUserChartDataTypesToUse(this.user) : [];
   }
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
-  private userService = inject(AppUserService);
   private activityCursorService = inject(AppActivityCursorService);
   private chartSettingsLocalStorageService = inject(AppChartSettingsLocalStorageService);
   private eventColorService = inject(AppEventColorService);

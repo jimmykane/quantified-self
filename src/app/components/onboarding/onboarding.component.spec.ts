@@ -158,7 +158,7 @@ describe('OnboardingComponent', () => {
         await localFixture.whenStable();
         if (choice === 'paid') {
             expect(mockPaymentService.appendCheckoutSession).toHaveBeenCalledWith(
-                expect.objectContaining({ id: 'price_pro_monthly' }), undefined, undefined, expect.any(Function),
+                expect.objectContaining({ id: 'price_pro_monthly' }), undefined, undefined, expect.any(Function), expect.any(Function),
             );
             expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         } else {

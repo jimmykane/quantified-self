@@ -1,4 +1,35 @@
 :host { display: block; min-width: 0; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface); }
+// Match the bundled Inter faces while they load. Keep this local to the hero:
+// numeric fonts and Material Symbols have different metrics.
+@font-face {
+  font-family: 'QS Home Inter Fallback';
+  src: local('Arial'), local('ArialMT');
+  font-style: normal;
+  font-weight: 400;
+  size-adjust: 106.99%;
+  ascent-override: 90.55%;
+  descent-override: 22.55%;
+  line-gap-override: 0%;
+}
+// Shortcuts must not gain a row after their first paint. Reuse the existing
+// bundled Inter asset, but retain the system font for this visit if it is late.
+@font-face {
+  font-family: 'QS Home Navigation';
+  src: url('@fontsource/inter/files/inter-latin-500-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-display: optional;
+}
+@font-face {
+  font-family: 'QS Home Inter Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT');
+  font-style: normal;
+  font-weight: 800;
+  size-adjust: 104.28%;
+  ascent-override: 92.9%;
+  descent-override: 23.13%;
+  line-gap-override: 0%;
+}
 .landing-page { --compact-row-gap: 0.75rem; --compact-row-padding: 0.75rem 0; --compact-row-body-gap: 0.5rem; max-width: 1200px; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 3rem); overflow-wrap: anywhere; }
 .landing-page, .landing-page * { box-sizing: border-box; }
 .landing-page section, .feature-section > * { min-width: 0; }
@@ -6,6 +37,7 @@
 .landing-page h2 { margin: 0 0 0.75rem; font: var(--mat-sys-headline-small); font-weight: 700; }
 .landing-page p { color: var(--mat-sys-on-surface-variant); line-height: 1.65; }
 .home-navigation { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem; padding-block: 0.5rem 1rem; }
+.home-navigation a { font-family: 'QS Home Navigation', sans-serif; }
 .hero-section { padding-block: clamp(1.5rem, 3vw, 2rem); text-align: center; }
 .hero-content { max-width: 64rem; margin-inline: auto; }
 .brand-badge { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
@@ -19,6 +51,7 @@
 .hero-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
 .integration-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; margin-block: 1rem; }
 .hero-access-note { max-width: 50rem; margin: 0 auto 0.75rem; font: var(--mat-sys-body-medium); }
+.hero-content h1, .hero-content p { font-family: 'Inter', 'QS Home Inter Fallback', sans-serif; }
 .trust-indicators { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem 1rem; margin: 0; padding: 0; list-style: none; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .trust-indicators li { display: flex; align-items: center; gap: 0.3rem; }
 .trust-indicators mat-icon { width: 16px; height: 16px; font-size: 16px; }

@@ -2550,7 +2550,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
     for (const field of ['id','owner','destinationKey','approvalDigest','issues','remoteWorkoutId','receipt',
       'suuntoSwimmingGuide','suuntoSwimmingSettings','suuntoApprovedSwimmingSettings','suuntoMappingSwimmingSettings',
-      'guideMappingVersion','guideFields','fieldAllocation','suuntoGuideGeneration','suuntoRetiredGuides','suuntoRetiredExternalIds']) {
+      'guideMappingVersion','guideFields','fieldAllocation','windowOffset','previousLapPace','previousLapDuration','previousLapStrokes',
+      'suuntoGuideGeneration','suuntoRetiredGuides','suuntoRetiredExternalIds']) {
       service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-TRAINING-CANARY' });
       const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
       expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');

@@ -391,6 +391,11 @@ Timed-Rest v16 native Suunto countdown alerts likewise have **no wire impact**: 
 not a new recipe setting, target, read metric, provider action, tool, scope or consent. Canonical planned-workout reads
 remain unchanged; strict recipes/proposals/outputs reject injected `alerts` and `countdown` fields. No contract promotion,
 catalog refresh or plugin rebuild is needed. See [countdown evidence and recovery](training-workspace.md#native-timed-rest-countdown-alerts-v16).
+Swimming v17 previous-lap Rest readings are also **no wire impact**: owner-only display preferences and native
+`manualLap`/negative `windowOffset` payload fields are not recipe fields, metrics or read outputs. Existing strict
+plan/workout reads and proposal/confirmation schemas remain unchanged and reject injected private fields.
+No tool, scope, consent, provider action, Assistant authority, catalog refresh or plugin rebuild is added. See
+[previous Work lap scope and verification](training-workspace.md#previous-work-lap-rest-readings-v17).
 The native-app **Duplicate to…** shortcut in completed-workout sync details reuses the existing scheduled-workout copy contract; existing
 read projections expose the new planned copy without copying completion/delivery state. Native **Send a fresh Guide**
 is a new app-only explicit action, not an addition to the registered MCP/Assistant provider-action union. Strict

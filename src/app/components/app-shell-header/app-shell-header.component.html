@@ -1,4 +1,4 @@
-<nav class="custom-header mat-typography" [style.top.px]="bannerHeight">
+<nav #header class="custom-header mat-typography" [style.top.px]="bannerHeight">
   <button mat-icon-button (click)="toggleSidenav.emit()" class="hamburger-link">
     <mat-icon class="larger_icon">menu</mat-icon>
   </button>
@@ -6,6 +6,10 @@
   <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="logoClick.emit()"></mat-icon>
 
   <span class="fill-space"></span>
+
+  @if (authState === true) {
+  <ng-container *ngComponentOutlet="historyImportComponent()"></ng-container>
+  }
 
   @if (authState === null && !isDashboardRoute && !isLoginRoute) {
   <button mat-flat-button class="right qs-mat-accent" disabled>

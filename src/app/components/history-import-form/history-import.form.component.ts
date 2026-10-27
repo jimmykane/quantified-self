@@ -396,7 +396,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const leaseExpiry = typeof expiresAt === 'number' && Number.isFinite(expiresAt) ? expiresAt : 0;
     const remainingMs = Math.max(leaseExpiry, retryAllowedAtMs) - Date.now();
     const usesBackgroundActivityHistory = this.serviceName === ServiceNames.SuuntoApp
-      || this.serviceName === ServiceNames.COROSAPI || this.serviceName === ServiceNames.WahooAPI;
+      || this.serviceName === ServiceNames.COROSAPI || this.serviceName === ServiceNames.WahooAPI
+      || this.serviceName === ServiceNames.GarminAPI;
     this.isActivityHistoryImportRunning.set((usesBackgroundActivityHistory
       && (!!this.userMetaForService?.connectionHistoryImport?.active || !!this.backgroundActivityImport()?.active))
       || remainingMs > 0);

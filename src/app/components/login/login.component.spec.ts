@@ -123,7 +123,7 @@ describe('LoginComponent', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppHapticsService, useValue: haptics },
                 { provide: AppWindowService, useValue: appWindow },
-                { provide: AppEventService, useValue: {} },
+                { provide: AppEventService, useFactory: () => { throw new Error('Sign-in must not initialize activity-data services'); } },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
                 { provide: MatSnackBar, useValue: mockSnackBar },
@@ -140,7 +140,7 @@ describe('LoginComponent', () => {
         component = TestBed.inject(LoginComponent);
     });
 
-    it('should create', () => {
+    it('creates sign-in without initializing activity-data services', () => {
         expect(component).toBeTruthy();
     });
 
@@ -244,7 +244,7 @@ describe('LoginComponent', () => {
         expect(component.profileVerificationNeedsReload()).toBe(httpStatus === 403);
     });
 
-    it.each(['appCheck/throttled', 'permission-denied'])('renders and wires the recovery action for %s', async code => {
+    it.each(['appCheck/throttled', 'permission-denied', 'account/settings-load-failed'])('renders and wires the recovery action for %s', async code => {
         // Only template tests compile a real fixture; login/auth lifecycle is covered separately.
         TestBed.resetTestingModule();
         TestBed.configureTestingModule({
@@ -270,22 +270,28 @@ describe('LoginComponent', () => {
         fixture.detectChanges();
         const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="profile-read-error"]');
         const button: HTMLButtonElement = panel.querySelector('button')!;
-        expect(button.textContent.trim()).toBe(code === 'appCheck/throttled' ? 'Reload page' : 'Retry');
+        const needsReload = code !== 'permission-denied';
+        if (code === 'account/settings-load-failed') {
+            expect(panel.textContent).toContain("We couldn't load the account software");
+            expect(panel.textContent).not.toContain('security check failed');
+            expect(panel.querySelector('a')).toBeNull();
+        }
+        expect(button.textContent.trim()).toBe(needsReload ? 'Reload page' : 'Retry');
         if (code === 'appCheck/throttled') {
             expect(panel.textContent).toContain("Repeated retries in this page won't help");
             expect(panel.textContent).toContain('another trusted network');
             expect(panel.querySelector('a')?.textContent).toContain('Browser verification help');
         }
         button.click();
-        if (code === 'appCheck/throttled') {
+        if (needsReload) {
             fixture.detectChanges();
             expect(button.disabled).toBe(true);
             expect(button.textContent.trim()).toBe('Reloading…');
         } else {
             await fixture.whenStable();
         }
-        expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(code === 'appCheck/throttled' ? 1 : 0);
-        expect(mockUserService.retryProfileRead).toHaveBeenCalledTimes(code === 'appCheck/throttled' ? 0 : 1);
+        expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(needsReload ? 1 : 0);
+        expect(mockUserService.retryProfileRead).toHaveBeenCalledTimes(needsReload ? 0 : 1);
         expect(haptics.selection).toHaveBeenCalledTimes(1);
         fixture.destroy();
     });

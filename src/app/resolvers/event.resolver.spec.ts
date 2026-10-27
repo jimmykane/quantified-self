@@ -1,3 +1,4 @@
+import { getUserChartDataTypesToUse } from '../helpers/app-chart-data-types.helper';
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import {
@@ -19,6 +20,8 @@ import { eventResolver, EventResolverData } from './event.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES } from '../helpers/event-dive-profile.helper';
 
+vi.mock('../helpers/app-chart-data-types.helper', importOriginal => importOriginal<typeof import('../helpers/app-chart-data-types.helper')>().then(actual => Object.assign({}, actual, { getUserChartDataTypesToUse: vi.fn() })));
+
 describe('eventResolver', () => {
     // Update ResolveFn generic type to include EventResolverData
     const executeResolver: ResolveFn<EventResolverData> = (...resolverParameters) =>
@@ -33,6 +36,7 @@ describe('eventResolver', () => {
     const mockUser = new User('testUser');
 
     beforeEach(() => {
+        vi.mocked(getUserChartDataTypesToUse).mockImplementation(user => userServiceSpy.getUserChartDataTypesToUse(user));
         mockUser.settings = {
             chartSettings: { showAllData: false },
             unitSettings: {}

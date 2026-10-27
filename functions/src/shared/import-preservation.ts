@@ -1,5 +1,5 @@
 import type * as admin from 'firebase-admin';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames, type EventInterface } from '@sports-alliance/sports-lib';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
@@ -8,7 +8,8 @@ import { readActivitySourceIdentity } from '../../../shared/activity-source-iden
 import { prepareActivitySourceBindings, savedActivityIdentity, type SavedActivitySource, type ActivityBindingPlan } from './activity-source-binding';
 import { ActivityIdentityConflictError } from './activity-identity-conflict';
 import { isSameProviderRecording, providerRecordingService } from './provider-recording-identity';
-import { retainedSourceRevision } from './retained-activity-source';
+import { retainedSourceReferences, retainedSourceRevision } from './retained-activity-source';
+import { isGarminIndoorActivityCopy, ProviderImportDuplicateError } from './provider-import-duplicate';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { EventWriteSkippedForDeletedEventError, type PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -182,6 +183,19 @@ async function prepareImportedActivityIdentities(
   const service = providerMetadata && providerRecordingService(providerMetadata);
   const provider = service && documents.length ? await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${service}`)) : null;
   const verifiedProvider = !!providerMetadata && isSameProviderRecording(provider?.data(), providerMetadata);
+  const originals = retainedSourceReferences(parent.data() ?? {});
+  const original = originals.length === 1 ? originals[0] : null;
+  if (!firstImport && !metadata.data()?.sourceWritePending && !parent.data()?.benchmarkSourceWritePending
+    && service === ServiceNames.SuuntoApp && !provider?.exists && documents.length === 1 && event.getActivities().length === 1
+    && typeof original?.path === 'string' && original.path.startsWith(`users/${uid}/events/${eventId}/`)
+    && /\.fit$/i.test(original.path)
+    && isGarminIndoorActivityCopy(savedActivityIdentity(documents[0]), event.getActivities()[0] as ActivityIdentityLike)) {
+    // Only likely duplicates incur this one extra, owner-scoped provenance read.
+    const garmin = (await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${ServiceNames.GarminAPI}`))).data();
+    if (`${garmin?.serviceActivityFileType || ''}`.toLowerCase() === 'fit'
+      && isSameProviderRecording(garmin, { ...garmin, serviceName: ServiceNames.GarminAPI }))
+      throw new ProviderImportDuplicateError(eventId);
+  }
   const plan = prepareActivitySourceBindings(event, documents, { allowSourceWindowMatch: verifiedProvider,
     allowNewActivities: firstImport || !documents.length });
   const applyAscent = prepareAscentCarryover(event, documents, plan, verifiedProvider);

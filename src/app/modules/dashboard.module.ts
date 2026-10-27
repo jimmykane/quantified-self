@@ -8,10 +8,11 @@ import { MaterialModule } from './material.module';
 import { DashboardLibraryModule } from './dashboard-library.module';
 import { DashboardRoutingModule } from '../dashboard.routing.module';
 import { DashboardComponent } from '../components/dashboard/dashboard.component';
+import { HistoryImportCardsComponent } from '../components/history-import-progress/history-import-cards.component';
 @NgModule({
   imports: [
     CommonModule, SharedModule, MaterialModule, DashboardLibraryModule,
-    DashboardRoutingModule, UploadActivitiesComponent, EventTableModule,
+    DashboardRoutingModule, UploadActivitiesComponent, EventTableModule, HistoryImportCardsComponent,
   ],
   declarations: [DashboardComponent, DashboardActionPromptsComponent],
 })

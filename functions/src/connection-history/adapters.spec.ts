@@ -19,6 +19,7 @@ import { CONNECTION_HISTORY_CAPABILITIES, historyCapabilities, type HistoryCapab
 import { createHistoryRun } from './model';
 import { executeHistoryOperation, HISTORY_ADAPTERS, historyAdmissionQueue } from './adapters';
 import { HistoryUnavailableError, type HistoryExecution } from './execution';
+import { advanceHistoryRun } from './advance';
 const now = Date.parse('2026-03-01T13:00:00+02:00');
 function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, importRouteHistory: true, rangePreset: '30_days', runId: '11111111-1111-4111-8111-111111111111', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
 const execution = { runId: 'run', tokenPath: 'private/exact/token', providerUserId: 'selected-account', beforeRequest: mocks.before } as unknown as HistoryExecution;
@@ -80,6 +81,33 @@ describe('shared history adapter contracts', () => {
   it('reuses Garmin submission without claiming webhook delivery', async () => {
     const job = run(ServiceNames.GarminAPI); await executeHistoryOperation(job, job.steps[0], execution);
     expect(mocks.garminActivity).toHaveBeenCalledWith('owner', new Date(job.startMs), new Date(job.endMs), execution); expect(job.steps[0].capability.completion).toBe('requested');
+  });
+  it('resumes bounded manual Garmin requests at the failed window and finishes as requested', async () => {
+    const job = run(ServiceNames.GarminAPI);
+    job.rangePreset = 'custom'; job.startMs = Date.parse('2026-01-01T21:00:00.000Z'); job.endMs = Date.parse('2026-02-02T20:59:59.999Z');
+    job.steps = [job.steps[0]]; const step = job.steps[0]; step.nextStartMs = job.startMs;
+    const deps = {
+      execute: async () => ({ ...await executeHistoryOperation(job, step, execution), childPaths: [] }),
+      observe: vi.fn(async () => 'processed' as const),
+      classify: () => ({ kind: 'retry' as const, message: 'Temporary provider failure' }),
+    };
+    await advanceHistoryRun(job, deps, now);
+    const resumeMs = Date.parse('2026-01-31T21:00:00.000Z');
+    expect(step).toMatchObject({ count: 1, nextStartMs: resumeMs, status: 'queued', done: false });
+    expect(mocks.garminActivity).toHaveBeenLastCalledWith('owner', new Date(job.startMs), new Date(resumeMs - 1), execution);
+    mocks.garminActivity.mockRejectedValueOnce(new Error('Temporary provider failure'));
+    await advanceHistoryRun(job, deps, now + 2000);
+    expect(step).toMatchObject({ count: 1, nextStartMs: resumeMs, status: 'retrying', done: false });
+    await advanceHistoryRun(job, deps, job.nextAttemptAt);
+    expect(mocks.garminActivity.mock.calls.slice(1)).toEqual([
+      ['owner', new Date(resumeMs), new Date(job.endMs), execution],
+      ['owner', new Date(resumeMs), new Date(job.endMs), execution],
+    ]);
+    expect(step).toMatchObject({ count: 2, nextStartMs: job.endMs + 1, status: 'requested', done: true, childPaths: [] });
+    expect(job.processed).toBe(true);
+    expect(deps.observe).not.toHaveBeenCalled();
+    expect(mocks.garmin).not.toHaveBeenCalled();
+    expect(mocks.activity).not.toHaveBeenCalled();
   });
   it('skips a provider-declared unavailable Garmin range without retrying it', async () => {
     const job = run(ServiceNames.GarminAPI);

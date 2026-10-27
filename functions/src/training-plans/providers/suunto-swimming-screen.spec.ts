@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { planSuuntoSwimmingScreen, suuntoSwimmingOccurrences, suuntoSwimmingRequiredShapes } from '../../../../shared/suunto-swimming-screen';
 import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import { defaultSuuntoSwimmingGuideSettings, normalizeSuuntoSwimmingGuideSettingsForRecovery,
+  parseSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 const work: WorkoutStepV1 = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100, allowEarlyLap: true }, targets: [] };
 const rest: WorkoutStepV1 = { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] };
 const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming,
@@ -9,6 +11,37 @@ const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimmin
 const prefs = { version: 1, workFields: ['distance', 'pace', 'duration', 'interval', 'workoutDistance'],
   restFields: ['interval', 'previousPlannedDistance', 'nextPlannedDistance', 'workoutDistance', 'heartRate'] };
 describe('shared Suunto swim field allocation', () => {
+  const previousChoices = { version: 1, workFields: [], restFields: ['interval', 'previousLapPace', 'previousLapDuration', 'previousLapStrokes'] };
+  it('bounds previous-lap choices to Rest and preserves historical settings fallback', () => {
+    expect(parseSuuntoSwimmingGuideSettings(previousChoices).restFields).toEqual(previousChoices.restFields);
+    expect(() => parseSuuntoSwimmingGuideSettings({ ...previousChoices, workFields: ['previousLapPace'] })).toThrow();
+    expect(() => parseSuuntoSwimmingGuideSettings({ ...previousChoices, windowOffset: -1 })).toThrow();
+    expect(normalizeSuuntoSwimmingGuideSettingsForRecovery(previousChoices)).toEqual(defaultSuuntoSwimmingGuideSettings());
+  });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('allocates native closed-lap readings after Work for %s', sport => {
+    const occurrences = suuntoSwimmingOccurrences({ ...structure, sport })!;
+    const output = planSuuntoSwimmingScreen('Rest', suuntoSwimmingRequiredShapes(rest), sport,
+      previousChoices, occurrences[1], occurrences[0], occurrences[2], undefined, true);
+    expect(output.title).toBe('Rest 1/10');
+    expect(output.fields).toEqual([
+      { type: 'stepDurationCountdown', value: 15, title: 'Rest rem' },
+      { type: 'pace', title: 'PrevPace', window: 'manualLap', aggregate: 'average', windowOffset: -1 },
+      { type: 'duration', title: 'PrevTime', window: 'manualLap', windowOffset: -1 },
+      { type: 'strokes', title: 'PrevStrk', window: 'manualLap', windowOffset: -1 },
+    ]);
+    expect(output.choices.slice(1).every(choice => choice.state === 'included' && choice.reason.includes('final segment'))).toBe(true);
+    expect(output.choices.slice(1).every(choice => choice.reason.includes('another Lap recorded without ending Rest changes which lap is shown'))).toBe(true);
+  });
+  it('does not substitute a warm-up, active recovery, earlier Rest or missing context for Work', () => {
+    for (const purpose of ['warmup', 'recovery', 'rest'] as const) {
+      const output = planSuuntoSwimmingScreen('Rest', suuntoSwimmingRequiredShapes(rest), structure.sport,
+        previousChoices, { step: rest, total: 1 }, { step: { ...work, purpose }, total: 1 }, undefined, undefined, true);
+      expect(output.fields.some(field => 'windowOffset' in field)).toBe(false);
+      expect(output.choices.filter(choice => choice.field.startsWith('previousLap')).every(choice => choice.state === 'omitted')).toBe(true);
+    }
+    expect(planSuuntoSwimmingScreen('Rest', [], structure.sport, previousChoices,
+      undefined, undefined, undefined, undefined, true).fields.some(field => 'windowOffset' in field)).toBe(false);
+  });
   it('uses the heading for numbering and one short planned-context cell, preserving native readings', () => {
     const occurrences = suuntoSwimmingOccurrences(structure)!;
     const output = planSuuntoSwimmingScreen('Rest', suuntoSwimmingRequiredShapes(rest), structure.sport,

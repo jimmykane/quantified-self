@@ -1,5 +1,6 @@
 {
   "node": [
+    "src/app/components/event/chart/event.card.chart.template.spec.ts",
     "src/app/components/shared/compact-row/compact-row.styles.spec.ts",
     "src/app/components/shared/reviewer-benchmark-preview/reviewer-benchmark-rr-preview.data.spec.ts",
     "src/app/helpers/activity-ascent.helper.spec.ts",
@@ -123,6 +124,7 @@
     "src/app/helpers/health-sleep-account.helper.spec.ts",
     "src/app/helpers/health-source-selection.helper.spec.ts",
     "src/app/helpers/help-search.helper.spec.ts",
+    "src/app/helpers/history-import-progress.helper.spec.ts",
     "src/app/helpers/intensity-zones-chart-data-helper.spec.ts",
     "src/app/helpers/intensity-zones.spec.ts",
     "src/app/helpers/membership-selection.helper.spec.ts",
@@ -192,6 +194,8 @@
     "src/app/helpers/training-workout-completion.shared.spec.ts",
     "src/app/helpers/unit-aware-display.helper.spec.ts",
     "src/app/helpers/unit-setup-preset.helper.spec.ts",
+    "src/app/helpers/user-access.helper.spec.ts",
+    "src/app/helpers/user-settings.loader.spec.ts",
     "src/app/helpers/wahoo-route-access.helper.spec.ts",
     "src/app/helpers/workout-library-presentation.helper.spec.ts",
     "src/app/helpers/workout-library.shared.spec.ts",

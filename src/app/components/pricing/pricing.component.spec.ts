@@ -1501,6 +1501,12 @@ describe('PricingComponent', () => {
             expect(haptics.selection).toHaveBeenCalledTimes(1);
             expect(haptics.success).not.toHaveBeenCalled();
             expect(haptics.error).not.toHaveBeenCalled();
+            if (!isFree) {
+                expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Preparing your checkout');
+                checkout.mock.calls[0][4]?.('updating'); fixture.detectChanges();
+                expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Updating your checkout');
+                expect(haptics.selection).toHaveBeenCalledTimes(1);
+            }
 
             complete();
             await request;

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { parseWorkoutStructureV1, type WorkoutStructureV1 } from '@shared/planned-workout';
+import { allowsEarlyLapV1, parseWorkoutStructureV1, type WorkoutStructureV1 } from '@shared/planned-workout';
 import { assessPlannedWorkoutProviderMappingV1 } from '@shared/planned-workout-providers';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { planSuuntoSwimmingScreen, suuntoSwimmingOccurrences, suuntoSwimmingRequiredShapes } from '@shared/suunto-swimming-screen';
@@ -8,7 +8,7 @@ import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultSuuntoSwimmingGuideSettings, normalizeSuuntoSwimmingGuideSettings, parseSuuntoSwimmingGuideSettings,
-  SUUNTO_SWIM_WORK_FIELDS, SUUNTO_SWIM_REST_FIELDS, SUUNTO_SWIM_FIELD_LABELS } from '@shared/suunto-swimming-guide-settings';
+  isSuuntoPreviousLapField, SUUNTO_SWIM_WORK_FIELDS, SUUNTO_SWIM_REST_FIELDS, SUUNTO_SWIM_FIELD_LABELS } from '@shared/suunto-swimming-guide-settings';
 type Phase = 'workFields' | 'restFields';
 let nextSwimmingGuideSettingsId = 0;
 @Component({ selector: 'app-suunto-swimming-guide-settings', standalone: true, imports: [SharedModule],
@@ -45,14 +45,19 @@ export class SuuntoSwimmingGuideSettingsComponent {
       if (assessPlannedWorkoutProviderMappingV1('suunto', structure).level === 'unsupported') {
         return { compact: false, blocked: true, rows: [] };
       }
-      const occurrences = suuntoSwimmingOccurrences(structure);
-      if (!occurrences) return { compact: true, blocked: false, rows: [] };
+      const previousLapReadings = this.draft().restFields.some(isSuuntoPreviousLapField);
+      const occurrences = suuntoSwimmingOccurrences(structure, previousLapReadings);
+      if (!occurrences) {
+        const blocked = previousLapReadings && structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+          .some(step => allowsEarlyLapV1(step.ending)));
+        return { compact: !blocked, blocked, rows: [] };
+      }
       const units = normalizeUserUnitSettings(this.users.user()?.settings?.unitSettings);
       const rows = occurrences.flatMap((occurrence, index) => {
         if (!['work', 'rest'].includes(occurrence.step.purpose)) return [];
         const result = planSuuntoSwimmingScreen(occurrence.step.purpose === 'rest' ? 'Rest' : 'Work',
           suuntoSwimmingRequiredShapes(occurrence.step), structure.sport, this.draft(), occurrence,
-          occurrences[index - 1], occurrences[index + 1], units);
+          occurrences[index - 1], occurrences[index + 1], units, true);
         return [{ ...result, index, rest: occurrence.step.purpose === 'rest',
           requiredCount: result.fields.length, choices: result.choices.map(choice => ({ ...choice,
             label: SUUNTO_SWIM_FIELD_LABELS[choice.field],
