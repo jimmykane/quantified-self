@@ -3599,13 +3599,17 @@ transition policy is introduced. A Lap-button ending already closes the lap, so 
 another one. An automatic ending creates the boundary on Rest entry. Early-Lap branches preserve both paths exactly,
 even when Work has no selected averages. **An extra Lap during Work splits it**: previous-lap readings cover its final
 segment, not the whole authored interval. This is not completion/adherence evidence or a whole-interval aggregation.
+These are relative windows, not a frozen snapshot: another Lap recorded without ending Rest makes `-1` refer to
+the newly closed Rest lap. Settings, field availability and Help disclose both kinds of extra-Lap behavior.
 
 The shared allocator enables these readings only on Rest immediately after authored Work. Leading/consecutive Rest,
 Rest after warm-up/Recovery/cool-down and context-free compact fallback omit them instead of substituting an earlier
 phase. Countdown, exact targets, target counterparts and authored instructions retain priority within five fields;
 selected readings keep their preference order. Native labels are `PrevPace`, `PrevTime`, `PrevStrk`. Field availability
 uses the same allocator, reports omissions, and warns when compact fallback removes contextual readings. Watch data,
-layout, native pace units and pool-length detection remain watch-controlled. Work/active-Recovery layouts, Rest alerts,
+including sensor finalization, remains native. The general availability warning also covers enriched JSON size
+fallback below the expanded-screen limit, which can omit previous readings even when the normal layout includes them.
+Layout, native pace units and pool-length detection remain watch-controlled. Work/active-Recovery layouts, Rest alerts,
 Guide identity, defaults and protected past/completed copies remain unchanged.
 
 V14–V16 recovery retains the old strict-parser fallback: newly unsupported choices meant the complete old default
@@ -3629,7 +3633,8 @@ frontend normally. This task performs no deployment or live upload. Rollback the
 worker, and retain v17 recovery support for already-started attempts.
 
 Pool check: use a fresh isolated Guide with one manual-ended and one distance-ended Work, each followed by timed
-Rest. Compare Rest's previous pace/time/strokes with the closed lap summary; values must stay fixed throughout Rest.
+Rest. Compare Rest's previous pace/time/strokes with the closed lap summary after the watch finalizes it; values
+must not accumulate Rest time while no additional lap is recorded.
 Repeat with one extra Lap inside Work: the final segment is expected. Do not reinterpret this as a full Work total.
 Keep the exact native Rest alert/duration and current default preferences; no completed copy needs rewriting.
 
@@ -3638,6 +3643,12 @@ frontend/settings/Help tests and 13 offline monitoring-definition tests passed w
 frontend builds pass; changed-file lint, frontend environment policy and `git diff --check` pass. The compiled MCP
 contract remains compatible with its existing developer-refresh advisory. No public contract changed. These are
 local checks; pace/stroke sensor behavior and Rest display readability still need the pool check above.
+
+Review follow-up: clarify extra laps recorded during Rest and the size-fallback limit in settings, per-field
+availability and Help. Synthetic recovery tests alter/remove offsets on all three previous-lap readings, reject
+false acceptance, prohibit a duplicate POST, and recover only after exact content is restored. These are presentation
+and verification fixes: Guide payloads/digests, timing, transitions, consent, MCP contracts and monitoring coverage
+stay unchanged. The 207 focused Functions tests and 156 frontend/settings/Help tests pass after the review changes.
 
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 

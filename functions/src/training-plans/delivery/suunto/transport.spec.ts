@@ -297,6 +297,31 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
       op.destinationKey, op.timeZone, undefined, undefined, undefined, undefined, op.suuntoSwimmingSettings).mappingVersion)
       .toBe('suunto-guides-v16');
   });
+  it.each(['missing', -2, 0, 1] as const)('does not accept a previous-lap create with a changed offset (%s) or repeat its POST', async offset => {
+    op.suuntoSwimmingSettings = { version: 1, workFields: [], restFields: ['previousLapPace', 'previousLapDuration', 'previousLapStrokes'] };
+    next({ structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] } });
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const rest = server.guides.get('guide-1')!.guide.steps[1] as SuuntoGuideFieldsStepV1;
+    const original = structuredClone(rest.fields);
+    // Exercise every new reading; a relative offset is part of the exact sent Guide.
+    for (let index = 1; index < rest.fields.length; index++) {
+      const field = rest.fields[index] as unknown as Record<string, unknown>;
+      if (offset === 'missing') delete field.windowOffset;
+      else field.windowOffset = offset;
+      expect(await recover()).toEqual({ kind: 'uncertain' });
+      await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+      rest.fields = structuredClone(original);
+    }
+    expect(await recover()).toMatchObject({ kind: 'accepted' });
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.some(request => ['PUT', 'DELETE'].includes(request.method))).toBe(false);
+  });
   it('uses the snapshotted strength units and updates the same Guide after a unit-only change', async () => {
     strengthOperation();
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v13');

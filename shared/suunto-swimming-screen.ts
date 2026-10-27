@@ -156,7 +156,7 @@ export function planSuuntoSwimmingScreen(title: string, baseFields: readonly Suu
       if (field.type === 'text') { contextIndex = fields.length; contexts.push(field.value.slice('Plan '.length)); }
       fields.push(field);
       report('included', isSuuntoPreviousLapField(selection)
-        ? 'Previous closed manual lap. An extra Lap press during Work limits this to its final segment; swim readings need watch data.'
+        ? 'Previous closed manual lap. An extra Lap press during Work limits this to its final segment; another Lap recorded without ending Rest changes which lap is shown. Swim readings need watch data.'
         : field.type === 'text' ? 'Included as planned text; Suunto may crop text beside numeric fields.'
           : 'Included as a native reading; it needs data from the watch.');
     }

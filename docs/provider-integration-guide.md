@@ -726,11 +726,12 @@ is added. Monitoring is covered/unchanged and MCP has no wire impact. See
 Swimming owners who select the new previous-lap Rest fields opt into private **v17**. It uses partner-confirmed
 `manualLap` readings with `windowOffset: -1` for pace average, duration and strokes immediately after Work.
 Defaults, other sports, lap/transition behavior, countdown alerts and historical recovery remain unchanged.
-An extra Lap during Work splits the effort: the reading then covers only its final segment. The owner confirmed
-previous HR/time on the watch after manual and automatic endings; swimming pace/strokes still require pool validation.
+An extra Lap during Work splits the effort: the reading then covers only its final segment. These are relative
+windows: another Lap recorded without ending Rest changes which lap is shown. The owner confirmed previous HR/time
+on the watch after manual and automatic endings; swimming pace/strokes still require pool validation.
 This is private presentation, with no MCP, queue, monitoring-resource, Rules or index change. See
 [previous-lap scope, recovery and rollout](training-workspace.md#previous-work-lap-rest-readings-v17).
-The application change still requires a separately approved Functions deployment; no frontend settings change is needed.
+V17 requires a separately approved deployment of the affected Functions before the frontend release exposes the new choices.
 
 An explicit **Send a fresh Guide** review can reserve a new Suunto external identity for the same eligible QS workout,
 without changing or deleting the earlier Guide. This is not absence detection or automatic repair: hidden Guides may

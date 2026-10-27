@@ -30,6 +30,7 @@ describe('shared Suunto swim field allocation', () => {
       { type: 'strokes', title: 'PrevStrk', window: 'manualLap', windowOffset: -1 },
     ]);
     expect(output.choices.slice(1).every(choice => choice.state === 'included' && choice.reason.includes('final segment'))).toBe(true);
+    expect(output.choices.slice(1).every(choice => choice.reason.includes('another Lap recorded without ending Rest changes which lap is shown'))).toBe(true);
   });
   it('does not substitute a warm-up, active recovery, earlier Rest or missing context for Work', () => {
     for (const purpose of ['warmup', 'recovery', 'rest'] as const) {

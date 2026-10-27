@@ -24,6 +24,7 @@ describe('Suunto swimming screen preferences', () => {
     expect(element.querySelector('section')?.hidden).toBe(true);
     expect(element.textContent).toContain('planned, not measured');
     expect(element.textContent).toContain('only its final segment');
+    expect(element.textContent).toContain('Another Lap recorded without ending Rest changes which lap is shown');
     expect(element.textContent).toContain('Pace and stroke readings depend on the watch and recorded swim data');
     expect(element.textContent).toContain('choose Duplicate to… in its sync details or workout actions');
     expect(element.textContent).not.toContain('Repeat on another date');
@@ -109,6 +110,7 @@ describe('Suunto swimming screen preferences', () => {
     component.choose('restFields', 3, 'previousLapStrokes');
     fixture.detectChanges();
     const rows = component.availability()!.rows;
+    expect(fixture.nativeElement.textContent).toContain('large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit');
     expect(rows[0].fields[0].type).toBe('stepDurationCountdown');
     expect(rows[0].choices.filter(choice => choice.state === 'included')).toHaveLength(3);
     expect(rows[1].choices.filter(choice => choice.field.startsWith('previousLap'))

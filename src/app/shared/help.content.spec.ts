@@ -739,6 +739,7 @@ describe('help.content', () => {
     for (const phrase of ['**Last Work lap: average pace**', '**Last Work lap: elapsed time**', '**Last Work lap: stroke count**',
       'Rest immediately after Work', 'both a Lap-button ending and an automatic Work ending', 'only its final segment',
       'Existing default choices stay unchanged', 'Consecutive Rest or Rest after another phase',
+      'Another Lap recorded without ending Rest changes which lap is shown', 'even below the expanded-screen limit',
       'Rest countdown, targets and your instructions keep priority']) expect(content).toContain(phrase);
     expect(content).not.toContain('completed-interval pace, time, measured distance and stroke count cannot currently be selected');
   });
