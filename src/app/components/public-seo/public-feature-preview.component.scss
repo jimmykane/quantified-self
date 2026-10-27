@@ -25,6 +25,12 @@
     var(--mat-sys-surface-container-low);
 }
 
+// Preserve the reserved layout while nearby examples prepare, without gray panels flashing on scroll.
+:host(.preview-prepares-ahead) .preview-placeholder {
+  border-color: transparent;
+  background: transparent;
+}
+
 .preview-placeholder--training,
 .preview-placeholder--flow {
   min-height: 22rem;

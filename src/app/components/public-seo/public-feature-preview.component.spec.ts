@@ -1,10 +1,10 @@
 import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { PLATFORM_ID, signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatButtonToggle } from '@angular/material/button-toggle';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -15,15 +15,76 @@ import { HealthOverviewPreviewComponent } from './health-overview-preview.compon
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 
 describe('PublicFeaturePreviewComponent', () => {
   let fixture: ComponentFixture<PublicFeaturePreviewComponent>;
+  let wait: MockInstance<typeof chartViewportQueue.wait>;
 
   beforeEach(async () => {
+    wait = vi.spyOn(chartViewportQueue, 'wait');
     await TestBed.configureTestingModule({
       deferBlockBehavior: DeferBlockBehavior.Manual,
       imports: [PublicFeaturePreviewComponent, MatIconTestingModule, NoopAnimationsModule],
     }).compileComponents();
+  });
+
+  afterEach(() => wait.mockRestore());
+
+  it('prepares an opted-in example before viewport entry through the shared chart queue', async () => {
+    let approach: (ready: boolean) => void;
+    const cancel = vi.fn();
+    wait.mockReturnValue({
+      ready: new Promise<boolean>(resolve => { approach = resolve; }), cancel,
+    });
+    fixture = TestBed.createComponent(PublicFeaturePreviewComponent);
+    fixture.componentRef.setInput('previewKey', 'training-signals');
+    fixture.componentRef.setInput('prepareAhead', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(wait).toHaveBeenCalledExactlyOnceWith(fixture.nativeElement);
+    expect(fixture.componentInstance.previewReady()).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-home-signal-charts-preview')).toBeNull();
+    approach!(true);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.previewReady()).toBe(true);
+    expect(fixture.nativeElement.classList.contains('preview-prepares-ahead')).toBe(true);
+  });
+
+  it('cancels pending preparation and ignores completion after navigation', async () => {
+    let approach: (ready: boolean) => void;
+    const cancel = vi.fn();
+    wait.mockReturnValue({
+      ready: new Promise<boolean>(resolve => { approach = resolve; }), cancel,
+    });
+    fixture = TestBed.createComponent(PublicFeaturePreviewComponent);
+    fixture.componentRef.setInput('previewKey', 'training-signals');
+    fixture.componentRef.setInput('prepareAhead', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.destroy();
+    expect(cancel).toHaveBeenCalledOnce();
+    approach!(true);
+    await Promise.resolve();
+    expect(fixture.componentInstance.previewReady()).toBe(false);
+  });
+
+  it('keeps default public previews out of the preparation queue', async () => {
+    renderPlaceholder('training-signals');
+    await fixture.whenStable();
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it('preserves server placeholders without queuing browser work', async () => {
+    TestBed.overrideProvider(PLATFORM_ID, { useValue: 'server' });
+    fixture = TestBed.createComponent(PublicFeaturePreviewComponent);
+    fixture.componentRef.setInput('previewKey', 'training-signals');
+    fixture.componentRef.setInput('prepareAhead', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(wait).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.previewReady()).toBe(false);
   });
 
   function renderPlaceholder(previewKey: PublicFeaturePreviewKey): HTMLElement {
