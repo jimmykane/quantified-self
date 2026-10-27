@@ -4,6 +4,7 @@ import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display
 import { planSuuntoSwimmingScreen, suuntoSwimmingOccurrences, suuntoSwimmingRequiredShapes } from '../../../../shared/suunto-swimming-screen';
 import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
 import { serializeSuuntoSwimmingGuideV14, serializeSuuntoSwimmingGuideV15, serializeSuuntoGuideV11ForRecovery,
+  serializeSuuntoRestAlertGuideV16, serializeSuuntoPreviousLapGuideV17,
   type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
 import { presentSuuntoSwimmingScreensV15 } from './suunto-swimming-presentation-v15';
 import { defaultSuuntoSwimmingGuideSettings, type SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
@@ -80,5 +81,73 @@ describe('Suunto v15 swimming presentation', () => {
     });
     expect(compact[0].type).toBe('repeat'); expect(JSON.stringify(compact)).not.toContain('Prev:');
     expect(presentSuuntoSwimmingScreensV15(structure, frozen, undefined, undefined, () => 256 * 1024 + 1)).toBe(frozen);
+  });
+});
+
+const previousSettings: SuuntoSwimmingGuideSettings = { version: 1, workFields: [],
+  restFields: ['interval', 'previousLapPace', 'previousLapDuration', 'previousLapStrokes'] };
+const previousFields = [
+  { type: 'pace', title: 'PrevPace', window: 'manualLap', aggregate: 'average', windowOffset: -1 },
+  { type: 'duration', title: 'PrevTime', window: 'manualLap', windowOffset: -1 },
+  { type: 'strokes', title: 'PrevStrk', window: 'manualLap', windowOffset: -1 },
+];
+describe('Suunto v17 previous closed Work lap readings', () => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('preserves boundaries and previous-lap fields for %s', sport => {
+    const endings: WorkoutStepV1['ending'][] = [{ kind: 'manual' }, { kind: 'time', seconds: 40 },
+      { kind: 'distance', meters: 100 }, { kind: 'distance', meters: 100, allowEarlyLap: true }];
+    for (const ending of endings) {
+      const structure = recipe(sport);
+      (structure.nodes[0] as { steps: WorkoutStepV1[] }).steps = [{ ...work, ending }, rest];
+      const frozen = serializeSuuntoGuideV11ForRecovery(structure, options).artifact.steps;
+      const guide = serializeSuuntoPreviousLapGuideV17(structure, options, previousSettings).artifact;
+      const screens = guide.steps as SuuntoGuideFieldsStepV1[];
+      const execution = (steps: typeof guide.steps) => steps.flatMap(node => node.type === 'repeat'
+        ? Array.from({ length: node.times }, () => node.steps).flat() : [node])
+        .map(({ transitions, trigger, createManualLap }) => ({ transitions, trigger, createManualLap }));
+      expect(execution(screens)).toEqual(execution(frozen));
+      const rests = screens.filter(screen => screen.title.startsWith('Rest'));
+      expect(rests.length).toBe(ending.kind === 'distance' && ending.allowEarlyLap ? 20 : 10);
+      for (const screen of rests) {
+        expect(screen.fields).toEqual([{ type: 'stepDurationCountdown', title: 'Rest rem', value: 15 }, ...previousFields]);
+        expect(screen.alerts).toEqual([{ type: 'default', condition: { type: 'stepDuration', value: 15 }, countdown: { type: 'standard' } }]);
+        expect(screen.notification).toBeUndefined();
+        if (ending.kind === 'manual' || screen.id?.endsWith('-lap')) expect(screen.createManualLap).not.toBe(true);
+        else expect(screen.createManualLap).toBe(true);
+      }
+      expect(screens.filter(screen => !screen.title.startsWith('Rest')).every(screen =>
+        !screen.fields.some(field => 'windowOffset' in field))).toBe(true);
+      expect(JSON.stringify(guide).length).toBeLessThan(256 * 1024);
+    }
+  });
+  it('keeps targets, notes and the countdown before optional previous-lap fields', () => {
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [work,
+      { ...rest, note: 'Relax', targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 80, maximumBpm: 120 }] }] };
+    const screen = serializeSuuntoPreviousLapGuideV17(structure, options, previousSettings).artifact.steps[1] as SuuntoGuideFieldsStepV1;
+    expect(screen.fields).toEqual([
+      { type: 'stepDurationCountdown', title: 'Rest rem', value: 15 }, { type: 'heartRate', title: 'HR' },
+      { type: 'targetHeartRate', title: 'Tgt HR', min: 80, max: 120 }, { type: 'text', value: 'Relax' }, previousFields[0],
+    ]);
+  });
+  it('does not show another phase or an earlier Work lap after consecutive Rest or Recovery', () => {
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      work, rest, { ...rest, id: 'rest2' }, { ...work, id: 'recovery', purpose: 'recovery' }, { ...rest, id: 'rest3' }] };
+    const screens = serializeSuuntoPreviousLapGuideV17(structure, options, previousSettings).artifact.steps as SuuntoGuideFieldsStepV1[];
+    expect(screens[1].fields).toEqual([{ type: 'stepDurationCountdown', title: 'Rest rem', value: 15 }, ...previousFields]);
+    expect(screens.slice(2).every(screen => !screen.fields.some(field => 'windowOffset' in field))).toBe(true);
+  });
+  it('omits contextual previous readings when the compact fallback cannot prove the adjacent phase', () => {
+    const structure = recipe();
+    const frozen = serializeSuuntoGuideV11ForRecovery(structure, options).artifact.steps;
+    const compact = presentSuuntoSwimmingScreensV15(structure, frozen, previousSettings, undefined,
+      candidate => candidate[0].type === 'repeat' ? 1000 : 256 * 1024 + 1, true);
+    expect(compact[0].type).toBe('repeat');
+    expect(JSON.stringify(compact)).not.toContain('windowOffset');
+  });
+  it('retains the exact legacy fallback for v14, v15 and v16 even when new settings reach recovery', () => {
+    for (const serialize of [serializeSuuntoSwimmingGuideV14, serializeSuuntoSwimmingGuideV15, serializeSuuntoRestAlertGuideV16]) {
+      expect(serialize(recipe(), options, previousSettings)).toEqual(serialize(recipe(), options, defaultSuuntoSwimmingGuideSettings()));
+    }
+    expect(serializeSuuntoPreviousLapGuideV17(recipe(), options, defaultSuuntoSwimmingGuideSettings()))
+      .toEqual(serializeSuuntoRestAlertGuideV16(recipe(), options, defaultSuuntoSwimmingGuideSettings()));
   });
 });

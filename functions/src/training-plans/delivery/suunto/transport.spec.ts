@@ -257,6 +257,46 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(0);
   });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('recovers frozen v16 before one opt-in v17 %s update, including a lost ACK', async sport => {
+    op.suuntoSwimmingSettings = defaultSuuntoSwimmingGuideSettings();
+    next({ structure: { version: 1, sport, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] } });
+    const original = (await execute())!;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v16');
+    const frozen = structuredClone(server.guides.get(original.ids.guide)!.guide);
+    expect(guidePayloadForRecovery(op, owner)).toEqual(frozen);
+    op.suuntoSwimmingSettings = { version: 1, workFields: [],
+      restFields: ['interval', 'previousLapPace', 'previousLapDuration', 'previousLapStrokes'] };
+    next();
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v17');
+    server.afterHandle = async request => { if (request.method === 'PUT') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const current = server.guides.get(original.ids.guide)!.guide;
+    const rest = current.steps[1] as SuuntoGuideFieldsStepV1;
+    const selected = rest.fields.filter(field => 'windowOffset' in field);
+    expect(selected.map(field => field.type)).toEqual(['pace', 'duration', 'strokes']);
+    expect(selected.every(field => 'windowOffset' in field && field.windowOffset === -1)).toBe(true);
+    expect(await readGuideArchive(await packageGuide(current))).toEqual(current);
+    const started = structuredClone(op);
+    const originalField = rest.fields[1];
+    rest.fields[1] = { type: 'heartRate', title: 'Wrong lap' };
+    // An owned existing Guide can resume its update, but mismatched content is never acceptance proof.
+    expect(await recover()).toEqual({ kind: 'resume' });
+    op = started;
+    rest.fields[1] = originalField;
+    expect(await recover()).toMatchObject({ kind: 'accepted', artifact: { ids: original.ids } });
+    expect(current.externalId).toBe(frozen.externalId);
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+    expect(transport.assess({ ...op.workout!, structure: { ...op.workout!.structure, sport: ActivityTypes.Running } },
+      op.destinationKey, op.timeZone, undefined, undefined, undefined, undefined, op.suuntoSwimmingSettings).mappingVersion)
+      .toBe('suunto-guides-v16');
+  });
   it('uses the snapshotted strength units and updates the same Guide after a unit-only change', async () => {
     strengthOperation();
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v13');

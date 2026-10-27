@@ -52,7 +52,7 @@ export class SuuntoSwimmingGuideSettingsComponent {
         if (!['work', 'rest'].includes(occurrence.step.purpose)) return [];
         const result = planSuuntoSwimmingScreen(occurrence.step.purpose === 'rest' ? 'Rest' : 'Work',
           suuntoSwimmingRequiredShapes(occurrence.step), structure.sport, this.draft(), occurrence,
-          occurrences[index - 1], occurrences[index + 1], units);
+          occurrences[index - 1], occurrences[index + 1], units, true);
         return [{ ...result, index, rest: occurrence.step.purpose === 'rest',
           requiredCount: result.fields.length, choices: result.choices.map(choice => ({ ...choice,
             label: SUUNTO_SWIM_FIELD_LABELS[choice.field],

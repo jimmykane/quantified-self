@@ -19,11 +19,12 @@ describe('Suunto swimming screen preferences', () => {
       { provide: AppUserService, useValue: { user, updateUserProperties: save } }, { provide: AppHapticsService, useValue: haptics }] }).compileComponents();
   });
   const render = () => { const fixture = TestBed.createComponent(SuuntoSwimmingGuideSettingsComponent); fixture.detectChanges(); return fixture; };
-  it('initializes silently, keeps controls disclosed and explains unsupported last-interval readings', () => {
+  it('initializes silently, keeps controls disclosed and explains previous-lap limitations', () => {
     const fixture = render(); const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('section')?.hidden).toBe(true);
     expect(element.textContent).toContain('planned, not measured');
-    expect(element.textContent).toContain('cannot select the completed interval');
+    expect(element.textContent).toContain('only its final segment');
+    expect(element.textContent).toContain('Pace and stroke readings depend on the watch and recorded swim data');
     expect(element.textContent).toContain('choose Duplicate to… in its sync details or workout actions');
     expect(element.textContent).not.toContain('Repeat on another date');
     expect(fixture.componentInstance.canSave()).toBe(false);
@@ -86,12 +87,37 @@ describe('Suunto swimming screen preferences', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
     expect(component.sections()[0].fields[1].choices.find(choice => choice.value === 'pace')!.disabled).toBe(true);
   });
-  it('never offers Rest lap averages or pool detection/format hacks as functioning controls', () => {
+  it('offers explicit previous-lap readings, not freshly reset Rest averages or guessed selectors', () => {
     const component = render().componentInstance;
     const rest = component.sections()[1];
     expect(rest.allowed).not.toContain('pace'); expect(rest.allowed).not.toContain('strokeRate');
-    component.choose('restFields', 0, 'previousLapPace');
+    expect(rest.allowed).toContain('previousLapPace');
+    expect(rest.allowed).toContain('previousLapDuration');
+    expect(rest.allowed).toContain('previousLapStrokes');
+    component.choose('restFields', 0, 'windowOffset');
     expect(component.changed()).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('saves previous-lap choices and previews only Rest immediately after Work with countdown first', async () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    fixture.componentRef.setInput('structure', { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+      { kind: 'step', id: 'rest-again', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] } satisfies WorkoutStructureV1);
+    component.choose('restFields', 1, 'previousLapPace');
+    component.choose('restFields', 2, 'previousLapDuration');
+    component.choose('restFields', 3, 'previousLapStrokes');
+    fixture.detectChanges();
+    const rows = component.availability()!.rows;
+    expect(rows[0].fields[0].type).toBe('stepDurationCountdown');
+    expect(rows[0].choices.filter(choice => choice.state === 'included')).toHaveLength(3);
+    expect(rows[1].choices.filter(choice => choice.field.startsWith('previousLap'))
+      .every(choice => choice.state === 'omitted')).toBe(true);
+    expect(rows[0].choices.find(choice => choice.field === 'previousLapPace')?.reason).toContain('final segment');
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    await component.save();
+    expect(save).toHaveBeenCalledExactlyOnceWith(user(), { settings: { suuntoSwimmingGuide: component.draft() } });
+    expect(haptics.success).toHaveBeenCalledOnce();
   });
   it('reports per-step target pressure, heading allocation and absent planned distances using the saved recipe', () => {
     const fixture = render(); const component = fixture.componentInstance;

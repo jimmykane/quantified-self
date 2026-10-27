@@ -689,7 +689,7 @@ describe('help.content', () => {
   it('explains manual pool progress and rest screens without promising measurement or fixed-position fixes', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**Manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
-      'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
+      'previous closed manual lap', 'Active **Recovery** keeps swim readings',
       '**Show swimming Guide screens**', 'cannot guarantee fixed positions', 'do not fix delayed pool-length detection',
       'only in an individual pool or open-water swimming workout', 'not shown for other sports, plan settings or sync history',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
@@ -730,9 +730,17 @@ describe('help.content', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**Save Guide screens**', '**Interval 1/10**', '**Prev plan**/**Next plan**',
       'prescribed, not measured', 'not pool lengths or recorded laps', 'no fake target field',
-      'past and completed copies stay unchanged', 'does not expose a previous-lap selector', '**m:ss/100m**',
+      'past and completed copies stay unchanged', 'previous closed manual lap', '**m:ss/100m**',
       'removing an average from Work or Rest does not remove automatic laps',
       '**20 seconds or less**', 'does not guarantee an audible or vibrating alert', 'your own Rest instructions still show']) expect(content).toContain(phrase);
+  });
+  it('explains opt-in previous Work lap readings with truthful lap and phase limits', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Last Work lap: average pace**', '**Last Work lap: elapsed time**', '**Last Work lap: stroke count**',
+      'Rest immediately after Work', 'both a Lap-button ending and an automatic Work ending', 'only its final segment',
+      'Existing default choices stay unchanged', 'Consecutive Rest or Rest after another phase',
+      'Rest countdown, targets and your instructions keep priority']) expect(content).toContain(phrase);
+    expect(content).not.toContain('completed-interval pace, time, measured distance and stroke count cannot currently be selected');
   });
   it('explains truthful swim field availability, compact headings and safe completed/hidden Guide reuse', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;

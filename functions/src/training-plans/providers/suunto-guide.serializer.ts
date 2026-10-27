@@ -633,12 +633,24 @@ export function serializeSuuntoSwimmingGuideV15(structureValue: unknown, options
  * budgets their bytes. V15 and earlier serializers stay frozen for recovery. */
 export function serializeSuuntoRestAlertGuideV16(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
     settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeSuuntoAlertGuide(structureValue, options, settings, units, false);
+}
+
+/** Partner-confirmed negative offsets on manual-lap windows. V16 recovery stays frozen. */
+export function serializeSuuntoPreviousLapGuideV17(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeSuuntoAlertGuide(structureValue, options, settings, units, true);
+}
+
+function serializeSuuntoAlertGuide(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings: SuuntoSwimmingGuideSettings | undefined, units: UserUnitSettingsInterface | undefined,
+    previousLapReadings: boolean): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
     const frozen = serializeSuuntoGuideV11ForRecovery(structure, options);
     const alerted = addSuuntoRestCountdownAlerts(frozen.artifact.steps);
     const jsonBytes = (steps: SuuntoGuideStepV1[]) => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps }), 'utf8');
     const steps = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)
-        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes)
+        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes, previousLapReadings)
         : presentSuuntoRestScreens(structure, alerted, jsonBytes);
     const enriched = (values: SuuntoGuideStepV1[]) => values.map(node => node.type === 'repeat'
         ? { ...node, steps: node.steps.map(screen => ({ ...screen,
