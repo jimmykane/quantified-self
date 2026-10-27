@@ -36,7 +36,9 @@ describe('help.content', () => {
       '**Requesting Garmin history**', 'temporary failures retry from the unfinished batch',
       '**History requested** means submission finished', 'Garmin delivers activities separately',
       'does not confirm that every activity has arrived', '**30-day cooldown**',
+      'Existing connections are verified automatically', 'reconnect before importing history; no import starts from that request',
       'Sleep, Health and saved routes keep their separate controls']) expect(copy).toContain(phrase);
+    expect(copy).not.toContain('Older connections may retain the previous import flow');
   });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;

@@ -198,10 +198,18 @@ The coordinator-active form lock applies to all four providers, alongside existi
 behavior. Garmin's form says **Requesting Garmin history**, then **History requested**, and explains asynchronous delivery.
 
 Compatibility is deliberate: omitted/false `background` retains the old callable contract, and a new client can
-still read an old backend's stats response. Existing connections without account/generation metadata use the old
-manual path until a normal reconnect establishes that identity; admission never invents generations. Missing or
-mismatching tokens on a versioned connection fail closed. Garmin's legacy path still returns void; new clients accept
-that response during backend-first rollout or legacy fallback. All manual Sleep/Health/route imports remain on their existing paths.
+still read an old backend's stats response. For all four providers, background admission repairs a missing
+`providerUserId` on demand when the connection and credential generations already exist and exactly one token
+under that user's provider root matches the active credential generation. The token's provider identity field must
+match its document ID (`userID`, `userName`, `openId`, or `wahooUserID`, respectively). The identifier, run and progress
+projection commit in one transaction with the existing deletion/disconnect/cooldown guards. A transaction retry
+cannot switch that recovery decision to a replacement account or generation. Existing identifiers are never overwritten.
+Suunto OAuth also passes its verified account ID to the guarded connected-state write, as the other providers do,
+so a later reconnect replaces an older recovered ID with the newly authorized account.
+Missing generations, ambiguous or mismatching credentials require reconnecting; background requests do not silently
+fall back to the legacy scan. Admission never invents generations or changes credentials. No bulk migration is needed,
+and already queued legacy imports are neither relinked nor replayed. Garmin's old-client path still returns void;
+new clients accept that response from older backends. All manual Sleep/Health/route imports remain on their existing paths.
 
 Monitoring: **covered/unchanged**, after reviewing `tools/connection-history-monitoring/definitions.mjs` and
 `tools/import-monitoring/definitions.mjs`. New runs use the same collection, workers, fixed provider labels,
@@ -214,6 +222,10 @@ Release the compatible backend first: `addSuuntoAppHistoryToQueue`, `addCOROSAPI
 backend function required for Wahoo. Garmin additionally needs only `backfillGarminAPIActivities`: its adapter and
 coordinator already support bounded requests and requested completion. Release the frontend afterward. No Rules, indexes,
 secrets or cloud queue configuration changes are needed. Deployment still requires separate approval.
+The on-demand identity repair requires the four admission functions (`addSuuntoAppHistoryToQueue`,
+`addCOROSAPIHistoryToQueue`, `addWahooAPIHistoryToQueue`, `backfillGarminAPIActivities`) once coordinator support is
+deployed. Release `requestAndSetSuuntoAPIAccessToken` before or alongside them so reconnect also updates the saved
+Suunto identity. The existing progress UI needs no behavior change; Help explains verification and reconnect requirements.
 To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
 retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.
 

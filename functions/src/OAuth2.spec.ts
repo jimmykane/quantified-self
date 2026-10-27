@@ -2061,7 +2061,7 @@ describe('OAuth2', () => {
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(
                 userID,
                 ServiceNames.SuuntoApp,
-                undefined,
+                'test-external-user',
                 expect.objectContaining({
                     fieldName: 'activeOAuthCredentialGeneration',
                     expectedGeneration: expect.any(String),
@@ -2074,6 +2074,26 @@ describe('OAuth2', () => {
             );
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
+        });
+
+        it.each([false, true])('passes the verified Suunto account to the guarded connection write with history consent=%s', async consent => {
+            mockTransactionDocumentData!.oauthImportRecentHistory = consent;
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'replacement-suunto-account', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
+
+            expect(mockMarkServiceConnected).toHaveBeenCalledOnce();
+            const [, , providerUserId, credentialGuard, flowGuard, historyContext] = mockMarkServiceConnected.mock.calls[0];
+            expect(providerUserId).toBe('replacement-suunto-account');
+            expect(credentialGuard).toMatchObject({
+                fieldName: 'activeOAuthCredentialGeneration', expectedGeneration: historyContext.credentialGeneration,
+            });
+            expect(flowGuard).toMatchObject({ fieldName: 'oauthFlowGeneration', expectedGeneration: 'oauth-flow-generation' });
+            expect(historyContext).toMatchObject({ requested: consent, providerUserId });
         });
 
         it('does not mark connected when pending-disconnect clearing loses its lifecycle guard', async () => {
