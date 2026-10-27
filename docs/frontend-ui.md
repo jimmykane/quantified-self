@@ -42,6 +42,26 @@ and [CLS diagnostics](https://web.dev/articles/optimize-cls).
 
 ## Sign-in route loading
 
+Account access checks use `AppUserAccess`, which has only type imports and stays synchronous. `AppUserUtilities`
+inherits that policy for existing private callers, while retaining the original settings defaults and migrations.
+Public shell/guards must import the access helper rather than the settings class. Profile merging and claim merging
+load the settings utilities through `loadUserSettingsUtilities` only when an authenticated profile needs normalization;
+an anonymous visit does not request that module. Normalize before publishing a ready profile. Keep `switchMap` around
+asynchronous snapshot merges, the account-identity check after server verification/normalization, existing generation
+guards, complete-profile requirements and read deadlines. A failed download propagates into the existing blocked
+profile recovery flow. A module import failure uses `account/settings-load-failed` and the existing explicit
+page-reload action: browsers may retain a failed native import for the document lifetime, so a same-page profile retry
+is insufficient. Keep the account blocked, preserve the signed-in session and use download-specific guidance.
+Authentication, App Check, consent and entitlement rules keep their existing lifecycle. Event-detail chart selection stays synchronous in the chart helper, where its
+canonical catalog is needed, rather than pulling that catalog into `AppUserService`.
+
+The production output check rejects the settings class and chart catalog in homepage startup. An authenticated tool
+such as Compare Files can still need those modules. Moving account initialization off startup also moves some shared
+code into deferred chart previews: the preview-only raw static limit is 192 KiB, with a separate 3,050 KiB cap for
+homepage startup plus that preview. The latter was about 3,042 KiB before this split. Report both loads and benchmark
+first chart use as well as startup; do not satisfy a startup budget by silently moving an equivalent stall onto a click.
+Use production source maps only for dependency attribution, not proof that every source listed in a map executes.
+
 `LoginModule` imports its forms, loading/haptic primitives and required Material modules directly. Keep activity-data
 services and broad `SharedModule`/`MaterialModule` dependencies out of this route: merely entering sign-in should not
 construct the activity workspace. The production-output check follows the sign-in module's static dependency graph
@@ -53,6 +73,45 @@ Profile Get Started from the hydrated homepage using equivalent production-mode 
 services. Separate click Event Timing from the asynchronous wait for sign-in to render, and report cold/warm conditions,
 CPU throttling and source-map exclusions. A smaller lazy payload or a fast local click does not establish field INP;
 Search Console and CrUX need their own post-release observations.
+
+### Account utilities verification (27 October 2026)
+
+Compared with base `59e2a73ba95f1fe46d1fb82f408e57a50e5b16d8`, the production build's raw static dependency graphs are:
+
+| Graph | Before | After |
+| --- | ---: | ---: |
+| Home startup | 2,911.4 KiB / 95 assets | 2,674.3 KiB / 90 assets |
+| Deferred signal preview, incremental | 130.7 KiB | 188.6 KiB |
+| Home plus signal preview | 3,042.1 KiB | 2,862.9 KiB |
+| All public startup graphs, union | 4,112.2 KiB | 4,113.2 KiB |
+
+Code moved off anonymous startup; it was not removed from the entire app. The chart/catalog normalizer remains available
+on account and feature paths. The preview budget change above exposes the 57.9 KiB incremental first-use tradeoff.
+
+Local browser checks used equivalent optimized full-app builds with the existing `demo-stripe-billing` environment,
+synthetic Auth/Firestore/Storage data, no service worker, a 390×844 visible viewport, Chrome's **6× CPU slowdown** and
+unthrottled loopback HTTP with `Cache-Control: no-store`. Both builds had the same local-only observation script.
+After warming both journeys, three runs per build per journey alternated before/after order. The observer records
+DOM readiness followed by two animation frames; it does not establish network/CDN or field performance.
+
+| Local timing | Before median (range) | After median (range) |
+| --- | ---: | ---: |
+| Home ready, six loads | 2,299 ms (2,176–2,350) | 2,239 ms (2,204–2,311) |
+| Get Started click → sign-in ready, three runs | 526 ms (508–543) | 542 ms (502–546) |
+| Signal placeholder enters viewport → preview ready, three runs | 570 ms (566–597) | 589 ms (561–623) |
+| Long-task time before Home ready, six loads | 1,487 ms | 1,444 ms |
+
+The reproducible result is an **8.1% smaller Home graph** and a **5.9% smaller Home-plus-preview graph**. The short local
+run shows overlapping timing ranges and slightly slower sign-in/preview medians. It does not demonstrate an INP win or
+resolve Search Console's field report. The largest startup task remains about 420 ms under this artificial slowdown.
+
+Functional checks cover anonymous/sign-in startup, returning Basic/Pro and legacy settings, direct Dashboard/Training/
+workout links, saved miles and dark theme, required consent, selected yearly Pro handoff, free completion, sign-out and
+account changes. Delayed/failed normalization and timeouts retain the profile gate; obsolete async results cannot publish
+access. A real local 503 reproduces browser import caching and the explicit reload recovery restores the same session.
+An old open document with removed assets follows the existing bounded chunk-reload recovery, after which Get Started
+works. These local checks do not exercise a real service-worker release, live App Check attestation, Stripe Checkout,
+provider delivery or server-computed Training data. Those contracts were not changed.
 
 ## Route headers
 

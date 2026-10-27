@@ -1,3 +1,5 @@
+import type { User } from '@sports-alliance/sports-lib';
+import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
   DataPotentialStamina,
   DataStamina,
@@ -46,3 +48,24 @@ export const getAppNonUnitBasedChartDataTypes = (
 
   return getAppCanonicalChartDataTypes();
 };
+
+export function getUserChartDataTypesToUse(user: User): string[] {
+  if (!user.settings?.chartSettings?.dataTypeSettings) {
+    return [];
+  }
+
+  const enabledDataTypeSet = new Set(
+    Object.keys(user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
+      return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
+    })
+  );
+  const canonicalDataTypes = getAppCanonicalChartDataTypes();
+  const orderedDataTypes = applyEventChartCanonicalOrderOverride(
+    canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
+  );
+  const extraEnabledDataTypes = [...enabledDataTypeSet]
+    .filter((dataType) => !orderedDataTypes.includes(dataType))
+    .sort((left, right) => left.localeCompare(right));
+
+  return orderedDataTypes.concat(extraEnabledDataTypes);
+}

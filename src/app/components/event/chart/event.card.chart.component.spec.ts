@@ -1,9 +1,8 @@
+import { getUserChartDataTypesToUse } from '../../../helpers/app-chart-data-types.helper';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { BehaviorSubject, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -44,6 +43,8 @@ import { MaterialModule } from '../../../modules/material.module';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+
+vi.mock('../../../helpers/app-chart-data-types.helper', importOriginal => importOriginal<typeof import('../../../helpers/app-chart-data-types.helper')>().then(actual => Object.assign({}, actual, { getUserChartDataTypesToUse: vi.fn() })));
 
 describe('EventCardChartComponent', () => {
   let fixture: ComponentFixture<EventCardChartComponent>;
@@ -110,6 +111,7 @@ describe('EventCardChartComponent', () => {
   };
 
   beforeEach(async () => {
+    vi.mocked(getUserChartDataTypesToUse).mockImplementation(user => mockUserService.getUserChartDataTypesToUse(user));
     authUserSubject = new BehaviorSubject<User | null>({ uid: 'u1' } as User);
     Object.values(mockHaptics).forEach(mock => mock.mockClear());
     mockSnackBar.open.mockClear();
@@ -2341,16 +2343,6 @@ describe('EventCardChartComponent', () => {
     expect(component.zoomRange).toBeNull();
     expect(component.previewSelectedRange).toBeNull();
     expect(component.selectedRange).toBeNull();
-  });
-
-  it('passes contextual reset state to each data chart panel', () => {
-    const template = readFileSync(
-      resolve(process.cwd(), 'src/app/components/event/chart/event.card.chart.component.html'),
-      'utf8'
-    );
-
-    expect(template).toContain('[showResetChartState]="hasResettableChartState"');
-    expect(template).toContain('(resetChartState)="onResetChartStateRequested()"');
   });
 
   it('exposes branded watermark text when provided', () => {

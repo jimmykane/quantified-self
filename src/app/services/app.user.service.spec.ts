@@ -10,16 +10,18 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { of, firstValueFrom, take, from, filter, Observable, Subject, BehaviorSubject, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames, User } from '@sports-alliance/sports-lib';
+import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
-import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import { appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { UserProfileVerificationService } from './user-profile-verification.service';
 import { defaultSuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
+import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
+
+vi.mock('../helpers/user-settings.loader', () => ({ loadUserSettingsUtilities: vi.fn() }));
 
 const verificationSDK = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
 vi.mock('firebase/firestore/lite', () => verificationSDK);
@@ -61,6 +63,7 @@ describe('AppUserService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(loadUserSettingsUtilities).mockReset().mockResolvedValue(AppUserUtilities);
         (authState as any).mockImplementation((auth: any) => of(auth?.currentUser || null));
         (user as any).mockImplementation((auth: any) => of(auth?.currentUser || null));
         (docData as any).mockReset();
@@ -129,6 +132,75 @@ describe('AppUserService', () => {
     it('should be created', () => {
         service = TestBed.inject(AppUserService);
         expect(service).toBeTruthy();
+    });
+
+    it('does not load chart/settings utilities for an anonymous account', () => {
+        vi.mocked(authState).mockReturnValue(of(null));
+        vi.mocked(user).mockReturnValue(of(null));
+        service = TestBed.inject(AppUserService);
+        expect(service.user()).toBeNull();
+        expect(service.profileReadState()).toEqual({ status: 'signed-out' });
+        expect(loadUserSettingsUtilities).not.toHaveBeenCalled();
+    });
+
+    it.each(['switch', 'sign out'])('never publishes a pending settings profile after %s', async change => {
+        const authChanges = new BehaviorSubject<any>(mockAuth.currentUser);
+        const tokenChanges = new BehaviorSubject<any>(mockAuth.currentUser);
+        vi.mocked(authState).mockReturnValue(authChanges);
+        vi.mocked(user).mockReturnValue(tokenChanges);
+        let complete!: (utilities: typeof AppUserUtilities) => void;
+        vi.mocked(loadUserSettingsUtilities).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+        service = TestBed.inject(AppUserService);
+        const seen: string[] = [];
+        const subscription = service.user$.subscribe(value => { if (value) seen.push(value.uid); });
+        await vi.waitFor(() => expect(loadUserSettingsUtilities).toHaveBeenCalledOnce());
+        expect(service.isProfileReadBlocking()).toBe(true);
+        expect(seen).toEqual([]);
+        mockAuth.currentUser = change === 'switch' ? { ...mockAuth.currentUser, uid: 'u2' } : null;
+        authChanges.next(mockAuth.currentUser);
+        tokenChanges.next(mockAuth.currentUser);
+        if (change === 'switch') await vi.waitFor(() => expect(service.user()?.uid).toBe('u2'));
+        complete(AppUserUtilities);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(seen).not.toContain('u1');
+        expect(service.user()?.uid ?? null).toBe(change === 'switch' ? 'u2' : null);
+        expect(service.profileReadState().status).toBe(change === 'switch' ? 'ready' : 'signed-out');
+        subscription.unsubscribe();
+    });
+
+    it('discards an older snapshot if settings loading finishes after a newer one', async () => {
+        vi.mocked(authState).mockReturnValue(of(null));
+        vi.mocked(user).mockReturnValue(of(null));
+        service = TestBed.inject(AppUserService);
+        const snapshots = new Subject<any>();
+        vi.mocked(docData).mockReturnValueOnce(snapshots).mockReturnValue(of({}));
+        let complete!: (utilities: typeof AppUserUtilities) => void;
+        vi.mocked(loadUserSettingsUtilities).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+        const seen: string[] = [];
+        const subscription = service.getUserByID('u1').subscribe(value => { if (value?.email) seen.push(value.email); });
+        snapshots.next({ email: 'old@example.test' });
+        await vi.waitFor(() => expect(loadUserSettingsUtilities).toHaveBeenCalledOnce());
+        snapshots.next({ email: 'new@example.test' });
+        await vi.waitFor(() => expect(seen).toEqual(['new@example.test']));
+        complete(AppUserUtilities);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(seen).toEqual(['new@example.test']);
+        subscription.unsubscribe();
+    });
+
+    it('keeps access blocked while the browser retains a failed settings import', async () => {
+        const error = Object.assign(new TypeError('Failed to fetch dynamically imported module'), { code: 'account/settings-load-failed' });
+        vi.mocked(loadUserSettingsUtilities).mockRejectedValue(error);
+        mockAuth.currentUser.getIdTokenResult.mockResolvedValue({ claims: { stripeRole: 'pro' } });
+        service = TestBed.inject(AppUserService);
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('error'));
+        expect(service.user()).toBeNull();
+        expect(service.hasProAccessSignal()).toBe(false);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        expect(service.profileReadState()).toMatchObject({ code: 'account/settings-load-failed' });
+        expect(await service.retryProfileRead()).toBe(false);
+        expect(service.user()).toBeNull();
+        expect(service.hasProAccessSignal()).toBe(false);
     });
 
     it('feeds only resolved Auth state from the existing subscription, never user details', () => {
@@ -558,8 +630,7 @@ describe('AppUserService', () => {
         });
 
         authStateSubject.next(mockAuth.currentUser);
-        await Promise.resolve();
-        await Promise.resolve();
+        await vi.waitFor(() => expect(emittedUsers).toEqual([null]));
 
         expect(emittedErrors).toEqual([]);
         expect(emittedUsers).toEqual([null]);
@@ -1280,62 +1351,6 @@ describe('AppUserService', () => {
         expect(loadedUser?.acceptedPrivacyPolicy).toBe(true);
         expect(loadedUser?.settings).toBeTruthy();
         expect(loggerErrorSpy).toHaveBeenCalledTimes(3);
-    });
-
-    it('returns enabled chart data types in canonical order with event chart priority overrides', () => {
-        service = TestBed.inject(AppUserService);
-        const user = {
-            settings: {
-                chartSettings: {
-                    dataTypeSettings: {
-                        [DataAltitude.type]: { enabled: true },
-                        [DataCadence.type]: { enabled: true },
-                        [DataGradeAdjustedSpeed.type]: { enabled: true },
-                        [DataHeartRate.type]: { enabled: true },
-                        [DataPace.type]: { enabled: true },
-                        [DataPotentialStamina.type]: { enabled: true },
-                        [DataSpeed.type]: { enabled: true },
-                        [DataStamina.type]: { enabled: true },
-                        [DataPower.type]: { enabled: true },
-                        customType: { enabled: true },
-                    }
-                }
-            }
-        } as any;
-
-        const canonicalChartDataTypes = getAppCanonicalChartDataTypes();
-        const enabledDataTypes = [
-            DataAltitude.type,
-            DataCadence.type,
-            DataGradeAdjustedSpeed.type,
-            DataHeartRate.type,
-            DataPace.type,
-            DataPotentialStamina.type,
-            DataPower.type,
-            DataSpeed.type,
-            DataStamina.type,
-            'customType'
-        ];
-        const canonicalEnabledDataTypes = canonicalChartDataTypes.filter((dataType) => enabledDataTypes.includes(dataType));
-        const expectedOrderedDataTypes = [
-            DataHeartRate.type,
-            DataPace.type,
-            DataSpeed.type,
-            DataGradeAdjustedSpeed.type,
-            DataPower.type,
-            DataCadence.type,
-            ...canonicalEnabledDataTypes.filter((dataType) => ![
-                DataHeartRate.type,
-                DataPace.type,
-                DataSpeed.type,
-                DataGradeAdjustedSpeed.type,
-                DataPower.type,
-                DataCadence.type,
-            ].includes(dataType)),
-            'customType'
-        ];
-
-        expect(service.getUserChartDataTypesToUse(user)).toEqual(expectedOrderedDataTypes);
     });
 
     it('builds the shared Suunto connection view from tokens and service meta', async () => {

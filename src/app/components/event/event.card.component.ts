@@ -1,3 +1,4 @@
+import { getUserChartDataTypesToUse } from '../../helpers/app-chart-data-types.helper';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -562,7 +563,7 @@ export class EventCardComponent implements OnInit {
 
     const user = this.currentUser();
     if (user) {
-      const userChartDataTypes = this.userService.getUserChartDataTypesToUse(user);
+      const userChartDataTypes = getUserChartDataTypesToUse(user);
       const nonUnitBasedDataTypes = getAppNonUnitBasedChartDataTypes(
         user.settings.chartSettings.showAllData,
         userChartDataTypes,

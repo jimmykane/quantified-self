@@ -4,6 +4,10 @@ import { Firestore } from 'app/firebase/firestore';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppUserInterface } from '../models/app-user.interface';
 import { UserProfileVerificationService } from './user-profile-verification.service';
+import { AppUserUtilities } from '../utils/app.user.utilities';
+import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
+
+vi.mock('../helpers/user-settings.loader', () => ({ loadUserSettingsUtilities: vi.fn() }));
 
 const sdk = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
 vi.mock('firebase/firestore/lite', () => sdk);
@@ -16,6 +20,7 @@ describe('UserProfileVerificationService', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(loadUserSettingsUtilities).mockResolvedValue(AppUserUtilities);
     auth = { currentUser: { uid: 'u1' } };
     sdk.getFirestore.mockReturnValue('lite-firestore');
     sdk.doc.mockImplementation((_firestore, path) => path);
@@ -37,6 +42,54 @@ describe('UserProfileVerificationService', () => {
     expect(await service.verifyIfIncomplete('u1', profile)).toBe(profile);
     expect(sdk.getFirestore).not.toHaveBeenCalled();
     expect(sdk.getDoc).not.toHaveBeenCalled();
+    expect(loadUserSettingsUtilities).not.toHaveBeenCalled();
+  });
+
+  it('keeps verification pending until existing settings normalization finishes', async () => {
+    let complete!: (utilities: typeof AppUserUtilities) => void;
+    vi.mocked(loadUserSettingsUtilities).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+    const finished = vi.fn();
+    const verification = service.verifyIfIncomplete('u1', null).then(finished);
+    await vi.waitFor(() => expect(loadUserSettingsUtilities).toHaveBeenCalledOnce());
+    expect(finished).not.toHaveBeenCalled();
+    complete(AppUserUtilities);
+    await verification;
+    expect(finished).toHaveBeenCalledWith(expect.objectContaining({
+      uid: 'u1', settings: expect.objectContaining({ appSettings: expect.objectContaining({ unitSetupCompleted: true }) }),
+    }));
+  });
+
+  it.each(['switch', 'sign out'])('rejects verification on %s while the settings chunk is pending', async change => {
+    let complete!: (utilities: typeof AppUserUtilities) => void;
+    vi.mocked(loadUserSettingsUtilities).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+    const verification = service.verifyIfIncomplete('u1', null);
+    const assertion = expect(verification).rejects.toMatchObject({ code: 'cancelled' });
+    await vi.waitFor(() => expect(loadUserSettingsUtilities).toHaveBeenCalledOnce());
+    auth.currentUser = change === 'switch' ? { uid: 'u2' } : null;
+    complete(AppUserUtilities);
+    await assertion;
+  });
+
+  it('propagates a cached settings import failure without memoizing its verification attempt', async () => {
+    const error = Object.assign(new TypeError('Failed to fetch dynamically imported module'), { code: 'account/settings-load-failed' });
+    vi.mocked(loadUserSettingsUtilities).mockRejectedValue(error);
+    await expect(service.verifyIfIncomplete('u1', null)).rejects.toBe(error);
+    await expect(service.verifyIfIncomplete('u1', null)).rejects.toBe(error);
+    expect(loadUserSettingsUtilities).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds a stalled settings download with the existing verification deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(loadUserSettingsUtilities).mockReturnValueOnce(new Promise(() => {}));
+      const result = service.verifyIfIncomplete('u1', null);
+      const assertion = expect(result).rejects.toMatchObject({ code: 'deadline-exceeded' });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+      expect(await service.verifyIfIncomplete('u1', null)).toMatchObject({ uid: 'u1' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([
