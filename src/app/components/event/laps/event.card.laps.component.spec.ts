@@ -175,6 +175,7 @@ describe('EventCardLapsComponent', () => {
         expect(rows.map(row => row[EVENT_LAP_STROKE_COLUMN])).toEqual(['Freestyle', '', 'Butterfly', '', 'Mixed']);
         expect(rows.map(row => row.isRest)).toEqual([false, true, false, true, false]);
         expect(haptics.selection).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 m).');
         component.toggleLapLengths(rows[0]);
         component.toggleLapSelection(table, rows[0]);
         component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
@@ -183,6 +184,7 @@ describe('EventCardLapsComponent', () => {
         const refreshed = component.lapTableGroups[0].tables[0];
         const first = refreshed.dataSource.data.find(row => !row.isLapAverage)!;
         expect(first.lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 yd).');
         expect(refreshed.selectedCount).toBe(1);
         expect(getSwimLapLengths(refreshed.activity).get(first.lap)?.map(length => length.index)).toEqual([1, 2, 3, 4]);
         haptics.selection.mockClear();
@@ -229,6 +231,7 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
         expect(component.availableLapTypes).toEqual([]);
         expect(fixture.nativeElement.textContent).toContain('No separate original laps to display.');
+        expect(fixture.nativeElement.querySelector('.lap-type-tabs')).toBeNull();
         fixture.nativeElement.querySelectorAll('mat-button-toggle button')[0].click();
         fixture.detectChanges();
         expect(component.availableLapTypes).toEqual([LapTypes.Interval]);

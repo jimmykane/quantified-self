@@ -82,7 +82,7 @@
               [class.swim-length-split-cell]="column.name === 'Split'"
               [class.swim-length-swolf-cell]="column.name === 'Normalized SWOLF'">
               @if (column.name === 'Normalized SWOLF') {
-              <span class="swim-swolf-heading" tabindex="0" [matTooltip]="columnTooltips[column.name]" [attr.aria-label]="columnTooltips[column.name]">{{ swolfColumnLabel }}</span>
+              <span class="swim-swolf-heading" tabindex="0" [matTooltip]="columnTooltips[column.name]" [attr.aria-label]="swolfColumnLabel + '. ' + columnTooltips[column.name]">{{ swolfColumnLabel }}</span>
               } @else if (column.name !== '#') {
               <app-data-type-icon [dataType]="column.name" [tooltip]="columnTooltips[column.name]" [focusable]="true"></app-data-type-icon>
               }

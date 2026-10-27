@@ -143,10 +143,13 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(component.lapLengthTable?.rows[0]).toMatchObject({ Duration: '30s', Distance: '25 yd', Strokes: '10', 'Swim Pace': '02:00 min/100yd', 'Normalized SWOLF': '40', SWOLF: '39' });
     expect(fixture.nativeElement.querySelectorAll('mat-row')).toHaveLength(count);
     expect(fixture.nativeElement.querySelector('mat-accordion')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 yd).');
     expect(haptics.selection).not.toHaveBeenCalled();
     component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as UserUnitSettingsInterface;
     component.ngOnChanges();
     expect(component.lapLengthTable?.rows[0]['Normalized SWOLF']).toBe('43.7');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 m).');
   });
 
   it('excludes rest from group cadence, strokes, and efficiency while retaining recorded length values', () => {

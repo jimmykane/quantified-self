@@ -162,7 +162,7 @@
 @if (lapTableGroups[0]; as lapTableGroup) {
 <ng-container *ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"></ng-container>
 }
-} @else {
+} @else if (lapTableGroups.length > 1) {
 <mat-tab-group class="lap-type-tabs" [dynamicHeight]="true" [preserveContent]="true">
   @for (lapTableGroup of lapTableGroups; track lapTableGroup.lapType) {
   <mat-tab [aria-label]="lapTableGroup.lapType">
@@ -215,7 +215,7 @@
             <mat-icon aria-hidden="true" matTooltip="Recorded lap details">linear_scale</mat-icon>
             <span class="cdk-visually-hidden">Lap details</span>
             } @else if (column === swolfColumn) {
-            <span class="swim-swolf-heading" tabindex="0" [matTooltip]="lapTable.columnTooltips[column] || swolfColumnLabel" [attr.aria-label]="lapTable.columnTooltips[column] || swolfColumnLabel">{{ swolfColumnLabel }}</span>
+            <span class="swim-swolf-heading" tabindex="0" [matTooltip]="lapTable.columnTooltips[column] || swolfColumnLabel" [attr.aria-label]="swolfColumnLabel + '. ' + (lapTable.columnTooltips[column] || '')">{{ swolfColumnLabel }}</span>
             } @else if (column !== '#' && column !== 'selection') {
             <app-data-type-icon [dataType]="column" [tooltip]="lapTable.columnTooltips[column]" [focusable]="true"></app-data-type-icon>
             }
