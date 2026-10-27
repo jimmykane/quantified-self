@@ -152,7 +152,23 @@ describe.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.CORO
     expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('connectionHistoryImport');
     expect(runs()).toHaveLength(0);
   });
-  it.each(['disconnect', 'reconnect', 'replacement account', 'lost generation'])(
+  it.each(['token refresh', 'same-account pin'])('can finish recovery after %s during a transaction retry', async change => {
+    const root = seed(service); delete mocks.rows.get(metaPath(service))!.providerUserId;
+    mocks.retryTransaction = true;
+    mocks.onRetry = () => {
+      if (change === 'token refresh') Object.assign(mocks.rows.get(`${root}/tokens/account`)!, {
+        accessToken: 'REFRESHED_PRIVATE_TOKEN', dateRefreshed: now + 1,
+      });
+      else mocks.rows.get(metaPath(service))!.providerUserId = 'account';
+    };
+    const result = await startManualActivityHistory('owner', service, start, end);
+    expect(runs()).toHaveLength(1);
+    expect(runs()[0][1]).toMatchObject({ providerUserId: 'account', credentialGeneration: 'credential', connectionGeneration: 'connection' });
+    expect(mocks.rows.get(metaPath(service))).toMatchObject({ providerUserId: 'account', connectionHistoryImport: result });
+    if (change === 'token refresh') expect(mocks.rows.get(`${root}/tokens/account`)?.accessToken).toBe('REFRESHED_PRIVATE_TOKEN');
+    expect(JSON.stringify(result)).not.toContain('REFRESHED_PRIVATE_TOKEN');
+  });
+  it.each(['disconnect', 'reconnect', 'replacement account', 'replacement credential', 'lost generation'])(
     'does not reuse the migration decision after %s during a transaction retry', async change => {
       const root = seed(service); delete mocks.rows.get(metaPath(service))!.providerUserId;
       mocks.retryTransaction = true;
@@ -161,6 +177,10 @@ describe.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.CORO
         if (change === 'disconnect') mocks.rows.get(root)!.disconnectOperationGeneration = 'disconnect';
         if (change === 'reconnect') meta.connectionStateGeneration = 'new-connection';
         if (change === 'lost generation') delete mocks.rows.get(root)!.activeOAuthCredentialGeneration;
+        if (change === 'replacement credential') {
+          mocks.rows.get(root)!.activeOAuthCredentialGeneration = 'new-credential';
+          mocks.rows.get(`${root}/tokens/account`)!.tokenCredentialGeneration = 'new-credential';
+        }
         if (change === 'replacement account') {
           meta.providerUserId = 'replacement';
           mocks.rows.set(`${root}/tokens/replacement`, { tokenCredentialGeneration: 'credential' });

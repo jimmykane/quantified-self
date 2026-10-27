@@ -811,7 +811,8 @@ describe('service-connection-meta', () => {
     expect(hoisted.releaseQueueItemsDeferredForRouteRestore).not.toHaveBeenCalled();
   });
 
-  it('does not let a stale OAuth callback mark an older credential connected', async () => {
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('does not let a stale %s OAuth callback overwrite the current account', async service => {
+    hoisted.metaData = { connectionState: 'connected', connectionStateGeneration: 'current-connection', providerUserId: 'current-account' };
     hoisted.refreshTokenGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -820,13 +821,13 @@ describe('service-connection-meta', () => {
         expiresAt: 2_000,
         dateCreated: 200,
         dateRefreshed: 200,
-        tokenCredentialGeneration: 'new-generation',
+        activeOAuthCredentialGeneration: 'new-generation',
       }),
     });
 
     await expect(markServiceConnected(
       'user-1',
-      ServiceNames.WahooAPI,
+      service,
       'provider-1',
       {
         documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
@@ -836,6 +837,7 @@ describe('service-connection-meta', () => {
     )).resolves.toBe(false);
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.metaData).toEqual({ connectionState: 'connected', connectionStateGeneration: 'current-connection', providerUserId: 'current-account' });
     expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
   });
 
