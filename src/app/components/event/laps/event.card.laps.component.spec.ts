@@ -24,6 +24,7 @@ import {
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DataStrokeRate,
     DataSwimPaceAvg,
     DataTotalCycles,
     DistanceUnits,
@@ -217,6 +218,26 @@ describe('EventCardLapsComponent', () => {
         component.unitSettings = getDefaultUserUnitSettings();
         component.ngOnChanges();
         expect(component.lapTableGroups[0].tables[0].dataSource.data[0][DataDistance.type]).toBe('91.59 m');
+    });
+
+    it('keeps incomplete derived SWOLF out of rows and summaries while retaining its available metrics', () => {
+        const activity = createSwimIntervalFixture();
+        activity.getSwimLengths()[0].strokes = null;
+        activity.getSwimLengths()[0].avgCadence = new DataStrokeRate(20);
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const first = table.dataSource.data.find(row => !row.isLapAverage)!;
+        expect(first[EVENT_LAP_STROKES_COLUMN]).toBe('');
+        expect(first[EVENT_LAP_SWOLF_COLUMN]).toBe('');
+        expect(first[DataSwimPaceAvg.type]).toBe('02:00 min/100m');
+        expect(table.dataSource.data.find(row => row.isLapAverage)?.[EVENT_LAP_SWOLF_COLUMN]).toBe('42');
+        component.toggleLapSelection(table, first);
+        fixture.detectChanges();
+        expect(table.selectedSummary[EVENT_LAP_SWOLF_COLUMN]).toBe('— · 0/1');
+        expect(fixture.nativeElement.querySelector('mat-footer-cell.mat-column-Normalized-SWOLF').textContent).toContain('— · 0/1');
     });
 
     it.each(['none', 'whole-activity'])('can return to intervals when original laps are %s', kind => {

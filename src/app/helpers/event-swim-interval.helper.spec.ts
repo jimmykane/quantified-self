@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ActivityTypes, DataDistance, DataDuration, DataHeartRateMax, EventImporterJSON, LapTypes, SwimPaceUnits,
+  ActivityTypes, DataDistance, DataDuration, DataHeartRateMax, DataStrokeRate, EventImporterJSON, LapTypes, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { getSwimIntervalActivity } from './event-swim-interval.helper';
@@ -80,6 +80,21 @@ describe('swim interval display projection', () => {
     expect(analytics.strokes).toBeNull();
     expect(analytics.activeDuration).toBeNull();
     expect(analytics.pace).toBeNull();
+  });
+
+  it.each([1, 4].flatMap(coverage => [SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard]
+    .map(unit => ({ coverage, unit }))))('requires complete strokes for derived SWOLF with $coverage rate samples in $unit', ({ coverage, unit }) => {
+    const source = swimIntervalFixture();
+    source.getSwimLengths()[0].strokes = null;
+    source.getSwimLengths().slice(0, coverage).forEach(length => length.avgCadence = new DataStrokeRate(20));
+    const analytics = [...getSwimLapAnalytics(getSwimIntervalActivity(source)!, {
+      ...getDefaultUserUnitSettings(), swimPaceUnits: [unit],
+    }).values()][0];
+    expect(analytics.strokes).toBeNull();
+    expect(analytics.swolf).toBeNull();
+    expect(analytics.pace?.getValue()).toBe(120);
+    expect(analytics.cadence?.getValue()).toBe(20);
+    expect(analytics.cadenceDuration).toBe(30 * coverage);
   });
 
   it.each(['partial', 'unknown', 'duplicate', 'overlap', 'gap', 'outside', 'rest distance', 'non-pool'])('falls back to original laps for %s evidence', problem => {

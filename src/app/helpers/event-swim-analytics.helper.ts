@@ -8,6 +8,7 @@ import {
   createSwimDistanceDisplayStat, normalizeUserUnitSettings, resolveUnitAwareDisplayStat,
 } from '@shared/unit-aware-display';
 import { AppSwimLength, getRecordedLapActive, getSwimLapLengths, isRestSwimLength } from './event-swim-length.helper';
+import { getDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 export const EVENT_LAP_STROKES_COLUMN = 'Total strokes';
 /** Display-only calculation; does not replace the recorded provider SWOLF. */
@@ -157,7 +158,9 @@ export function getSwimLapAnalytics(
     // collection of lengths as the full interval's totals or average weights.
     const completeLengths = lengths.length > 0
       && (!Number.isInteger(recordedActiveCount) || recordedActiveCount === active.length);
-    const nativeFallback = active.length === lengths.length;
+    // A constructed interval has no independent watch summary to fall back to.
+    // In particular, available rate samples cannot replace its missing stroke total for SWOLF.
+    const nativeFallback = !getDerivedSwimIntervalLengths(lap) && active.length === lengths.length;
     const validTiming = !getRejectedSwimTiming(lap) && !active.some(length => getRejectedSwimTiming(length));
     const nativeTimingFallback = nativeFallback && validTiming;
     const lengthDuration = completeLengths ? completeSum(active, getSwimLengthDuration) : null;

@@ -424,8 +424,10 @@ with valid active membership keep their existing rows and metrics, including whe
 A Session end segment or summary is not considered a competing lap scheme.
 
 Derived intervals reuse the swim analytics, summaries, column settings and expandable length table. Strokes and
-distance require complete contributing fields; timer time respects explicit zero and rejected timing. Heart-rate
-averages are duration-weighted from complete length coverage, while maxima require complete length maxima. The
+distance require complete contributing fields; timer time respects explicit zero and rejected timing.
+SWOLF also requires complete contributing stroke counts: constructed intervals never use the native-lap pace/rate
+fallback to estimate missing stroke totals. Such rows are excluded from SWOLF averages and selection coverage.
+Heart-rate averages are duration-weighted from complete length coverage, while maxima require complete length maxima. The
 persistent summary also preserves the whole-session peak from original lap/session/stream evidence. No unmatched
 native lap metrics are copied into intervals. Corroborated nominal yard display uses the same independent length
 evidence as Swim Lengths; the original canonical distance remains in pace/SWOLF calculations and storage.
