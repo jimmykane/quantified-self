@@ -26,6 +26,24 @@ describe('connection history contract', () => {
       expect(historyOperationKey({ ...step, ...changed })).not.toBe(key);
     }
   });
+  it('snapshots batching only for new Suunto Sleep/Health steps without changing legacy receipt identity or projections', () => {
+    const context = { requested: true, rangePreset: 'maximum' as const, runId: '11111111-1111-4111-8111-111111111111',
+      tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'account', credentialGeneration: 'credential' };
+    for (const service of Object.values(ServiceNames)) {
+      const run = createHistoryRun('owner', service, context, 'connection', Date.now());
+      for (const step of run.steps) {
+        const batched = service === ServiceNames.SuuntoApp && ['sleep', 'health'].includes(step.id);
+        expect(step.suuntoWindowBatchVersion).toBe(batched ? 1 : undefined);
+        if (batched) {
+          expect(step.windowDays).toBe(step.id === 'health' ? 104 : 112);
+          const legacy = { ...step }; delete legacy.suuntoWindowBatchVersion; delete legacy.windowDays;
+          expect(historyOperationKey(legacy)).toBe(JSON.stringify([step.id, step.capability.version, step.nextStartMs, 30, step.page]));
+          expect(historyOperationKey(step)).not.toBe(historyOperationKey({ ...step, suuntoWindowBatchVersion: undefined }));
+        }
+      }
+      expect(historyProjection(run).steps.every(step => !('suuntoWindowBatchVersion' in step) && !('windowDays' in step))).toBe(true);
+    }
+  });
   it('accepts only server-generated v4 run identities', () => {
     expect(isConnectionHistoryRunId('11111111-1111-4111-8111-111111111111')).toBe(true);
     expect(isConnectionHistoryRunId('flow')).toBe(false);

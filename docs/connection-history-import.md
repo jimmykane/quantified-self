@@ -283,6 +283,69 @@ Queued children from a superseded connection finish through the existing revisio
 
 Suunto activity history uses the same Firebase-owner-scoped queue identity as webhooks. Existing canonical queue revisions are preserved by automatic admission. A new connection replaces only its owner’s unfinished work from a superseded history run, with a new queue revision; completed records remain intact. Child rows must have explicit terminal outcomes; missing rows never count as success. Failed child items can be restored only from the same run's matching DLQ entry, without overwriting a replacement row. Retry resumes failed steps and preserves completed steps and dates, renewing restored queue rows’ retention. Automatic cooldown timestamps remain anchored to the original connection, including across pages and retries; retry checks reservations again before restoring failed queue work. Lost authorization is explained separately and leads to reconnect options.
 
+## Batched Suunto Sleep/Health targets
+
+New Suunto connection-history snapshots use at most four 28-day Sleep targets or four 26-day Health targets per
+coordinator admission (112/104 days). Health still requests every feed with one day of context on either side,
+within the existing 28-day HTTP bound. Dense responses still narrow and checkpoint through the existing worker;
+empty results never shorten the selected history. The exclusive child end is the next cursor, including the
+selected final millisecond. The parent waits for all children before advancing to another batch.
+
+The private `suuntoWindowBatchVersion: 1` step snapshot and receipt key bind this policy to new runs. Existing runs
+without it retain their exact 30-day parent/28-day child ranges, receipts, retry identities and checkpoints; no
+migration or replay occurs. The manual combined Sleep/Health callable, other providers, activities, routes,
+permissions, source writers, queue concurrency, retry budgets and half-hour recovery remain unchanged. The same
+pinned account and lifecycle guards apply to all four children, with immediate dispatch and `preserveExisting`.
+A partial enqueue keeps the cursor and cooldown; retry repeats the exact deterministic children and waits for every
+started admission to settle. The pre-existing 500-task/backlog admission stop and 100-child hard bound still apply.
+
+### Offline stress evidence and latency limitation
+
+Run `node tools/benchmarks/suunto-history-windows.mjs` for the standalone design model, or build Functions and run
+`node tools/benchmarks/suunto-history-windows.mjs --compiled` to use the production range planner. The model was run
+before implementation, then against the compiled planner. It uses synthetic data only: FIFO worker slots, a
+serialized one-second coordinator, sixty-second child observations, all three Health feeds, adaptive response
+splits and a 900-second transient retry. It normalizes the legacy sub-second cursor gaps so both plans perform the
+same amount of useful coverage. These are virtual-time estimates, not measured cloud duration, CPU or euro savings.
+
+For 9,795.8575 synthetic days, ordinary empty/sparse history changes as follows:
+
+| Work | Existing | Batched |
+| --- | ---: | ---: |
+| Coordinator admissions, Sleep + Health | 654 | 183 |
+| Queued children | 1,306 | 727 |
+| Worker attempts, including continuations | 1,632 | 727 |
+| Provider requests, all feeds | 3,590 | 1,481 |
+| Modeled completion with eight free slots | 39,242 seconds | 10,982 seconds |
+
+The 540 single-import range/load comparisons have no completion regression. Additional scenarios exercise dense
+responses, adaptive splitting, retries, eight simultaneous imports, ordinary foreground traffic and a backlog of
+550 tasks. Four-window batching improves total completion in those scenarios, but **does not guarantee that every
+import gets faster under contention**: with seven dense one-year imports plus a thirty-day import, the short
+import takes 669 -> 1,809 simulated seconds at four slots, 249 -> 489 at sixteen slots, and remains 249 at eighty.
+The shared-queue dense case also increases maximum foreground wait from 220 to 938 seconds at four slots.
+Reducing batches to two alone did not eliminate the contention tradeoff. These counterexamples are retained in the
+benchmark output; adding `--require-no-slowdown` makes the command fail on these counterexamples. Do not claim the no-slowdown requirement is satisfied from aggregate completion alone.
+Keep the change in draft pending resolution or explicit acceptance of that tradeoff. No real provider traffic is
+part of this verification. Post-release assessment must compare per-import completion/short-import latency,
+normal webhook lag, request counts, failures, queue age and billed runtime separately.
+
+### Compatibility and release boundary
+
+After separate approval, update `processConnectionHistoryTask` and `recoverConnectionHistoryImports` before
+`requestAndSetSuuntoAPIAccessToken`, which creates the new snapshots. The consumer/probe must understand the new
+receipt identity before a producer emits it. The shared Health constants are a behavior-preserving extraction;
+ordinary Sleep/Health workers need no tuning or resource change. No new Function, queue, index, Rule, secret,
+environment activation, monitoring apply, data migration or production replay is required.
+
+Rollback stops producing new batched snapshots by reverting the Suunto callback first; keep compatible coordinator
+and recovery consumers until existing batched runs drain. Do not reinterpret already-started runs as legacy windows.
+Monitoring is **covered/unchanged** by the reviewed #847 coordinator and #830 Health/Sleep definitions/runbooks:
+labels, receipt observation, native queues, committed outcomes, retries and backlog age retain their meanings.
+Field-masked emulator tests cover both matching and mismatched batch receipts without reading receipt payloads.
+Existing Help's background-import, chosen-range, progress-count and incomplete-provider-coverage explanations remain
+accurate. No frontend, MCP/Assistant, Training planning/derived-metric, consent or public data contract changes.
+
 ## Adding capabilities
 
 1. Register supported history resources and the provider's valid range choices/maximum policy in `shared/connection-history.ts`, or declare an empty capability list for a service that cannot supply history. Both registries are exhaustive over `ServiceNames`.

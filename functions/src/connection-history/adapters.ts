@@ -16,6 +16,7 @@ import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provide
 import { assertHistoryConnectionCurrent, HistoryUnavailableError, HistoryWindowTooLargeError, type HistoryExecution } from './execution';
 import { queueSuuntoRouteHistory } from '../suunto/route-history';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
+import { suuntoHistoryBatchRange } from '../suunto/history-windows';
 import type { ConnectionHistoryRun, HistoryStep } from './model';
 
 export class HistorySkippedError extends Error {
@@ -103,7 +104,11 @@ async function executeActivityHistory(run: ConnectionHistoryRun, step: HistorySt
   return { count: result.successCount, nextStartMs, nextPage: 1 };
 }
 async function executeSleepHealthHistory(run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution): Promise<HistoryOperationResult> {
-  const { endMs, nextStartMs } = historyWindow(run, step);
+  const batchedSuunto = run.serviceName === ServiceNames.SuuntoApp && step.suuntoWindowBatchVersion === 1
+    && (step.id === 'sleep' || step.id === 'health');
+  const { endMs, nextStartMs } = batchedSuunto
+    ? suuntoHistoryBatchRange(step.nextStartMs, run.endMs, step.id as 'sleep' | 'health', step.windowDays)
+    : historyWindow(run, step);
   const provider = historySleepProvider(run.serviceName);
   if (!isSleepProviderEnabled(provider) || !isSleepSyncUserAllowed(run.userID)) throw new HistorySkippedError('History sync is currently unavailable.');
   if (step.id === 'health' && ((run.serviceName === ServiceNames.GarminAPI && !isGarminHealthSyncEnabled())
@@ -111,7 +116,8 @@ async function executeSleepHealthHistory(run: ConnectionHistoryRun, step: Histor
   const state = await admin.firestore().doc(`users/${run.userID}/sleepSyncState/${provider}`).get();
   const nextAllowed = Number(state.data()?.nextBackfillAllowedAtMs || 0);
   if (state.data()?.connectionHistoryReservation !== run.id && nextAllowed > Date.now()) throw new HistorySkippedError('History is in cooldown. You can use History Import after the date shown.', nextAllowed);
-  const options = { execution, startMs: step.nextStartMs, endMs, resources: step.resources };
+  const options = { execution, startMs: step.nextStartMs, endMs, resources: step.resources,
+    ...(batchedSuunto ? { suuntoWindowBatchVersion: 1 as const } : {}) };
   const operation = HISTORY_SLEEP_OPERATIONS[run.serviceName as keyof typeof HISTORY_SLEEP_OPERATIONS];
   if (!operation) throw new HistorySkippedError('History is not supported.');
   let result: Awaited<ReturnType<typeof operation>>;

@@ -19,7 +19,7 @@ import { CONNECTION_HISTORY_CAPABILITIES, historyCapabilities, type HistoryCapab
 import { createHistoryRun } from './model';
 import { executeHistoryOperation, HISTORY_ADAPTERS, historyAdmissionQueue } from './adapters';
 import { HistoryUnavailableError, type HistoryExecution } from './execution';
-import { advanceHistoryRun } from './advance';
+import { advanceHistoryRun, type HistoryChildObservation } from './advance';
 const now = Date.parse('2026-03-01T13:00:00+02:00');
 function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, importRouteHistory: true, rangePreset: '30_days', runId: '11111111-1111-4111-8111-111111111111', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
 const execution = { runId: 'run', tokenPath: 'private/exact/token', providerUserId: 'selected-account', beforeRequest: mocks.before } as unknown as HistoryExecution;
@@ -152,8 +152,47 @@ describe('shared history adapter contracts', () => {
     const job = run(service); const fn = service === ServiceNames.SuuntoApp ? mocks.suunto : service === ServiceNames.GarminAPI ? mocks.garmin : mocks.coros;
     for (const step of job.steps.slice(1).filter(step => step.id !== 'routes')) {
       await executeHistoryOperation(job, step, execution);
-      expect(fn).toHaveBeenLastCalledWith('owner', { execution, startMs: job.startMs, endMs: job.endMs, resources: step.resources });
+      expect(fn).toHaveBeenLastCalledWith('owner', { execution, startMs: job.startMs,
+        endMs: job.endMs + (service === ServiceNames.SuuntoApp ? 1 : 0), resources: step.resources,
+        ...(service === ServiceNames.SuuntoApp ? { suuntoWindowBatchVersion: 1 } : {}) });
     }
+  });
+  it.each(['sleep', 'health'] as const)('batches %s without an extra coordinator wait and replays the exact range after an interrupted admission', async resource => {
+    const job = run(ServiceNames.SuuntoApp);
+    job.startMs = Date.parse('2000-01-01T00:00:00.123Z'); job.endMs = job.startMs + 365 * 86400000 - 1;
+    job.steps = [job.steps.find(step => step.id === resource)!];
+    const step = job.steps[0]; step.nextStartMs = job.startMs;
+    const width = (resource === 'health' ? 26 : 28) * 86400000;
+    const deps = { execute: async () => ({ ...await executeHistoryOperation(job, step, execution), childPaths: ['child'] }),
+      observe: vi.fn(async (): Promise<HistoryChildObservation> => 'processed'), classify: () => ({ kind: 'retry' as const, message: 'Interrupted admission' }) };
+    mocks.suunto.mockRejectedValueOnce(new Error('Interrupted admission'));
+    await advanceHistoryRun(job, deps, now);
+    expect(step.nextStartMs).toBe(job.startMs);
+    await advanceHistoryRun(job, deps, job.nextAttemptAt);
+    expect(mocks.suunto.mock.calls[0]).toEqual(mocks.suunto.mock.calls[1]);
+    expect(step.nextStartMs).toBe(job.startMs + 4 * width);
+    deps.observe.mockResolvedValueOnce('pending');
+    await advanceHistoryRun(job, deps, job.nextAttemptAt);
+    expect(mocks.suunto).toHaveBeenCalledTimes(2);
+    while (!job.processed) await advanceHistoryRun(job, deps, job.nextAttemptAt);
+    const calls = mocks.suunto.mock.calls.slice(1).map(([, options]) => options);
+    expect(calls).toHaveLength(Math.ceil(365 * 86400000 / (4 * width)));
+    let cursor = job.startMs;
+    for (const options of calls) {
+      expect(options).toMatchObject({ startMs: cursor, resources: [resource], suuntoWindowBatchVersion: 1 });
+      expect(options.endMs - options.startMs).toBeLessThanOrEqual(4 * width); cursor = options.endMs;
+    }
+    expect(cursor).toBe(job.endMs + 1);
+    expect(step.status).toBe('processed');
+  });
+  it.each(['sleep', 'health'] as const)('leaves an existing %s run on its exact legacy plan', async resource => {
+    const job = run(ServiceNames.SuuntoApp); job.endMs = job.startMs + 90 * 86400000;
+    const step = job.steps.find(step => step.id === resource)!;
+    delete step.suuntoWindowBatchVersion; delete step.windowDays;
+    const result = await executeHistoryOperation(job, step, execution);
+    expect(mocks.suunto).toHaveBeenCalledWith('owner', { execution, startMs: job.startMs,
+      endMs: job.startMs + 30 * 86400000 - 1000, resources: [resource] });
+    expect(result.nextStartMs).toBe(job.startMs + 30 * 86400000);
   });
   it('skips cooldown scopes without calling the provider', async () => {
     const job = run(ServiceNames.GarminAPI); mocks.meta = { didLastHistoryImport: Date.now() };
