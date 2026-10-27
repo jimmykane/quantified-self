@@ -104,6 +104,13 @@ section.container {
   color: var(--mat-sys-on-surface-variant);
 }
 
+.chart-options-menu__heading {
+  margin: 0;
+  padding: 6px 16px 4px;
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .chart-options-menu__slider-header {
   display: flex;
   justify-content: space-between;

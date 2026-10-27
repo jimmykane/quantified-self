@@ -703,6 +703,8 @@ touch handlers. Event chart options use submenus for Line continuity and X axis,
 in the main menu. Visible charts uses the same panel scrolling instead of adding a nested list scroller.
 Dashboard tile menus no longer inject a temporary global `overflow: visible` style on opening. Material owns
 overlay layout throughout; the menu-open event owns one selection feedback and restores normal focus return.
+Submenu choices must be `mat-menu-item` controls in the same view as their `mat-menu`. Wrapping them in a child
+component hides them from Material's content query, breaking initial focus and arrow-key navigation.
 
 ## Dashboard activity query sharing
 
