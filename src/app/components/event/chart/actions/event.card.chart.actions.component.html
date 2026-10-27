@@ -101,37 +101,14 @@
 </mat-menu>
 
 <mat-menu #optionsMenu="matMenu" xPosition="before" class="qs-menu-panel qs-menu-panel-form qs-config-menu chart-options-menu">
-  <app-menu-radio-list label="Line continuity" [value]="lineContinuity.mode" [options]="lineContinuityOptions"
-    [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
-    (valueChange)="onLineContinuityModeChange($event)">
-  </app-menu-radio-list>
-  <section class="chart-options-menu__continuity" (click)="$event.stopPropagation()">
-    @if (lineContinuity.mode === 'custom') {
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Maximum gap (seconds)</mat-label>
-      <input matInput type="number" min="1" [max]="maxLineGapSeconds" step="1"
-        [value]="gapLimitDraft()" [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
-        [attr.aria-invalid]="gapLimitInvalid()" [aria-describedby]="gapLimitInvalid() ? gapLimitErrorID : ''"
-        (input)="onGapLimitInput($event)" (change)="onGapLimitCommit()"
-        (keydown)="onGapLimitKeydown($event)">
-    </mat-form-field>
-    @if (gapLimitInvalid()) {
-    <p [id]="gapLimitErrorID" role="alert">Enter a whole number from 1 to 86400 seconds.</p>
-    }
-    }
-    @if (lineContinuity.mode === 'continuous') {
-    <p>Connects available readings, including across missing data.</p>
-    } @else if (lineContinuity.mode === 'detect') {
-    <p>Estimates gaps from the recording cadence. Some missing readings can look like normal sampling.</p>
-    } @else {
-    <p>Breaks the line when readings are more than this many seconds apart.</p>
-    }
-    <p>Display only. Saved to your chart settings.</p>
-  </section>
-  <mat-divider></mat-divider>
-  <app-menu-radio-list label="X Axis" [value]="xAxisType" [options]="xAxisOptions"
-    [disabled]="!user || event?.isMultiSport()" (valueChange)="onXAxisTypeChange($event)">
-  </app-menu-radio-list>
+  <button mat-menu-item type="button" [matMenuTriggerFor]="continuityMenu"
+    [attr.aria-label]="'Line continuity: ' + lineContinuityLabel" (menuOpened)="onOptionsMenuOpened()">
+    <span class="chart-options-menu__choice"><span>Line continuity</span><span class="chart-options-menu__current">{{ lineContinuityLabel }}</span></span>
+  </button>
+  <button mat-menu-item type="button" [matMenuTriggerFor]="axisMenu"
+    [attr.aria-label]="'X axis: ' + xAxisType" (menuOpened)="onOptionsMenuOpened()">
+    <span class="chart-options-menu__choice"><span>X axis</span><span class="chart-options-menu__current">{{ xAxisType }}</span></span>
+  </button>
 
   <mat-divider></mat-divider>
 
@@ -223,4 +200,41 @@
       Include all recorded metrics
     </mat-slide-toggle>
   </section>
+</mat-menu>
+
+<mat-menu #continuityMenu="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu" aria-label="Line continuity">
+  <app-menu-radio-list label="Line continuity" [value]="lineContinuity.mode" [options]="lineContinuityOptions"
+    [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
+    (valueChange)="onLineContinuityModeChange($event)">
+  </app-menu-radio-list>
+  <section class="chart-options-menu__continuity" (click)="$event.stopPropagation()">
+    @if (lineContinuity.mode === 'custom') {
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Maximum gap (seconds)</mat-label>
+      <input matInput type="number" min="1" [max]="maxLineGapSeconds" step="1"
+        [value]="gapLimitDraft()" [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
+        [attr.aria-invalid]="gapLimitInvalid()" [aria-describedby]="gapLimitInvalid() ? gapLimitErrorID : ''"
+        (input)="onGapLimitInput($event)" (change)="onGapLimitCommit()"
+        (keydown)="onGapLimitKeydown($event)">
+    </mat-form-field>
+    @if (gapLimitInvalid()) {
+    <p [id]="gapLimitErrorID" role="alert">Enter a whole number from 1 to 86400 seconds.</p>
+    }
+    }
+    @if (lineContinuity.mode === 'continuous') {
+    <p>Connects available readings, including across missing data.</p>
+    } @else if (lineContinuity.mode === 'detect') {
+    <p>Estimates gaps from the recording cadence. Some missing readings can look like normal sampling.</p>
+    } @else {
+    <p>Breaks the line when readings are more than this many seconds apart.</p>
+    }
+    <p>Display only. Saved to your chart settings.</p>
+  </section>
+</mat-menu>
+
+<mat-menu #axisMenu="matMenu" class="qs-menu-panel" aria-label="X axis">
+  <app-menu-radio-list label="X Axis" [value]="xAxisType" [options]="xAxisOptions"
+    [disabled]="!user || event?.isMultiSport()" (valueChange)="onXAxisTypeChange($event)">
+  </app-menu-radio-list>
+
 </mat-menu>

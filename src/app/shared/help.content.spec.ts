@@ -2095,6 +2095,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('including across missing data');
     expect(gettingStartedSection?.content).toContain('**Detect gaps** estimates breaks');
     expect(gettingStartedSection?.content).toContain('**Custom gap limit**');
+    expect(gettingStartedSection?.content).toContain('**X axis** choices; open either submenu to change it.');
     expect(gettingStartedSection?.content).toContain('**Settings → Charts → Event chart line continuity**');
     expect(gettingStartedSection?.content).toContain('missing measurements stay missing in tooltips and statistics');
     expect(gettingStartedSection?.content).toContain('Power **3s** still requires complete sample windows');

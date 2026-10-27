@@ -381,6 +381,7 @@ describe('Firebase Hosting configuration', () => {
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
+    // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-27');
     // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');

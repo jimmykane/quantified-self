@@ -871,6 +871,7 @@ retrying; repeating the upload cannot resolve an ambiguous leg association.
 
 ### Event chart defaults and controls
 
+- **Chart options** shows the current **Line continuity** and **X axis** choices; open either submenu to change it. Fill opacity and display toggles stay in the main menu. Long menus scroll within the screen so every option remains reachable.
 - In Event details, if **Distance** is selected but any selected activity does not include distance data, the chart uses **Duration** instead.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
 - **Pool swimming** defaults to **Duration**, with **Time** also available. **Distance** is disabled even when distance is recorded. A saved Distance choice uses Duration for the swim without changing your preference for other sports. Open-water swimming can still use Distance when recorded.

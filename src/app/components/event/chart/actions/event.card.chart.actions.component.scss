@@ -20,11 +20,6 @@ section.container {
   inline-size: max-content;
   min-inline-size: 0;
   max-inline-size: min(72vw, 240px);
-  max-block-size: min(62dvh, 460px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
   padding: 8px;
 }
 
@@ -96,6 +91,17 @@ section.container {
   gap: 8px;
   min-width: 220px;
   padding: 12px 16px;
+}
+
+.chart-options-menu__choice {
+  display: flex;
+  flex-direction: column;
+  padding-block: 4px;
+}
+
+.chart-options-menu__current {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .chart-options-menu__slider-header {

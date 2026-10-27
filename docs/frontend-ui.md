@@ -695,6 +695,15 @@ QA must include genuinely overflowing content in dialogs, sheets and nested pane
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
 
+Shared `qs-menu-panel` menus keep the Material panel itself as their single scroll owner, bounded by the dynamic
+viewport minus 16px; CDK owns placement relative to the trigger. The inner menu content keeps its natural height; it must not inherit a
+height limit or become another scroller. Form and tile menu minimum widths stay inside narrow viewports too.
+This covers action, configuration, map-layer, chart-overlay, source and range menus without per-menu observers or
+touch handlers. Event chart options use submenus for Line continuity and X axis, retaining their current choices
+in the main menu. Visible charts uses the same panel scrolling instead of adding a nested list scroller.
+Dashboard tile menus no longer inject a temporary global `overflow: visible` style on opening. Material owns
+overlay layout throughout; the menu-open event owns one selection feedback and restores normal focus return.
+
 ## Dashboard activity query sharing
 
 `SummariesComponent` owns a shared activity-query stream for each event owner and tile date window. Duration

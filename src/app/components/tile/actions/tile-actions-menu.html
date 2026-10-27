@@ -1,5 +1,5 @@
-<button mat-icon-button class="tile-actions-trigger" [disabled]="isActionSaving" [attr.aria-busy]="isActionSaving" (menuOpened)="restoreMenuFocus()" [matMenuTriggerFor]="tileOptions" [attr.aria-label]="presentation.actions"
-  (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
+<button mat-icon-button class="tile-actions-trigger" [disabled]="isActionSaving" [attr.aria-busy]="isActionSaving" (menuOpened)="onMenuOpened()" [matMenuTriggerFor]="tileOptions" [attr.aria-label]="presentation.actions"
+  (click)="$event.preventDefault(); $event.stopPropagation();">
   @if (isActionSaving) {
   <mat-spinner diameter="18" aria-label="Saving dashboard changes"></mat-spinner>
   } @else {
