@@ -74,6 +74,8 @@ This change splits startup work; it does not remove the menu's CPU cost or demon
 resolved Search Console report. Home-ready timing ranges overlap substantially.
 
 Retain real Material drawer tests for the early-opening path, idle preparation, view reuse, teardown and feedback.
+Cover onboarding removing both pending and prepared menus, then re-registering a fresh drawer on completion.
+The retained menu's identity, role badges and private actions must follow sign-in, account changes and sign-out.
 Review user-facing Help when changing navigation; this scheduling-only change preserves its labels and actions.
 
 ## Sign-in route loading

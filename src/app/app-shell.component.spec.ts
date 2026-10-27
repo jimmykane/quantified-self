@@ -798,6 +798,62 @@ describe('AppShellComponent', () => {
         expect(navigationLifecycle.created).toHaveBeenCalledOnce();
     });
 
+    it('cancels pending menu preparation when onboarding removes navigation', async () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        component.onboardingCompleted = false;
+        fixture.detectChanges();
+        resumeIdle();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.debugElement.query(By.directive(MatSidenav))).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeNull();
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+
+        component.onboardingCompleted = true;
+        fixture.detectChanges();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(mockAppSideNavService.setSidenav).toHaveBeenLastCalledWith(drawer);
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeTruthy();
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+    });
+
+    it('replaces a prepared menu after onboarding without retaining its old view', async () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        resumeIdle();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const previousContents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(previousContents).toBeTruthy();
+
+        component.onboardingCompleted = false;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeNull();
+        expect(navigationLifecycle.destroyed).toHaveBeenCalledOnce();
+
+        component.onboardingCompleted = true;
+        fixture.detectChanges();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(mockAppSideNavService.setSidenav).toHaveBeenLastCalledWith(drawer);
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        const currentContents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(currentContents).toBeTruthy();
+        expect(currentContents).not.toBe(previousContents);
+        expect(navigationLifecycle.created).toHaveBeenCalledTimes(2);
+        fixture.destroy();
+        expect(navigationLifecycle.destroyed).toHaveBeenCalledTimes(2);
+    });
+
     it('should toggle sidenav through side nav service', () => {
         renderShellFixture();
         mockHapticsService.selection.mockClear();
