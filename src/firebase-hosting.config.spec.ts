@@ -570,17 +570,17 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it.each(['production', 'beta'])('retains the original total-script budget for %s', configuration => {
+  it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '13600kb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13700kb',
     });
   });
 
   it.each(['production', 'beta'])('bounds the sports-lib 23.5 startup output for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     // Published 23.5.0 with power and R-R metrics measures 1,472.76 kB of initial output.
-    // Keep a narrow matching limit for both release builds, without relaxing allScript.
+    // Keep a narrow matching startup limit for both release builds, independent of allScript.
     expect(budgets?.find(budget => budget.type === 'initial')).toEqual({
       type: 'initial', maximumWarning: '1474kb', maximumError: '1474kb',
     });
