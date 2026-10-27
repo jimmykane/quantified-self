@@ -1,4 +1,4 @@
-@if (availableLapTypes.length > 0) {
+@if (availableLapTypes.length > 0 || hasSwimIntervals) {
 <mat-divider></mat-divider>
 <app-event-section-header icon="linear_scale" [title]="hasSwimIntervals && !showOriginalLaps() ? 'Intervals' : 'Laps'">
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
@@ -17,6 +17,9 @@
   <p class="mat-body-small">{{ showOriginalLaps()
     ? 'As recorded by the watch. Lap types can overlap and their totals should not be added together.'
     : 'Swim and rest intervals from recorded lengths. Expand an interval to see its lengths.' }}</p>
+  @if (availableLapTypes.length === 0) {
+  <p class="mat-body-small">No separate original laps to display.</p>
+  }
 </div>
 }
 <ng-template #lapColumnsDialog>

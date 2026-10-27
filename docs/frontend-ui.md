@@ -414,12 +414,14 @@ Partial HR coverage is visible, and unsupported aggregate metrics remain blank w
 This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
 remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
-Pool swims with overlapping lap schemes or unassigned lengths use a separate table-only Intervals projection
+Pool swims with overlapping lap schemes or unassigned active lengths use a separate table-only Intervals projection
 (`event-swim-interval.helper.ts`). It requires the complete recorded active-length count, valid ordered length indices,
 known active/rest types and chronological coverage (allowing one second of FIT timestamp quantization). Missing,
 malformed or incomplete evidence keeps the original lap view. Consecutive active lengths form one interval;
-consecutive idle lengths form a separate rest. Leading/trailing rests and the final active set are retained.
-Native Garmin-style single sequences with valid membership keep their existing rows and metrics.
+consecutive idle lengths form a separate rest. Recorded leading/trailing rests and the final active set are retained;
+unrecorded time before/after the lengths is not turned into an invented rest. Native Garmin-style single sequences
+with valid active membership keep their existing rows and metrics, including when only rest membership is missing.
+A Session end segment or summary is not considered a competing lap scheme.
 
 Derived intervals reuse the swim analytics, summaries, column settings and expandable length table. Strokes and
 distance require complete contributing fields; timer time respects explicit zero and rejected timing. Heart-rate
@@ -427,12 +429,18 @@ averages are duration-weighted from complete length coverage, while maxima requi
 persistent summary also preserves the whole-session peak from original lap/session/stream evidence. No unmatched
 native lap metrics are copied into intervals. Corroborated nominal yard display uses the same independent length
 evidence as Swim Lengths; the original canonical distance remains in pace/SWOLF calculations and storage.
+The importer-dependent interval constructor is separate from `event-swim-interval-metadata.helper.ts`. Shared
+distance formatters and the chart worker read only that lightweight metadata registry; file importers/parsers must
+remain outside the worker bundle. Expanded interval lengths use the original membership stored in that registry,
+so their Lap column never exposes synthetic interval indexes as recorded lap numbers.
 
 An Intervals / Original laps Material toggle defaults to intervals and emits one selection haptic for an accepted
 change. Original laps retain their provider types and remain available for inspection. View-specific row identities
 prevent selection/disclosure state from leaking between the two representations; ordinary unit/column refreshes
 preserve it within the current view. Column headers expose keyboard-focusable, accessible tooltips distinguishing
 interval stroke totals, individual-length counts, recorded per-length averages, stroke rate and normalized SWOLF.
+The event section also appears when lengths support intervals but no original laps are visible. Switching to an
+empty Original laps view keeps the view toggle available, with an explicit empty message.
 
 This fixes the UI consequence of Sports Lib 21.6.8 refusing ambiguous length-to-lap ownership. The earlier first-match
 assignment could attach the next set's lengths to a preceding lap, so it must not be restored. The projection works

@@ -23,13 +23,14 @@ export const EVENT_LAP_SWOLF_COLUMN = DataNormalizedSwolf.type;
 export const SWIM_TABLE_HEADER_TOOLTIPS: Readonly<Record<string, string>> = Object.freeze(Object.assign(Object.create(null), {
   'Total strokes': 'Total strokes across the active lengths in this interval; excludes rest.',
   Strokes: 'Recorded stroke count for this individual length.',
+  Lap: 'Original lap number for this recorded length, when available.',
   'Average Stroke Count': 'Recorded average strokes per length, rather than the total for an interval.',
   Stroke: 'Stroke recorded for the active lengths. Mixed means more than one stroke type.',
   'Average Stroke Rate': 'Average active swimming stroke rate, in strokes per minute; excludes rest.',
   'Average Cadence': 'Average recorded cadence. For swimming, this is the stroke rate per minute.',
   'Normalized SWOLF': 'Active swim time plus strokes, normalized to the reference distance shown; excludes rest.',
   SWOLF: 'Original SWOLF recorded by the watch for this length.',
-  Duration: 'Recorded timer time for this swim or rest interval.',
+  Duration: 'Recorded timer duration, falling back to elapsed duration only when timer time was not recorded.',
   'Swim Pace': 'Average active swim pace; excludes rest.',
   [DataSwimPaceAvg.type]: 'Average active swim pace; excludes rest.',
 }));

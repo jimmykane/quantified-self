@@ -6,13 +6,7 @@ import {
 import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import { AppSwimLength, getActivitySwimLengths, isRestSwimLength } from './event-swim-length.helper';
 import { getSwimLengthDistance, getSwimLengthDuration, sumSwimValues } from './event-swim-analytics.helper';
-
-const intervalLengthsByLap = new WeakMap<LapInterface, AppSwimLength[]>();
-
-/** Only locally constructed display intervals qualify for nominal length-count formatting. */
-export function getDerivedSwimIntervalLengths(lap: LapInterface): readonly AppSwimLength[] | undefined {
-  return intervalLengthsByLap.get(lap);
-}
+import { setDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 function value(stat: DataInterface | void | null): number | null {
   const number = stat ? stat.getValue() : null;
@@ -50,11 +44,14 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
       || (isRestSwimLength(length) && length.distance && value(length.distance) !== 0))) return null;
 
   const nativeLaps = activity.getLaps?.() || [];
-  const hasUnassignedLengths = lengths.some(length => !Number.isInteger(length.lapIndex)
-    || length.lapIndex < 1 || length.lapIndex > nativeLaps.length);
-  const hasParallelLaps = nativeLaps.some((lap, index) => nativeLaps.slice(index + 1).some(other =>
+  // Missing rest membership does not invalidate the watch's active set boundaries.
+  // A session-end record is a terminal segment/summary, not a parallel lap scheme.
+  const hasUnassignedActiveLengths = lengths.some(length => !isRestSwimLength(length)
+    && (!Number.isInteger(length.lapIndex) || length.lapIndex < 1 || length.lapIndex > nativeLaps.length));
+  const schemeLaps = nativeLaps.filter(lap => lap.type !== LapTypes.session_end);
+  const hasParallelLaps = schemeLaps.some((lap, index) => schemeLaps.slice(index + 1).some(other =>
     lap.type !== other.type && Math.min(+lap.endDate, +other.endDate) - Math.max(+lap.startDate, +other.startDate) > 1000));
-  if (!hasUnassignedLengths && !hasParallelLaps) return null;
+  if (!hasUnassignedActiveLengths && !hasParallelLaps) return null;
 
   const groups: AppSwimLength[][] = [];
   for (const length of lengths) {
@@ -70,7 +67,7 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
       startDate: +group[0].startDate, endDate: +group[group.length - 1].endDate,
       lapId: index + 1, type: LapTypes.Interval, stats: {}, startIndex: null, endIndex: null,
     }, index);
-    intervalLengthsByLap.set(lap, group);
+    setDerivedSwimIntervalLengths(lap, group);
     lap.addStat(new DataActiveLap(!rest));
     lap.addStat(new DataActiveLengths(rest ? 0 : group.length));
     const duration = total(group, getSwimLengthDuration);

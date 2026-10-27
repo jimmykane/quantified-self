@@ -3,7 +3,7 @@ import {
 } from '@sports-alliance/sports-lib/metrics';
 import { AppSwimLength, getActivitySwimLengths, getRecordedLapActive, isRestSwimLength } from './event-swim-length.helper';
 import { sumSwimValues } from './event-swim-analytics.helper';
-import { getDerivedSwimIntervalLengths } from './event-swim-interval.helper';
+import { getDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 interface DistanceBounds { lower: number; upper: number; }
 interface LengthEvidence { length: AppSwimLength; bounds: DistanceBounds; }

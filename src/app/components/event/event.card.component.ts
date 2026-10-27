@@ -43,6 +43,7 @@ import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.he
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
+import { getSwimIntervalActivity } from '../../helpers/event-swim-interval.helper';
 import { getBenchmarkRRIntervalSource, hasBenchmarkRRStats } from '../../helpers/benchmark-rr.helper';
 import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
@@ -103,6 +104,7 @@ export class EventCardComponent implements OnInit {
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
     hasVisibleEventLaps(this.selectedActivitiesInstant())
+      || this.selectedActivitiesInstant().some(activity => !!getSwimIntervalActivity(activity))
   );
 
   public hasJumpsFlag = computed(() =>

@@ -21,6 +21,7 @@ import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helpe
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { SWIM_TABLE_HEADER_TOOLTIPS, getActiveSwimLengthCadence, getNormalizedSwolf, getSwimLengthDistance, getSwimLengthDuration, getSwolfColumnLabel, sumSwimValues } from '../../../helpers/event-swim-analytics.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { getDerivedSwimIntervalLengths } from '../../../helpers/event-swim-interval-metadata.helper';
 import {
   getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters, NominalSwimDistanceDisplayContext,
 } from '../../../helpers/event-swim-distance-display.helper';
@@ -93,7 +94,11 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   @Input() lap: LapInterface | null = null;
   public lapLengthTable: Pick<SwimLengthGroupView, 'rows' | 'columns' | 'columnNames'> | null = null;
   public swolfColumnLabel = '';
-  public readonly columnTooltips = SWIM_TABLE_HEADER_TOOLTIPS;
+  public readonly columnTooltips: Readonly<Record<string, string>> = {
+    ...SWIM_TABLE_HEADER_TOOLTIPS,
+    'Average Stroke Rate': 'Recorded stroke rate for this length, in strokes per minute.',
+    'Swim Pace': 'Swim pace for this length, using recorded speed when available.',
+  };
 
   public activitiesWithSwimLengths: ActivityInterface[] = [];
   public swimLengthViews: SwimLengthActivityView[] = [];
@@ -131,7 +136,10 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     if (this.lap) {
       const activity = this.selectedActivities[0];
       const displayContext = getNominalSwimDistanceDisplayContext(activity);
-      const rowViews = (getSwimLapLengths(activity).get(this.lap) || []).map(swimLength => ({
+      // Interval membership is local to the table; retain original lap numbers in
+      // the recorded detail rows instead of exposing the adapter's synthetic indexes.
+      const lengths = getDerivedSwimIntervalLengths(this.lap) ?? getSwimLapLengths(activity).get(this.lap) ?? [];
+      const rowViews = lengths.map(swimLength => ({
         swimLength, row: this.buildSwimLengthRow(swimLength, displayContext),
       }));
       const rows = this.buildGroupRows(rowViews, displayContext);

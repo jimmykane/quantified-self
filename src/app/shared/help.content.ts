@@ -765,7 +765,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 ### Event lap tables
 
-- Pool swims with overlapping lap types or unassigned lengths open in **Intervals** when the complete recorded lengths can be read reliably. Each row contains one swim set or a separate rest, with total strokes and recorded stroke types. **Mixed** means a set contains more than one stroke type. Expand a row to inspect its lengths.
+- Pool swims with overlapping lap types or unassigned active lengths open in **Intervals** when the recorded lengths can be read reliably, including when no separate original laps are available. Each row contains one swim set or a separate recorded rest, with total strokes and recorded stroke types. **Mixed** means a set contains more than one stroke type. Expand a row to inspect its lengths; their **Lap** column retains the original lap numbers when recorded.
 - Use **Original laps** to inspect the watch's own lap groups. **Fitness equipment** is a recorded lap trigger, not a different sport; it can overlap **Manual** laps. Do not add those groups together. Already-correct lap sequences keep their recorded intervals. This display also works for saved activities without reimporting them.
 - Hover over a table header or focus it with the keyboard for an explanation. **Total strokes** is the count for an interval; **Strokes** in Swim Lengths is the count for one length; **Average Stroke Count** is a recorded per-length average; **Average Stroke Rate** is strokes per minute. Missing fields stay unavailable.
 

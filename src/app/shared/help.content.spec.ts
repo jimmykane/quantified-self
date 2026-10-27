@@ -123,7 +123,8 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const phrase of ['**Intervals**', '**Original laps**', '**Fitness equipment** is a recorded lap trigger',
       'without reimporting them', '**Total strokes** is the count for an interval',
-      '**Average Stroke Count** is a recorded per-length average', 'focus it with the keyboard']) {
+      '**Average Stroke Count** is a recorded per-length average', 'focus it with the keyboard',
+      'including when no separate original laps are available', '**Lap** column retains the original lap numbers']) {
       expect(copy).toContain(phrase);
     }
   });

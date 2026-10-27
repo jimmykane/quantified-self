@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ActivityTypes, DataDistance, DataDuration, DataHeartRateMax, SwimPaceUnits,
+  ActivityTypes, DataDistance, DataDuration, DataHeartRateMax, EventImporterJSON, LapTypes, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { getSwimIntervalActivity } from './event-swim-interval.helper';
@@ -41,6 +41,21 @@ describe('swim interval display projection', () => {
 
   it('keeps an already assigned single lap scheme native', () => {
     const source = getSwimIntervalActivity(swimIntervalFixture())!;
+    expect(getSwimIntervalActivity(source)).toBeNull();
+  });
+
+  it('preserves native set boundaries when only rest lengths have no lap membership', () => {
+    const source = getSwimIntervalActivity(swimIntervalFixture())!;
+    source.getSwimLengths().filter(length => length.type === 'idle').forEach(length => length.lapIndex = null);
+    expect(getSwimIntervalActivity(source)).toBeNull();
+  });
+
+  it('does not treat a session-end summary as a competing lap scheme', () => {
+    const source = getSwimIntervalActivity(swimIntervalFixture())!;
+    source.getLaps().push(EventImporterJSON.getLapFromJSON({
+      startDate: 0, endDate: 300000, lapId: 6, type: LapTypes.session_end,
+      stats: { [DataDistance.type]: 175, [DataDuration.type]: 300 }, startIndex: null, endIndex: null,
+    }, 5));
     expect(getSwimIntervalActivity(source)).toBeNull();
   });
 

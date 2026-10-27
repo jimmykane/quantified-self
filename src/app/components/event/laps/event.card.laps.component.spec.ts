@@ -217,6 +217,24 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapTableGroups[0].tables[0].dataSource.data[0][DataDistance.type]).toBe('91.59 m');
     });
 
+    it.each(['none', 'whole-activity'])('can return to intervals when original laps are %s', kind => {
+        const activity = createSwimIntervalFixture();
+        activity.getLaps().splice(0, kind === 'none' ? 2 : 1);
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[1].click();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([]);
+        expect(fixture.nativeElement.textContent).toContain('No separate original laps to display.');
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[0].click();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
     it('explains rejected lap timing while retaining lap distance and identity', () => {
         const lap = { ...createRenderableLap(LapTypes.Manual), getDuration: () => new DataDuration(4000000),
             getDistance: () => new DataDistance(25), timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } } as unknown as LapInterface;

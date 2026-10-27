@@ -26,6 +26,8 @@ import { vi } from 'vitest';
 import { EventCardSwimLengthsComponent } from './event.card.swim-lengths.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
+import { getSwimIntervalActivity } from '../../../helpers/event-swim-interval.helper';
+import { createSwimIntervalFixture } from '../../../helpers/event-swim-interval.test-fixtures';
 
 function createActivity(swimLengths: unknown[]): ActivityInterface {
   return {
@@ -111,6 +113,21 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('mat-row')).toHaveLength(3);
   });
 
+  it.each([null, 2])('retains original lap membership %s in expanded derived intervals', lapIndex => {
+    const source = createSwimIntervalFixture();
+    source.getSwimLengths().forEach(length => length.lapIndex = lapIndex);
+    const before = JSON.stringify(source.toJSON());
+    const display = getSwimIntervalActivity(source)!;
+    component.selectedActivities = [display];
+    component.lap = display.getLaps()[0];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(component.lapLengthTable?.rows.map(row => row.Lap)).toEqual(Array(4).fill(lapIndex === null ? '' : '2'));
+    expect(component.lapLengthTable?.columnNames.includes('Lap')).toBe(lapIndex !== null);
+    expect(component.lapLengthTable?.rows.map(row => row.Strokes)).toEqual(['13', '13', '13', '14']);
+    expect(JSON.stringify(source.toJSON())).toBe(before);
+  });
+
   it.each([6, 10])('renders each recorded 25-yard length of a %s-length interval inline without duplicating set headers', count => {
     const laps = [{}, {}] as LapInterface[];
     const activity = { ...createActivity(Array.from({ length: count }, (_, index) => createSwimLength({
@@ -142,6 +159,7 @@ describe('EventCardSwimLengthsComponent', () => {
     const group = component.swimLengthViews[0].groups[0];
     expect(group.summaryRow).toMatchObject({ 'Average Stroke Rate': '33 spm', Strokes: '40', SWOLF: '65', 'Normalized SWOLF': '65' });
     expect(group.rows[2]).toMatchObject({ isRest: true, Split: 'Rest', Strokes: '200', SWOLF: '200', 'Normalized SWOLF': '' });
+    expect(component.columnTooltips['Average Stroke Rate']).toBe('Recorded stroke rate for this length, in strokes per minute.');
     group.expanded = true;
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.swim-length-rest-row')).toHaveLength(1);
