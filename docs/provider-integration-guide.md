@@ -1010,7 +1010,8 @@ Suunto's single-activity generic `Running`/`Rowing` copies can instead finish as
 when the saved Garmin FIT has the corresponding `Treadmill`/`Indoor Rowing` source identity, identical start time,
 positive active duration and identical nonnegative distance. The incoming end must match active duration within
 one second and cannot exceed Garmin's elapsed window. The existing reservation reuses its event/activity/metadata
-reads; only candidates read one additional owner-scoped Garmin metadata document. First/unfinished imports,
+reads; the sole retained original must reference a FIT inside that owner's event storage prefix. Only candidates
+read one additional owner-scoped Garmin metadata document. First/unfinished imports,
 multiple activities/originals, existing Suunto provenance and insufficient evidence retain their normal handling.
 This aborts preparation before any source/load/original-file write, preserving the Garmin recording and edits.
 The existing queue completion records `processed=true`, `resultStatus=skipped` and the saved `duplicateEventID`,

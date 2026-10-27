@@ -183,9 +183,12 @@ async function prepareImportedActivityIdentities(
   const service = providerMetadata && providerRecordingService(providerMetadata);
   const provider = service && documents.length ? await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${service}`)) : null;
   const verifiedProvider = !!providerMetadata && isSameProviderRecording(provider?.data(), providerMetadata);
+  const originals = retainedSourceReferences(parent.data() ?? {});
+  const original = originals.length === 1 ? originals[0] : null;
   if (!firstImport && !metadata.data()?.sourceWritePending && !parent.data()?.benchmarkSourceWritePending
     && service === ServiceNames.SuuntoApp && !provider?.exists && documents.length === 1 && event.getActivities().length === 1
-    && retainedSourceReferences(parent.data() ?? {}).length === 1
+    && typeof original?.path === 'string' && original.path.startsWith(`users/${uid}/events/${eventId}/`)
+    && /\.fit$/i.test(original.path)
     && isGarminIndoorActivityCopy(savedActivityIdentity(documents[0]), event.getActivities()[0] as ActivityIdentityLike)) {
     // Only likely duplicates incur this one extra, owner-scoped provenance read.
     const garmin = (await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${ServiceNames.GarminAPI}`))).data();
