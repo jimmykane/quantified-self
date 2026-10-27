@@ -8,6 +8,7 @@ import {
   createSwimDistanceDisplayStat, normalizeUserUnitSettings, resolveUnitAwareDisplayStat,
 } from '@shared/unit-aware-display';
 import { AppSwimLength, getRecordedLapActive, getSwimLapLengths, isRestSwimLength } from './event-swim-length.helper';
+import { getDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 export const EVENT_LAP_STROKES_COLUMN = 'Total strokes';
 /** Display-only calculation; does not replace the recorded provider SWOLF. */
@@ -18,6 +19,22 @@ export class DataNormalizedSwolf extends DataNumber {
   }
 }
 export const EVENT_LAP_SWOLF_COLUMN = DataNormalizedSwolf.type;
+
+/** Column meaning is separate from the data class's canonical value/unit formatting. */
+export const SWIM_TABLE_HEADER_TOOLTIPS: Readonly<Record<string, string>> = Object.freeze(Object.assign(Object.create(null), {
+  'Total strokes': 'Total strokes across the active lengths in this interval; excludes rest.',
+  Strokes: 'Recorded stroke count for this individual length.',
+  Lap: 'Original lap number for this recorded length, when available.',
+  'Average Stroke Count': 'Recorded average strokes per length, rather than the total for an interval.',
+  Stroke: 'Stroke recorded for the active lengths. Mixed means more than one stroke type.',
+  'Average Stroke Rate': 'Average active swimming stroke rate, in strokes per minute; excludes rest.',
+  'Average Cadence': 'Average recorded cadence. For swimming, this is the stroke rate per minute.',
+  'Normalized SWOLF': 'Active swim time plus strokes, normalized to the reference distance shown; excludes rest.',
+  SWOLF: 'Original SWOLF recorded by the watch for this length.',
+  Duration: 'Recorded timer duration, falling back to elapsed duration only when timer time was not recorded.',
+  'Swim Pace': 'Average active swim pace; excludes rest.',
+  [DataSwimPaceAvg.type]: 'Average active swim pace; excludes rest.',
+}));
 
 export interface SwimLapAnalytics {
   lengths: AppSwimLength[];
@@ -141,7 +158,9 @@ export function getSwimLapAnalytics(
     // collection of lengths as the full interval's totals or average weights.
     const completeLengths = lengths.length > 0
       && (!Number.isInteger(recordedActiveCount) || recordedActiveCount === active.length);
-    const nativeFallback = active.length === lengths.length;
+    // A constructed interval has no independent watch summary to fall back to.
+    // In particular, available rate samples cannot replace its missing stroke total for SWOLF.
+    const nativeFallback = !getDerivedSwimIntervalLengths(lap) && active.length === lengths.length;
     const validTiming = !getRejectedSwimTiming(lap) && !active.some(length => getRejectedSwimTiming(length));
     const nativeTimingFallback = nativeFallback && validTiming;
     const lengthDuration = completeLengths ? completeSum(active, getSwimLengthDuration) : null;

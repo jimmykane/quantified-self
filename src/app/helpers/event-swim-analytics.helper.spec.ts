@@ -145,6 +145,15 @@ describe('swim interval analytics', () => {
     expect(getAverageEventLapMetrics(laps, [DataStrokeRateAvg.type, DataSwimPaceAvg.type], units, 'Swimming', swim))
       .toEqual([{ type: DataStrokeRateAvg.type, display: '20 spm' }, { type: DataSwimPaceAvg.type, display: '02:00 min/100m' }]);
   });
+
+  it('retains the recorded pace/rate fallback for native laps without lengths or stroke counts', () => {
+    const native = lap(25, 30, 20, true);
+    const result = getSwimLapAnalytics(activity([native], [])).get(native);
+    expect(result?.strokes).toBeNull();
+    expect(result?.swolf?.getValue()).toBe(40);
+    expect(result?.pace?.getValue()).toBe(120);
+    expect(result?.cadence?.getValue()).toBe(20);
+  });
   it('does not substitute partial lengths for whole interval metrics when the recorded active count differs', () => {
     const laps = [lap(150, 180, 20, true, {
       [DataActiveLengths.type]: new DataActiveLengths(6), [DataTotalCycles.type]: new DataTotalCycles(60),

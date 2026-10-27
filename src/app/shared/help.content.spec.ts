@@ -119,6 +119,16 @@ describe('help.content', () => {
       expect(copy).toContain(phrase);
     }
   });
+  it('explains reconstructed swim intervals, original lap triggers and header meanings', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Intervals**', '**Original laps**', '**Fitness equipment** is a recorded lap trigger',
+      'without reimporting them', '**Total strokes** is the count for an interval',
+      '**Average Stroke Count** is a recorded per-length average', 'focus it with the keyboard',
+      'including when no separate original laps are available', '**Lap** column retains the original lap numbers']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('explains pool-swimming axis choices and preserves distance preferences for other sports', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const phrase of ['**Pool swimming** defaults to **Duration**, with **Time** also available',

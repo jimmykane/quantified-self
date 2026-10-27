@@ -1,6 +1,6 @@
-@if (availableLapTypes.length > 0) {
+@if (availableLapTypes.length > 0 || hasSwimIntervals) {
 <mat-divider></mat-divider>
-<app-event-section-header icon="linear_scale" title="Laps">
+<app-event-section-header icon="linear_scale" [title]="hasSwimIntervals && !showOriginalLaps() ? 'Intervals' : 'Laps'">
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
   <button mat-icon-button (click)="openLapColumnsDialog()" matTooltip="Choose lap columns"
     aria-label="Choose lap columns">
@@ -8,6 +8,20 @@
   </button>
   }
 </app-event-section-header>
+@if (hasSwimIntervals) {
+<div class="swim-interval-controls">
+  <mat-button-toggle-group class="qs-segmented-button-group" [value]="showOriginalLaps()" (change)="setOriginalLaps($event.value)" aria-label="Swim table view">
+    <mat-button-toggle [value]="false">Intervals</mat-button-toggle>
+    <mat-button-toggle [value]="true">Original laps</mat-button-toggle>
+  </mat-button-toggle-group>
+  <p class="mat-body-small">{{ showOriginalLaps()
+    ? 'As recorded by the watch. Lap types can overlap and their totals should not be added together.'
+    : 'Swim and rest intervals from recorded lengths. Expand an interval to see its lengths.' }}</p>
+  @if (availableLapTypes.length === 0) {
+  <p class="mat-body-small">No separate original laps to display.</p>
+  }
+</div>
+}
 <ng-template #lapColumnsDialog>
   <h2 mat-dialog-title>Choose lap columns</h2>
   <mat-dialog-content class="lap-column-dialog-content">
@@ -148,7 +162,7 @@
 @if (lapTableGroups[0]; as lapTableGroup) {
 <ng-container *ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"></ng-container>
 }
-} @else {
+} @else if (lapTableGroups.length > 1) {
 <mat-tab-group class="lap-type-tabs" [dynamicHeight]="true" [preserveContent]="true">
   @for (lapTableGroup of lapTableGroups; track lapTableGroup.lapType) {
   <mat-tab [aria-label]="lapTableGroup.lapType">
@@ -170,7 +184,7 @@
   <section>
     @if (selectedActivities.length > 1 || hasMultipleEventActivities) {
     <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
-      [activity]="lapTable.activity" [selectedActivities]="selectedActivities">
+      [activity]="lapTable.sourceActivity" [selectedActivities]="selectedActivities">
     </app-activity-toggle>
     }
     @if (selectedActivities.length > 1) {
@@ -195,15 +209,15 @@
             <mat-checkbox [checked]="lapTable.allLapRowsSelected"
               [indeterminate]="lapTable.someLapRowsSelected"
               (change)="toggleAllLapSelections(lapTable)"
-              aria-label="Select all laps in this table">
+              [aria-label]="'Select all ' + lapTable.rowNoun + 's in this table'">
             </mat-checkbox>
             } @else if (column === 'lengths') {
             <mat-icon aria-hidden="true" matTooltip="Recorded lap details">linear_scale</mat-icon>
             <span class="cdk-visually-hidden">Lap details</span>
             } @else if (column === swolfColumn) {
-            <span class="swim-swolf-heading">{{ swolfColumnLabel }}</span>
+            <span class="swim-swolf-heading" tabindex="0" [matTooltip]="lapTable.columnTooltips[column] || swolfColumnLabel" [attr.aria-label]="swolfColumnLabel + '. ' + (lapTable.columnTooltips[column] || '')">{{ swolfColumnLabel }}</span>
             } @else if (column !== '#' && column !== 'selection') {
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            <app-data-type-icon [dataType]="column" [tooltip]="lapTable.columnTooltips[column]" [focusable]="true"></app-data-type-icon>
             }
           </mat-header-cell>
           <mat-cell *matCellDef="let row" [class.lap-selection-cell]="column === 'selection'"
@@ -219,12 +233,12 @@
             } @else if (column === 'selection' && !row.isLapAverage) {
             <mat-checkbox [checked]="row.isSelected" [indeterminate]="row.isPartiallySelected || false"
               (change)="toggleLapSelection(lapTable, row)"
-              [aria-label]="(row.members ? 'Select laps ' : 'Select lap ') + row['#']">
+              [aria-label]="(row.members ? 'Select laps ' : 'Select ' + lapTable.rowNoun + ' ') + row['#']">
             </mat-checkbox>
             } @else if (column === 'lengths') {
             @if (row.hasLengths || row.members) {
             <button mat-icon-button (click)="toggleLapLengths(row)"
-              [attr.aria-label]="(row.lengthsExpanded ? 'Hide' : 'Show') + (row.members ? ' recorded laps ' : ' lengths for lap ') + row['#']"
+              [attr.aria-label]="(row.lengthsExpanded ? 'Hide' : 'Show') + (row.members ? ' recorded laps ' : ' lengths for ' + lapTable.rowNoun + ' ') + row['#']"
               [attr.aria-expanded]="row.lengthsExpanded" [attr.aria-controls]="row.detailId">
               <mat-icon>{{ row.lengthsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
             </button>
@@ -247,7 +261,7 @@
             [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-selected-summary-label]="column === 'selection'"
             [class.lap-selected-summary-index-spacer]="column === '#'"
-            [matTooltip]="column === maximumHeartRateType ? 'Peak of the selected original lap maxima, including selected rest laps. Coverage counts contributing laps.' : ''">
+            [matTooltip]="column === maximumHeartRateType ? 'Peak of the selected row maxima, including rest. Coverage counts contributing rows.' : ''">
             @if (column === 'selection') {
             {{ lapTable.selectedSummaryLabel }}
             } @else if (column !== '#' && column !== 'lengths') {
@@ -258,12 +272,12 @@
         }
         <ng-container matColumnDef="lengthDetails">
           <mat-cell *matCellDef="let row" class="lap-length-detail-cell">
-            <div [id]="row.detailId" [attr.aria-label]="(row.members ? 'Recorded laps ' : 'Lengths for lap ') + row['#']">
+            <div [id]="row.detailId" [attr.aria-label]="(row.members ? 'Recorded laps ' : 'Lengths for ' + lapTable.rowNoun + ' ') + row['#']">
               @if (row.lengthsExpanded && row.members) {
               <p class="mat-label-medium">Recorded laps · {{ row['#'] }}</p>
               <ng-container *ngTemplateOutlet="lapRowsTable; context: { $implicit: lapTable, rows: row.members, nested: true }"></ng-container>
               } @else if (row.lengthsExpanded && row.lap) {
-              <p class="mat-label-medium">Recorded lengths · Lap {{ row['#'] }}</p>
+              <p class="mat-label-medium">Recorded lengths · {{ lapTable.rowNoun | titlecase }} {{ row['#'] }}</p>
               <app-event-card-swim-lengths [event]="event" [selectedActivities]="[lapTable.activity]"
                 [unitSettings]="unitSettings" [lap]="row.lap"></app-event-card-swim-lengths>
               }
