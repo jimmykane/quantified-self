@@ -1846,6 +1846,10 @@ Some older email delivery records may remain after account deletion. Those with 
 
 If sign-in or account loading has not finished after 15 seconds, **Loading is taking longer than expected** replaces the rolling numbers. Check your connection and select **Reload page** to try again. Reloading keeps your browser session and does not clear storage or change saved account data. If loading finishes in the meantime, the app continues automatically. If you then see an account recovery message, use **Retry** there. For repeated failures, contact support with your browser name and the time it happened; never send passwords or verification tokens.
 
+### Account software could not load
+
+If you see **We couldn't load the account software**, you're still signed in, but part of the app could not download. Check your connection and select **Reload page**. Your browser can retain a failed download until the page reloads, so retrying the account read alone may not help. You do not need to sign out or clear browser storage; your saved account data stays unchanged.
+
 ### Browser verification paused
 
 Temporary verification service errors retry automatically after short pauses. If you see **We couldn't verify this browser**, you're still signed in, but the browser security check could not finish. A rejected check can pause verification in the current page for up to **24 hours**. Repeated retries in that page do not clear the pause.

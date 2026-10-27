@@ -34,7 +34,7 @@ describe('dashboard configuration writes', () => {
     const tile = AppUserUtilities.getDefaultUserDashboardChartTile();
     delete tile['eventFilters'];
     const stored = { tiles: [tile] };
-    const baseline = mergeUserProfileDocuments('owner', { settings: { dashboardSettings: structuredClone(stored) } })!.settings.dashboardSettings;
+    const baseline = (await mergeUserProfileDocuments('owner', { settings: { dashboardSettings: structuredClone(stored) } }))!.settings.dashboardSettings;
     expect(baseline.tiles).not.toEqual(stored.tiles);
     const set = vi.fn();
     vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({ get: async () => ({ exists: () => true, data: () => ({ dashboardSettings: stored }) }), set } as never));
