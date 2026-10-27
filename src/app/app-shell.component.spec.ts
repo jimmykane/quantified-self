@@ -1,7 +1,8 @@
 import { ActivitySendService } from './services/activity-send.service';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ComponentFixture, DeferBlockBehavior, TestBed } from '@angular/core/testing';
+import { Component, OnDestroy, signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APP_SHELL_HEADER_HEIGHT_PX, AppShellComponent } from './app-shell.component';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
@@ -22,14 +23,21 @@ import { Router, ActivatedRoute, NavigationEnd, NavigationStart } from '@angular
 import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenav, MatSidenavModule } from '@angular/material/sidenav';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
 import { AppThemes } from '@sports-alliance/sports-lib';
 
-// ... (existing imports)
+const navigationLifecycle = { created: vi.fn(), destroyed: vi.fn() };
+
+@Component({ selector: 'app-sidenav', template: '<button type="button">Navigation contents</button>', standalone: false })
+class NavigationContentsFixture implements OnDestroy {
+    constructor() { navigationLifecycle.created(); }
+    ngOnDestroy() { navigationLifecycle.destroyed(); }
+}
+
 
 describe('AppShellComponent', () => {
     let component: AppShellComponent;
@@ -102,7 +110,22 @@ describe('AppShellComponent', () => {
         fixture.detectChanges();
     };
 
+    const holdNavigationIdleWork = () => {
+        let resumeIdle: () => void;
+        vi.stubGlobal('requestIdleCallback', (callback: () => void) => {
+            resumeIdle = callback;
+            return 1;
+        });
+        vi.stubGlobal('cancelIdleCallback', vi.fn());
+        TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Playthrough });
+        return () => resumeIdle();
+    };
+
+    afterEach(() => vi.unstubAllGlobals());
+
     beforeEach(async () => {
+        navigationLifecycle.created.mockClear();
+        navigationLifecycle.destroyed.mockClear();
         window.history.pushState({}, '', '/');
         mockRouter.events = new Subject();
         mockRouter.url = '/';
@@ -111,7 +134,7 @@ describe('AppShellComponent', () => {
         mockLocaleService.reconcileAccountPreference.mockReset();
 
         await TestBed.configureTestingModule({
-            declarations: [AppShellComponent],
+            declarations: [AppShellComponent, NavigationContentsFixture],
             imports: [
                 MatSidenavModule,
                 MatTabsModule,
@@ -709,6 +732,70 @@ describe('AppShellComponent', () => {
         component.authState = false;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/']);
+    });
+
+    it('leaves closed navigation contents unconstructed during public startup', () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        expect(fixture.debugElement.query(By.directive(MatSidenav))).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeNull();
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+        fixture.destroy();
+        resumeIdle();
+        expect(navigationLifecycle.destroyed).not.toHaveBeenCalled();
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+    });
+
+    it('constructs navigation on first open and retains the same contents through close/reopen', async () => {
+        holdNavigationIdleWork();
+        renderShellFixture();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        const contents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(contents?.textContent).toContain('Navigation contents');
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+        const close = drawer.close();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await close;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBe(contents);
+        expect(navigationLifecycle.destroyed).not.toHaveBeenCalled();
+        const reopen = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await reopen;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBe(contents);
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+        fixture.destroy();
+        expect(navigationLifecycle.destroyed).toHaveBeenCalledOnce();
+    });
+
+    it('prepares closed navigation during idle time and reuses it when opened', async () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+        resumeIdle();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const contents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(contents?.textContent).toContain('Navigation contents');
+        expect(drawer.opened).toBe(false);
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBe(contents);
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
     });
 
     it('should toggle sidenav through side nav service', () => {
