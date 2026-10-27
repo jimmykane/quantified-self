@@ -1,4 +1,5 @@
 import { ActivityIdentityConflictError } from './shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from './shared/provider-import-duplicate';
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { PROVIDER_MAX_RETRY_COUNT, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
@@ -2975,6 +2976,16 @@ describe('queue', () => {
             } as any);
 
             vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(createSyntheticFitPayload()));
+        });
+
+        it('acknowledges a verified cross-provider duplicate as skipped without retrying or completing another import', async () => {
+            vi.mocked(utils.setEvent).mockRejectedValueOnce(new ProviderImportDuplicateError('saved-garmin-event'));
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.Processed);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: 'saved-garmin-event',
+            }));
+            expect(mockRetainSuuntoGuideCompletions).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
         it('dead-letters a verified Suunto identity conflict without another parse retry', async () => {

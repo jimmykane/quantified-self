@@ -1006,6 +1006,18 @@ source reservation. Existing provider dead-letter handling commits the terminal 
 revision/lease fences. Strict elevation-correction matches must agree with the selected saved-ID pairing and the
 file's sport eligibility. No automatic reassociation or deletion is performed.
 
+Suunto's single-activity generic `Running`/`Rowing` copies can instead finish as `cross_provider_duplicate` skips
+when the saved Garmin FIT has the corresponding `Treadmill`/`Indoor Rowing` source identity, identical start time,
+positive active duration and identical nonnegative distance. The incoming end must match active duration within
+one second and cannot exceed Garmin's elapsed window. The existing reservation reuses its event/activity/metadata
+reads; only candidates read one additional owner-scoped Garmin metadata document. First/unfinished imports,
+multiple activities/originals, existing Suunto provenance and insufficient evidence retain their normal handling.
+This aborts preparation before any source/load/original-file write, preserving the Garmin recording and edits.
+The existing queue completion records `processed=true`, `resultStatus=skipped` and the saved `duplicateEventID`,
+without another outbound send. No provider association is added to the retained recording. Monitoring is
+**covered/unchanged** by #829's existing committed `skipped` outcome; no new worker, retry, metric, Help, MCP or
+Training contract is introduced. Existing failed jobs require separately approved targeted replay after deployment.
+
 Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
 overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
 live event edits and custom device names. Repeat manual uploads use the same preparation. An unmatchable upload

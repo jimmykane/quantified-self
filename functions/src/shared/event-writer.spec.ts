@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventWriter, FirestoreAdapter, LogAdapter } from './event-writer';
+import { ProviderImportDuplicateError } from './provider-import-duplicate';
 
 function containsKeyRecursively(value: unknown, targetKey: string): boolean {
     if (value === null || value === undefined) {
@@ -65,6 +66,19 @@ describe('EventWriter', () => {
             toJSON: vi.fn().mockReturnValue({ id: 'event-1', activities: [] }),
             startDate: new Date(),
         };
+    });
+
+    it('leaves source documents and original files untouched for a verified provider duplicate', async () => {
+        const duplicate = new ProviderImportDuplicateError('event-1');
+        adapter.prepareTrainingLoad = vi.fn().mockRejectedValue(duplicate);
+        const logger: LogAdapter = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const guardedWriter = new EventWriter(adapter, storageAdapter, undefined, logger);
+        await expect(guardedWriter.writeAllEventData('user-1', eventMock, {
+            data: Buffer.from('synthetic'), extension: 'fit', startDate: new Date(0),
+        })).rejects.toBe(duplicate);
+        expect(adapter.setDoc).not.toHaveBeenCalled();
+        expect(storageAdapter.uploadFile).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('does not launch source writes when the original-file upload fails', async () => {

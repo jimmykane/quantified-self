@@ -7,6 +7,7 @@ import { prepareImportedEventWrite, prepareReparsedEventWrite, preserveImportedA
 const state = vi.hoisted(() => ({
   activities: new Map<string, Record<string, unknown>>(), metadata: {} as Record<string, unknown>, parentExists: true,
   parent: {} as Record<string, unknown>, provider: {} as Record<string, unknown>,
+  garminProvider: {} as Record<string, unknown>,
   get: vi.fn(), prepare: vi.fn(), commit: vi.fn(), collection: vi.fn(), select: vi.fn(), where: vi.fn(), limit: vi.fn(),
 }));
 vi.mock('../training-load/training-load-metadata', () => ({ prepareTrainingLoadMetadata: state.prepare }));
@@ -32,7 +33,7 @@ function event(activities = [activity()]) {
 describe('shared import preservation', () => {
   let authorize: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {}; state.provider = {};
+    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {}; state.provider = {}; state.garminProvider = {};
     const query = { where: state.where, select: state.select, limit: state.limit };
     state.collection.mockReturnValue(query); state.where.mockReturnValue(query);
     state.select.mockReturnValue(query); state.limit.mockReturnValue(query);
@@ -40,7 +41,8 @@ describe('shared import preservation', () => {
       ? { size: state.activities.size, docs: [...state.activities].map(([id, data]) => ({ id, data: () => data })) }
       : ref.path.includes('/activities/') ? { id: ref.path.split('/').at(-1), exists: state.activities.has(ref.path.split('/').at(-1)),
         data: () => state.activities.get(ref.path.split('/').at(-1)) }
-      : ref.path.endsWith(`/${ServiceNames.SuuntoApp}`) ? { exists: true, data: () => state.provider }
+      : ref.path.endsWith(`/${ServiceNames.SuuntoApp}`) ? { exists: !!Object.keys(state.provider).length, data: () => state.provider }
+      : ref.path.endsWith(`/${ServiceNames.GarminAPI}`) ? { exists: !!Object.keys(state.garminProvider).length, data: () => state.garminProvider }
       : ref.path.endsWith('/trainingLoad') ? { data: () => state.metadata } : { exists: state.parentExists, data: () => state.parent });
     state.prepare.mockImplementation(async (_uid, _event, authorize) => {
       const doc = (path: string) => ({ path, collection: (name: string) => ({ doc: (id: string) => doc(`${path}/${name}/${id}`) }) });
@@ -56,6 +58,60 @@ describe('shared import preservation', () => {
   function store(id: string, parsed = activity(), extra: Record<string, unknown> = {}) {
     state.activities.set(id, { ...parsed.toJSON(), ...extra });
   }
+
+  function garminCopy(type = 'Treadmill', generic = 'Running') {
+    const incoming = activity(0, generic), startMs = +incoming.startDate;
+    state.parent = { originalFiles: [{ path: 'saved.fit' }] };
+    store('saved-id', activity(0, type), { endDate: new Date(startMs + 3_652_000),
+      sourceIdentity: { version: 1, activityId: 'saved-id', startMs, endMs: startMs + 3_652_000, importedType: type } });
+    state.garminProvider = { serviceName: ServiceNames.GarminAPI, serviceUserID: 'garmin-account',
+      serviceActivityFileID: 'garmin-file', serviceActivityFileType: 'FIT' };
+    return { incoming, provider: { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'suunto-account', serviceWorkoutID: 'workout' } };
+  }
+
+  it.each([['Treadmill', 'Running'], ['Indoor Rowing', 'Rowing']])(
+    'skips a verified Garmin %s copy from Suunto %s before reserving or changing any source', async (type, generic) => {
+      const { incoming, provider } = garminCopy(type, generic);
+      state.parent = { name: 'Owner title', notes: 'Owner note', originalFiles: [{ path: 'saved.fit' }] };
+      state.metadata = { controls: { saved: { override: 0 } } };
+      const before = structuredClone({ parent: state.parent, activities: [...state.activities], metadata: state.metadata });
+      await expect(prepareImportedEventWrite('owner', event([incoming]), authorize, provider))
+        .rejects.toMatchObject({ name: 'ProviderImportDuplicateError', eventID: 'event' });
+      expect(state.commit).not.toHaveBeenCalled();
+      expect({ parent: state.parent, activities: [...state.activities], metadata: state.metadata }).toEqual(before);
+      expect(incoming.getID()).toBe('legacy-0');
+      expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`))).toHaveLength(1);
+    });
+
+  it.each(['manual', 'same-provider', 'multisport', 'merged-files', 'pending', 'pending-parent', 'first-import', 'different-distance',
+    'missing-provenance', 'wrong-provenance', 'non-fit', 'incomplete-provenance'])(
+    'retains identity conflict protection for an unverified copy: %s', async scenario => {
+      const { incoming, provider } = garminCopy();
+      if (scenario === 'same-provider') state.provider = provider;
+      if (scenario === 'pending') state.metadata = { sourceWritePending: true };
+      if (scenario === 'pending-parent') state.parent.benchmarkSourceWritePending = true;
+      if (scenario === 'merged-files') state.parent.originalFiles = [{ path: 'one.fit' }, { path: 'two.fit' }];
+      if (scenario === 'first-import') state.metadata = { sourceFirstImport: true };
+      if (scenario === 'different-distance') state.activities.get('saved-id')!.stats = { Duration: 3600, Distance: 9999 };
+      if (scenario === 'missing-provenance') state.garminProvider = {};
+      if (scenario === 'wrong-provenance') state.garminProvider.serviceName = ServiceNames.WahooAPI;
+      if (scenario === 'non-fit') state.garminProvider.serviceActivityFileType = 'TCX';
+      if (scenario === 'incomplete-provenance') delete state.garminProvider.serviceActivityFileID;
+      await expect(prepareImportedEventWrite('owner', event(scenario === 'multisport' ? [incoming, activity(1)] : [incoming]),
+        authorize, scenario === 'manual' ? undefined : provider)).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+      expect(state.commit).not.toHaveBeenCalled();
+      const needsProvenance = ['missing-provenance', 'wrong-provenance', 'non-fit', 'incomplete-provenance'].includes(scenario);
+      expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`)))
+        .toHaveLength(needsProvenance ? 1 : 0);
+    });
+
+  it('honors lifecycle authorization before duplicate detection or extra provenance reads', async () => {
+    const { incoming, provider } = garminCopy();
+    authorize.mockRejectedValueOnce(new Error('account deleting or history superseded'));
+    await expect(prepareImportedEventWrite('owner', event([incoming]), authorize, provider)).rejects.toThrow('account deleting');
+    expect(state.get).not.toHaveBeenCalled();
+    expect(state.commit).not.toHaveBeenCalled();
+  });
 
   it('does not reserve a reparse after the workout was deleted', async () => {
     state.parentExists = false;

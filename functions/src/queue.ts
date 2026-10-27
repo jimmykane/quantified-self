@@ -36,6 +36,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { isActivityIdentityConflict } from './shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from './shared/provider-import-duplicate';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { inspectFitPayload, normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
@@ -1494,6 +1495,12 @@ async function parseHistoryGuardedWorkoutQueueItem(
       oneSuccess = true;
       break;
     } catch (e: any) {
+      if (serviceName === ServiceNames.SuuntoApp && e instanceof ProviderImportDuplicateError) {
+        logger.info('Skipping a verified Suunto copy of a saved Garmin activity.', { queueItemId: queueItem.id, eventID: e.eventID });
+        oneSuccess = true;
+        processedAdditionalData = { resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID };
+        break;
+      }
       if (isActivityIdentityConflict(e)) {
         sourceIdentityConflict = e;
         continue; // A legacy shared-provider row can still have another usable token.

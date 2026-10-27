@@ -3,6 +3,7 @@ import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePaylo
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { isActivityIdentityConflict } from './activity-identity-conflict';
+import { ProviderImportDuplicateError } from './provider-import-duplicate';
 import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, readAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 
 /**
@@ -105,7 +106,8 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 }
 
 function isControlFlowWriteAbort(error: Error): boolean {
-    return isActivityIdentityConflict(error) || error.name === 'EventWriteSkippedForDeletedUserError'
+    return isActivityIdentityConflict(error) || error instanceof ProviderImportDuplicateError
+        || error.name === 'EventWriteSkippedForDeletedUserError'
         || error.name === 'EventWriteSkippedForDeletedEventError'
         || error.name === 'UserDeletionGuardReadError'
         || error.name === 'HistoryLifecycleChangedError';
