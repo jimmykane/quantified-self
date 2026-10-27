@@ -740,6 +740,8 @@ describe('help.content', () => {
       'Rest immediately after Work', 'both a Lap-button ending and an automatic Work ending', 'only its final segment',
       'Existing default choices stay unchanged', 'Consecutive Rest or Rest after another phase',
       'Another Lap recorded without ending Rest changes which lap is shown', 'even below the expanded-screen limit',
+      'adds missing lap boundaries at automatic step endings, even without Work averages',
+      'Lap-button endings are not duplicated', '1,000-screen limit stays blocked',
       'Rest countdown, targets and your instructions keep priority']) expect(content).toContain(phrase);
     expect(content).not.toContain('completed-interval pace, time, measured distance and stroke count cannot currently be selected');
   });

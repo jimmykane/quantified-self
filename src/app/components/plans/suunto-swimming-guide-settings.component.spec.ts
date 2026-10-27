@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import type { WorkoutStructureV1 } from '@shared/planned-workout';
+import type { WorkoutStepV1, WorkoutStructureV1 } from '@shared/planned-workout';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,6 +24,8 @@ describe('Suunto swimming screen preferences', () => {
     expect(element.querySelector('section')?.hidden).toBe(true);
     expect(element.textContent).toContain('planned, not measured');
     expect(element.textContent).toContain('only its final segment');
+    expect(element.textContent).toContain('creates missing lap boundaries at automatic step endings');
+    expect(element.textContent).toContain('Lap-button endings are not duplicated');
     expect(element.textContent).toContain('Another Lap recorded without ending Rest changes which lap is shown');
     expect(element.textContent).toContain('Pace and stroke readings depend on the watch and recorded swim data');
     expect(element.textContent).toContain('choose Duplicate to… in its sync details or workout actions');
@@ -120,6 +122,22 @@ describe('Suunto swimming screen preferences', () => {
     await component.save();
     expect(save).toHaveBeenCalledExactlyOnceWith(user(), { settings: { suuntoSwimmingGuide: component.draft() } });
     expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('blocks previous-lap early-Lap paths above the screen limit without blocking frozen default screens', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const target: WorkoutStepV1['targets'] = [{ kind: 'speed', mode: 'absolute', presentation: 'speed',
+      minimumMetersPerSecond: 1, maximumMetersPerSecond: 2 }];
+    fixture.componentRef.setInput('structure', { version: 1, sport: ActivityTypes.Swimming,
+      nodes: Array.from({ length: 4 }, (_, index) => ({ kind: 'repeat', id: `set-${index}`, count: 100, steps: [
+        { kind: 'step', id: `work-${index}`, purpose: 'work', ending: { kind: 'distance', meters: 100, allowEarlyLap: true }, targets: target, note: 'Relax' },
+        { kind: 'step', id: `rest-${index}`, purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: target, note: 'Relax' },
+      ] })) } satisfies WorkoutStructureV1);
+    fixture.detectChanges();
+    expect(component.availability()?.blocked).toBe(false);
+    component.choose('restFields', 1, 'previousLapPace'); fixture.detectChanges();
+    expect(component.availability()).toMatchObject({ blocked: true, compact: false, rows: [] });
+    component.reset(); fixture.detectChanges();
+    expect(component.availability()?.blocked).toBe(false);
   });
   it('reports per-step target pressure, heading allocation and absent planned distances using the saved recipe', () => {
     const fixture = render(); const component = fixture.componentInstance;

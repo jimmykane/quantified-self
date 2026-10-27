@@ -3594,10 +3594,14 @@ confirmed previous HR/time on the watch after Lap-button and automatic Work endi
 path on that watch, **not swimming pace/strokes**; those still require the pool check below. No private user IDs or
 provider exports are kept in repository docs or fixtures.
 
-The frozen v11 execution graph already creates the required manual-lap boundaries for swimming; no new lap or
-transition policy is introduced. A Lap-button ending already closes the lap, so the following Rest does not create
-another one. An automatic ending creates the boundary on Rest entry. Early-Lap branches preserve both paths exactly,
-even when Work has no selected averages. **An extra Lap during Work splits it**: previous-lap readings cover its final
+V17 uses the established boundary generator independently of visible averages. Some speed-target-and-note screens
+had no lap averages in the frozen graph and therefore no automatic boundaries; selected previous-lap readings now
+create those missing boundaries, including repeat wraps and completion. V16 and older serializers retain their exact
+behavior. A Lap-button ending already closes the lap, so the following Rest does not create another one. The first
+screen still creates no opening lap. Early-Lap branches distinguish button-created from automatic boundaries.
+The shared occurrence budget includes these required paths: more than 1,000 early-Lap screens blocks mapping before
+provider I/O, and the frontend marks the same draft unavailable instead of promising a compact working graph.
+**An extra Lap during Work splits it**: previous-lap readings cover its final
 segment, not the whole authored interval. This is not completion/adherence evidence or a whole-interval aggregation.
 These are relative windows, not a frozen snapshot: another Lap recorded without ending Rest makes `-1` refer to
 the newly closed Rest lap. Settings, field availability and Help disclose both kinds of extra-Lap behavior.
@@ -3625,8 +3629,8 @@ Monitoring is **covered/unchanged**: `tools/training-monitoring/definitions.mjs`
 not mapping version. Existing Suunto outcomes/failures/recovery metrics and policies cover v17. No new resources,
 Rules, indexes, storage migration, TTL or backfill are needed.
 
-Verification covers pool/open-water, manual/time/distance/early-Lap endings, repeat context, unchanged execution
-boundaries, target/note/countdown priority, compact fallback, frozen historical payloads, strict offset readback,
+Verification covers pool/open-water, manual/time/distance/early-Lap endings, repeat context, preserved existing
+boundaries and newly required missing ones, target/note/countdown priority, compact fallback, frozen historical payloads, strict offset readback,
 loss-approval snapshots, idempotent same-ID updates and lost-ACK recovery with synthetic HTTP/demo Firestore.
 Release needs separate approval: deploy the affected Functions before exposing frontend choices, then release the
 frontend normally. This task performs no deployment or live upload. Rollback the opt-in UI before reverting the
@@ -3646,9 +3650,12 @@ local checks; pace/stroke sensor behavior and Rest display readability still nee
 
 Review follow-up: clarify extra laps recorded during Rest and the size-fallback limit in settings, per-field
 availability and Help. Synthetic recovery tests alter/remove offsets on all three previous-lap readings, reject
-false acceptance, prohibit a duplicate POST, and recover only after exact content is restored. These are presentation
-and verification fixes: Guide payloads/digests, timing, transitions, consent, MCP contracts and monitoring coverage
-stay unchanged. The 207 focused Functions tests and 156 frontend/settings/Help tests pass after the review changes.
+false acceptance, prohibit a duplicate POST, and recover only after exact content is restored. The boundary correction
+changes v17 payloads only where automatic boundaries were missing; v16 and older payloads/digests, durations, target
+prescriptions, consent, MCP contracts and monitoring coverage stay unchanged. Current verification passes 777 targeted
+Functions/MCP tests, all 191 Suunto lifecycle emulator cases and 157 frontend/settings/Help tests without skips.
+An additional 8,192-case synthetic matrix checks target/note/ending combinations, automatic Work-lap closure,
+field budgets and preservation of already-existing execution graphs. Functions and beta frontend builds pass.
 
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 

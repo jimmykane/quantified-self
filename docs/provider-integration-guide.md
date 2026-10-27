@@ -725,7 +725,9 @@ is added. Monitoring is covered/unchanged and MCP has no wire impact. See
 
 Swimming owners who select the new previous-lap Rest fields opt into private **v17**. It uses partner-confirmed
 `manualLap` readings with `windowOffset: -1` for pace average, duration and strokes immediately after Work.
-Defaults, other sports, lap/transition behavior, countdown alerts and historical recovery remain unchanged.
+Selected readings add missing automatic lap boundaries even without visible Work averages, reusing the established
+boundary generator without duplicating button-ended laps. Defaults, other sports, countdown alerts and historical
+v16-or-older payloads remain unchanged. Required early-Lap paths above 1,000 screens are blocked before provider I/O.
 An extra Lap during Work splits the effort: the reading then covers only its final segment. These are relative
 windows: another Lap recorded without ending Rest changes which lap is shown. The owner confirmed previous HR/time
 on the watch after manual and automatic endings; swimming pace/strokes still require pool validation.

@@ -27,7 +27,7 @@ export function presentSuuntoSwimmingScreensV15(structure: WorkoutStructureV1, s
   const fallback = () => fits(compact) ? compact : steps;
   const count = steps.reduce((sum, node) => sum + (node.type === 'repeat' ? node.times * node.steps.length : 1), 0);
   if (count > SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT) return fallback();
-  const occurrences = suuntoSwimmingOccurrences(structure);
+  const occurrences = suuntoSwimmingOccurrences(structure, previousLapReadings);
   if (!occurrences) return fallback();
   const branches = steps.some(node => node.type === 'fields' && node.id?.startsWith('qs-boundary-'));
   let position = 0;

@@ -92,6 +92,41 @@ const previousFields = [
   { type: 'strokes', title: 'PrevStrk', window: 'manualLap', windowOffset: -1 },
 ];
 describe('Suunto v17 previous closed Work lap readings', () => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('creates missing boundaries for %s speed-and-note screens', sport => {
+    const target: WorkoutStepV1['targets'] = [{ kind: 'speed', mode: 'absolute', presentation: 'speed',
+      minimumMetersPerSecond: 1, maximumMetersPerSecond: 2 }];
+    for (const ending of [{ kind: 'manual' }, { kind: 'time', seconds: 40 },
+      { kind: 'distance', meters: 100, allowEarlyLap: true }] as WorkoutStepV1['ending'][]) {
+      const structure = recipe(sport);
+      (structure.nodes[0] as { steps: WorkoutStepV1[] }).steps = [
+        { ...work, ending, targets: target, note: 'Relax' }, { ...rest, targets: target, note: 'Relax' }];
+      const flatten = (steps: ReturnType<typeof serializeSuuntoRestAlertGuideV16>['artifact']['steps']) =>
+        steps.flatMap(node => node.type === 'repeat' ? Array.from({ length: node.times }, () => node.steps).flat() : [node]);
+      const legacy = flatten(serializeSuuntoRestAlertGuideV16(structure, options).artifact.steps);
+      if (ending.kind !== 'manual') expect(legacy.some(screen => screen.createManualLap)).toBe(false);
+      const current = flatten(serializeSuuntoPreviousLapGuideV17(structure, options, previousSettings).artifact.steps);
+      const rests = current.filter(screen => screen.title.startsWith('Rest'));
+      expect(rests.length).toBe(ending.kind === 'distance' ? 20 : 10);
+      for (const screen of rests) {
+        expect(screen.fields).toContainEqual(previousFields[0]);
+        expect(screen.createManualLap === true).toBe(ending.kind !== 'manual' && !screen.id?.endsWith('-lap'));
+      }
+      const followingWork = current.filter(screen => screen.title === 'Work').slice(1);
+      expect(followingWork.every(screen => screen.createManualLap)).toBe(true);
+      expect(current.at(-1)?.createManualLap).toBe(true);
+    }
+  });
+  it('rejects new early-Lap boundary graphs above the provider limit while retaining frozen v16 mapping', () => {
+    const targeted = (step: WorkoutStepV1): WorkoutStepV1 => ({ ...step, note: 'Relax', targets: [
+      { kind: 'speed', mode: 'absolute', presentation: 'speed', minimumMetersPerSecond: 1, maximumMetersPerSecond: 2 }] });
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming,
+      nodes: Array.from({ length: 4 }, (_, index) => ({ kind: 'repeat', id: `set-${index}`, count: 100, steps: [
+        targeted({ ...work, id: `work-${index}`, ending: { kind: 'distance', meters: 100, allowEarlyLap: true } }),
+        targeted({ ...rest, id: `rest-${index}` }),
+      ] })) };
+    expect(() => serializeSuuntoRestAlertGuideV16(structure, options)).not.toThrow();
+    expect(() => serializeSuuntoPreviousLapGuideV17(structure, options, previousSettings)).toThrow('1000-screen limit');
+  });
   it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('preserves boundaries and previous-lap fields for %s', sport => {
     const endings: WorkoutStepV1['ending'][] = [{ kind: 'manual' }, { kind: 'time', seconds: 40 },
       { kind: 'distance', meters: 100 }, { kind: 'distance', meters: 100, allowEarlyLap: true }];

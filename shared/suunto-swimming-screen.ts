@@ -31,14 +31,14 @@ export interface SuuntoSwimmingScreen {
 export const SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT = 1000;
 
 /** Bound before expanding. Work occurrences, not recorded laps or pool lengths. */
-export function suuntoSwimmingOccurrences(structure: WorkoutStructureV1): SuuntoSwimmingOccurrence[] | null {
+export function suuntoSwimmingOccurrences(structure: WorkoutStructureV1, forceManualLapBoundaries = false): SuuntoSwimmingOccurrence[] | null {
   const count = structure.nodes.reduce((sum, node) => sum + (node.kind === 'step' ? 1 : node.count * node.steps.length), 0);
   if (count > SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT) return null;
-  // Match the frozen v11 graph: Complete consumes one screen; an early-Lap
-  // boundary has a second incoming branch only when that graph uses averages.
-  const usesAverages = structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps).some(step =>
+  // Complete consumes one screen. V17 previous-lap choices require boundaries
+  // even when the frozen graph had no visible manual-lap averages.
+  const needsBoundaries = forceManualLapBoundaries || structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps).some(step =>
     suuntoGuideOptionalReadingsV1(step, structure.sport).some(type => isSuuntoGuideManualLapAverageV1(type, structure.sport))));
-  const branches = usesAverages ? structure.nodes.reduce((sum, node) => sum + (node.kind === 'step'
+  const branches = needsBoundaries ? structure.nodes.reduce((sum, node) => sum + (node.kind === 'step'
     ? Number(allowsEarlyLapV1(node.ending)) : node.count * node.steps.filter(step => allowsEarlyLapV1(step.ending)).length), 0) : 0;
   if (count + 1 + branches > SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT) return null;
   const steps = structure.nodes.flatMap(node => node.kind === 'step' ? [node]
