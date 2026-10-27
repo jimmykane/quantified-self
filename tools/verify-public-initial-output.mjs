@@ -51,6 +51,18 @@ const publicStartupJavaScriptAssets = collectStaticDependencyGraph([
 ]);
 const homeStartupSourceRecords = uniqueSourceRecords(homeStartupJavaScriptAssets.flatMap(readSourceRecords));
 const publicStartupSourceRecords = uniqueSourceRecords(publicStartupJavaScriptAssets.flatMap(readSourceRecords));
+const signInRouteAssets = findAssetsContainingSource(/^src\/app\/modules\/login\.module\.ts$/);
+if (signInRouteAssets.length === 0) {
+  throw new Error('Expected the sign-in module in the release output.');
+}
+const signInStartupAssets = collectStaticDependencyGraph(signInRouteAssets);
+const signInSourceRecords = uniqueSourceRecords(signInStartupAssets.flatMap(readSourceRecords));
+assertNoSourceRecords(
+  'activity-data services or broad UI modules',
+  signInSourceRecords,
+  /^src\/app\/(?:services\/(?:app\.(?:event|original-file-hydration)|activity-send)\.service|modules\/(?:shared|material)\.module)\.ts$/,
+  'sign-in startup graph',
+);
 const homeSignalPreviewJavaScriptAssets = collectStaticDependencyGraph(homeSignalPreviewAssets);
 const homeSignalPreviewSourceRecords = uniqueSourceRecords(
   homeSignalPreviewJavaScriptAssets.flatMap(readSourceRecords),

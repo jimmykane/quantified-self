@@ -13,7 +13,6 @@ import { LoggerService } from '../../services/logger.service';
 import { AccountLinkingDialogComponent } from './account-linking-dialog/account-linking-dialog.component';
 import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { AppEventService } from '../../services/app.event.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { appCheckFailureDetails } from '../../helpers/app-check-error.helper';
@@ -77,7 +76,6 @@ export class LoginComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private dialog: MatDialog,
     // Injected services
-    private eventService: AppEventService = inject(AppEventService),
     public userService: AppUserService = inject(AppUserService),
     private analyticsService: AppAnalyticsService = inject(AppAnalyticsService),
     private logger: LoggerService = inject(LoggerService),

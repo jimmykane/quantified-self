@@ -11,6 +11,15 @@
   descent-override: 22.55%;
   line-gap-override: 0%;
 }
+// Shortcuts must not gain a row after their first paint. Reuse the existing
+// bundled Inter asset, but retain the system font for this visit if it is late.
+@font-face {
+  font-family: 'QS Home Navigation';
+  src: url('@fontsource/inter/files/inter-latin-500-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-display: optional;
+}
 @font-face {
   font-family: 'QS Home Inter Fallback';
   src: local('Arial Bold'), local('Arial-BoldMT');
@@ -28,6 +37,7 @@
 .landing-page h2 { margin: 0 0 0.75rem; font: var(--mat-sys-headline-small); font-weight: 700; }
 .landing-page p { color: var(--mat-sys-on-surface-variant); line-height: 1.65; }
 .home-navigation { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem; padding-block: 0.5rem 1rem; }
+.home-navigation a { font-family: 'QS Home Navigation', sans-serif; }
 .hero-section { padding-block: clamp(1.5rem, 3vw, 2rem); text-align: center; }
 .hero-content { max-width: 64rem; margin-inline: auto; }
 .brand-badge { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
