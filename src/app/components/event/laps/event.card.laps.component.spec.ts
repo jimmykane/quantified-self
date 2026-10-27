@@ -292,6 +292,46 @@ describe('EventCardLapsComponent', () => {
         expect(table.selectedSummary[EVENT_LAP_STROKES_COLUMN]).toBe('28 · 1/1');
     });
 
+    it('uses original lap ownership in other legs while switching the swim display and selected activities', () => {
+        const swim = createSwimIntervalFixture();
+        swim.setID('multisport-swim');
+        const cycling = createHydratedActivity([
+            swim.getLaps()[1].toJSON(),
+            { lapId: 2, type: LapTypes.Manual, startDate: 300000, endDate: 600000,
+                startIndex: null, endIndex: null,
+                stats: { [DataDuration.type]: 300, [DataDistance.type]: 2000 } },
+        ]);
+        cycling.setID('multisport-cycling');
+        cycling.startDate = new Date(300000);
+        cycling.addStat(new DataDuration(300));
+        const sources = [swim, cycling];
+        const before = JSON.stringify(sources.map(activity => activity.toJSON()));
+        component.event = { getActivities: () => sources } as EventInterface;
+        component.selectedActivities = sources;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const assertCyclingRows = () => {
+            const tables = component.lapTableGroups.flatMap(group => group.tables)
+                .filter(table => table.activity === cycling);
+            expect(tables).toHaveLength(1);
+            expect(tables[0].dataSource.data.filter(row => !row.isLapAverage).map(row => row.lap))
+                .toEqual([cycling.getLaps()[1]]);
+        };
+        assertCyclingRows();
+        for (const original of [true, false]) {
+            component.setOriginalLaps(original);
+            fixture.detectChanges();
+            assertCyclingRows();
+        }
+        for (const selected of [[cycling], sources]) {
+            component.selectedActivities = selected;
+            component.ngOnChanges();
+            fixture.detectChanges();
+            assertCyclingRows();
+        }
+        expect(JSON.stringify(sources.map(activity => activity.toJSON()))).toBe(before);
+    });
+
     it('keeps incomplete derived SWOLF out of rows and summaries while retaining its available metrics', () => {
         const activity = createSwimIntervalFixture();
         activity.getSwimLengths()[0].strokes = null;

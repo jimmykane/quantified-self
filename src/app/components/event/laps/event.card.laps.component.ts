@@ -180,7 +180,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public hasSwimIntervals = false;
   public readonly showOriginalLaps = signal(false);
   private displayActivities: ActivityInterface[] = [];
-  private displayEventActivities: ActivityInterface[] = [];
+  private sourceEventActivities: ActivityInterface[] = [];
   private intervalActivities = new Set<ActivityInterface>();
   private readonly expandedLapKeys = new Set<string>();
   public availableLapTypes: LapTypes[] = [];
@@ -283,12 +283,14 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.intervalActivities = new Set(this.showOriginalLaps() ? [] : [...projections.values()].filter(Boolean));
     const displayActivity = (activity: ActivityInterface) => this.showOriginalLaps() ? activity : projections.get(activity) || activity;
     this.displayActivities = this.selectedActivities.map(displayActivity);
-    this.displayEventActivities = (this.event?.getActivities?.() || this.selectedActivities).map(displayActivity);
+    // Cross-leg ownership depends on original lap records, including duplicates that
+    // the swim projection replaces. Other activity tables must keep that source context.
+    this.sourceEventActivities = this.event?.getActivities?.() || this.selectedActivities;
     const lapTypesWithData = new Set<LapTypes>();
     const tablesByKey = new Map<string, LapTableView>();
     const groupsByActivity = new Map(this.displayActivities.map(activity => [activity,
       this.intervalActivities.has(activity) ? [{ lapType: LapTypes.Interval, laps: activity.getLaps() }]
-        : getEventLapTableGroups(activity, this.displayEventActivities),
+        : getEventLapTableGroups(activity, this.sourceEventActivities),
     ]));
     this.availableLapTypes = [...new Set(Array.from(groupsByActivity.values()).flatMap(groups => groups.map(group => group.lapType)))];
 
@@ -373,7 +375,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         '#': index + 1,
       };
       const sourceIndex = sourceIndexes.get(lap) ?? index;
-      const contextLabel = getEventLapContextLabel(activity, lap, this.displayEventActivities);
+      const contextLabel = getEventLapContextLabel(activity, lap, this.sourceEventActivities);
       const swim = contextLabel ? undefined : analytics.get(lap);
       // Synthetic row numbers can change when source lengths regroup during a live
       // refresh. State follows the same interval window and kind, never a reused number.
@@ -419,9 +421,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     if (laps.length < 2) {
       return displayRows;
     }
-    const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, this.displayEventActivities));
+    const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, this.sourceEventActivities));
     const averageMetrics = getAverageEventLapMetrics(localLaps, metricTypes, this.unitSettings, activity.type, activity,
-      this.displayEventActivities);
+      this.sourceEventActivities);
     if (averageMetrics.length === 0) {
       return displayRows;
     }
@@ -752,7 +754,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.displayActivities.forEach((activity) => {
-      if (this.intervalActivities.has(activity) || getVisibleEventLaps(activity, this.displayEventActivities).length > 0) {
+      if (this.intervalActivities.has(activity) || getVisibleEventLaps(activity, this.sourceEventActivities).length > 0) {
         sportFamilies.add(resolveEventLapSportFamily(activity.type));
       }
     });
@@ -850,7 +852,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       this.getSelectableRows(table.dataSource.data).flatMap(row => row.lap ? [row.lap] : []),
       metricTypes,
       this.unitSettings,
-      this.displayEventActivities,
+      this.sourceEventActivities,
     ) : new Set(table.columns));
 
     return Object.fromEntries(metricGroups

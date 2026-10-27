@@ -445,6 +445,8 @@ prevent selection/disclosure state from leaking between the two representations;
 preserve it within the current view. Derived row state follows its time window and swim/rest kind, so live length
 regrouping cannot move selection or expansion onto a different interval with a reused row number. Comparison headers
 receive the original activity object, keeping temporary projections out of shared selection and color-cache state.
+Cross-leg lap ownership also reads original event activities, so a swim display change cannot restore duplicate
+source laps in another activity's table.
 Column headers expose keyboard-focusable, accessible tooltips distinguishing
 interval stroke totals, individual-length counts, recorded per-length averages, stroke rate and normalized SWOLF.
 The event section also appears when lengths support intervals but no original laps are visible. Switching to an
