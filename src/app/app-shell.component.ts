@@ -35,7 +35,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
 import { AppUserInterface } from './models/app-user.interface';
-import { AppUserUtilities } from './utils/app.user.utilities';
+import { AppUserAccess } from './helpers/user-access.helper';
 import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
 import {
   hasAngularServerContext,
@@ -385,7 +385,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
           user.acceptedTos === true;
 
         const hasSubscribedOnce = user.hasSubscribedOnce === true;
-        const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
+        const hasPaidAccess = AppUserAccess.hasPaidAccessUser(user);
 
         const explicitOnboardingComplete = user.onboardingCompleted === true;
         this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);

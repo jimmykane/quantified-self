@@ -1,3 +1,4 @@
+import { getUserChartDataTypesToUse } from '../../helpers/app-chart-data-types.helper';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardComponent } from './event.card.component';
@@ -58,6 +59,8 @@ import type { AppEventInterface } from '@shared/app-event.interface';
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
 }));
+
+vi.mock('../../helpers/app-chart-data-types.helper', importOriginal => importOriginal<typeof import('../../helpers/app-chart-data-types.helper')>().then(actual => Object.assign({}, actual, { getUserChartDataTypesToUse: vi.fn() })));
 
 describe('EventCardComponent', () => {
     let component: EventCardComponent;
@@ -267,6 +270,7 @@ describe('EventCardComponent', () => {
     });
 
     beforeEach(() => {
+        vi.mocked(getUserChartDataTypesToUse).mockImplementation(user => mockUserService.getUserChartDataTypesToUse(user));
         fixture = TestBed.createComponent(EventCardComponent);
         component = fixture.componentInstance;
         fixture.detectChanges();

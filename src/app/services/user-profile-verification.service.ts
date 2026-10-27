@@ -1,10 +1,11 @@
+import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
 import { Injectable, inject } from '@angular/core';
 import { Auth, FirebaseUserType } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
 import { getUserLegalAgreementsPath } from '@shared/user-profile-firestore';
 import { AppUserInterface } from '../models/app-user.interface';
 import { REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES } from '../shared/policy-consent-fields';
-import { AppUserUtilities } from '../utils/app.user.utilities';
+import { AppUserAccess } from '../helpers/user-access.helper';
 import { firstValueFrom, from, throwError, timeout } from 'rxjs';
 
 export interface UserProfileDocuments {
@@ -14,7 +15,7 @@ export interface UserProfileDocuments {
   settings?: Record<string, unknown>;
 }
 
-export function mergeUserProfileDocuments(userID: string, documents: UserProfileDocuments): AppUserInterface | null {
+export async function mergeUserProfileDocuments(userID: string, documents: UserProfileDocuments): Promise<AppUserInterface | null> {
   const { user, legal, system, settings } = documents;
   const hasData = (value: object | undefined) => !!value && Object.keys(value).length > 0;
   if (!user && !hasData(legal) && !hasData(system) && !hasData(settings)) {
@@ -27,7 +28,8 @@ export function mergeUserProfileDocuments(userID: string, documents: UserProfile
   if (hasData(settings)) {
     profile.settings = settings as unknown as AppUserInterface['settings'];
   }
-  profile.settings = AppUserUtilities.fillMissingAppSettings(profile);
+  const settingsUtilities = await loadUserSettingsUtilities();
+  profile.settings = settingsUtilities.fillMissingAppSettings(profile);
   return profile;
 }
 
@@ -58,7 +60,7 @@ export class UserProfileVerificationService {
     // root document can lose that history while the legal document survives.
     const hasCompletedSetup = profile.onboardingCompleted === true
       || profile.hasSubscribedOnce === true
-      || AppUserUtilities.hasPaidAccessUser(profile, profile.admin === true);
+      || AppUserAccess.hasPaidAccessUser(profile, profile.admin === true);
     return !termsAccepted || !hasCompletedSetup;
   }
 
@@ -113,6 +115,8 @@ export class UserProfileVerificationService {
       `users/${userID}/config/settings`,
     ].map(async path => (await getDoc(doc(firestore, path))).data()));
     assertCurrentUser();
-    return mergeUserProfileDocuments(userID, { user, legal, system, settings });
+    const profile = await mergeUserProfileDocuments(userID, { user, legal, system, settings });
+    assertCurrentUser();
+    return profile;
   }
 }

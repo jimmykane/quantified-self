@@ -6,7 +6,10 @@ const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
 const prerenderManifestPath = path.join(path.dirname(outputDirectory), 'prerendered-routes.json');
 const sourceMapCache = new Map();
-const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 160 * 1024;
+// Moving account-only initialization out of startup also moves shared chart code
+// into the preview. Bound both its first use and the combined page journey.
+const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 192 * 1024;
+const HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES = 3050 * 1024;
 const TRAINING_PLANS_ROUTE = '/features/training-plans';
 const TRAINING_PLANS_SOCIAL_IMAGE_PATH = path.join(
   outputDirectory,
@@ -93,6 +96,18 @@ assertNoHomeStartupSource(
   /^src\/app\/services\/admin\.service\.ts$/,
 );
 assertNoStartupSource('Mapbox', /(?:^|\/)(?:mapbox-gl|mapbox-loader)(?:[./]|$)/);
+assertNoHomeStartupSource(
+  'account settings normalization or chart metric catalogs',
+  /^src\/app\/(?:utils\/app\.user\.utilities|helpers\/app-chart-data-types\.helper)\.ts$/,
+);
+assertNoSourceRecords(
+  'account settings normalization or chart metric catalogs',
+  uniqueSourceRecords(collectStaticDependencyGraph(findAssetsContainingSource(
+    /^src\/app\/components\/public-seo\/public-seo-page\.component\.ts$/,
+  )).flatMap(readSourceRecords)),
+  /^src\/app\/(?:utils\/app\.user\.utilities|helpers\/app-chart-data-types\.helper)\.ts$/,
+  'public guide/feature page startup graph',
+);
 assertNoStartupSource(
   'eager regional locale catalog',
   /node_modules\/(?:dayjs\/locale|@angular\/common\/locales)\//,
@@ -176,6 +191,10 @@ const publicStartupBytes = publicStartupJavaScriptAssets.reduce((total, asset) =
 const homeSignalPreviewIncrementalStaticBytes = homeSignalPreviewIncrementalStaticAssets.reduce((total, asset) => (
   total + fs.statSync(path.join(outputDirectory, asset)).size
 ), 0);
+const homeWithSignalPreviewStaticBytes = homeStartupBytes + homeSignalPreviewIncrementalStaticBytes;
+if (homeWithSignalPreviewStaticBytes > HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES) {
+  throw new Error(`Home plus its signal preview exceeded its ${formatBytes(HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES)} static budget: ${formatBytes(homeWithSignalPreviewStaticBytes)}.`);
+}
 if (homeSignalPreviewIncrementalStaticBytes > HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES) {
   throw new Error(
     `Deferred home signal preview exceeded its ${formatBytes(HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES)} incremental static budget: `
@@ -190,6 +209,7 @@ const authBaseline = sourceBaseline(
 
 console.log(`Verified prerendered public startup union: ${publicStartupJavaScriptAssets.length} JS assets, ${formatBytes(publicStartupBytes)} raw.`);
 console.log(`Home startup baseline: ${homeStartupJavaScriptAssets.length} JS assets, ${formatBytes(homeStartupBytes)} raw.`);
+console.log(`Home plus signal preview: ${formatBytes(homeWithSignalPreviewStaticBytes)} raw.`);
 console.log(`Home Sports Lib baseline: ${sportsLibBaseline.count} source module(s), ${formatBytes(sportsLibBaseline.bytes)} source bytes.`);
 console.log(`Home auth/Firebase baseline: ${authBaseline.count} source module(s), ${formatBytes(authBaseline.bytes)} source bytes.`);
 console.log(

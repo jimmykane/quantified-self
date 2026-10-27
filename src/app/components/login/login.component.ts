@@ -43,9 +43,13 @@ export class LoginComponent implements OnInit, OnDestroy {
     return state.status === 'error' || state.status === 'recovering'
       ? state.appCheckFailure ?? appCheckFailureDetails({ code: state.code }) : null;
   });
+  readonly profileSettingsLoadFailed = computed(() => {
+    const state = this.userService.profileReadState();
+    return state.status === 'error' && state.code === 'account/settings-load-failed';
+  });
   readonly profileVerificationNeedsReload = computed(() => {
     const failure = this.profileVerificationFailure();
-    return !!failure && !failure.retryable;
+    return this.profileSettingsLoadFailed() || (!!failure && !failure.retryable);
   });
   private static readonly nonReportableAuthenticationErrorCodes = new Set([
     'auth/account-exists-with-different-credential',
@@ -452,8 +456,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     let pageReloadRequested = false;
     try {
       if (this.profileVerificationNeedsReload()) {
-        // A new page starts a fresh browser check. A same-page forced token refresh
-        // cannot bypass the SDK's cooldown. Reloading does not guarantee acceptance.
+        // A new page can retry a failed module fetch or browser verification.
+        // Keep reload explicit; same-page retries cannot clear either browser cache/cooldown.
         this.windowService.windowRef.location.reload();
         pageReloadRequested = true;
         // A cancelled beforeunload prompt leaves this document alive. Bound the

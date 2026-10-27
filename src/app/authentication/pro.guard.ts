@@ -5,7 +5,7 @@ import { AppUserService, isActionableProfileReadState } from '../services/app.us
 import { LoggerService } from '../services/logger.service';
 import { combineLatest, firstValueFrom } from 'rxjs';
 import { filter, startWith, take } from 'rxjs/operators';
-import { AppUserUtilities } from '../utils/app.user.utilities';
+import { AppUserAccess } from '../helpers/user-access.helper';
 
 @Injectable({
     providedIn: 'root'
@@ -68,7 +68,7 @@ class PermissionsService {
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
             const isAdmin = (user as any).admin === true;
-            const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+            const hasPaidAccess = AppUserAccess.hasPaidAccessUser(user, isAdmin);
 
             this.logger.log('[PaidGuard] Status:', {
                 termsAccepted,

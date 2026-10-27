@@ -7,7 +7,10 @@
         @if (userService.hasActionableProfileReadFailure()) {
         <div class="profile-read-error" role="alert" data-testid="profile-read-error">
           <mat-icon aria-hidden="true">error_outline</mat-icon>
-          @if (profileVerificationNeedsReload()) {
+          @if (profileSettingsLoadFailed()) {
+          <h2 class="title">We couldn't load the account software</h2>
+          <p class="subtitle">You're still signed in. Check your connection, then reload the page to download the account software again. Your saved data stays unchanged.</p>
+          } @else if (profileVerificationNeedsReload()) {
           <h2 class="title">We couldn't verify this browser</h2>
           <p class="subtitle">You're still signed in. The browser security check failed, so your account data couldn't load.</p>
           @if (profileVerificationFailure()?.cooldown) {
@@ -26,7 +29,7 @@
             (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
             {{ isProfileRecoveryInProgress ? (profileVerificationNeedsReload() ? 'Reloading…' : 'Retrying…') : profileVerificationNeedsReload() ? 'Reload page' : 'Retry' }}
           </button>
-          @if (profileVerificationNeedsReload()) {
+          @if (profileVerificationNeedsReload() && !profileSettingsLoadFailed()) {
           <a mat-button routerLink="/help" fragment="troubleshooting" appHapticTap>Browser verification help</a>
           }
         </div>

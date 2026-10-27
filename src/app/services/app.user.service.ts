@@ -1,3 +1,4 @@
+import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
 import { mergeDashboardChartLibrarySeen, newDashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -50,7 +51,7 @@ import {
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
-import { AppUserUtilities } from '../utils/app.user.utilities';
+import { AppUserAccess } from '../helpers/user-access.helper';
 import {
   MapThemes,
   MapTypes,
@@ -71,8 +72,6 @@ import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
 import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { mergeUserProfileDocuments, UserProfileVerificationService } from './user-profile-verification.service';
-import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
-import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -460,7 +459,8 @@ export class AppUserService implements OnDestroy {
       ? new Date(firebaseUser.metadata.lastSignInTime)
       : authCreationDate;
 
-    const defaultNewUserSettings = AppUserUtilities.fillMissingAppSettings({} as any);
+    const settingsUtilities = await loadUserSettingsUtilities();
+    const defaultNewUserSettings = settingsUtilities.fillMissingAppSettings({} as any);
     defaultNewUserSettings.appSettings = {
       ...defaultNewUserSettings.appSettings,
       unitSetupCompleted: false,
@@ -870,12 +870,12 @@ export class AppUserService implements OnDestroy {
 
   public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
   public readonly isAdminSignal = computed(() => this.user()?.admin === true);
-  public readonly isProSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
-  public readonly isBasicSignal = computed(() => AppUserUtilities.isBasicUser(this.user()));
+  public readonly isProSignal = computed(() => AppUserAccess.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isBasicSignal = computed(() => AppUserAccess.isBasicUser(this.user()));
 
-  public readonly isGracePeriodActiveSignal = computed(() => AppUserUtilities.isGracePeriodActive(this.user()));
-  public readonly hasPaidAccessSignal = computed(() => AppUserUtilities.hasPaidAccessUser(this.user(), this.isAdminSignal()));
-  public readonly hasProAccessSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isGracePeriodActiveSignal = computed(() => AppUserAccess.isGracePeriodActive(this.user()));
+  public readonly hasPaidAccessSignal = computed(() => AppUserAccess.hasPaidAccessUser(this.user(), this.isAdminSignal()));
+  public readonly hasProAccessSignal = computed(() => AppUserAccess.hasProAccess(this.user(), this.isAdminSignal()));
 
   public readonly gracePeriodUntil = computed(() => {
     const user = this.user();
@@ -916,7 +916,7 @@ export class AppUserService implements OnDestroy {
   public async isPro(): Promise<boolean> {
     const user = await this.getCurrentUserForAccessCheck();
     const isAdmin = user?.admin === true;
-    return AppUserUtilities.hasProAccess(user, isAdmin);
+    return AppUserAccess.hasProAccess(user, isAdmin);
   }
 
   public async hasProAccess(): Promise<boolean> {
@@ -926,7 +926,7 @@ export class AppUserService implements OnDestroy {
   public async hasPaidAccess(): Promise<boolean> {
     const user = await this.getCurrentUserForAccessCheck();
     const isAdmin = user?.admin === true;
-    return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+    return AppUserAccess.hasPaidAccessUser(user, isAdmin);
   }
 
   private async getCurrentUserForAccessCheck(): Promise<AppUserInterface | null> {
@@ -1041,7 +1041,7 @@ export class AppUserService implements OnDestroy {
       )
     }).pipe(
       distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
-      map(documents => mergeUserProfileDocuments(userID, documents)));
+      switchMap(documents => from(mergeUserProfileDocuments(userID, documents))));
   }
 
   public async createOrUpdateUser(user: AppUserInterface) {
@@ -1929,7 +1929,7 @@ export class AppUserService implements OnDestroy {
     // But the guard checks "hasPaidAccess".
 
     // Let's look at the guard again.
-    // const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
+    // const hasPaidAccess = AppUserAccess.hasPaidAccessUser(user);
     // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
     // So if I just set 'onboardingCompleted' property on the user in Firestore, 
@@ -1973,26 +1973,6 @@ export class AppUserService implements OnDestroy {
       this.logger.error(e);
       throw e;
     }
-  }
-  public getUserChartDataTypesToUse(user: User): string[] {
-    if (!user.settings?.chartSettings?.dataTypeSettings) {
-      return [];
-    }
-
-    const enabledDataTypeSet = new Set(
-      Object.keys(user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
-        return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
-      })
-    );
-    const canonicalDataTypes = getAppCanonicalChartDataTypes();
-    const orderedDataTypes = applyEventChartCanonicalOrderOverride(
-      canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
-    );
-    const extraEnabledDataTypes = [...enabledDataTypeSet]
-      .filter((dataType) => !orderedDataTypes.includes(dataType))
-      .sort((left, right) => left.localeCompare(right));
-
-    return orderedDataTypes.concat(extraEnabledDataTypes);
   }
 
   ngOnDestroy() {
