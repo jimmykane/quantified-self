@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { gzipSync } from 'zlib';
 import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from '../../../shared/activity-sync-routes';
@@ -1438,7 +1439,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
   });
 
-  it('persists a transient Wahoo type-correction resume ID and never reposts the FIT', async () => {
+  it.each(['unavailable', 'resource-exhausted'])('persists a Wahoo type-correction resume ID on %s and never reposts the FIT', async code => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
@@ -1449,7 +1450,8 @@ describe('activity-sync/process-queue-item', () => {
       operation: 'activity_upload_status',
       disposition: 'retryable',
       retryMode: 'resume',
-      code: 'unavailable',
+      code,
+      retryAfterSeconds: code === 'resource-exhausted' ? 3600 : undefined,
       message: 'Wahoo could not update the workout type.',
       providerOperationId: 'wahoo-correction-resume',
       dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_RETRY_EXHAUSTED',
@@ -1460,6 +1462,13 @@ describe('activity-sync/process-queue-item', () => {
     expect(firstResult).toBe(QueueResult.RetryIncremented);
     expect(queueItem.destinationUploadID).toBe('wahoo-correction-resume');
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+    if (code === 'resource-exhausted') {
+      expect(queueItem.dispatchedToCloudTask).toBeGreaterThanOrEqual(Date.now() + 3_599_000);
+      expect(queueItem.dispatchedToCloudTask).toBeLessThanOrEqual(Date.now() + 3_631_000);
+      expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'expected_contention' }));
+    } else {
+      expect(queueItem.dispatchedToCloudTask).toBeNull();
+    }
 
     const secondResult = await processActivitySyncQueueItem(queueItem);
 
@@ -1470,6 +1479,42 @@ describe('activity-sync/process-queue-item', () => {
       9,
     );
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('retains a delayed Wahoo quota retry (already accepted: %s)', async accepted => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ...(accepted ? { destinationUploadID: 'accepted-1', destinationExpectedWorkoutTypeID: 9 } : {}),
+    };
+    const error = new HttpsError('resource-exhausted', 'Wahoo API quota exceeded.', { retryAfterSeconds: 7200 });
+    (accepted ? mockGetWahooActivityUploadStatus : mockUploadActivityFileToWahoo).mockRejectedValueOnce(error);
+    const before = Date.now();
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(queueItem.dispatchedToCloudTask).toBeGreaterThanOrEqual(before + 7_201_000);
+    expect(queueItem.dispatchedToCloudTask).toBeLessThanOrEqual(Date.now() + 7_230_000);
+    expect(queueItem.destinationUploadID).toBe(accepted ? 'accepted-1' : undefined);
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'expected_contention' }));
+    if (accepted) {
+      expect(mockDownload).not.toHaveBeenCalled();
+      expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps the existing terminal reconciliation path after Wahoo quota retries are exhausted', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI, destinationUploadID: 'accepted-1',
+      retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+    };
+    mockGetWahooActivityUploadStatus.mockRejectedValueOnce(new HttpsError('resource-exhausted', 'Rate limited.', { retryAfterSeconds: 3600 }));
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('accepted-1');
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'dead_lettered' }));
   });
 
   it('reuses the durable Wahoo type on resume without rereading a changed event', async () => {

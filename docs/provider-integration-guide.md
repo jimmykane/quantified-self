@@ -1390,6 +1390,15 @@ already dispatched requests and their retained results.
 - Do not assume a successful bounded range endpoint returns only requested dates. Some providers include a current-day summary with older requests. Keep response byte and item bounds, validate every returned row, and persist only records intersecting the original target; a valid extra day is not a retryable transport failure.
 - Classify provider 429 responses separately and surface reset metadata where available. Do not convert rate limits into rapid retries.
 
+Wahoo's shared JSON API transport checks the existing application/day Training capacity record's `notBeforeMs`
+before provider I/O and extends it transactionally on a quota rejection, preserving its counters. The reset header
+is a relative delay in seconds. Recorded-activity delivery retains that delay as its existing guarded dispatch marker
+and schedules a delayed task with bounded jitter, including before an upload is accepted. Retain accepted IDs and
+type-correction state before scheduling. Future quota waits must not exhaust reconciliation's candidate budget or
+page as processing failures. See [Wahoo application cooldown](wahoo-integration.md#application-api-cooldown) for bounds,
+fallbacks, privacy, unchanged lifecycle/consent and the monitoring coverage decision. This is a cooldown, not a promise
+of proactive request-count reservation across every Wahoo transport.
+
 ### Queue item design
 
 Queue IDs and imported event IDs must be stable across retries. Prefer provider identity plus stable provider activity/workout ID, with a secondary provider-user identity where collisions are possible.
