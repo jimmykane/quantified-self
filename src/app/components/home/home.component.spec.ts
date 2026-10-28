@@ -102,8 +102,7 @@ describe('HomeComponent', () => {
 
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('Pro imports new activities automatically');
-    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('supported recordings along the paths you choose');
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toBe('Bring your activities, sleep and health data together. See how your training is changing and plan what comes next.');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;

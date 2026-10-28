@@ -384,7 +384,7 @@ describe('Firebase Hosting configuration', () => {
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-27');
     // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
