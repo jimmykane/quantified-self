@@ -1,4 +1,5 @@
-import { SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { DistanceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { describe, expect, it } from 'vitest';
 import type { DashboardTrainingSwimPerformanceContext } from './dashboard-derived-metrics.helper';
 import {
@@ -63,5 +64,47 @@ describe('training-swim-performance.helper', () => {
       hasSessions: false,
       hasPace: false,
     });
+  });
+
+  it.each([
+    { paceUnits: [SwimPaceUnits.MinutesPer100Yard, SwimPaceUnits.MinutesPer100Meter], distanceUnits: DistanceUnits.Kilometers,
+      pool: '25 yd', distances: ['500 yd', '2.000 yd'] },
+    { paceUnits: [SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard], distanceUnits: DistanceUnits.Miles,
+      pool: '22.86 m', distances: ['457.2 m', '1.829 m'] },
+    { paceUnits: [], distanceUnits: DistanceUnits.Miles,
+      pool: '22.86 m', distances: ['457.2 m', '1.829 m'] },
+  ])('uses the first swim preference for pool context and both weekly distances: $paceUnits', example => {
+    const source = context();
+    source.swolfContext.poolLengthMeters = 22.86;
+    source.weeks[0].distanceMeters = 457.2;
+    source.weeks[1].distanceMeters = 1828.8;
+    const before = structuredClone(source);
+    const view = buildTrainingSwimPerformanceViewModel(source, {
+      ...getDefaultUserUnitSettings(),
+      swimPaceUnits: example.paceUnits,
+      distanceUnits: example.distanceUnits,
+    });
+
+    expect(view.swolfContextText).toBe(`Freestyle · ${example.pool} pool`);
+    expect([view.pool[0].distanceText, view.openWater[0].distanceText]).toEqual(example.distances);
+    expect([view.pool[0].distanceMeters, view.openWater[0].distanceMeters]).toEqual([457.2, 1828.8]);
+    expect(view.latestSwolfText).toBe('41.5');
+    expect(source).toEqual(before);
+  });
+
+  it('converts an actual metre pool without relabelling it as a nominal yard pool', () => {
+    const view = buildTrainingSwimPerformanceViewModel(context(), {
+      ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    });
+    expect(view.swolfContextText).toBe('Freestyle · 27.34 yd pool');
+  });
+
+  it('keeps zero distance distinct from missing or invalid distance', () => {
+    for (const distanceMeters of [0, null, Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+      const source = context();
+      source.weeks[0].distanceMeters = distanceMeters;
+      const view = buildTrainingSwimPerformanceViewModel(source, null);
+      expect(view.pool[0].distanceText).toBe(distanceMeters === 0 ? '0 m' : '--');
+    }
   });
 });

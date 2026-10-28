@@ -73,6 +73,9 @@
           @if (row.timingExplanation) {
             <p class="mat-body-small">Length {{ row['#'] }}: {{ row.timingExplanation }}</p>
           }
+          @if (row.distanceExplanation) {
+            <p class="mat-body-small">Length {{ row['#'] }}: {{ row.distanceExplanation }}</p>
+          }
         }
         <table mat-table [dataSource]="group.rows">
           @for (column of group.columns; track column.name) {

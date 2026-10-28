@@ -19,7 +19,10 @@ import {
 } from '../../../helpers/event-swim-length.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
-import { SWIM_TABLE_HEADER_TOOLTIPS, getActiveSwimLengthCadence, getNormalizedSwolf, getSwimLengthDistance, getSwimLengthDuration, getSwolfColumnLabel, sumSwimValues } from '../../../helpers/event-swim-analytics.helper';
+import {
+  SWIM_TABLE_HEADER_TOOLTIPS, getActiveSwimLengthCadence, getCompleteSwimLengthSum, getNormalizedSwolf,
+  getSwimLengthDistance, getSwimLengthDuration, getSwimLengthHeartRateAverage, getSwimLengthPace, getSwolfColumnLabel, sumSwimValues,
+} from '../../../helpers/event-swim-analytics.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { getDerivedSwimIntervalLengths } from '../../../helpers/event-swim-interval-metadata.helper';
 import {
@@ -32,6 +35,7 @@ interface SwimLengthTableRow {
   Split: string;
   Duration: string;
   timingExplanation?: string;
+  distanceExplanation?: string;
   Distance: string;
   Type: string;
   Stroke: string;
@@ -204,14 +208,12 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Split: '',
       Duration: this.formatDuration(swimLength),
       timingExplanation: getRejectedSwimTiming(swimLength) ? SWIM_TIMING_UNAVAILABLE_REASON : undefined,
-      Distance: this.formatSwimDistanceValue(isRestSwimLength(swimLength)
-        ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength),
+      Distance: this.formatSwimDistanceValue(getSwimLengthDistance(swimLength),
         getNominalSwimLengthsDisplayMeters(displayContext, [swimLength])),
       Type: this.formatLabel(swimLength.type),
       Stroke: this.formatLabel(swimLength.stroke),
       Strokes: this.formatOptionalInteger(swimLength.strokes),
-      'Swim Pace': getRejectedSwimTiming(swimLength) ? '' : this.formatSwimPace(swimLength.avgSpeed)
-        || (!isRestSwimLength(swimLength) ? this.formatGroupSwimPace(getSwimLengthDuration(swimLength), getSwimLengthDistance(swimLength)) : ''),
+      'Swim Pace': this.formatOptionalStat(getSwimLengthPace(swimLength)),
       'Average Stroke Rate': this.formatStrokeRate(swimLength.avgCadence),
       'Average Heart Rate': this.formatHeartRate(swimLength.avgHeartRate),
       SWOLF: this.formatDecimal(swimLength.swolf),
@@ -272,7 +274,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private buildGroupRows(rowViews: SwimLengthRowView[], displayContext: NominalSwimDistanceDisplayContext | null): SwimLengthTableRow[] {
     let activeSplitIndex = 0;
-    let cumulativeDistance = 0;
+    let cumulativeDistance: number | null = 0;
     const nominalDisplayComplete = getNominalSwimLengthsDisplayMeters(displayContext, rowViews.map(view => view.swimLength)) !== undefined;
 
     return rowViews.map((rowView) => {
@@ -281,19 +283,26 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
       if (this.isIdleOrRestSwimLength(swimLength)) {
         row.Split = 'Rest';
+        if (swimLength.distanceIsInvalid) {
+          row.distanceExplanation = 'Set distance is unavailable because this rest length has an invalid recorded distance.';
+        }
         return row;
       }
 
       activeSplitIndex++;
-      const splitDistance = this.getSwimLengthSplitDistance(swimLength);
-      if (splitDistance !== null) {
+      const splitDistance = getSwimLengthDistance(swimLength);
+      if (cumulativeDistance !== null && splitDistance !== null) {
         cumulativeDistance += splitDistance;
         row.Split = this.formatSwimDistanceValue(cumulativeDistance,
           nominalDisplayComplete ? activeSplitIndex * displayContext.poolMeters : undefined);
         return row;
       }
 
-      row.Split = this.formatOptionalInteger(activeSplitIndex);
+      cumulativeDistance = null;
+      row.Split = 'Unavailable';
+      if (splitDistance === null) {
+        row.distanceExplanation = 'Cumulative distance is unavailable from this length onward because its distance is missing or invalid. A recorded pool length is used only when distance is missing.';
+      }
       return row;
     });
   }
@@ -306,17 +315,19 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const firstIndex = swimLengths[0]?.index ?? 0;
     const lastSwimLength = swimLengths[swimLengths.length - 1];
     const totalDuration = this.completeDuration(swimLengths);
-    const totalDistance = this.sumNumericValues(swimLengths, swimLength => isRestSwimLength(swimLength)
-      ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength));
-    const activeDuration = activeSwimLengths.every(length => getSwimLengthDuration(length) !== null)
-      ? this.sumNumericValues(activeSwimLengths, getSwimLengthDuration) : null;
-    const activeDistance = activeSwimLengths.every(length => getSwimLengthDistance(length) !== null)
-      ? this.sumNumericValues(activeSwimLengths, getSwimLengthDistance) : null;
-    const totalEnergy = this.sumDataValues(swimLengths, swimLength => swimLength.calories);
-    const totalStrokes = activeSwimLengths.every(length => length.strokes !== null && length.strokes >= 0)
-      ? this.sumNumericValues(activeSwimLengths, swimLength => swimLength.strokes) : null;
+    // An idle length with no distance adds no movement to an active set. Preserve
+    // explicit rest distances, and never fill missing active distance with zero.
+    const totalDistance = getCompleteSwimLengthSum(swimLengths, length => {
+      if (length.distanceIsInvalid) return null;
+      if (!isRestSwimLength(length)) return getSwimLengthDistance(length);
+      return length.distance === null && activeSwimLengths.length > 0 ? 0 : this.getFiniteDataValue(length.distance);
+    });
+    const activeDuration = getCompleteSwimLengthSum(activeSwimLengths, getSwimLengthDuration);
+    const activeDistance = getCompleteSwimLengthSum(activeSwimLengths, getSwimLengthDistance);
+    const totalEnergy = getCompleteSwimLengthSum(swimLengths, length => this.getFiniteDataValue(length.calories));
+    const totalStrokes = getCompleteSwimLengthSum(activeSwimLengths, length => length.strokes);
     const avgCadence = getActiveSwimLengthCadence(activeSwimLengths);
-    const avgHeartRate = this.averageDataValues(activeSwimLengths, swimLength => swimLength.avgHeartRate);
+    const avgHeartRate = getSwimLengthHeartRateAverage(activeSwimLengths);
     const avgSwolf = this.averageNumericValues(activeSwimLengths, swimLength => swimLength.swolf);
 
     return {
@@ -324,7 +335,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Lap: this.formatLapRange(swimLengths),
       Split: '',
       Duration: this.formatDurationValue(totalDuration),
-      Distance: this.formatSwimDistanceValue(totalDistance, getNominalSwimLengthsDisplayMeters(displayContext, swimLengths)),
+      Distance: totalDistance === null && activeSwimLengths.length > 0 ? 'Distance unavailable'
+        : this.formatSwimDistanceValue(totalDistance, getNominalSwimLengthsDisplayMeters(displayContext, swimLengths)),
       Type: activeSwimLengths.length === 0 ? 'Rest' : this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
       Stroke: getSwimStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
@@ -358,8 +370,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private completeDuration(lengths: AppSwimLength[]): number | null {
-    return lengths.length && lengths.every(length => getSwimLengthDuration(length) !== null)
-      ? sumSwimValues(lengths.map(length => getSwimLengthDuration(length)!)) : null;
+    return getCompleteSwimLengthSum(lengths, getSwimLengthDuration);
   }
 
   private formatDuration(swimLength: AppSwimLength): string {
@@ -381,15 +392,6 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private formatEnergy(calories: AppSwimLength['calories']): string {
     return calories === null ? '' : this.formatUnitAwareStat(calories);
-  }
-
-  private formatSwimPace(avgSpeed: AppSwimLength['avgSpeed']): string {
-    const speed = avgSpeed?.getValue();
-    if (typeof speed !== 'number' || speed <= 0) {
-      return '';
-    }
-
-    return this.formatUnitAwareStat(new DataSwimPace(convertSpeedToSwimPace(speed)));
   }
 
   private formatGroupSwimPace(totalDuration: number | null, totalDistance: number | null): string {
@@ -422,10 +424,6 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private formatOptionalInteger(value: number | null): string {
     return value === null ? '' : `${Math.round(value)}`;
-  }
-
-  private getSwimLengthSplitDistance(swimLength: AppSwimLength): number | null {
-    return this.getFiniteDataValue(swimLength.distance) ?? this.getFiniteDataValue(swimLength.poolLength);
   }
 
   private formatLapRange(swimLengths: AppSwimLength[]): string {
@@ -504,20 +502,6 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private isIdleOrRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
     return isRestSwimLength(swimLength);
-  }
-
-  private sumDataValues(
-    swimLengths: AppSwimLength[],
-    getStat: (swimLength: AppSwimLength) => DataInterface | null,
-  ): number | null {
-    return this.sumNumericValues(swimLengths, swimLength => this.getFiniteDataValue(getStat(swimLength)));
-  }
-
-  private averageDataValues(
-    swimLengths: AppSwimLength[],
-    getStat: (swimLength: AppSwimLength) => DataInterface | null,
-  ): number | null {
-    return this.averageNumericValues(swimLengths, swimLength => this.getFiniteDataValue(getStat(swimLength)));
   }
 
   private sumNumericValues(

@@ -25,6 +25,8 @@ export interface AppSwimLength {
   elapsedTime: DataDuration | null;
   timerTime: DataDuration | null;
   distance: DataSwimDistance | null;
+  /** Frontend-only: a rejected recorded distance must not become a missing-distance fallback. */
+  distanceIsInvalid?: true;
   poolLength: DataPoolLength | null;
   avgSpeed: DataSpeed | null;
   /** Average stroke rate. The property name is retained by Sports Lib for JSON compatibility. */
@@ -111,6 +113,12 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
     return null;
   }
 
+  const rawDistance = getRecordValue(record, 'distance');
+  const distance = normalizeDataNumber(rawDistance, DataSwimDistance);
+  // Retain rejection through repeated normalization of the interval display adapter.
+  const distanceIsInvalid = distance === null
+    && (record.distanceIsInvalid === true || (rawDistance !== null && rawDistance !== undefined));
+
   return {
     ...(getRejectedSwimTiming(record) ? { timingValidity: getRejectedSwimTiming(record) } : {}),
     index,
@@ -122,7 +130,8 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
     strokes: normalizeNumber(getRecordValue(record, 'strokes')),
     elapsedTime: normalizeDataNumber(getRecordValue(record, 'elapsedTime'), DataDuration),
     timerTime: normalizeDataNumber(getRecordValue(record, 'timerTime'), DataDuration),
-    distance: normalizeDataNumber(getRecordValue(record, 'distance'), DataSwimDistance),
+    distance,
+    ...(distanceIsInvalid ? { distanceIsInvalid: true } : {}),
     poolLength: normalizeDataNumber(getRecordValue(record, 'poolLength'), DataPoolLength),
     avgSpeed: normalizeDataNumber(getRecordValue(record, 'avgSpeed'), DataSpeed),
     avgCadence: normalizeDataNumber(getRecordValue(record, 'avgCadence'), DataStrokeRate),

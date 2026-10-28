@@ -365,13 +365,52 @@ Recorded swim sets retain their existing boundaries (through the following idle/
 length row. Headers label active length timing as **Swim**, idle/rest timing as **Rest**, and preserve the previous
 combined duration as **Total** when both are present. Rest-only groups show Rest without an invented active duration.
 Each duration prefers the source `timerTime`, falling back to `elapsedTime` only when timer time is absent; explicit
-zeroes remain zero, missing values remain blank, and sums retain the existing finite-value behavior. Unknown rest or
+zeroes remain zero, missing values remain blank, and combined times require complete contributing length timing. Unknown rest or
 paused gaps are not inferred from timestamps. The shared display resolver's `durationMilliseconds` option preserves
 Sports Lib's existing fractional length formatting. Set pace now uses non-rest distance/time, while row durations,
-distances, pace and other detail metrics and aggregate totals retain their existing source values. Stable group keys
+distances, pace and other detail metrics retain their recorded values. Stable group keys
 preserve disclosure state across unit refreshes. Header timings wrap at phone widths, and user disclosure clicks and
 Enter/Space toggles use app haptics without feedback for initialization or unit refreshes. This is a frontend display
 change; import/storage, event/lap totals, chart markers, Training and MCP contracts are unchanged.
+
+Swim Lengths and derived Intervals share `getCompleteSwimLengthSum` and `getSwimLengthHeartRateAverage`.
+Totals require complete nonnegative inputs. Set distance requires every active length's distance or its recorded
+pool-length fallback; a rest without distance adds no movement, while an explicit rest distance is retained.
+The frontend normalizer retains a `distanceIsInvalid` marker when it rejects an explicit distance. The marker
+survives interval-adapter normalization: invalid distances cannot become pool-length fallbacks or omitted rest
+zeroes, and invalid rest distance disqualifies derived interval/nominal-pool projection. Source records are untouched.
+An unknown active distance produces **Distance unavailable** in the set header and **Unavailable** in that and later
+cumulative splits within the set. Expanding the set explains the missing/invalid length, and the next set starts its
+own cumulative total. Known individual distances stay visible, including inside expanded interval details.
+The computed HR summary weights complete active-length HR by recorded duration, excluding rest, with elapsed time
+used only when timer time is absent. Missing HR/timing or zero total time makes that summary unavailable. Computed
+energy totals require all contributing active and rest values; an omitted calorie value is not an explicit zero.
+These HR/energy summary fields are internal to the Swim Lengths view model; this change does not add them to the
+collapsed set header. Recorded per-length HR/energy rows and native watch-lap statistics remain unchanged.
+
+Chart length tooltips share `getSwimLengthDistance` and `getSwimLengthPace` with the length table. A missing active
+distance may use its recorded pool length; invalid distances remain unavailable and rests never gain pool distance.
+Valid recorded speed has precedence over time/distance pace inference. The fallback requires positive usable active
+timing and distance, and rejected timing suppresses pace. Swim lap tooltips use the table's `getSwimLapAnalytics`
+pace in the user's swim units, omitting pace for rest or unavailable timing instead of substituting generic pace/speed.
+Chart boundaries and lap identities remain recorded; shared multisport/across-leg laps retain generic metrics.
+This changes frontend tooltip content only, with no new controls, event writes, Training or MCP changes.
+
+The **Show Swim Lengths** setting also controls the swim/rest strip above each metric plot on duration/time axes.
+`buildEventSwimLengthMarkers` supplies an optional recorded start coordinate only for positive, unrejected spans
+contained by the activity's timestamps. `buildSwimTimelineLanes` groups by activity, orders each lane, and excludes
+overlapping clusters and unknown states. It never fills gaps, infers rest from zero cadence, or substitutes timer
+duration for recorded start/end boundaries. Distance axes retain boundary markers but omit the strip, since rest
+has no distance width. Only activities represented by that metric panel receive lanes.
+
+`buildSwimTimelineSeries` uses the existing lazy-registered ECharts custom series and the metric's x axis. The
+plot reserves space for each lane; native zoom/resize transforms its x coordinates, with horizontal clipping and
+no contribution to the metric y axis or range statistics. Filled active blocks and dashed hollow rest blocks match
+the accessible legend, with separate numbered lanes for compared watches. Hollow blocks retain an invisible filled
+hit target. Local hover/click tooltips reuse the length formatter and `escapeConnect`, preventing ECharts from
+replaying series indices in another panel. The existing shared chart feedback owns tap haptics; no feedback is
+emitted by timeline hydration, and non-interactive previews stay silent. This adds no stored metric, setting,
+Training behavior, MCP contract, import change or provider action.
 
 Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
 Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels

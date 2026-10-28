@@ -1721,6 +1721,9 @@ describe('help.content', () => {
   it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
+    expect(trainingSection?.content).toContain('including weekly tooltip distances and the pool-length label beside SWOLF');
+    expect(trainingSection?.content).toContain('general kilometres/miles setting does not override swimming units');
+    expect(trainingSection?.content).toContain('does not change the physical pool or SWOLF comparison');
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
     expect(trainingSection?.content).toContain('TSS divided by 42');
@@ -1943,6 +1946,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Missing active-length distance can use its recorded pool length');
     expect(gettingStartedSection?.content).toContain('Rest lengths never gain distance from pool size');
     expect(gettingStartedSection?.content).toContain('Set pace and calculated SWOLF require complete active time and distance');
+    expect(gettingStartedSection?.content).toContain('the set header shows **Distance unavailable**');
+    expect(gettingStartedSection?.content).toContain('An invalid recorded distance is never replaced with pool length');
+    expect(gettingStartedSection?.content).toContain('later cumulative splits show **Unavailable** until the next set');
+    expect(gettingStartedSection?.content).toContain('Known individual length distances stay visible');
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
@@ -2112,6 +2119,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Power **3s** still requires complete sample windows');
     expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
+    expect(gettingStartedSection?.content).toContain('**Swim / rest timeline**');
+    expect(gettingStartedSection?.content).toContain('Gaps are not assumed to be rest');
+    expect(gettingStartedSection?.content).toContain('Swim length chart tooltips use the same distance and pace rules as the length table');
+    expect(gettingStartedSection?.content).toContain('Swim lap tooltips show **Avg Swim Pace**');
     expect(gettingStartedSection?.content).toContain('swim length end boundaries');
     expect(gettingStartedSection?.content).toContain('active and idle/rest lengths are both included');
     expect(gettingStartedSection?.content).toContain('shared y-axis');
