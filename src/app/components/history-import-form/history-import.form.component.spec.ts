@@ -244,6 +244,8 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
         component.formGroup.get('accepted')!.setValue(true);
         const picker = fixture.debugElement.query(By.directive(MatDatepicker)).componentInstance as MatDatepicker<dayjs.Dayjs>;
+        // Avoid a provider-minimum month with only one enabled day at month end.
+        picker.startAt = dayjs().subtract(10, 'day');
         picker.open();
         fixture.detectChanges();
         await fixture.whenStable();

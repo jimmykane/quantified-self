@@ -4,6 +4,8 @@ import {
   ActivityUtilities,
   EventImporterJSON,
   ActivityTypes,
+  ActivityInterface,
+  DataActiveLap,
   DataAltitude,
   DataCadence,
   DataDistance,
@@ -18,16 +20,19 @@ import {
   DataGradeSmooth,
   DataHeartRate,
   DataPace,
+  DataPaceAvg,
   DataPotentialStamina,
   DataPower,
   DataSpeed,
   DataStamina,
   DataSwimPace,
+  DataSwimPaceAvg,
   DataSwimDistance,
   DataTemperature,
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
+  LapInterface,
   PaceUnits,
   SpeedUnits,
   Stream,
@@ -57,6 +62,126 @@ import type { EventChartPanelSeries } from './event-echarts-data.helper';
 import { canSelectEventChartDistanceXAxis } from './event-echarts-xaxis.helper';
 import { computeEventPanelRangeStats } from './event-echarts-range-stats.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
+
+describe('swim chart tooltip consistency', () => {
+  const colorService = { getActivityColor: () => '#00aaff' } as Parameters<typeof buildEventLapMarkers>[0]['eventColorService'];
+  const makeActivity = (lengths: unknown[], laps: LapInterface[] = [], type = ActivityTypes.Swimming): ActivityInterface => ({
+    type, startDate: new Date(0), endDate: new Date(120000), creator: { name: 'Synthetic swim' },
+    getID: () => 'swim', getSwimLengths: () => lengths, getLaps: () => laps,
+  }) as unknown as ActivityInterface;
+  const length = (overrides: Record<string, unknown> = {}) => ({
+    index: 1, lapIndex: 1, startDate: 0, endDate: 30000, type: 'active',
+    timerTime: 30, elapsedTime: 30, distance: null, poolLength: 25, avgSpeed: null, ...overrides,
+  });
+  const lengthDetails = (source: Record<string, unknown>, units = getDefaultUserUnitSettings()) => {
+    const activity = makeActivity([source]);
+    return buildEventSwimLengthMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, eventColorService: colorService, userUnitSettings: units })[0].tooltipDetails;
+  };
+
+  it.each([
+    { unit: SwimPaceUnits.MinutesPer100Meter, pool: 25, distance: '25 m', pace: '02:00min/100m' },
+    { unit: SwimPaceUnits.MinutesPer100Yard, pool: 22.86, distance: '25 yd', pace: '02:00min/100yd' },
+  ])('uses recorded pool length and timer/elapsed pace fallback in $unit', example => {
+    for (const timerTime of [30, null]) {
+      const source = length({ poolLength: example.pool, timerTime });
+      const before = structuredClone(source);
+      const details = lengthDetails(source, { ...getDefaultUserUnitSettings(), swimPaceUnits: [example.unit] });
+      expect(details.find(row => row.label === 'Distance')?.value).toBe(example.distance);
+      expect(details.find(row => row.label === 'Swim Pace')?.value.replace(/\s/g, '')).toBe(example.pace);
+      expect(source).toEqual(before);
+    }
+  });
+
+  it.each([
+    { distance: Number.NaN }, { distance: -1 }, { distance: 0 }, { poolLength: null },
+    { timerTime: 0 }, { timerTime: -1 }, { timerTime: null, elapsedTime: null },
+    { timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } },
+    { type: 'idle' }, { type: 'rest', distance: 0 },
+  ])('does not infer length pace from unusable inputs or rest: %j', overrides => {
+    const details = lengthDetails(length(overrides));
+    expect(details.some(row => row.label === 'Swim Pace')).toBe(false);
+    if ('distance' in overrides && overrides.distance === 0) {
+      expect(details.find(row => row.label === 'Distance')?.value).toBe('0 m');
+    }
+    if (overrides.type === 'idle' || Number.isNaN(overrides.distance) || overrides.distance === -1) {
+      expect(details.some(row => row.label === 'Distance')).toBe(false);
+    }
+  });
+
+  it.each([XAxisTypes.Duration, XAxisTypes.Time])('retains recorded swim/rest bounds on %s axes', axis => {
+    const activity = makeActivity([length({ startDate: 10000, endDate: 40000, type: 'idle' })]);
+    const marker = buildEventSwimLengthMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: axis, eventColorService: colorService })[0];
+    expect(marker.timelineStartXValue).toBe(axis === XAxisTypes.Time ? 10000 : 10);
+    expect(marker.xValue).toBe(axis === XAxisTypes.Time ? 40000 : 40);
+  });
+
+  it.each([
+    { startDate: -1000 }, { endDate: 130000 }, { endDate: 0 }, { startDate: 31000 },
+    { timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } },
+  ])('omits timeline blocks with unreliable recorded bounds: %j', overrides => {
+    const activity = makeActivity([length(overrides)]);
+    const marker = buildEventSwimLengthMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, eventColorService: colorService })[0];
+    expect(marker.timelineStartXValue).toBeUndefined();
+  });
+
+  it('prefers independently recorded length speed over inferred pace', () => {
+    const details = lengthDetails(length({ avgSpeed: 1, distance: Number.NaN }));
+    expect(details.find(row => row.label === 'Swim Pace')?.value.replace(/\s/g, '')).toBe('01:40min/100m');
+    expect(details.some(row => row.label === 'Distance')).toBe(false);
+  });
+
+  const makeLap = (overrides: Partial<LapInterface> = {}): LapInterface => ({
+    startDate: new Date(0), endDate: new Date(60000), type: LapTypes.Manual,
+    getDuration: () => new DataDuration(60), getDistance: () => new DataDistance(50),
+    getStat: (type: string) => type === DataSwimPaceAvg.type ? new DataSwimPaceAvg(100)
+      : type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined, ...overrides,
+  }) as LapInterface;
+  const lapDetails = (lap: LapInterface, lengths: unknown[] = [], type = ActivityTypes.Swimming,
+    units = getDefaultUserUnitSettings()) => {
+    const activity = makeActivity(lengths, [lap, makeLap({ endDate: new Date(120000) })], type);
+    return buildEventLapMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, lapTypes: [], eventColorService: colorService, userUnitSettings: units })[0].tooltipDetails;
+  };
+
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('uses recorded swim pace for %s laps in metre/yard units', type => {
+    for (const unit of [SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard]) {
+      const details = lapDetails(makeLap(), [], type, { ...getDefaultUserUnitSettings(), swimPaceUnits: [unit] });
+      expect(details.find(row => row.label === 'Avg Swim Pace')?.value.replace(/\s/g, '')).toBe(
+        unit === SwimPaceUnits.MinutesPer100Yard ? '01:31min/100yd' : '01:40min/100m');
+      expect(details.some(row => row.label === 'Avg Pace' || row.label === 'Avg Speed')).toBe(false);
+    }
+  });
+
+  it('uses the same active-length lap pace as the table, excluding rest', () => {
+    const details = lapDetails(makeLap(), [length(), length({ index: 2, startDate: 30000, endDate: 60000,
+      type: 'idle', distance: 0, timerTime: 30 })]);
+    expect(details.find(row => row.label === 'Avg Swim Pace')?.value.replace(/\s/g, '')).toBe('02:00min/100m');
+  });
+
+  it('does not substitute generic lap pace for rest or rejected swimming timing', () => {
+    const rest = makeLap({ getStat: type => type === DataActiveLap.type ? new DataActiveLap(false)
+      : type === DataPaceAvg.type ? new DataPaceAvg(300) : type === DataSwimPaceAvg.type ? new DataSwimPaceAvg(100) : undefined });
+    const rejected = Object.assign(makeLap(), { timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } });
+    for (const lap of [rest, rejected]) {
+      expect(lapDetails(lap).some(row => ['Avg Swim Pace', 'Avg Pace', 'Avg Speed'].includes(row.label))).toBe(false);
+    }
+    expect(lapDetails(makeLap(), [], ActivityTypes.Running).some(row => row.label === 'Avg Pace')).toBe(true);
+  });
+
+  it('keeps a shared multisport lap generic even when its endpoint belongs to swimming', () => {
+    const sharedLap = makeLap({ startDate: new Date(-30000) });
+    const swim = makeActivity([], [sharedLap, makeLap({ endDate: new Date(120000) })]);
+    const run = Object.assign(makeActivity([], [], ActivityTypes.Running), { startDate: new Date(-60000), endDate: new Date(0) });
+    const markers = buildEventLapMarkers({ selectedActivities: [swim], allActivities: [run, swim],
+      xAxisType: XAxisTypes.Duration, lapTypes: [], eventColorService: colorService, userUnitSettings: getDefaultUserUnitSettings() });
+    expect(markers[0].tooltipTitle).toBe('Multisport lap 1');
+    expect(markers[0].tooltipDetails.some(row => row.label === 'Avg Pace')).toBe(true);
+    expect(markers[0].tooltipDetails.some(row => row.label === 'Avg Swim Pace')).toBe(false);
+  });
+});
 
 it('places a shared multisport lap at its actual ending leg even when it is that leg\'s sole lap', () => {
   const lap = { lapId: 1, startDate: 0, endDate: 450_000, startIndex: null, endIndex: null,
@@ -2866,6 +2991,7 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(1);
     expect(markers[0].xValue).toBe(75);
+    expect(markers[0].timelineStartXValue).toBeUndefined();
   });
 
   it('formats swim length marker distances in meters regardless of distance unit preference', () => {

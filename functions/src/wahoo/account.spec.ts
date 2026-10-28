@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import type { firestore } from 'firebase-admin';
+import type { TokenCredentialSnapshot } from '../token-refresh-coordinator';
 
 interface MockTokenSnapshot {
   exists: boolean;
@@ -84,11 +86,67 @@ vi.mock('../service-connection-meta', () => ({
 }));
 
 import {
+  areWahooActiveAccountGuardsEqual,
   assertWahooActiveAccountGuardCurrent,
+  assertWahooActiveAccountGuardCurrentInTransaction,
   assertWahooOAuthAccountCompatible,
   captureWahooActiveAccountGuard,
   getActiveWahooTokenSnapshot,
+  type WahooActiveAccountGuard,
 } from './account';
+
+const credential: TokenCredentialSnapshot = {
+  accessToken: 'access-a',
+  refreshToken: 'refresh-a',
+  expiresAt: 300,
+  dateCreated: 100,
+  dateRefreshed: 200,
+  credentialGeneration: 'credential-a',
+};
+
+function accountGuard(): WahooActiveAccountGuard {
+  return {
+    providerUserId: 'account-a',
+    connectionStateGeneration: 'connection-a',
+    activeCredentialGeneration: 'credential-a',
+    credential: { ...credential },
+  };
+}
+
+describe('Wahoo active account guard equality', () => {
+  it('compares snapshots by value, including legacy account-only guards', () => {
+    expect(areWahooActiveAccountGuardsEqual(accountGuard(), accountGuard())).toBe(true);
+    const legacy = { ...accountGuard(), connectionStateGeneration: null, activeCredentialGeneration: null, credential: null };
+    expect(areWahooActiveAccountGuardsEqual(legacy, { ...legacy })).toBe(true);
+  });
+
+  it.each(['providerUserId', 'connectionStateGeneration', 'activeCredentialGeneration'] as const)(
+    'rejects a changed %s in either direction', field => {
+      const changed = { ...accountGuard(), [field]: 'replacement' };
+      expect(areWahooActiveAccountGuardsEqual(accountGuard(), changed)).toBe(false);
+      expect(areWahooActiveAccountGuardsEqual(changed, accountGuard())).toBe(false);
+    },
+  );
+
+  it.each([
+    ['accessToken', 'access-b'],
+    ['refreshToken', 'refresh-b'],
+    ['expiresAt', 301],
+    ['dateCreated', 101],
+    ['dateRefreshed', 201],
+    ['credentialGeneration', 'credential-b'],
+  ] as const)('rejects a change to credential %s', (field, value) => {
+    const changed = accountGuard();
+    changed.credential = { ...credential, [field]: value };
+    expect(areWahooActiveAccountGuardsEqual(accountGuard(), changed)).toBe(false);
+  });
+
+  it('does not treat a missing credential snapshot as equal to a captured credential', () => {
+    const accountOnly = { ...accountGuard(), credential: null };
+    expect(areWahooActiveAccountGuardsEqual(accountOnly, accountGuard())).toBe(false);
+    expect(areWahooActiveAccountGuardsEqual(accountGuard(), accountOnly)).toBe(false);
+  });
+});
 
 function tokenSnapshot(
   id: string,
@@ -121,6 +179,87 @@ describe('Wahoo active account resolution', () => {
     }));
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.pinServiceConnectionProviderUserIdIfUnset.mockResolvedValue('pinned');
+  });
+
+  describe.each(['provider I/O', 'caller-owned transaction'] as const)('%s checkpoint', checkpoint => {
+    let guard: WahooActiveAccountGuard;
+    let checkpointReads: MockTransaction['get'];
+    const assertCurrent = () => checkpoint === 'provider I/O'
+      ? assertWahooActiveAccountGuardCurrent('user-1', guard)
+      : assertWahooActiveAccountGuardCurrentInTransaction({
+        get: checkpointReads,
+      } as unknown as firestore.Transaction, 'user-1', guard);
+
+    beforeEach(async () => {
+      mocks.transactionMeta = {
+        connectionState: 'connected',
+        connectionStateGeneration: 'connection-a',
+        providerUserId: 'account-a',
+      };
+      mocks.tokenRootData = { activeOAuthCredentialGeneration: 'credential-a' };
+      mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 200, {
+        ...credential,
+        tokenCredentialGeneration: 'credential-a',
+      }));
+      guard = await captureWahooActiveAccountGuard('user-1', 'account-a', 'access-a');
+      mocks.runTransaction.mockClear();
+      checkpointReads = vi.fn(async (target: { get: () => Promise<unknown> }) => target.get());
+      mocks.runTransaction.mockImplementation(async (callback: (transaction: MockTransaction) => unknown) => callback({
+        get: checkpointReads,
+      }));
+    });
+
+    it('preserves the read transaction boundary for an unchanged guard', async () => {
+      await expect(assertCurrent()).resolves.toBeUndefined();
+      expect(mocks.runTransaction).toHaveBeenCalledTimes(checkpoint === 'provider I/O' ? 1 : 0);
+      expect(checkpointReads.mock.calls.map(([reference]) => reference.path)).toEqual([
+        'users/user-1/meta/wahooAPI',
+        'wahooAPIAccessTokens/user-1',
+        'wahooAPIAccessTokens/user-1/tokens/account-a',
+      ]);
+    });
+
+    it.each(['providerUserId', 'connectionStateGeneration'] as const)('rejects changed %s', async field => {
+      mocks.transactionMeta[field] = 'replacement';
+      await expect(assertCurrent()).rejects.toMatchObject({ code: 'unauthenticated' });
+    });
+
+    it('treats a changed credential snapshot as retryable even when the access token is unchanged', async () => {
+      mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 201, {
+        ...credential,
+        refreshToken: 'refresh-b',
+        tokenCredentialGeneration: 'credential-a',
+      }));
+      await expect(assertCurrent()).rejects.toMatchObject({ name: 'WahooCredentialSupersededError', code: 'unavailable' });
+    });
+
+    it('preserves account-only captures across a refresh within the same OAuth generation', async () => {
+      guard = await captureWahooActiveAccountGuard('user-1', 'account-a');
+      mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 201, {
+        accessToken: 'access-b', refreshToken: 'refresh-b', tokenCredentialGeneration: 'credential-a',
+      }));
+      await expect(assertCurrent()).resolves.toBeUndefined();
+    });
+
+    it('rejects a replaced active credential generation for an account-only guard', async () => {
+      guard = await captureWahooActiveAccountGuard('user-1', 'account-a');
+      mocks.tokenRootData = { activeOAuthCredentialGeneration: 'credential-b' };
+      mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 201, {
+        ...credential, tokenCredentialGeneration: 'credential-b',
+      }));
+      await expect(assertCurrent()).rejects.toMatchObject({ name: 'WahooCredentialSupersededError', code: 'unavailable' });
+    });
+
+    it('preserves reconnect-required errors before comparing guards', async () => {
+      mocks.transactionMeta.connectionState = 'reconnect_required';
+      await expect(assertCurrent()).rejects.toMatchObject({ name: 'WahooReconnectRequiredError' });
+    });
+
+    it('preserves authoritative pending-disconnect errors before comparing guards', async () => {
+      mocks.tokenRootData.disconnectState = 'disconnect_pending';
+      mocks.tokenRootData.disconnectGeneration = 'disconnect-a';
+      await expect(assertCurrent()).rejects.toMatchObject({ name: 'TokenUseSkippedForPendingDisconnectError' });
+    });
   });
 
   it('uses only the pinned Wahoo token even when another token exists', async () => {

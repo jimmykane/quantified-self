@@ -16,6 +16,7 @@ import {
   getSwimStrokeLabel,
   getSwimLapStrokeLabels,
 } from './event-swim-length.helper';
+import { getSwimLengthDistance } from './event-swim-analytics.helper';
 
 describe('event-swim-length.helper', () => {
   const rawSwimLength = {
@@ -67,6 +68,22 @@ describe('event-swim-length.helper', () => {
     expect(swimLength?.avgCadence?.getDisplayUnit()).toBe('spm');
     expect(swimLength?.startDate).toBeInstanceOf(Date);
     expect(swimLength?.endDate).toBeInstanceOf(Date);
+  });
+
+  it('keeps invalid recorded distance distinct from missing distance after repeated normalization', () => {
+    for (const distance of [Number.NaN, Number.POSITIVE_INFINITY, 'invalid', '']) {
+      const source = { ...rawSwimLength, distance };
+      const length = normalizeSwimLength(source)!;
+      expect(getSwimLengthDistance(length)).toBeNull();
+      expect(getSwimLengthDistance(normalizeSwimLength(length)!)).toBeNull();
+      expect(length.poolLength?.getValue()).toBe(25);
+      expect(source.distance).toBe(distance);
+    }
+    for (const distance of [null, undefined]) {
+      expect(getSwimLengthDistance(normalizeSwimLength({ ...rawSwimLength, distance })!)).toBe(25);
+    }
+    expect(getSwimLengthDistance(normalizeSwimLength({ ...rawSwimLength, distance: 0 })!)).toBe(0);
+    expect(getSwimLengthDistance(normalizeSwimLength({ ...rawSwimLength, distance: -1 })!)).toBeNull();
   });
 
   it('ignores malformed rows', () => {

@@ -82,7 +82,7 @@ export function getNominalSwimDistanceDisplayContext(
   if (!Array.isArray(rawLengths) || rawLengths.length !== lengths.length
     || recordedPool === null || recordedPool <= 0 || recordedTotal === null || recordedTotal <= 0
     || !Number.isInteger(recordedCount) || recordedCount !== active.length || active.length < 2
-    || lengths.some((length, index) => length.index !== index + 1
+    || lengths.some((length, index) => length.distanceIsInvalid || length.index !== index + 1
       || (length.type.trim().toLowerCase() !== 'active' && !isRestSwimLength(length))
       || (index > 0 && length.startDate.getTime() <= lengths[index - 1].startDate.getTime())
       || length.endDate < length.startDate

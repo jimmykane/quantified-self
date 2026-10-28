@@ -96,6 +96,12 @@ describe('nominal yard-pool distance display evidence', () => {
     expect(getNominalSwimDistanceDisplayContext(activity)).toBeNull();
   });
 
+  it('rejects nominal pool evidence when a rest has an invalid recorded distance', () => {
+    const { activity, rawLengths } = fixture();
+    rawLengths.push({ ...rawLengths[0], index: 5, startDate: 120000, endDate: 150000, type: 'idle', distance: Number.NaN });
+    expect(getNominalSwimDistanceDisplayContext(activity)).toBeNull();
+  });
+
   it('rejects a contradictory activity total and declines unknown source context', () => {
     expect(getNominalSwimDistanceDisplayContext(fixture(4, 25, { total: 110 }).activity)).toBeNull();
     const { activity } = fixture();
